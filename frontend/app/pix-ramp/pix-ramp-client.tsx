@@ -1197,6 +1197,7 @@ export default function PixRampClient({
     !orderFailed &&
     generatedOnRampOrderKey === onRampOrderInputKey
   );
+  const onRampPixGenerationBlocked = onRampPixAlreadyGenerated && !quoteExpired;
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
   const estimatedReceiveLabel = feeAdjustedAutoPayAmount
       ? feeAdjustedAutoPayDisplayAmount
@@ -1219,6 +1220,13 @@ export default function PixRampClient({
         ? L("Validando destinatário salvo...", "Validating saved recipient...")
         : recipientVerificationError || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX.")
     : "";
+  const canPrepareOnRampPix = Boolean(
+    canResolveWallet &&
+    !loading &&
+    !operationLocked &&
+    !receiveEstimateMissing &&
+    !transferRecipientBlocker
+  );
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
@@ -2432,6 +2440,7 @@ export default function PixRampClient({
           ? estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)
           : amountBrl
       );
+      const createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${quoteForOrder?.id || "no-quote"}`);
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
         customer_id: orderCustomerId || undefined,
@@ -2448,7 +2457,7 @@ export default function PixRampClient({
         auto_pay_recipient: transferRecipient || undefined,
         auto_pay_amount: feeAdjustedAutoPayAmount || autoPayAmount || undefined,
         auto_pay_asset_code: settlementAssetCode(autoPayAsset || targetAsset),
-      }, "POST", authForOrder, buildIdempotencyKey("create-onramp"));
+      }, "POST", authForOrder, createOnRampIdempotencyKey);
       if (payload?.quote) {
         setQuotePayload(payload);
         setQuoteReceivedAt(Date.now());
@@ -3339,13 +3348,15 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-lg shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canResolveWallet || Boolean(loading) || operationLocked || receiveEstimateMissing || Boolean(transferRecipientBlocker) || onRampPixAlreadyGenerated} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+            <button className="mt-6 w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-lg shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canPrepareOnRampPix || onRampPixGenerationBlocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
               {operationLocked
                 ? L("PIX concluído", "PIX complete")
-                : onRampPixAlreadyGenerated
-                  ? L("PIX gerado para este valor", "PIX created for this amount")
                 : loading === "Preparing PIX checkout"
                   ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Gerando PIX...", "Generating PIX...")}</span>
+                : quoteExpired
+                  ? L("Continuar", "Continue")
+                : onRampPixAlreadyGenerated
+                  ? L("PIX gerado para este valor", "PIX created for this amount")
                   : waitingForReceiveEstimate
                     ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
                     : receiveEstimateMissing
@@ -3376,8 +3387,18 @@ export default function PixRampClient({
                   destinationCaption={quoteCostContext}
                 />
                 {quoteExpired && (
-                  <div className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm font-bold text-tts-error">
-                    {L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")}
+                  <div className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm font-bold text-tts-error sm:flex sm:items-center sm:justify-between sm:gap-4">
+                    <p>{L("A estimativa expirou. Toque em continuar para preparar um novo PIX.", "The estimate expired. Tap continue to prepare a new PIX.")}</p>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white transition hover:bg-tts-error/90 disabled:opacity-50 sm:mt-0 sm:w-auto"
+                      disabled={!canPrepareOnRampPix}
+                      onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}
+                    >
+                      {loading === "Preparing PIX checkout"
+                        ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Preparando...", "Preparing...")}</span>
+                        : L("Continuar", "Continue")}
+                    </button>
                   </div>
                 )}
                 {onboardingUrl && (
