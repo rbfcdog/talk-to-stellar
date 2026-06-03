@@ -2,6 +2,27 @@
 
 Use este guia para gerar os arquivos de evidencia de sessoes e importar o CSV no Notion.
 
+## Gerar pacote para 15+ usuarios
+
+Este comando gera CSV, Markdown, JSON e um CSV auxiliar para capturar manualmente usuarios reais que ainda estejam faltando.
+
+```bash
+cd /home/rodrigodog/talk-to-stellar/backend
+npm run research:build-15-user-log -- --since=2026-06-01 --network=testnet --min-users=15 --limit=25
+```
+
+Arquivos gerados:
+
+```text
+testnet-15plus-user-research-....csv
+testnet-15plus-user-research-....md
+testnet-15plus-user-research-....json
+testnet-15plus-user-research-....-manual-capture.csv
+testnet-15plus-user-research-....-README.md
+```
+
+Use o CSV principal no Notion. Se o script avisar que existem menos de 15 usuarios reais, use o `manual-capture.csv` durante testes reais com novas pessoas e preencha apenas informacoes observadas.
+
 ## Exportar sessoes testnet
 
 ```bash
