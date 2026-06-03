@@ -204,10 +204,10 @@ export default function CreateAccountClient({
   const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0)
   const submitLockRef = useRef(false)
   const loadingPhrases = useMemo(() => [
-    L("Preparando sua conta da forma mais otimizada.", "Preparing your account with the most optimized setup."),
+    L("Preparando sua conta.", "Preparing your account."),
     L("Organizando saldo, contatos e chaves de recebimento.", "Organizing balance, contacts, and receiving keys."),
     L("Criando contatos iniciais para você testar pagamentos.", "Creating starter contacts so you can test payments."),
-    L("Ativando a rota mais otimizada para PIX e pagamentos.", "Enabling the most optimized route for PIX and payments."),
+    L("Ativando PIX e pagamentos.", "Enabling PIX and payments."),
     L("Quase pronto: validando tudo antes de conectar.", "Almost ready: validating everything before connecting."),
   ], [language])
   useEffect(() => {

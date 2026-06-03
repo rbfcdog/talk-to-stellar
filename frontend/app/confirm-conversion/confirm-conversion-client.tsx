@@ -391,10 +391,10 @@ export default function ConfirmConversionClient({
                 <p className="text-tts-deep">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
                 <p className="mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
                 {showEstimatedFee && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Taxa total estimada", "Estimated total fee")}: {estimatedFeeDisplay}</p>
+                  <p className="text-tts-deep">{T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.")}</p>
+                  <p className="text-tts-deep">{T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.")}</p>
                 )}
                 {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                   <p className="text-tts-confirm">
@@ -453,7 +453,7 @@ export default function ConfirmConversionClient({
 	            <div className="mt-5 border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
               <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
-              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Executando conversão da forma mais otimizada...", "Executing conversion with the most optimized route...")}</div>}
+              {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Executando conversão com a cotação confirmada...", "Executing conversion with the confirmed quote...")}</div>}
               <AnimatePresence mode="wait">
               {status === "done" && result?.success && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2 space-y-1 text-tts-confirm">

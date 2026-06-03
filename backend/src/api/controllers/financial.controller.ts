@@ -492,7 +492,7 @@ export class FinancialController {
         estimated_platform_fee: null,
         estimated_spread_fee: null,
         route_chain: routeChain || null,
-        optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
+        optimization_criteria: 'melhor cotação disponível para o valor de envio informado',
         quote_issued_at: quoteWithExpiry.quote_issued_at || null,
         quote_expires_at: quoteWithExpiry.quote_expires_at || null,
         quote_ttl_seconds: quoteWithExpiry.quote_ttl_seconds || quoteTtlSeconds(),

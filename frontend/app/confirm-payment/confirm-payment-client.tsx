@@ -124,8 +124,8 @@ function getAutoConversionMessage(result?: ConfirmResponse | null, language: App
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
   return T(
     language,
-    `Conversão automática concluída pela forma mais otimizada: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} virou ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`,
-    `Automatic conversion completed with the most optimized route: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} became ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} before sending.`
+    `Conversão automática concluída com a cotação atual: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} virou ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`,
+    `Automatic conversion completed with the current quote: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} became ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} before sending.`
   )
 }
 
@@ -338,7 +338,7 @@ function buildConfirmedFeedback(payload: any, language: AppLanguage) {
     amount && asset ? `${T(language, "Valor", "Amount")}: ${formatPaymentAmount(amount, asset)}` : "",
     `${T(language, "Destino", "Destination")}: ${formatRecipientLabel(payload, language)}`,
     recipientKey ? `${T(language, "Chave", "Key")}: ${recipientKey}` : "",
-    isCrossAsset && route ? T(language, "Rota mais otimizada selecionada.", "Most optimized route selected.") : "",
+    isCrossAsset && route ? T(language, "Cotação aplicada antes do PIN.", "Quote applied before PIN.") : "",
     hasUsableFeeDisplay(fee) ? `${T(language, "Taxa estimada", "Estimated fee")}: ${fee}` : "",
     isCrossAsset && savings ? `${T(language, "Economia estimada", "Estimated savings")}: ${savings}` : "",
     `${T(language, "Horário", "Time")}: ${formatTimestamp(undefined, language)}`,
@@ -691,7 +691,7 @@ export default function ConfirmPaymentClient({
           `${T(feedbackLanguage, "Valor", "Amount")}: ${formatPaymentAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || ""))}`,
           `${T(feedbackLanguage, "Destino", "Destination")}: ${formatRecipientLabel(payload, feedbackLanguage)}`,
           recipientKey ? `${T(feedbackLanguage, "Chave", "Key")}: ${recipientKey}` : "",
-          feedbackIsCrossAsset && routeForFeedback ? T(feedbackLanguage, "Rota mais otimizada selecionada.", "Most optimized route selected.") : "",
+          feedbackIsCrossAsset && routeForFeedback ? T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.") : "",
           hasUsableFeeDisplay(estimatedFeeForFeedback) ? `${T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: ${estimatedFeeForFeedback}` : "",
           feedbackIsCrossAsset && savingsForFeedback ? `${T(feedbackLanguage, "Economia estimada", "Estimated savings")}: ${savingsForFeedback}` : "",
           monthlySavingsForFeedback ? `${T(feedbackLanguage, "Economia no mês até agora", "Monthly savings so far")}: ${monthlySavingsForFeedback}` : "",

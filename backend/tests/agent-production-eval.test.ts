@@ -624,8 +624,8 @@ describe('Agent production evals', () => {
         destinationAsset: { code: 'TESOURO' },
         path: [],
       },
-      optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
-      message: 'Rota mais otimizada agora.',
+      optimization_criteria: 'melhor cotação disponível para o valor de envio informado',
+      message: 'Cotação atual.',
     }));
 
     const result = await graph.processInput(createState('- melhor rota para converter 100 USDC para BRL'));
@@ -639,7 +639,10 @@ describe('Agent production evals', () => {
     expect(result.success).toBe(true);
     expect(result.response_message).toContain('Melhor rota agora para converter US$ 100.00');
     expect(result.response_message).toContain('Recebe aproximadamente R$ 438.70');
-    expect(result.response_message).toContain('Rota mais otimizada agora: US$ -> R$');
+    expect(result.response_message).toContain('Taxa estimada: R$ 0,01');
+    expect(result.response_message).toContain('Cotação válida por 45 segundos.');
+    expect(result.response_message).not.toContain('Rota mais otimizada');
+    expect(result.response_message).not.toContain('Critério:');
     expect(result.response_message).not.toContain('Eu analiso a melhor rota quando você informa');
   });
 
@@ -1600,7 +1603,7 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('10 XLM');
     expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('/confirm-payment?');
-    expect(result.response_message).toContain('Gerei o link de confirmação da forma mais otimizada');
+    expect(result.response_message).toContain('Gerei o link de confirmação com a cotação atual');
     expect(result.response_message).not.toMatch(/confirmar o saldo|saldo suficiente|taxa estimada|indispon[ií]vel/i);
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
@@ -1982,8 +1985,8 @@ describe('Agent production evals', () => {
           destinationAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
           path: [],
         },
-        optimization_criteria: 'maximizar recebimento no destino para o valor de envio informado',
-        message: 'Rota mais otimizada agora.',
+        optimization_criteria: 'melhor cotação disponível para o valor de envio informado',
+        message: 'Cotação atual.',
       }))
       .mockResolvedValueOnce(JSON.stringify({
         success: true,

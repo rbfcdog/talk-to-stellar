@@ -56,8 +56,8 @@ function getAutoConversionMessage(result?: any, language: AppLanguage = "en") {
   if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
   return T(
     language,
-    `Conversão automática concluída pela forma mais otimizada: ${formatAmount(details?.sourceAmount, sourceAsset)} virou ${formatAmount(details?.destinationAmount, destinationAsset)} antes de receber.`,
-    `Automatic conversion completed with the most optimized route: ${formatAmount(details?.sourceAmount, sourceAsset)} became ${formatAmount(details?.destinationAmount, destinationAsset)} before receiving.`
+    `Conversão automática concluída com a cotação atual: ${formatAmount(details?.sourceAmount, sourceAsset)} virou ${formatAmount(details?.destinationAmount, destinationAsset)} antes de receber.`,
+    `Automatic conversion completed with the current quote: ${formatAmount(details?.sourceAmount, sourceAsset)} became ${formatAmount(details?.destinationAmount, destinationAsset)} before receiving.`
   )
 }
 

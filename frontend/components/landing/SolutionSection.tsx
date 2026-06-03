@@ -88,7 +88,7 @@ export default function SolutionSection() {
               {L("Tudo onde você já conversa.", "Everything where you already chat.")}
             </h3>
             <p className="text-lg text-[#9BA4B5] leading-relaxed">
-              {L("WhatsApp e Telegram já fazem parte do seu dia. Você diz se quer trazer, converter, aplicar ou retirar, e o assistente organiza a operação com valor, destino e confirmação.", "WhatsApp and Telegram are already part of your day. Say whether you want to add, convert, apply, or withdraw, and the assistant structures the operation through the most optimized available route.")}
+              {L("WhatsApp e Telegram já fazem parte do seu dia. Você diz se quer trazer, converter, aplicar ou retirar, e o assistente organiza a operação com valor, destino e confirmação.", "WhatsApp and Telegram are already part of your day. Say whether you want to add, convert, apply, or withdraw, and the assistant structures the operation with amount, destination, and confirmation.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 relative h-[300px] rounded-2xl overflow-hidden border border-white/[0.03] bg-[#162032] flex items-center justify-center">
@@ -98,7 +98,7 @@ export default function SolutionSection() {
                   {L("Colocar R$ 500, converter para euros e aplicar.", "Add R$500, convert to euros, and apply.")}
                 </div>
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tl-sm p-4 max-w-[85%] text-sm text-slate-200 flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] shadow-[#00D2FF]/5">
-                   <p>{L("Pronto. Encontrei a melhor rota para você.", "Done. I found the most optimized route.")}</p>
+                   <p>{L("Pronto. Cotação preparada para você.", "Done. Quote prepared for you.")}</p>
                    <div className="bg-[#162032] p-3 rounded-xl border border-white/[0.03]">
                       <p className="text-xs text-[#9BA4B5]">{L("Valor para aplicar", "Amount to apply")}</p>
                       <p className="text-lg font-bold text-[#00D2FF]">€ 92,00</p>
