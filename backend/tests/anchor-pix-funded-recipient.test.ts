@@ -203,4 +203,56 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
     });
     expect(String(result.transaction_hash)).toMatch(/^sandbox-ledger-transfer-/);
   });
+
+  it('allows XLM as the exact asset for a post-PIX transfer', async () => {
+    jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({
+      sandbox: true,
+      provider: 'etherfuse',
+      network: 'Stellar Testnet',
+      base_url: 'https://api.sand.etherfuse.com',
+      stellar_network_id: 'TESTNET',
+      asset: {
+        code: 'TESOURO',
+        issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        identifier: 'TESOURO',
+      },
+    });
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'owner-user',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sessionPinHash: 'hash',
+    });
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue(undefined);
+    jest.spyOn(AnchorService as any, 'resolveTransferRecipient').mockResolvedValue({
+      publicKey: anaPublicKey,
+      displayName: 'Ana Silva',
+      pixKey: '5595280606751',
+      recipientKey: '5595280606751',
+    });
+
+    const result = await AnchorService.submitPixFundedTransferForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      recipient: 'Ana Silva',
+      recipient_key: '5595280606751',
+      amount: '100',
+      asset_code: 'XLM',
+      order_id: 'sandbox-pix-xlm-test',
+      pin: '1234',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      sandbox: true,
+      sandbox_ledger_transfer: true,
+      recipient_name: 'Ana Silva',
+      amount: '100',
+      asset_code: 'XLM',
+    });
+    expect(result.asset_issuer).toBeUndefined();
+    expect(String(result.transaction_hash)).toMatch(/^sandbox-ledger-transfer-/);
+  });
 });

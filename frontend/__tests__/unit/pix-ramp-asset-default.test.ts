@@ -34,6 +34,10 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("quote ? effectiveOnRampPixPayDisplay : formatMoney(amountBrl)");
     expect(text).toContain("const quotedOrderAmountBrl = normalizeHumanAmount(quoteForOrder?.fromAmount || \"\")");
     expect(text).toContain("PIX pela rota da sua conta");
+    expect(text).toContain("pixFundedTransferError");
+    expect(text).toContain("PIX confirmado. Não consegui concluir o envio automático agora");
+    expect(text).toContain("if (!transferFlow || transferPayload) markOperationCompleted();");
+    expect(text).toContain("if (!transferFlow || transferPayload) {");
     expect(text).toContain("O PIX será calculado pela cotação dinâmica antes de gerar o QR.");
     expect(text).not.toContain("PIX estimado pela rota da sua conta");
     expect(text).not.toContain("formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)");
