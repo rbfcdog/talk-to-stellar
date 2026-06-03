@@ -215,6 +215,7 @@ function transactionProfileUrl(item: TransactionItem) {
 export default function TransactionsClient() {
   const today = useMemo(() => new Date(), [])
   const [sessionId, setSessionId] = useState("")
+  const [sessionSource, setSessionSource] = useState("")
   const [authenticated, setAuthenticated] = useState(false)
   const [period, setPeriod] = useState<PeriodMode>("all")
   const [month, setMonth] = useState(String(today.getMonth() + 1))
@@ -235,8 +236,9 @@ export default function TransactionsClient() {
   }, [month, period, today, year])
 
   useEffect(() => {
-    getClientSession().then(({ sessionId: sid, authenticated: isAuthenticated }) => {
+    getClientSession().then(({ sessionId: sid, authenticated: isAuthenticated, sessionSource: source }) => {
       setSessionId(sid)
+      setSessionSource(source)
       setAuthenticated(Boolean(isAuthenticated))
       if (!sid || !isAuthenticated) {
         setStatus("error")
@@ -247,17 +249,28 @@ export default function TransactionsClient() {
 
   useEffect(() => {
     if (!sessionId || !authenticated) return
-    void loadTransactions(sessionId, period, month, year)
-  }, [authenticated, month, period, sessionId, year])
+    void loadTransactions(sessionId, period, month, year, sessionSource)
+  }, [authenticated, month, period, sessionId, sessionSource, year])
 
   useEffect(() => { setPage(1) }, [kindFilter, pageSize, search, period])
 
-  async function loadTransactions(currentSessionId = sessionId, currentPeriod = period, currentMonth = month, currentYear = year) {
+  async function loadTransactions(
+    currentSessionId = sessionId,
+    currentPeriod = period,
+    currentMonth = month,
+    currentYear = year,
+    currentSessionSource = sessionSource,
+  ) {
     if (!currentSessionId) return
     setStatus("loading")
     setMessage("")
     try {
       const params = new URLSearchParams({ limit: "500" })
+      const source = currentSessionSource.trim()
+      if (source) {
+        params.set("session_source", source)
+        params.set("session_scope", source)
+      }
       if (currentPeriod === "month") {
         params.set("month", currentMonth)
         params.set("year", currentYear)
