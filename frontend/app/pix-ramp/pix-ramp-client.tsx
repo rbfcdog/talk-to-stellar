@@ -1478,15 +1478,13 @@ export default function PixRampClient({
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
     const normalizedReceiveAsset = normalizeTargetAsset(receiveAsset, "USDC");
-    const quoteOnlyUsdcOnRamp = Boolean(mode === "onramp" && normalizedReceiveAsset === "USDC" && !nextTransferFlow);
-    const settlementReceiveAsset = quoteOnlyUsdcOnRamp ? "BRL" : normalizedReceiveAsset;
-    if (isAdvancedAsset(settlementReceiveAsset)) setAdvancedAssetMode(true);
+    if (isAdvancedAsset(normalizedReceiveAsset)) setAdvancedAssetMode(true);
     const hasExactOnRampReceiveTarget = Boolean(mode === "onramp" && receiveAmount && normalizedReceiveAsset);
     const amountParamIsPixBrl = currency === "BRL" || asset === "BRL" || asset === "TESOURO";
     if (mode === "onramp" && receiveAmount) {
       setDesiredReceiveAmount(receiveAmount);
       setDesiredReceiveAsset(normalizedReceiveAsset);
-      setTargetAsset(settlementReceiveAsset);
+      setTargetAsset(normalizedReceiveAsset);
       if (!amountParamIsPixBrl) {
         setAmountBrl("");
       }
