@@ -35,6 +35,7 @@ import { brlUsdQuoteService } from "../services/brl-usd-quote.service";
 import { internationalTransferService } from "../services/international-transfer.service";
 import { mainnetWalletService } from "../services/mainnet-wallet.service";
 import { AnchorService } from "../services/anchor.service";
+import { ConversionRateMatrixService } from "../services/conversion-rate-matrix.service";
 import { timingSafeEqualString } from "../../utils/password";
 import { safeRedactedJson } from "../../utils/redaction";
 import { hashWalletPin } from "../../utils/pin-hash";
@@ -557,6 +558,28 @@ function isCrossAssetPair(sourceAssetCode?: unknown, destinationAssetCode?: unkn
   return Boolean(source && destination && source !== destination);
 }
 
+function normalizePairQuoteAsset(value: unknown): string {
+  const raw = String(value || '').trim().toUpperCase();
+  if (!raw) return '';
+  if (raw === 'USD' || raw === 'DOLLAR' || raw === 'DOLLARS' || raw === 'US$') return 'USDC';
+  if (raw === 'REAL' || raw === 'REAIS' || raw === 'R$' || raw === 'TESOURO') return 'BRL';
+  return userFacingAssetCode(normalizeAssetCode(raw));
+}
+
+function pairQuoteAmount(value: unknown): string {
+  const amount = parseHumanAmountNumber(value);
+  if (Number.isFinite(amount) && amount > 0) return amount.toFixed(7).replace(/\.?0+$/, '');
+  return '1';
+}
+
+function displayPairQuoteAmount(value: unknown, assetCode: unknown): string {
+  const amount = parseHumanAmountNumber(value);
+  return formatCustomerAssetAmount(
+    Number.isFinite(amount) && amount > 0 ? amount.toFixed(7).replace(/\.?0+$/, '') : String(value || '0'),
+    normalizePairQuoteAsset(assetCode)
+  );
+}
+
 function formatNoPathFallbackMessage(errorMessage: string): string {
   const raw = String(errorMessage || '').trim();
   const normalized = raw.toLowerCase();
@@ -886,6 +909,35 @@ export const toolDefinitions = [
       type: "object",
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "get_pair_quote",
+    description: "Consulta a cotação atual pela melhor rota entre quaisquer dois ativos configurados do TalkToStellar. Use para perguntas como 'cotação XLM para USDC', 'melhor rota de BRL pra CETES', 'quanto está USDC/XLM agora' ou 'converter 100 XLM para BRL sem executar'. Retorna taxa efetiva, valor estimado de destino, status da rota e se a rota foi direta, fallback ou sintética via moeda ponte. Não executa transação e não pede PIN.",
+    parameters: {
+      type: "object",
+      properties: {
+        source_asset_code: {
+          type: "string",
+          enum: ["BRL", "USDC", "CETES", "XLM"],
+          description: "Ativo/moeda de origem. Use USDC quando o usuário falar USD, dólar, dólares ou US$; use BRL para real/reais/R$.",
+        },
+        dest_asset_code: {
+          type: "string",
+          enum: ["BRL", "USDC", "CETES", "XLM"],
+          description: "Ativo/moeda de destino/recebimento. Use USDC para dólar/USD e BRL para real/reais.",
+        },
+        source_amount: {
+          type: "string",
+          description: "Valor de origem para simular. Se o usuário só pedir a taxa/cotação, use 1.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Idioma da resposta.",
+        },
+      },
+      required: ["source_asset_code", "dest_asset_code"],
     },
   },
   {
@@ -2001,6 +2053,8 @@ export async function executeTool(
         return executeGetProductContext(toolInput);
       case "get_brl_usdc_quote":
         return await executeGetBrlUsdcQuote();
+      case "get_pair_quote":
+        return await executeGetPairQuote(toolInput);
       case "get_explanations":
         return await executeGetExplanations(toolInput);
       case "get_yield_options":
@@ -2495,6 +2549,106 @@ async function executeGetBrlUsdcQuote(): Promise<string> {
     return JSON.stringify({
       success: false,
       error: errorMessage,
+    });
+  }
+}
+
+async function executeGetPairQuote(input: any): Promise<string> {
+  try {
+    const sourceAssetCode = normalizePairQuoteAsset(input.source_asset_code || input.sourceAssetCode || input.from_asset_code || input.fromAssetCode);
+    const destAssetCode = normalizePairQuoteAsset(input.dest_asset_code || input.destAssetCode || input.destination_asset_code || input.destinationAssetCode || input.to_asset_code || input.toAssetCode);
+    const sourceAmount = pairQuoteAmount(input.source_amount || input.sourceAmount || input.amount);
+    const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+
+    if (!sourceAssetCode || !destAssetCode) {
+      return JSON.stringify({
+        success: false,
+        error: language === 'en'
+          ? 'Tell me the source and destination currencies, for example: quote XLM to USDC.'
+          : 'Me diga a moeda de origem e destino, por exemplo: cotação XLM para USDC.',
+      });
+    }
+
+    const matrixPayload = await ConversionRateMatrixService.buildMatrix({
+      assets: ['BRL', 'USDC', 'CETES', 'XLM'],
+      sampleAmount: sourceAmount,
+    });
+    const cell = matrixPayload.matrix?.[sourceAssetCode]?.[destAssetCode];
+
+    if (!cell || cell.status === 'unavailable' || !cell.rate || !cell.destination_amount) {
+      return JSON.stringify({
+        success: false,
+        source_asset_code: sourceAssetCode,
+        dest_asset_code: destAssetCode,
+        error: language === 'en'
+          ? `No safe route is available for ${sourceAssetCode} to ${destAssetCode} right now.`
+          : `Não encontrei uma rota segura de ${sourceAssetCode} para ${destAssetCode} agora.`,
+        route_cell: cell || null,
+        all_pairs_summary: matrixPayload.summary,
+      });
+    }
+
+    const sourceDisplay = displayPairQuoteAmount(cell.sample_source_amount, sourceAssetCode);
+    const destinationDisplay = displayPairQuoteAmount(cell.destination_amount, destAssetCode);
+    const oneUnitDestination = Number(cell.rate || 0);
+    const inverse = Number(cell.inverse_rate || 0);
+    const rateDisplay = Number.isFinite(oneUnitDestination) && oneUnitDestination > 0
+      ? displayPairQuoteAmount(oneUnitDestination.toFixed(10), destAssetCode)
+      : '';
+    const inverseDisplay = Number.isFinite(inverse) && inverse > 0
+      ? displayPairQuoteAmount(inverse.toFixed(10), sourceAssetCode)
+      : '';
+    const routeKind = cell.status === 'synthetic' && cell.bridge_asset_code
+      ? (language === 'en' ? `best route via ${cell.bridge_asset_code}` : `melhor rota via ${cell.bridge_asset_code}`)
+      : cell.status === 'fallback'
+        ? (language === 'en' ? 'dynamic market fallback route' : 'rota por referência dinâmica de mercado')
+        : cell.status === 'same_asset'
+          ? (language === 'en' ? 'same-currency route' : 'mesma moeda')
+          : (language === 'en' ? 'direct best route' : 'melhor rota direta');
+    const message = language === 'en'
+      ? [
+          `Current quote by best route: ${sourceDisplay} -> approximately ${destinationDisplay}.`,
+          rateDisplay ? `Rate: 1 ${sourceAssetCode} ≈ ${rateDisplay}.` : '',
+          inverseDisplay ? `Inverse: 1 ${destAssetCode} ≈ ${inverseDisplay}.` : '',
+          `Route: ${routeKind}.`,
+          'This is only a quote. Nothing is executed without opening confirmation and entering PIN.',
+        ].filter(Boolean).join('\n')
+      : [
+          `Cotação atual pela melhor rota: ${sourceDisplay} -> aproximadamente ${destinationDisplay}.`,
+          rateDisplay ? `Taxa: 1 ${sourceAssetCode} ≈ ${rateDisplay}.` : '',
+          inverseDisplay ? `Inverso: 1 ${destAssetCode} ≈ ${inverseDisplay}.` : '',
+          `Rota: ${routeKind}.`,
+          'Isso é só cotação. Nada é executado sem abrir a confirmação e digitar o PIN.',
+        ].filter(Boolean).join('\n');
+
+    return JSON.stringify({
+      success: true,
+      network: matrixPayload.network,
+      source_asset_code: sourceAssetCode,
+      dest_asset_code: destAssetCode,
+      source_amount: cell.sample_source_amount,
+      destination_amount: cell.destination_amount,
+      rate: cell.rate,
+      inverse_rate: cell.inverse_rate,
+      route_status: cell.status,
+      route_source: cell.source,
+      route_method: cell.method,
+      route_path: cell.path,
+      bridge_asset_code: cell.bridge_asset_code || null,
+      observed_at: cell.observed_at,
+      all_pairs_summary: matrixPayload.summary,
+      message,
+    });
+  } catch (error) {
+    const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+    return JSON.stringify({
+      success: false,
+      error: publicErrorMessage(
+        error,
+        language === 'en'
+          ? 'I could not load this quote right now. Try again in a few seconds.'
+          : 'Não consegui carregar essa cotação agora. Tente novamente em alguns segundos.'
+      ),
     });
   }
 }

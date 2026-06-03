@@ -33,6 +33,22 @@ const mockQuoteBrlToUsdc = jest.fn(async (amountBrl: string) => {
     path: [],
   };
 });
+const mockQuoteUsdcToBrl = jest.fn(async (amountUsdc: string) => {
+  const sourceAmount = Number(String(amountUsdc).replace(',', '.'));
+  const brlPerUsdc = 5.13;
+  return {
+    source: 'configured_tesouro_asset',
+    symbol: 'USDC/BRL',
+    brlPerUsdc: brlPerUsdc.toFixed(8),
+    usdcPerBrl: (1 / brlPerUsdc).toFixed(8),
+    fetchedAt: '2026-05-15T12:00:00.000Z',
+    sourceAmount: sourceAmount.toFixed(7),
+    destinationAmount: (sourceAmount * brlPerUsdc).toFixed(7),
+    sourceAsset: { code: 'USDC' },
+    destinationAsset: { code: 'TESOURO' },
+    path: [],
+  };
+});
 const mockGetUsdBrlRate = jest.fn().mockResolvedValue({
   brlPerUsd: 5.13,
   source: 'configured_tesouro_asset',
@@ -57,6 +73,7 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   BrlReferenceRateService: {
     getReferenceRate: mockGetReferenceRate,
     quoteBrlToUsdc: mockQuoteBrlToUsdc,
+    quoteUsdcToBrl: mockQuoteUsdcToBrl,
   },
 }));
 
@@ -366,6 +383,59 @@ describe('Agent tool execution', () => {
       expect(parsed.error).not.toContain('source_issuer');
       expect(parsed.error).not.toContain('dest_issuer');
       expect(parsed.error).not.toMatch(/trustline|liquidez/i);
+    } finally {
+      quoteSpy.mockRestore();
+    }
+  });
+
+  it('executes get_pair_quote for any configured pair using the dynamic best-route matrix', async () => {
+    const quoteSpy = jest
+      .spyOn(apiStellarService, 'quoteStrictSendConversion')
+      .mockImplementation(async ({ sourceAsset, destAsset, sourceAmount }: any) => {
+        const source = String(sourceAsset?.code || '').toUpperCase() === 'TESOURO' ? 'BRL' : String(sourceAsset?.code || '').toUpperCase();
+        const destination = String(destAsset?.code || '').toUpperCase() === 'TESOURO' ? 'BRL' : String(destAsset?.code || '').toUpperCase();
+        const rates: Record<string, number> = {
+          'XLM->USDC': 0.2,
+          'USDC->XLM': 5,
+          'CETES->USDC': 0.1,
+          'USDC->CETES': 10,
+        };
+        const rate = rates[`${source}->${destination}`];
+        if (!rate) throw new Error(`No direct route for ${source}->${destination}`);
+        const amount = Number(String(sourceAmount || '0').replace(',', '.'));
+        return {
+          sourceAmount: amount.toFixed(7),
+          destinationAmount: (amount * rate).toFixed(7),
+          sourceAsset,
+          destinationAsset: destAsset,
+          destinationMin: (amount * rate * 0.99).toFixed(7),
+          path: [],
+          platformFee: { enabled: false, feeAmount: '0', feeAssetCode: source, feeBps: 0 },
+          networkFeeXlm: '0.0000100',
+        };
+      });
+
+    try {
+      const output = await executeTool('get_pair_quote', {
+        source_asset_code: 'XLM',
+        dest_asset_code: 'CETES',
+        source_amount: '100',
+        language: 'pt-BR',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.source_asset_code).toBe('XLM');
+      expect(parsed.dest_asset_code).toBe('CETES');
+      expect(parsed.source_amount).toBe('100');
+      expect(parsed.destination_amount).toBe('200');
+      expect(parsed.rate).toBeCloseTo(2, 10);
+      expect(parsed.route_status).toBe('synthetic');
+      expect(parsed.bridge_asset_code).toBe('USDC');
+      expect(parsed.all_pairs_summary.total_pairs).toBe(16);
+      expect(parsed.message).toContain('Cotação atual pela melhor rota');
+      expect(parsed.message).toContain('100 XLM');
+      expect(parsed.message).toContain('200 CETES');
     } finally {
       quoteSpy.mockRestore();
     }

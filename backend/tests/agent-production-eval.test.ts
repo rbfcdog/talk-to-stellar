@@ -90,6 +90,9 @@ type RouterEvalCase = {
   risk?: 'low' | 'medium' | 'high';
   language?: 'pt-BR' | 'en';
   needsClarification?: boolean;
+  expectedAmount?: string;
+  expectedSourceAssetCode?: string;
+  expectedDestAssetCode?: string;
 };
 
 function flattenMessageContent(value: any): string {
@@ -439,6 +442,51 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Toda conversão ou envio usa a melhor rota disponível');
     expect(result.response_message).toContain('antes de qualquer PIN');
     expect(result.response_message).not.toContain('Eu analiso a melhor rota');
+  });
+
+  it('calls the pair quote tool when the LLM route extracts source and destination assets', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = jest.fn().mockResolvedValue({
+      tool_calls: [{
+        id: 'call_route_price_quote_intent',
+        name: 'route_price_quote_intent',
+        args: {
+          confidence: 0.99,
+          reason: 'pair quote',
+          needs_clarification: false,
+          language: 'pt-BR',
+          risk: 'medium',
+          source_asset_code: 'USDC',
+          dest_asset_code: 'BRL',
+        },
+      }],
+    });
+    graph.llm = {
+      bindTools: jest.fn().mockReturnValue({ invoke: routerInvoke }),
+      invoke: jest.fn(),
+    };
+    executeToolMock.mockResolvedValueOnce(JSON.stringify({
+      success: true,
+      message: [
+        'Cotação atual pela melhor rota: US$ 1.00 -> aproximadamente R$ 5.13.',
+        'Taxa: 1 USDC ≈ R$ 5.13.',
+        'Isso é só cotação. Nada é executado sem abrir a confirmação e digitar o PIN.',
+      ].join('\n'),
+    }));
+
+    const result = await graph.processInput(createState('qual a melhor rota de usdc pra brl agor?'));
+
+    expect(executeToolMock).toHaveBeenCalledTimes(1);
+    expect(executeToolMock).toHaveBeenCalledWith('get_pair_quote', {
+      source_asset_code: 'USDC',
+      dest_asset_code: 'BRL',
+      source_amount: '1',
+      language: 'pt-BR',
+    });
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Cotação atual pela melhor rota');
+    expect(result.response_message).not.toContain('Toda conversão ou envio usa a melhor rota disponível');
   });
 
   it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
@@ -828,8 +876,13 @@ describe('Agent production evals', () => {
     expect(descriptionByName.route_payment_intent).toContain('Do not use for PIX top-up');
     expect(descriptionByName.route_payment_link_intent).toContain('does not require an existing contact');
     expect(descriptionByName.route_price_quote_intent).toContain('needs_clarification=true');
+    expect(descriptionByName.route_price_quote_intent).toContain('XLM/USDC');
+    expect(descriptionByName.route_price_quote_intent).toContain('BRL para CETES');
     expect(descriptionByName.route_reset_pin_intent).toContain('redefimir');
     expect(descriptionByName.route_general_intent).toContain('Never use for actionable product requests');
+    const priceQuoteProperties = tools.find((tool: any) => tool.function?.name === 'route_price_quote_intent')?.function?.parameters?.properties || {};
+    expect(priceQuoteProperties.source_asset_code.description).toContain('source/origin asset');
+    expect(priceQuoteProperties.dest_asset_code.description).toContain('destination/target asset');
   });
 
   describe('LLM intent router contract matrix', () => {
@@ -880,12 +933,14 @@ describe('Agent production evals', () => {
       { name: 'conversion generic', input: 'quero converter dinheiro', expectedIntent: IntentType.CONVERSION, risk: 'medium' },
       { name: 'conversion swap wording', input: 'trocar 50 reais para dólar', expectedIntent: IntentType.CONVERSION, risk: 'high' },
       { name: 'conversion missing amount', input: 'trocar usdc para brl', expectedIntent: IntentType.CONVERSION, risk: 'medium', needsClarification: true },
-      { name: 'price quote best route', input: 'qual a melhor rota de usdc pra brl agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
+      { name: 'price quote best route', input: 'qual a melhor rota de usdc pra brl agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'BRL' },
       { name: 'price quote fees', input: 'quanto custa enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
       { name: 'price quote bank comparison', input: 'vale a pena comparado com o banco enviar 5000 reais?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
-      { name: 'price quote missing amount', input: 'qual a taxa de usdc pra brl?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', needsClarification: true },
-      { name: 'price quote xlm to usdc', input: 'quanto dá 100 xlm em usdc?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium' },
-      { name: 'price quote route without amount', input: 'melhor rota de brl para xlm', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', needsClarification: true },
+      { name: 'price quote missing amount', input: 'qual a taxa de usdc pra brl?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'BRL' },
+      { name: 'price quote xlm to usdc', input: 'quanto dá 100 xlm em usdc?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '100', expectedSourceAssetCode: 'XLM', expectedDestAssetCode: 'USDC' },
+      { name: 'price quote route without amount', input: 'melhor rota de brl para xlm', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'XLM' },
+      { name: 'price quote cetes slash xlm', input: 'quanto está CETES/XLM agora?', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedSourceAssetCode: 'CETES', expectedDestAssetCode: 'XLM' },
+      { name: 'price quote brl to cetes', input: 'cotação atual de 250 reais para cetes', expectedIntent: IntentType.PRICE_QUOTE, risk: 'medium', expectedAmount: '250', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'CETES' },
       { name: 'yield typo', input: 'quero ver aolicacoes', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield investments', input: 'quero ver meus investimentos', expectedIntent: IntentType.YIELD, risk: 'low' },
       { name: 'yield singular typo', input: 'quero ver minhas aplicação', expectedIntent: IntentType.YIELD, risk: 'low' },
@@ -934,7 +989,17 @@ describe('Agent production evals', () => {
       { name: 'english help', input: 'what can you do?', expectedIntent: IntentType.GENERAL, risk: 'low', language: 'en' },
     ];
 
-    it.each(cases)('$name -> $expectedIntent', async ({ input, expectedIntent, expectedTool: caseExpectedTool, risk = 'medium', language = 'pt-BR', needsClarification = false }) => {
+    it.each(cases)('$name -> $expectedIntent', async ({
+      input,
+      expectedIntent,
+      expectedTool: caseExpectedTool,
+      risk = 'medium',
+      language = 'pt-BR',
+      needsClarification = false,
+      expectedAmount,
+      expectedSourceAssetCode,
+      expectedDestAssetCode,
+    }) => {
       const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
       const expectedTool = caseExpectedTool || routeToolByIntent[expectedIntent];
       const routeArgs = {
@@ -943,6 +1008,9 @@ describe('Agent production evals', () => {
         needs_clarification: needsClarification,
         language,
         risk,
+        ...(expectedAmount ? { amount: expectedAmount } : {}),
+        ...(expectedSourceAssetCode ? { source_asset_code: expectedSourceAssetCode } : {}),
+        ...(expectedDestAssetCode ? { dest_asset_code: expectedDestAssetCode } : {}),
       };
       const routerInvoke = jest.fn(async (messages: any[]) => {
         const joinedMessages = messages.map((message) => flattenMessageContent(message.content)).join('\n\n');
@@ -971,6 +1039,9 @@ describe('Agent production evals', () => {
       expect(routeArgs.needs_clarification).toBe(needsClarification);
       expect(routeArgs.language).toBe(language);
       expect(routeArgs.risk).toBe(risk);
+      if (expectedAmount) expect(routeArgs.amount).toBe(expectedAmount);
+      if (expectedSourceAssetCode) expect(routeArgs.source_asset_code).toBe(expectedSourceAssetCode);
+      if (expectedDestAssetCode) expect(routeArgs.dest_asset_code).toBe(expectedDestAssetCode);
       const expectedRouterCalls = expectedIntent === IntentType.CONTACTS || expectedTool === 'route_pix_onramp_intent' ? 2 : 1;
       expect(routerInvoke).toHaveBeenCalledTimes(expectedRouterCalls);
       expect(graph.llm.bindTools).toHaveBeenCalledTimes(expectedRouterCalls);
