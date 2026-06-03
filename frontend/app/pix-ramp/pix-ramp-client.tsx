@@ -1137,6 +1137,14 @@ export default function PixRampClient({
   const paymentInstructions = order?.paymentInstructions || {};
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
+  const effectiveOnRampPixPayAmount = String(
+    paymentInstructions?.amount ||
+    order?.fromAmount ||
+    quote?.fromAmount ||
+    amountBrl ||
+    ""
+  );
+  const effectiveOnRampPixPayDisplay = formatMoney(effectiveOnRampPixPayAmount);
   const isSandboxMockOrder = Boolean(order?.sandbox_mock);
   const localMockFallbackAllowed = Boolean(config?.local_mock_fallback_allowed);
   const opsMocksAllowed = Boolean(config?.ops_mocks_allowed);
@@ -1192,7 +1200,7 @@ export default function PixRampClient({
       : desiredFinalAmount && desiredFinalAsset === targetAsset
         ? formatRampAsset(desiredFinalAmount, targetAsset)
       : onRampReceivedDisplay || L("Calculado na confirmação", "Calculated on confirmation");
-  const quoteGrossLabel = quote ? formatMoney(quote.fromAmount || amountBrl) : formatMoney(amountBrl);
+  const quoteGrossLabel = quote ? effectiveOnRampPixPayDisplay : formatMoney(amountBrl);
   const quoteCostContext = transferFlow && transferRecipientLabel
     ? L("valor que será enviado", "amount that will be sent")
     : L("valor que entra na sua conta", "amount added to your account");
@@ -1209,7 +1217,7 @@ export default function PixRampClient({
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
-    ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(String(order?.fromAmount || amountBrl))}&asset=${encodeURIComponent(targetAsset)}`
+    ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(effectiveOnRampPixPayAmount)}&asset=${encodeURIComponent(targetAsset)}`
     : "";
   const loginHref = useMemo(() => {
     if (!needsBrowserLoginForPix) return "";
@@ -1307,8 +1315,8 @@ export default function PixRampClient({
         label: L("Valor", "Amount"),
         detail: quote
           ? transferFlow && transferRecipientLabel
-            ? L(`${formatMoney(quote.fromAmount || amountBrl)} via PIX para enviar a ${transferRecipientLabel}.`, `${formatMoney(quote.fromAmount || amountBrl)} via PIX to send to ${transferRecipientLabel}.`)
-            : L(`${formatMoney(quote.fromAmount || amountBrl)} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${formatMoney(quote.fromAmount || amountBrl)} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
+            ? L(`${effectiveOnRampPixPayDisplay} via PIX para enviar a ${transferRecipientLabel}.`, `${effectiveOnRampPixPayDisplay} via PIX to send to ${transferRecipientLabel}.`)
+            : L(`${effectiveOnRampPixPayDisplay} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${effectiveOnRampPixPayDisplay} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
           : receiveEstimateRequired && !receiveEstimateReady
             ? receiveEstimateLoading
               ? L("Calculando a cotação atual.", "Calculating the current quote.")
@@ -2184,14 +2192,14 @@ export default function PixRampClient({
         eventName: "pix_funded_transfer_completed",
         taskLabel: "Pagou PIX e enviou dinheiro para destinatario",
         metadata: {
-          pix_paid: formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl),
+          pix_paid: effectiveOnRampPixPayDisplay,
           transfer_amount: sentAmount,
           recipient,
         },
       });
       enqueueWebChatFeedback([
         L("PIX confirmado e transferência enviada.", "PIX confirmed and transfer sent."),
-        L(`PIX pago: ${formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}`, `PIX paid: ${formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}`),
+        L(`PIX pago: ${effectiveOnRampPixPayDisplay}`, `PIX paid: ${effectiveOnRampPixPayDisplay}`),
         L(`Transferência: ${sentAmount}`, `Transfer: ${sentAmount}`),
         L(`Destino: ${recipient}`, `Destination: ${recipient}`),
         L("Status: concluído", "Status: completed"),
@@ -2212,7 +2220,9 @@ export default function PixRampClient({
     const finalAmount = finalAsset === "BRL"
       ? String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || order?.toAmount || quote?.toAmount || amountBrl)
       : String(input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
-    const paidAmount = formatMoney(input.completedTransaction?.fromAmount || order?.fromAmount || quote?.fromAmount || amountBrl);
+    const paidAmount = input.completedTransaction?.fromAmount
+      ? formatMoney(input.completedTransaction.fromAmount)
+      : effectiveOnRampPixPayDisplay;
     const receivedAmount = finalAmount
       ? formatRampAsset(finalAmount, finalAsset)
       : L(
@@ -2384,9 +2394,12 @@ export default function PixRampClient({
       const transferFinalAsset = transferFlow ? normalizeTargetAsset(autoPayAsset || targetAsset, targetAsset) : "";
       const requestedFinalAmount = transferFlow ? normalizeHumanAmount(autoPayAmount || "") : desiredFinalAmount;
       const requestedFinalAsset = requestedFinalAmount ? optionalSettlementAssetCode(transferFlow ? transferFinalAsset : desiredFinalAsset) : "";
-      const orderAmountBrl = targetAsset === "BRL" && requestedFinalAmount
-        ? estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)
-        : amountBrl;
+      const quotedOrderAmountBrl = normalizeHumanAmount(quoteForOrder?.fromAmount || "");
+      const orderAmountBrl = quotedOrderAmountBrl || (
+        targetAsset === "BRL" && requestedFinalAmount
+          ? estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)
+          : amountBrl
+      );
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
         intent_id: atomicIntentKey,
         customer_id: orderCustomerId || undefined,
@@ -2475,7 +2488,7 @@ export default function PixRampClient({
       `Order: ${orderId}`,
       `Operation: ${operationId || "not persisted"}`,
       `PIX key: ${displayPixKey}`,
-      `${L("Valor", "Amount")}: ${formatMoney(order?.fromAmount || amountBrl)}`,
+      `${L("Valor", "Amount")}: ${effectiveOnRampPixPayDisplay}`,
       `${L("Entrega", "Delivery")}: ${onRampReceivedDisplay}`,
     ].join("\n");
     await navigator.clipboard.writeText(isSandboxMockOrder ? sandboxReference : pixCode || pixKey || orderId);
@@ -2808,7 +2821,7 @@ export default function PixRampClient({
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
-                  {rampMode === "onramp" ? formatMoney(amountBrl) : offRampDisplayAmount}
+                  {rampMode === "onramp" ? effectiveOnRampPixPayDisplay : offRampDisplayAmount}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
@@ -3263,7 +3276,7 @@ export default function PixRampClient({
                   <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{desiredFinalAsset}</span>
                 </div>
                 <div className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 px-4 py-3 text-sm font-bold text-tts-confirm">
-                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : amountBrl ? L(`PIX estimado pela rota da sua conta: ${formatMoney(amountBrl)}`, `Estimated PIX from your account route: ${formatMoney(amountBrl)}`) : L("O PIX será calculado pela cotação dinâmica antes de gerar o QR.", "PIX will be calculated by the dynamic quote before creating the QR.")}
+                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : amountBrl ? L(`PIX pela rota da sua conta: ${effectiveOnRampPixPayDisplay}`, `PIX from your account route: ${effectiveOnRampPixPayDisplay}`) : L("O PIX será calculado pela cotação dinâmica antes de gerar o QR.", "PIX will be calculated by the dynamic quote before creating the QR.")}
                 </div>
               </>
             ) : (
@@ -3446,7 +3459,7 @@ export default function PixRampClient({
                     </div>
                     <div className="rounded-3xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{L("Valor", "Amount")}</p>
-                      <p className="mt-1 text-lg font-black">{formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)}</p>
+                      <p className="mt-1 text-lg font-black">{effectiveOnRampPixPayDisplay}</p>
                     </div>
                     <div className="rounded-3xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-tts-confirm">{L("Expira em", "Expires in")}</p>
@@ -3660,7 +3673,7 @@ export default function PixRampClient({
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <ReceiptRow
                       label={rampMode === "offramp" ? L("Recebido no seu PIX", "Received in your PIX") : L("Pago via PIX", "Paid with PIX")}
-                      value={rampMode === "offramp" ? offRampReceiptReceived : formatMoney(order?.fromAmount || quote?.fromAmount || amountBrl)}
+                      value={rampMode === "offramp" ? offRampReceiptReceived : effectiveOnRampPixPayDisplay}
                     />
                     <ReceiptRow label={L("Status", "Status")} value={L("Concluído", "Completed")} />
                     {rampMode === "onramp" && <ReceiptRow label={L("Saldo antes", "Balance before")} value={onRampReceiptBefore} />}
