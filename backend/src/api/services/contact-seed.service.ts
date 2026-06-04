@@ -37,6 +37,8 @@ export const STARTER_CONTACTS = [
   { contact_name: 'Juliana Lima', pix_prefix: 'juliana.lima' },
 ];
 
+type StarterContact = (typeof STARTER_CONTACTS)[number];
+
 const CURRENT_STATIC_CONTACT_KEYS: Record<string, string> = {
   'Ana Silva': 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
   'Carlos Souza': 'GCIWWXXCVYF63AMC7PX3C4SAMNPLHVZRPPGJXM4S3D5IJV4NOCJ32HLV',
@@ -415,16 +417,51 @@ export class ContactSeedService {
     };
   }
 
+  private static isPublicDynamicStarterContactEnabled(): boolean {
+    return ['1', 'true', 'yes', 'on'].includes(String(process.env.ENABLE_PUBLIC_STARTER_CONTACTS || '').trim().toLowerCase());
+  }
+
+  private static shouldUseStaticStarterContactOnly(): boolean {
+    return getStellarNetworkName() === 'PUBLIC' && !this.isPublicDynamicStarterContactEnabled();
+  }
+
+  private static getStaticStarterPublicKey(contactName: string): string {
+    return CURRENT_STATIC_CONTACT_KEYS[contactName] || LEGACY_STATIC_CONTACT_KEYS[contactName] || '';
+  }
+
+  private static staticStarterContactWallet(contact: StarterContact, pixKey: string) {
+    const publicKey = this.getStaticStarterPublicKey(contact.contact_name);
+    if (!publicKey) {
+      throw new Error(`No static starter public key configured for ${contact.contact_name}`);
+    }
+
+    return {
+      publicKey,
+      pixKey,
+      staticFallback: true,
+    };
+  }
+
+  private static async resolveStarterContactWallet(ownerId: string, contact: StarterContact, pixKey: string) {
+    if (this.shouldUseStaticStarterContactOnly()) {
+      return this.staticStarterContactWallet(contact, pixKey);
+    }
+
+    try {
+      return await this.createInternalContactWallet(ownerId, contact.contact_name, pixKey);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[contact-seed] dynamic starter wallet failed for ${ownerId}/${contact.contact_name}; using static fallback: ${message}`);
+      return this.staticStarterContactWallet(contact, pixKey);
+    }
+  }
+
   static async ensureStarterContactsForUser(ownerId: string): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
     const result = { created: 0, updated: 0, skipped: 0, errors: [] as string[] };
     if (!ownerId) return result;
 
-    if (getStellarNetworkName() === 'PUBLIC' && String(process.env.ENABLE_PUBLIC_STARTER_CONTACTS || '').toLowerCase() !== 'true') {
-      result.skipped = STARTER_CONTACTS.length;
-      return result;
-    }
-
     const walletRepo = new WalletRepository(supabase);
+    const staticOnly = this.shouldUseStaticStarterContactOnly();
 
     for (const contact of STARTER_CONTACTS) {
       const pixKey = this.deriveStarterPixKey(ownerId, contact.pix_prefix);
@@ -447,6 +484,25 @@ export class ContactSeedService {
           ? await walletRepo.getWalletByPublicKey(existingPublicKey).catch(() => null)
           : null;
 
+        const staticPublicKey = this.getStaticStarterPublicKey(contact.contact_name);
+        if (staticOnly && existing?.id && existingPublicKey && isLegacyStarterContact(contact.contact_name, existingPublicKey)) {
+          if (existingPublicKey !== staticPublicKey || existing.pix_key !== pixKey) {
+            const { error: updateStaticError } = await supabase
+              .from('contacts')
+              .update({
+                stellar_public_key: staticPublicKey,
+                pix_key: pixKey,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existing.id);
+            if (updateStaticError) throw new Error(updateStaticError.message || 'failed to update static starter contact');
+            result.updated += 1;
+          } else {
+            result.skipped += 1;
+          }
+          continue;
+        }
+
         if (existing && existingPublicKey && existingWallet?.vault_secret_id && !isLegacyStarterContact(contact.contact_name, existingPublicKey)) {
           if (existing.pix_key !== pixKey) {
             const { error: updatePixError } = await supabase
@@ -466,7 +522,12 @@ export class ContactSeedService {
           continue;
         }
 
-        const contactWallet = await this.createInternalContactWallet(ownerId, contact.contact_name, pixKey);
+        const contactWallet = await this.resolveStarterContactWallet(ownerId, contact, pixKey);
+
+        if (existing?.id && existingPublicKey === contactWallet.publicKey && existing.pix_key === pixKey) {
+          result.skipped += 1;
+          continue;
+        }
 
         if (existing?.id) {
           const { error: updateError } = await supabase
