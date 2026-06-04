@@ -14,6 +14,7 @@ describe("UX copy guardrails", () => {
       "app/rendimentos/rendimentos-client.tsx",
       "app/pix-ramp/pix-ramp-client.tsx",
       "app/transactions/transactions-client.tsx",
+      "app/balance/balance-client.tsx",
       "app/passkey-test/passkey-test-client.tsx",
     ];
 
@@ -34,10 +35,12 @@ describe("UX copy guardrails", () => {
 
     expect(i18nText).toContain('chat_link_yield: "Abrir rendimentos"');
     expect(i18nText).toContain('chat_link_profile: "Abrir perfil"');
+    expect(i18nText).toContain('chat_link_balance: "Abrir saldo"');
     expect(i18nText).toContain('chat_link_history: "Abrir histórico"');
     expect(i18nText).toContain('chat_link_external_send: "Abrir envio externo"');
     expect(chatText).toContain('path.endsWith("/rendimentos")');
     expect(chatText).toContain('path.startsWith("/profile/")');
+    expect(chatText).toContain('path.endsWith("/balance")');
     expect(chatText).toContain('path.endsWith("/transactions")');
     expect(chatText).toContain('path.endsWith("/send-external")');
   });
@@ -197,7 +200,7 @@ describe("UX copy guardrails", () => {
 
     expect(text).toContain('displayCode === "BRL" ? "TESOURO"');
     expect(text).toContain("final_asset: settlementAssetCode(targetAsset)");
-    expect(text).toContain("auto_pay_asset_code: settlementAssetCode(autoPayAsset || targetAsset)");
+    expect(text).toContain("auto_pay_asset_code: settlementAssetCode(autoPaySourceAsset || autoPayAsset || targetAsset)");
     expect(text).toContain("asset_code: requestedAutoPayAsset");
     expect(text).toContain("source_asset_code: sourceAssetCode");
     expect(text).toContain("display_source_asset_code: offRampInputAsset");
@@ -218,7 +221,7 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("refreshOrder(false)");
     expect(text).toContain("function extractRampReceiptUrl(...sources: unknown[]): string");
     expect(text).toContain("function buildRampReceiptFallbackUrl(reference: unknown): string");
-    expect(text).toContain("receiptUrl: extractRampReceiptUrl(payload, refreshed)");
+    expect(text).toContain("receiptUrl: extractRampReceiptUrl(completedTransaction, refreshed, payload)");
     expect(text).toContain("buildRampReceiptFallbackUrl(transactionHash || operationId || orderId)");
     expect(text).toContain("const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload)");
     expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');

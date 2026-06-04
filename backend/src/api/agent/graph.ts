@@ -2343,8 +2343,8 @@ export class AgentGraph {
       crossAssetPayment
         ? this.text(
             language,
-            `O PIX completa seu saldo em ${this.formatUserFacingAssetName(input.assetCode, language)} e, depois da confirmação, a tela converte para ${this.formatUserFacingAssetName(recipientAssetCode, language)} e envia para ${input.destinationName}.`,
-            `PIX tops up your balance in ${this.formatUserFacingAssetName(input.assetCode, language)} and, after confirmation, the screen converts to ${this.formatUserFacingAssetName(recipientAssetCode, language)} and sends it to ${input.destinationName}.`
+            `No mesmo link você faz os dois passos: primeiro completa o saldo via PIX em ${this.formatUserFacingAssetName(input.assetCode, language)}; depois a tela converte para ${this.formatUserFacingAssetName(recipientAssetCode, language)} e envia para ${input.destinationName}.`,
+            `In the same link you do both steps: first PIX tops up ${this.formatUserFacingAssetName(input.assetCode, language)}; then the screen converts to ${this.formatUserFacingAssetName(recipientAssetCode, language)} and sends it to ${input.destinationName}.`
           )
         : this.text(
             language,
@@ -4078,47 +4078,13 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       state.success = false;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
-      const toolResultRaw = await executeTool('get_balance', {
-        session_id: sessionId || undefined,
-        public_key: sessionPublicKey || undefined,
-      });
-
-      let toolResult: any;
-      try {
-        toolResult = JSON.parse(toolResultRaw);
-      } catch {
-        toolResult = { success: false, error: 'Failed to parse tool response' };
-      }
-
-      if (!toolResult.success) {
-        state.success = false;
-        state.response_message = this.text(
-          language,
-          'Não consegui consultar seu saldo agora. Tente novamente em alguns segundos.',
-          'I could not check your balance right now. Try again in a few seconds.'
-        );
-      } else {
-        const balances = Array.isArray(toolResult.balances) ? toolResult.balances : [];
-        const byAsset = new Map<string, any>();
-        for (const balance of balances) {
-          const asset = this.toUserFacingAssetCode(balance.asset || balance.asset_code || '').replace(/^USD$/, 'USDC');
-          if (asset) {
-            byAsset.set(asset, { ...balance, asset });
-          }
-        }
-        const balanceAssets = ['BRL', 'USDC', 'CETES', 'XLM'];
-        const exactBalances = balanceAssets.map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
-        const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
-        const monthlySavingsMessage = String(toolResult.monthly_savings?.message || '').trim();
-        const savingsLine = monthlySavingsMessage ? `\n\n💰 ${monthlySavingsMessage}` : '';
-
-        state.success = true;
-        state.response_message = this.text(
-          language,
-          `Saldo da sua conta TalkToStellar:\n${formattedBalances}${savingsLine}\n\nO PIX entrega R$ ou US$ conforme você escolher no checkout.`,
-          `Your TalkToStellar account balance:\n${formattedBalances}${savingsLine}\n\nPIX delivers R$ or US$ depending on what you choose at checkout.`
-        );
-      }
+      const balanceUrl = await this.buildBalanceUrl(state);
+      state.success = true;
+      state.response_message = this.text(
+        language,
+        `Para proteger seu saldo, abra a tela segura abaixo. Ela pede seu PIN antes de mostrar valores, XLM e outros ativos:\n\n${balanceUrl}`,
+        `To protect your balance, open the secure screen below. It asks for your PIN before showing values, XLM, and other assets:\n\n${balanceUrl}`
+      );
     }
 
     await this.saveAssistantResponse(state);
@@ -4127,36 +4093,18 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
   }
 
   private async handleHistoryCheck(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
     if (!state.session_data?.public_key) {
       state.success = false;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
-      const toolResultRaw = await executeTool('get_transaction_history', {
-        public_key: state.session_data.public_key,
-        user_id: state.session_data.user_id,
-        limit: 5,
-      });
-
-      let toolResult: any;
-      try {
-        toolResult = JSON.parse(toolResultRaw);
-      } catch {
-        toolResult = { success: false, error: 'Failed to parse tool response' };
-      }
-
-      if (!toolResult.success) {
-        state.success = false;
-        state.response_message = `Não consegui consultar suas transações agora: ${toolResult.error || 'erro desconhecido'}`;
-      } else {
-        const transactions = Array.isArray(toolResult.transactions) ? toolResult.transactions.slice(0, 5) : [];
-        const formattedTransactions = transactions.length > 0
-          ? transactions.map((transaction: any, index: number) => this.formatTransactionLine(transaction, index)).join('\n\n')
-          : 'Nenhuma transação encontrada.';
-        const historyUrl = await this.buildTransactionsHistoryUrl(state);
-
-        state.success = true;
-        state.response_message = `Ver histórico completo:\n${historyUrl}\n\nÚltimas 5 transações da sua conta:\n${formattedTransactions}`;
-      }
+      const historyUrl = await this.buildTransactionsHistoryUrl(state);
+      state.success = true;
+      state.response_message = this.text(
+        language,
+        `Para proteger seu histórico, abra a tela segura abaixo. Ela pede seu PIN antes de mostrar suas últimas transações:\n\n${historyUrl}`,
+        `To protect your history, open the secure screen below. It asks for your PIN before showing your latest transactions:\n\n${historyUrl}`
+      );
     }
 
     await this.saveAssistantResponse(state);
@@ -4164,10 +4112,43 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     return state;
   }
 
+  private applyChannelContextToUrl(state: AgentState, url: URL): void {
+    const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
+    const externalProviderUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
+    const externalSource = String((state.action_params as any)?.external_source || externalProvider || '').trim().toLowerCase();
+    const externalSessionScope = normalizeExternalSessionScope(externalProvider || externalSource);
+
+    if (externalProvider) url.searchParams.set('provider', externalProvider);
+    if (externalProviderUserId) url.searchParams.set('provider_user_id', externalProviderUserId);
+    if (externalSource) url.searchParams.set('source', externalSource);
+    if (externalSessionScope) url.searchParams.set('session_scope', externalSessionScope);
+  }
+
+  private async buildBalanceUrl(state: AgentState): Promise<string> {
+    const language = this.getLanguage(state);
+    const url = new URL(`${this.getFrontendBaseUrl()}/balance`);
+    url.searchParams.set('lang', language);
+    this.applyChannelContextToUrl(state, url);
+    let finalUrl = url.toString();
+    try {
+      finalUrl = await this.externalService.shortenPublicUrl({
+        url: finalUrl,
+        purpose: 'balance_view',
+        sessionId: state.session_id,
+        userId: String(state.session_data?.user_id || '').trim() || undefined,
+        expiresInHours: 24,
+      });
+    } catch (error) {
+      logger.warn(`[balance-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return finalUrl;
+  }
+
   private async buildTransactionsHistoryUrl(state: AgentState): Promise<string> {
     const language = this.getLanguage(state);
     const url = new URL(`${this.getFrontendBaseUrl()}/transactions`);
     url.searchParams.set('lang', language);
+    this.applyChannelContextToUrl(state, url);
     let finalUrl = url.toString();
     try {
       finalUrl = await this.externalService.shortenPublicUrl({

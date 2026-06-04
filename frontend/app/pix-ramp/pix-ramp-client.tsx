@@ -2398,6 +2398,7 @@ export default function PixRampClient({
         L(`Destino: ${externalPixDestination}`, `Destination: ${externalPixDestination}`),
         L("Status: concluído", "Status: completed"),
         L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
+        receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
     }
@@ -2423,6 +2424,7 @@ export default function PixRampClient({
         L(`Destino: ${recipient}`, `Destination: ${recipient}`),
         L("Status: concluído", "Status: completed"),
         L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
+        receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
     }
@@ -2489,6 +2491,7 @@ export default function PixRampClient({
         ? L(`Status: conversão para ${friendlyAssetName(finalAsset, language)} em andamento`, `Status: conversion to ${friendlyAssetName(finalAsset, language)} in progress`)
         : L("Status: concluído", "Status: completed"),
       L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
+      receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
     ].filter(Boolean).join("\n"));
   }
 

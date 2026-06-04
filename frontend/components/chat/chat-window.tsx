@@ -120,6 +120,7 @@ function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
     if (path.endsWith("/pay-anyone")) return t("chat_link_pay_anyone");
     if (path.endsWith("/claim-payment")) return t("chat_link_claim");
     if (path.endsWith("/pix-ramp") || path.endsWith("/pix-on") || path.endsWith("/pix-off")) return t("chat_link_pix");
+    if (path.endsWith("/balance")) return t("chat_link_balance");
     if (path.endsWith("/transactions")) return t("chat_link_history");
     if (path.startsWith("/profile/") || path.startsWith("/u/")) return t("chat_link_profile");
     if (path.endsWith("/send-external")) return t("chat_link_external_send");
@@ -790,7 +791,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     return timestamp.toLocaleTimeString(language === "en" ? "en-US" : "pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
-  const renderMessageContent = (content: string) => {
+  const renderMessageContent = (content: string, role: Message["role"] = "assistant") => {
     const safeContent = sanitizeVisibleChatText(content)
       .replace(/RECEIPT_IMAGE_DATA_URL:data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/g, '')
       .trim();
@@ -807,15 +808,19 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 href={part}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="my-2 flex max-w-full items-center gap-3 rounded-xl border border-tts-border bg-tts-bg px-3 py-2 text-tts-deep no-underline shadow-sm transition hover:bg-tts-surface"
+                className={
+                  role === "user"
+                    ? "my-2 flex max-w-full items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-3 py-2 !text-white no-underline shadow-sm transition hover:bg-white/15"
+                    : "my-2 flex max-w-full items-center gap-3 rounded-xl border border-tts-border bg-tts-bg px-3 py-2 text-tts-deep no-underline shadow-sm transition hover:bg-tts-surface"
+                }
                 title={part}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tts-gold-bg text-tts-gold">
+                <span className={role === "user" ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black" : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tts-gold-bg text-tts-gold"}>
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1 overflow-hidden">
                   <span className="block truncate text-sm font-medium">{getFriendlyLinkLabel(part, t)}</span>
-                  <span className="block truncate text-xs text-tts-muted">{getFriendlyLinkMeta(part)}</span>
+                  <span className={role === "user" ? "block truncate text-xs !text-white/65" : "block truncate text-xs text-tts-muted"}>{getFriendlyLinkMeta(part)}</span>
                 </span>
               </a>
             );
@@ -899,15 +904,15 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 <div
                   className={
                     m.role === "user"
-                      ? "min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm text-tts-surface shadow-sm dark:border dark:border-white/10 dark:bg-white/10 dark:text-white"
+                      ? "min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm !text-white shadow-sm dark:border dark:border-white/10 dark:bg-white/10 dark:!text-white [&_*]:!text-white"
                       : "min-w-0 max-w-[80%] overflow-hidden rounded-2xl rounded-bl-sm border border-tts-border bg-tts-surface px-4 py-2.5 text-sm text-tts-deep shadow-sm"
                   }
                 >
-                  {renderMessageContent(m.content)}
+                  {renderMessageContent(m.content, m.role)}
                   <div
                     className={
                       m.role === "user"
-                        ? "mt-1 text-right font-mono text-[10px] text-tts-surface/60 dark:text-white/60"
+                        ? "mt-1 text-right font-mono text-[10px] !text-white/60"
                         : "mt-1 text-right font-mono text-[10px] text-tts-muted"
                     }
                   >
