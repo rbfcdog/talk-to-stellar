@@ -719,6 +719,7 @@
       min-height: calc(100dvh - 10.75rem);
       display: flex;
       flex-direction: column;
+      animation: tts-stage-enter 180ms ease-out both;
     }
 
     .tts-op-page .tts-mobile-flow-card h2 {
@@ -737,6 +738,10 @@
     }
 
     .tts-op-page .tts-mobile-flow-card .tts-mobile-soft-hide {
+      display: none !important;
+    }
+
+    .tts-op-page .tts-mobile-soft-hide {
       display: none !important;
     }
 
@@ -788,6 +793,102 @@
     border-top: 1px solid var(--tts-border);
     margin-top: 0.5rem;
     padding-top: 0.65rem;
+  }
+
+  .tts-op-page .tts-mobile-current-step {
+    border: 1px solid var(--tts-border);
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--tts-bg) 78%, var(--tts-surface) 22%);
+    padding: 0.85rem;
+  }
+
+  .tts-op-page .tts-wait-ring {
+    position: relative;
+    display: inline-flex;
+    height: 1.25rem;
+    width: 1.25rem;
+    border-radius: 999px;
+    background: var(--tts-muted);
+  }
+
+  .tts-op-page .tts-wait-ring::after {
+    content: "";
+    position: absolute;
+    inset: -0.35rem;
+    border-radius: inherit;
+    border: 1px solid currentColor;
+    color: var(--tts-muted);
+    opacity: 0.28;
+    animation: tts-soft-ping 1.4s ease-out infinite;
+  }
+
+  .tts-op-page .tts-wait-ring[data-tone='active'] {
+    background: var(--tts-gold);
+  }
+
+  .tts-op-page .tts-wait-ring[data-tone='done'] {
+    background: var(--tts-confirm);
+  }
+
+  .tts-op-page .tts-wait-ring[data-tone='error'] {
+    background: var(--tts-error);
+  }
+
+  .tts-op-page .tts-pulse-track {
+    height: 0.25rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.055);
+  }
+
+  .tts-op-page .tts-pulse-track::after {
+    content: "";
+    display: block;
+    height: 100%;
+    width: 44%;
+    border-radius: inherit;
+    background: var(--tts-deep);
+    animation: tts-track-slide 1.25s ease-in-out infinite;
+  }
+
+  @keyframes tts-soft-ping {
+    0% {
+      transform: scale(0.72);
+      opacity: 0.28;
+    }
+    70%,
+    100% {
+      transform: scale(1.45);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tts-track-slide {
+    0% {
+      transform: translateX(-112%);
+    }
+    100% {
+      transform: translateX(232%);
+    }
+  }
+
+  @keyframes tts-stage-enter {
+    0% {
+      opacity: 0;
+      transform: translateY(0.65rem) scale(0.992);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tts-op-page .tts-mobile-flow-card,
+    .tts-op-page .tts-wait-ring::after,
+    .tts-op-page .tts-pulse-track::after {
+      animation: none !important;
+    }
   }
 }
 

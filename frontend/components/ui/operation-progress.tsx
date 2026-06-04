@@ -56,6 +56,11 @@ export function OperationProgressPanel({
       : status === "submitting"
         ? runningMessage
         : readyMessage
+  const compactStepIndex = status === "done"
+    ? Math.max(0, steps.length - 1)
+    : Math.min(Math.max(activeIndex, 0), Math.max(0, steps.length - 1))
+  const compactStep = steps[compactStepIndex]
+  const compactTone = status === "error" ? "error" : status === "done" ? "done" : status === "submitting" ? "active" : "ready"
 
   return (
     <div className={`tts-stage-panel p-4 text-sm ${
@@ -74,7 +79,25 @@ export function OperationProgressPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2">
+      {compactStep && (
+        <div className="tts-mobile-current-step mt-4 md:hidden" data-tone={compactTone}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="tts-wait-ring shrink-0" data-tone={compactTone} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black">{compactStep.label}</p>
+                <p className="mt-0.5 line-clamp-2 text-xs leading-4 opacity-70">{compactStep.detail}</p>
+              </div>
+            </div>
+            <span className="shrink-0 text-[11px] font-black opacity-70">
+              {Math.min(compactStepIndex + 1, steps.length)}/{steps.length}
+            </span>
+          </div>
+          {status === "submitting" && <div className="tts-pulse-track mt-4" />}
+        </div>
+      )}
+
+      <div className="mt-4 hidden gap-2 md:grid">
         {steps.map((step, index) => {
           const stepState = stateForStep(status, index, activeIndex, steps.length)
           return (
