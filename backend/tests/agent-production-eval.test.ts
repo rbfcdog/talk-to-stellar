@@ -154,7 +154,11 @@ describe('Agent production evals', () => {
 
   it('answers asset explanation questions with the explanations tool instead of generic help', async () => {
     const repository = createRepository();
-    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    mockRouteIntent(graph, 'route_general_intent', {
+      explanation_topic: 'assets',
+      risk: 'low',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -318,7 +322,12 @@ describe('Agent production evals', () => {
   it('adds a new contact when the user asks to add an email to contacts', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_contacts_intent');
+    mockRouteIntent(graph, 'route_contacts_intent', {
+      contact_action: 'add',
+      contact_key: 'rodrigobfdog@gmail.com',
+      contact_name: '',
+      risk: 'medium',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -397,7 +406,10 @@ describe('Agent production evals', () => {
   it('opens the user profile page for direct profile requests', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_wallet_intent');
+    mockRouteIntent(graph, 'route_wallet_intent', {
+      wallet_action: 'profile',
+      risk: 'low',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -609,40 +621,38 @@ describe('Agent production evals', () => {
   it('quotes a concrete best-route conversion instead of repeating guidance', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_price_quote_intent');
+    mockRouteIntent(graph, 'route_price_quote_intent', {
+      amount: '100',
+      source_asset_code: 'USDC',
+      dest_asset_code: 'BRL',
+      quote_mode: 'send_exact',
+      risk: 'medium',
+    });
 
     executeToolMock.mockResolvedValueOnce(JSON.stringify({
       success: true,
-      source: { amount: '100', asset_code: 'USDC' },
-      destination: { amount: '438.7000000', asset_code: 'TESOURO' },
-      route: { chain: 'USDC -> TESOURO', hops_count: 0 },
-      effective_rate: { destination_per_source: '4.38700000' },
-      fee_breakdown: { total_fee_display: 'R$ 0,01' },
-      quote_ttl_seconds: 45,
-      quote: {
-        sourceAmount: '100',
-        destinationAmount: '438.7000000',
-        sourceAsset: { code: 'USDC' },
-        destinationAsset: { code: 'TESOURO' },
-        path: [],
-      },
-      optimization_criteria: 'melhor cotação disponível para o valor de envio informado',
-      message: 'Cotação atual.',
+      message: [
+        'Cotação de envio pela melhor rota: US$ 100.00 -> aproximadamente R$ 438.70.',
+        'Câmbio: 1 USDC ≈ R$ 4.39.',
+        'Isso é só cotação. Nada é executado sem abrir a confirmação e digitar o PIN.',
+      ].join('\n'),
     }));
 
     const result = await graph.processInput(createState('- melhor rota para converter 100 USDC para BRL'));
 
     expect(executeToolMock).toHaveBeenCalledTimes(1);
-    expect(executeToolMock).toHaveBeenCalledWith('get_best_route', expect.objectContaining({
-      source_amount: '100',
+    expect(executeToolMock).toHaveBeenCalledWith('get_pair_quote', {
       source_asset_code: 'USDC',
-      dest_asset_code: 'TESOURO',
-    }));
+      dest_asset_code: 'BRL',
+      source_amount: '100',
+      amount_was_provided: true,
+      quote_mode: 'send_exact',
+      language: 'pt-BR',
+    });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Melhor rota agora para converter US$ 100.00');
-    expect(result.response_message).toContain('Recebe aproximadamente R$ 438.70');
-    expect(result.response_message).toContain('Taxa estimada: R$ 0,01');
-    expect(result.response_message).toContain('Cotação válida por 45 segundos.');
+    expect(result.response_message).toContain('Cotação de envio pela melhor rota');
+    expect(result.response_message).toContain('US$ 100.00');
+    expect(result.response_message).toContain('R$ 438.70');
     expect(result.response_message).not.toContain('Rota mais otimizada');
     expect(result.response_message).not.toContain('Critério:');
     expect(result.response_message).not.toContain('Eu analiso a melhor rota quando você informa');
@@ -1508,6 +1518,9 @@ describe('Agent production evals', () => {
           needs_clarification: false,
           language: 'pt-BR',
           risk: 'high',
+          amount: '7',
+          asset_code: 'CETES',
+          recipient_query: 'Marina Costa',
         },
       }],
     });
@@ -1561,7 +1574,11 @@ describe('Agent production evals', () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const contactPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
-    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent', {
+      amount: '10',
+      asset_code: 'XLM',
+      recipient_query: 'Ana Silva',
+    });
 
     executeToolMock.mockImplementation(async (name: string) => {
       if (name === 'get_intent_help') {
@@ -1650,7 +1667,10 @@ describe('Agent production evals', () => {
   it('asks one specific payment clarification instead of showing the generic menu', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent', {
+      recipient_query: 'Ana Silva',
+      needs_clarification: true,
+    });
     graph.llm.invoke.mockResolvedValue({
       content: JSON.stringify({
         recipient_query: 'Ana Silva',
@@ -1675,7 +1695,7 @@ describe('Agent production evals', () => {
     const result = await graph.processInput(createState('quero mandar dinheiro para Ana Silva'));
 
     expect(routerInvoke).toHaveBeenCalledTimes(1);
-    expect(graph.llm.invoke).toHaveBeenCalledTimes(1);
+    expect(graph.llm.invoke).not.toHaveBeenCalled();
     expect(result.detected_intent).toBe(IntentType.PAYMENT);
     expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
     expect(result.success).toBe(false);
@@ -1691,7 +1711,11 @@ describe('Agent production evals', () => {
   it('keeps payment clarification in English when the session language is English', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_payment_intent');
+    mockRouteIntent(graph, 'route_payment_intent', {
+      recipient_query: 'Ana Silva',
+      needs_clarification: true,
+      language: 'en',
+    });
     graph.llm.invoke.mockResolvedValue({
       content: JSON.stringify({
         recipient_query: 'Ana Silva',
@@ -1737,7 +1761,11 @@ describe('Agent production evals', () => {
   it('routes send requests with amount, asset, and saved contact as payments', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_payment_intent', {
+      amount: '7',
+      asset_code: 'CETES',
+      recipient_query: 'Marina Costa',
+    });
     const contactPublicKey = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
     executeToolMock.mockImplementation(async (name: string) => {
@@ -1790,7 +1818,10 @@ describe('Agent production evals', () => {
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent', {
+      amount: '100',
+      asset_code: 'BRL',
+    });
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
     };
@@ -1822,7 +1853,10 @@ describe('Agent production evals', () => {
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent', {
+      amount: '100',
+      asset_code: 'BRL',
+    });
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
     };
@@ -1941,7 +1975,11 @@ describe('Agent production evals', () => {
     const previousFrontendUrl = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.com';
 
-    const routerInvoke = mockRouteIntent(graph, 'route_pix_offramp_intent');
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_offramp_intent', {
+      amount: '50',
+      asset_code: 'BRL',
+      source_asset_code: 'BRL',
+    });
     graph.externalService = {
       shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
     };
@@ -2105,7 +2143,12 @@ describe('Agent production evals', () => {
   it('routes yield deposits to prepare_yield_action with BRL normalized from reais', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_yield_intent');
+    mockRouteIntent(graph, 'route_yield_intent', {
+      amount: '250',
+      asset_code: 'BRL',
+      yield_action: 'deposit',
+      yield_mode: 'prepare',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -2129,7 +2172,12 @@ describe('Agent production evals', () => {
   it('routes yield balance checks to get_yield_balance for CETES', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_yield_intent');
+    mockRouteIntent(graph, 'route_yield_intent', {
+      asset_code: 'CETES',
+      yield_action: 'deposit',
+      yield_mode: 'balance',
+      risk: 'low',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -2151,7 +2199,13 @@ describe('Agent production evals', () => {
   it('routes explicit yield confirmations with PIN to confirm_yield_action', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_yield_intent');
+    mockRouteIntent(graph, 'route_yield_intent', {
+      amount: '100',
+      asset_code: 'BRL',
+      yield_action: 'deposit',
+      yield_mode: 'confirm',
+      pin: '1234',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -2176,7 +2230,12 @@ describe('Agent production evals', () => {
   it('does not execute yield confirmation without a PIN', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
-    mockRouteIntent(graph, 'route_yield_intent');
+    mockRouteIntent(graph, 'route_yield_intent', {
+      amount: '100',
+      asset_code: 'BRL',
+      yield_action: 'deposit',
+      yield_mode: 'prepare',
+    });
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
@@ -2196,50 +2255,38 @@ describe('Agent production evals', () => {
     expect(executeToolMock).not.toHaveBeenCalledWith('confirm_yield_action', expect.anything());
   });
 
-  it('routes broad keep-asset navigation to open_asset_interface', async () => {
+  it('does not route broad keep-asset navigation through a local parser', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Abrir rendimentos para CETES.\n\nAbrir:\nhttps://app.example.com/rendimentos?asset=CETES',
+      message: 'Posso ajudar com saldo, PIX, conversão, rendimentos, pagamentos e histórico.',
     }));
 
     const result = await graph.processInput(createState('manter 50 cetes'));
 
-    expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
-      session_id: 'eval-session',
-      action: 'keep',
-      amount: '50',
-      asset_code: 'CETES',
-      destination_pix_key: '',
-      language: 'pt-BR',
-    });
+    expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
+    expect(executeToolMock).not.toHaveBeenCalledWith('open_asset_interface', expect.anything());
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('/rendimentos?asset=CETES');
+    expect(result.response_message).toContain('rendimentos');
   });
 
-  it('routes send-out navigation with dynamic PIX key to open_asset_interface', async () => {
+  it('does not route send-out navigation with dynamic PIX key through a local parser', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt');
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Mandar para PIX está pronto para BRL.\n\nAbra:\nhttps://app.example.com/pix-off?destination_pix_key=user%40example.com',
+      message: 'Posso ajudar com saldo, PIX, conversão, rendimentos, pagamentos e histórico.',
     }));
 
     const result = await graph.processInput(createState('mandar embora 100 reais para user@example.com'));
 
-    expect(executeToolMock).toHaveBeenCalledWith('open_asset_interface', {
-      session_id: 'eval-session',
-      action: 'send_out',
-      amount: '100',
-      asset_code: 'BRL',
-      destination_pix_key: 'user@example.com',
-      language: 'pt-BR',
-    });
+    expect(executeToolMock).toHaveBeenCalledWith('get_intent_help', {});
+    expect(executeToolMock).not.toHaveBeenCalledWith('open_asset_interface', expect.anything());
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('destination_pix_key');
+    expect(result.response_message).toContain('PIX');
   });
 
   it('keeps the rich-message allowlist narrow and sanitizes unapproved decorative output', () => {
