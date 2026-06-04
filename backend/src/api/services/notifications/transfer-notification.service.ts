@@ -123,29 +123,23 @@ export class TransferNotificationService {
     const text = this.text(
       language,
       `${greeting}\n` +
-        `Login concluido. Sua conta esta conectada.\n` +
-        `Para começar pelo chat, siga este caminho rápido:\n` +
-        `1) Digite "saldo" para confirmar seu dinheiro disponível.\n` +
-        `2) Digite "contatos" para ver para quem já pode enviar.\n` +
-        `3) Digite "colocar 10 reais via PIX" para adicionar saldo.\n` +
-        `4) Digite "enviar 5 dólares para Ana" para iniciar um pagamento com confirmação.\n` +
-        `5) Digite "retirar 5 reais para meu PIX" para mandar dinheiro para fora via PIX.\n` +
-        `6) Digite "histórico" para ver operações e comprovantes.\n` +
-        `Se a página de cadastro abrir e você já tiver conta, use "Já tenho conta".\n` +
-        `Se quiser usar em inglês, peça "change to English".\n` +
-        `Se preferir, diga seu objetivo em uma frase (ex.: "quero cobrar um cliente" ou "quero mandar PIX").`,
+        `Conta conectada.\n\n` +
+        `Primeiros passos recomendados:\n` +
+        `1) Traga dinheiro para a conta: digite "colocar 100 reais via PIX". Eu gero um link com QR, taxa por fora e valor final antes do PIN.\n` +
+        `2) Confira o saldo recebido: digite "saldo".\n` +
+        `3) Faça a primeira ação: digite "converter 50 reais para dólar", "enviar 10 XLM para Ana" ou "ver rendimentos".\n` +
+        `4) Depois acompanhe tudo: digite "histórico" para ver operações e comprovantes.\n\n` +
+        `Se você só quiser começar rápido, mande: "colocar 100 reais via PIX".\n` +
+        `Nada movimenta dinheiro sem abrir a tela de confirmação e digitar seu PIN.`,
       `${greeting}\n` +
-        `Login complete. Your account is connected.\n` +
-        `Fast path to get started in chat:\n` +
-        `1) Type "balance" to check available money.\n` +
-        `2) Type "contacts" to see who you can pay.\n` +
-        `3) Type "add 10 reais with PIX" to add balance.\n` +
-        `4) Type "send 5 dollars to Ana" to start a payment with confirmation.\n` +
-        `5) Type "withdraw 5 reais to my PIX" to send money out to your PIX.\n` +
-        `6) Type "history" to see operations and receipts.\n` +
-        `If the sign-up page opens and you already have an account, use "I already have an account".\n` +
-        `You can switch languages anytime by asking for Portuguese or English.\n` +
-        `Or describe your goal in one sentence, for example: "I want to charge a client" or "I want to send a PIX".`
+        `Account connected.\n\n` +
+        `Recommended first steps:\n` +
+        `1) Bring money in: type "add 100 reais with PIX". I generate a link with QR, outside fee, and final amount before PIN.\n` +
+        `2) Check the received balance: type "balance".\n` +
+        `3) Try your first action: type "convert 50 reais to dollars", "send 10 XLM to Ana", or "see investments".\n` +
+        `4) Track everything: type "history" to see operations and receipts.\n\n` +
+        `If you want the fastest start, send: "add 100 reais with PIX".\n` +
+        `No money moves without opening the confirmation screen and entering your PIN.`
     );
 
     try {

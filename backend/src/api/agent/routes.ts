@@ -264,7 +264,7 @@ Few-shot examples — respostas corretas baseadas em histórico:
 - Before describing BRL -> US$ net value, use get_conversion_preview or a quote tool. Never use a hardcoded FX rate in chat.
 - After successful BRL <-> USDC payments or conversions with real BRL and USDC amounts, call/send send_receipt_with_savings. For same-asset payments, XLM, CETES, or any operation without positive BRL and USDC amounts, use the normal operation receipt; never show a savings receipt with zero values.
 - If a tool returns a WhatsApp-ready savings calculator, savings receipt, or annual savings summary, return it verbatim except for the global raw-link formatting rule. Preserve emojis, *bold*, and _italic_ exactly as returned.
-- Do not send duplicate welcome/start messages in a single session. A mini-menu is useful only on first generic/greeting contact, after login/onboarding, or when the user asks for ajuda.
+- Do not send duplicate welcome/start messages in a single session. On first login/onboarding completion, prefer a practical first-steps tutorial: bring money with PIX, check balance, then convert/send/invest, then view history.
 - Mini-menus must stay short, with no technical terms, and no second welcome block if a login/onboarding completion message was already sent. If the user explicitly asks for help/capabilities, show the compact full capability list from get_intent_help. Never include "yield"; say aplicação, investimento, or posição.
 - If a quote is expired, do not continue the old flow. Generate a fresh quote or tell the user to generate a fresh quote before confirmation.
 - User-facing failures must be recoverable. Do not expose SQL, schema cache, provider stack traces, raw API JSON, Friendbot, Horizon, issuer, trustline, or route diagnostics. Map failures to what the user can do next: try again, generate a new link, login again, choose a saved contact, or wait for confirmation.
@@ -376,7 +376,7 @@ Few-shot examples — respostas corretas baseadas em histórico:
 
 ## DEFAULT BEHAVIOR BY USER INTENT
 - Greetings: answer as TalkToStellar’s account assistant for balance, PIX, conversion, rendimentos, payments, and withdrawals.
-- Greetings or first session touch: include the compact full capability list with concrete examples for contacts, balance, PIX in/out, conversion, sending, payment links, rendimentos, history, and PIN, written as a normal chat message that works the same in WhatsApp, Telegram, and web chat.
+- Greetings or first session touch: if this is the first login/onboarding touch, guide the user step by step to bring money with PIX, check balance, do one first action, and view history. If the user explicitly asks for ajuda/funcionalidades/comandos, include the compact full capability list with concrete examples.
 - Account creation/import: guide the user through the account flow.
 - Balance checks: return the account balance clearly.
 - Contacts: show saved payment contacts and help manage them.
@@ -513,17 +513,16 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
   }
 
   return [
-    'Tudo finalizado. Aqui estão suas informações:',
+    'Tudo finalizado. Sua conta está pronta para começar.',
     ...balanceLines,
     '',
-    'Escolha o que quer fazer agora:',
-    '1. Digite "saldo" para conferir seu dinheiro disponível.',
-    '2. Digite "contatos" para escolher um destinatário salvo.',
-    '3. Digite "colocar 10 reais via PIX" para adicionar saldo.',
-    '4. Digite "enviar 5 dólares para Ana" para iniciar um pagamento.',
-    '5. Digite "retirar 10 reais para meu PIX" para sacar.',
+    'Roteiro inicial recomendado:',
+    '1. Traga dinheiro: digite "colocar 100 reais via PIX". A tela mostra QR, taxa por fora e valor final antes do PIN.',
+    '2. Confira se entrou: digite "saldo".',
+    '3. Faça algo com o saldo: digite "converter 50 reais para dólar", "enviar 10 XLM para Ana" ou "ver rendimentos".',
+    '4. Acompanhe tudo depois: digite "histórico" para ver operações e comprovantes.',
     '',
-    'Se quiser, diga seu objetivo em uma frase. Para ver mais exemplos, digite "ajuda".',
+    'Para começar agora, mande: "colocar 100 reais via PIX". Nada movimenta dinheiro sem confirmação e PIN.',
   ].join('\n');
 }
 

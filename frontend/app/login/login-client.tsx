@@ -154,6 +154,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [status, setStatus] = useState<"idle" | "pin" | "passkey" | "error">("idle")
   const [error, setError] = useState("")
   const [qrTargetUrl, setQrTargetUrl] = useState("")
+  const [canShowPasskeyQr, setCanShowPasskeyQr] = useState(false)
   const [loginDone, setLoginDone] = useState(false)
   const [externalLinkUsed, setExternalLinkUsed] = useState(false)
   const [googleLoginError, setGoogleLoginError] = useState("")
@@ -288,12 +289,26 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }, [email, nextPath, passkeyPairId, isPasskeyPhoneCodeMode, language])
 
   const qrImageUrl = useMemo(() => {
+    if (!canShowPasskeyQr) return ""
     if (!qrTargetUrl) return ""
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(qrTargetUrl)}`
-  }, [qrTargetUrl])
+  }, [canShowPasskeyQr, qrTargetUrl])
 
   useEffect(() => {
-    if (!PASSKEY_LOGIN_ENABLED) {
+    if (typeof window === "undefined") return
+    const media = window.matchMedia("(min-width: 1024px)")
+    const sync = () => setCanShowPasskeyQr(media.matches)
+    sync()
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync)
+      return () => media.removeEventListener("change", sync)
+    }
+    media.addListener(sync)
+    return () => media.removeListener(sync)
+  }, [])
+
+  useEffect(() => {
+    if (!PASSKEY_LOGIN_ENABLED || !canShowPasskeyQr) {
       setQrTargetUrl("")
       return
     }
@@ -329,7 +344,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     return () => {
       cancelled = true
     }
-  }, [mobileRedirectUrl])
+  }, [canShowPasskeyQr, mobileRedirectUrl])
 
   useEffect(() => {
     if (!hasExternalContext) return
@@ -1105,7 +1120,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       )}
 
       {PASSKEY_LOGIN_ENABLED && qrImageUrl && !externalLinkUsed && !isExternalLoginOnlyContext && (
-        <div className="rounded-xl border border-tts-border bg-tts-bg p-4 text-xs text-tts-deep">
+        <div className="hidden rounded-xl border border-tts-border bg-tts-bg p-4 text-xs text-tts-deep lg:block">
           <p className="font-bold">{t("login_passkey_qr_title")}</p>
           <p className="mt-1 text-tts-muted">
             {language === "pt-BR"
