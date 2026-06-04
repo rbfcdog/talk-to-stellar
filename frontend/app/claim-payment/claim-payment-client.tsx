@@ -210,14 +210,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
       setResult(payload)
       setStatus(response.ok && payload?.success ? "done" : "error")
       if (response.ok && payload?.success) {
-        const receiptUrl = String(payload.receipt_url || "")
         const conversionMessage = getAutoConversionMessage(payload, language)
         enqueueWebChatFeedback([
           T(language, "Pagamento recebido com sucesso.", "Payment received successfully."),
           conversionMessage,
           `${T(language, "Valor", "Amount")}: ${formatAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.transferDetails?.destinationAssetCode || ""))}`,
           `${T(language, "Horário", "Time")}: ${formatTimestamp(payload.completed_at, language)}`,
-          receiptUrl ? `${T(language, "Comprovante", "Receipt")}: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
       }
       if (!response.ok || !payload?.success) {
@@ -252,7 +250,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   const isSenderSession = Boolean(loggedIn && senderSessionId && sessionId === senderSessionId)
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.transferDetails?.destinationAssetCode || destinationAssetCode || "")
-  const successReceiptUrl = String(result?.receipt_url || "")
   const successAutoConversionMessage = getAutoConversionMessage(result, language)
   const isExpiredLink = Boolean(validation.valid === false && (validation as any)?.expired)
 
@@ -393,16 +390,6 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 <p><span className="text-tts-deep">{T(language, "Destino", "Destination")}: </span>{T(language, "Sua conta", "Your account")}</p>
                 <p><span className="text-tts-deep">{T(language, "Horário", "Time")}: </span>{formatTimestamp(result?.completed_at, language)}</p>
               </div>
-              {successReceiptUrl && (
-                <a
-                  href={successReceiptUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center rounded-xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
-                >
-                  {T(language, "Ver comprovante", "View receipt")}
-                </a>
-              )}
               {successAutoConversionMessage && (
                 <p>{successAutoConversionMessage}</p>
               )}

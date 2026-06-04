@@ -218,11 +218,7 @@ export class PaymentReceiptService {
     const textWithLink = receiptUrl ? `${text}\nComprovante: ${receiptUrl}` : text;
     const savingsFirstDeliveryText = await this.buildSavingsFirstWhatsappReceipt(input, receiptUrl);
     const externalDeliveryBase = String(input.externalDeliveryText || '').trim();
-    const externalDeliveryText = savingsFirstDeliveryText || (externalDeliveryBase
-      ? receiptUrl
-        ? `${externalDeliveryBase}\nComprovante: ${receiptUrl}`
-        : externalDeliveryBase
-      : textWithLink);
+    const externalDeliveryText = savingsFirstDeliveryText || externalDeliveryBase || text;
 
     try {
       await this.saveReceiptMessage({
@@ -258,8 +254,8 @@ export class PaymentReceiptService {
         provider: input.provider,
         providerUserId: input.providerUserId,
         text: externalDeliveryText,
-        buttonText: receiptUrl ? 'Abrir comprovante' : null,
-        buttonUrl: receiptUrl || null,
+        buttonText: null,
+        buttonUrl: null,
       });
       this.logExternalDelivery('receipt', delivery);
     } catch (error) {

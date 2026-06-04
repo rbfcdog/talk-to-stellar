@@ -2299,7 +2299,7 @@ export default function PixRampClient({
 
   async function runAtomicAction(action: string, fn: () => Promise<void>) {
     if (operationLocked) {
-      throw new Error(L("Esta operação PIX já foi concluída. O comprovante foi enviado no chat.", "This PIX operation is already complete. The receipt was sent in chat."));
+      throw new Error(L("Esta operação PIX já foi concluída.", "This PIX operation is already complete."));
     }
     if (atomicActionRef.current) {
       throw new Error(L(`Esta operação PIX já está em andamento (${action}).`, `This PIX operation is already in progress (${action}).`));
@@ -2378,7 +2378,6 @@ export default function PixRampClient({
         L(`Destino: ${externalPixDestination}`, `Destination: ${externalPixDestination}`),
         L("Status: concluído", "Status: completed"),
         L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
-        receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
     }
@@ -2404,7 +2403,6 @@ export default function PixRampClient({
         L(`Destino: ${recipient}`, `Destination: ${recipient}`),
         L("Status: concluído", "Status: completed"),
         L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
-        receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
       ].filter(Boolean).join("\n"));
       return;
     }
@@ -2471,7 +2469,6 @@ export default function PixRampClient({
         ? L(`Status: conversão para ${friendlyAssetName(finalAsset, language)} em andamento`, `Status: conversion to ${friendlyAssetName(finalAsset, language)} in progress`)
         : L("Status: concluído", "Status: completed"),
       L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
-      receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
     ].filter(Boolean).join("\n"));
   }
 
@@ -3942,7 +3939,7 @@ export default function PixRampClient({
 
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Comprovante PIX", "PIX receipt")}</p>
+                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento concluído", "Payment completed")}</p>
                   <div className="mt-5 flex items-center gap-4">
                     <span className="grid h-14 w-14 place-items-center rounded-2xl bg-tts-confirm text-2xl font-bold text-tts-deep">✓</span>
                     <div>
@@ -3989,12 +3986,10 @@ export default function PixRampClient({
                 </div>
 
                 <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-5">
-                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Detalhes do comprovante", "Receipt details")}</p>
+                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Detalhes da operação", "Operation details")}</p>
                   <dl className="mt-4 grid gap-3 text-sm">
                     <ReceiptRow label={L("Destino", "Destination")} value={rampMode === "offramp" ? L("Seu PIX", "Your PIX") : L("Minha conta TalkToStellar", "My TalkToStellar account")} />
                     <ReceiptRow label={L("Ordem", "Order")} value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
-                    {rampMode === "offramp" && temporaryOffRampTestResult?.receipt_url && <ReceiptRow label={L("Comprovante", "Receipt")} value={String(temporaryOffRampTestResult.receipt_url)} />}
-                    {rampMode === "onramp" && onRampReceiptUrl && <ReceiptRow label={L("Comprovante", "Receipt")} value={onRampReceiptUrl} />}
                     <ReceiptRow label={L("Data", "Date")} value={new Date().toLocaleString(language === "en" ? "en-US" : "pt-BR")} />
                   </dl>
                 </div>
@@ -4009,7 +4004,6 @@ export default function PixRampClient({
                         <ReceiptRow label={L("Enviado para", "Sent to")} value={transferRecipientLabel || "recipient"} />
                         {transferRecipientDisplayKey && <ReceiptRow label="Key" value={transferRecipientDisplayKey} />}
                         <ReceiptRow label={L("Valor transferido", "Transferred amount")} value={formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset)} />
-                        {pixFundedTransferResult.receipt_url && <ReceiptRow label={L("Comprovante", "Receipt")} value={String(pixFundedTransferResult.receipt_url)} />}
                       </div>
                     </>
                   ) : (
@@ -4066,7 +4060,7 @@ function MobilePixStepper({
   const stageItems: Array<{ key: MobilePixStage; label: string; enabled: boolean; done: boolean }> = [
     { key: "details", label: L("Dados", "Details"), enabled: true, done: hasPaymentStep || hasReceiptStep },
     { key: "payment", label: L("Confirmar", "Confirm"), enabled: hasPaymentStep || stage === "payment" || hasReceiptStep, done: hasReceiptStep },
-    { key: "receipt", label: L("Recibo", "Receipt"), enabled: hasReceiptStep, done: hasReceiptStep },
+    { key: "receipt", label: L("Concluído", "Done"), enabled: hasReceiptStep, done: hasReceiptStep },
   ];
   const stageIndex = Math.max(0, stageItems.findIndex((item) => item.key === stage));
   const currentLabel = mode === "onramp" ? L("PIX para saldo", "PIX to balance") : L("Saldo para PIX", "Balance to PIX");
