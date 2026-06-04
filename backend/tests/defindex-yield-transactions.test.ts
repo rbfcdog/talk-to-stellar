@@ -71,6 +71,10 @@ describe('Defindex yield transaction flows', () => {
       configured_issuer: vault.asset_issuer,
       configured_contract: vault.asset_contract,
     }));
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
+      { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE_TESTNET_USDC_ISSUER, balance: '1000' },
+      { asset_type: 'credit_alphanum4', asset_code: 'CETES', asset_issuer: process.env.CETES_ISSUER_TESTNET, balance: '1000' },
+    ] as any);
   });
 
   afterEach(() => {
@@ -370,6 +374,38 @@ describe('Defindex yield transaction flows', () => {
     });
     expect(String(result.execution_blocked_reason)).toContain('reserva de rede');
     expect(buildSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not report insufficient balance when XLM precheck confirms spendable balance', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    jest.spyOn(StellarService, 'loadAccount').mockResolvedValue({
+      subentry_count: 1,
+      balances: [{ asset_type: 'native', balance: '5' }],
+    } as any);
+    jest.spyOn(DefindexYieldService, 'buildVaultAction').mockRejectedValue({
+      message: 'tx simulation failed: insufficient balance',
+      error: 'Simulation Failed',
+    });
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '1',
+      asset_code: 'XLM',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      execution_blocked_code: 'yield_execution_unavailable',
+      setup_required: false,
+    });
+    expect(String(result.execution_blocked_reason)).toContain('confirmacao de investimento');
+    expect(String(result.execution_blocked_reason)).not.toContain('saldo disponivel nao e suficiente');
   });
 
   it('normalizes testnet EURC yield requests to CETES', async () => {
