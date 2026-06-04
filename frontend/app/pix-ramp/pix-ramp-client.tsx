@@ -1010,7 +1010,6 @@ export default function PixRampClient({
     : formatRampAsset(offRampInputValue || "0", offRampInputAsset);
   const offRampInputPrefix = offRampExactReceiveBrl ? "R$" : friendlyAssetName(offRampInputAsset, language);
   const offRampInputUnit = offRampExactReceiveBrl ? "BRL" : offRampInputAsset;
-  const headerCurrencyAsset = rampMode === "onramp" ? "BRL" : targetAsset;
   const offRampPixTargetAmount = String(
     temporaryOffRampTestResult?.target_brl ||
     temporaryOffRampTestResult?.destination_amount ||
@@ -1074,6 +1073,13 @@ export default function PixRampClient({
   );
   const receiveEstimateMissing = Boolean(receiveEstimateRequired && !receiveEstimateReady);
   const waitingForReceiveEstimate = Boolean(receiveEstimateRequired && receiveEstimateLoading);
+  const exactOnRampValueContract = Boolean(
+    rampMode === "onramp" &&
+      (
+        receiveEstimateRequired ||
+        (transferFlow && (autoPayAmount || desiredFinalAmount) && (autoPayAsset || desiredFinalAsset || targetAsset))
+      )
+  );
 
   const launchedFromChat = useMemo(() => queryParams.get("from") === "chat", [queryParams]);
   const returnSource = useMemo(() => String(queryParams.get("return_source") || queryParams.get("from") || "").trim().toLowerCase(), [queryParams]);
@@ -1129,6 +1135,9 @@ export default function PixRampClient({
     if (estimatedFromQuote) {
       return L(`Taxa de conversão estimada: ${estimatedFromQuote}.`, `Estimated conversion fee: ${estimatedFromQuote}.`);
     }
+    if (exactOnRampValueContract) {
+      return L("Taxa calculada junto com a cotação final.", "Fee calculated with the final quote.");
+    }
 
     const fallbackBase = toPositiveNumber(desiredFinalAmount || amountBrl, 0);
     if (!fallbackBase) return L("Calculando taxa de conversão.", "Calculating conversion fee.");
@@ -1137,7 +1146,7 @@ export default function PixRampClient({
     const appFee = Math.max(fallbackBase * (clientTtsTransactionFeeBps() / 10000), clientTtsTransactionMinBrl());
     const fallbackFee = providerFee + appFee;
     return L(`Taxa de conversão estimada: ${formatMoney(fallbackFee)}.`, `Estimated conversion fee: ${formatMoney(fallbackFee)}.`);
-  }, [L, amountBrl, desiredFinalAmount, onRampFeeEstimate, rampMode]);
+  }, [L, amountBrl, desiredFinalAmount, exactOnRampValueContract, onRampFeeEstimate, rampMode]);
   const feeAdjustedAutoPayAmount = transferFlow &&
     !autoPayAmount &&
     onRampFeeEstimate?.destinationCurrency === (autoPayAsset || targetAsset) &&
@@ -1191,14 +1200,27 @@ export default function PixRampClient({
   const paymentInstructions = order?.paymentInstructions || {};
   const pixCode = String(paymentInstructions?.pixCode || "");
   const pixKey = String(paymentInstructions?.pixKey || "");
-  const effectiveOnRampPixPayAmount = String(
+  const quotedOnRampPixPayAmount = String(
     paymentInstructions?.amount ||
     order?.fromAmount ||
     quote?.fromAmount ||
-    amountBrl ||
     ""
   );
+  const hasExecutableOnRampPixPayAmount = Boolean(normalizeHumanAmount(quotedOnRampPixPayAmount));
+  const effectiveOnRampPixPayAmount = String(quotedOnRampPixPayAmount || amountBrl || "");
   const effectiveOnRampPixPayDisplay = formatMoney(effectiveOnRampPixPayAmount);
+  const onRampHeaderValueDisplay = exactOnRampValueContract
+    ? requestedOnRampTargetDisplay
+    : effectiveOnRampPixPayDisplay;
+  const headerCurrencyAsset = rampMode === "onramp"
+    ? exactOnRampValueContract
+      ? (autoPayAsset || desiredFinalAsset || targetReceiveInputAsset || targetAsset)
+      : "BRL"
+    : targetAsset;
+  const headerCurrencyName = friendlyAssetName(headerCurrencyAsset, language);
+  const headerCurrencyDisplay = headerCurrencyName.toUpperCase() === headerCurrencyAsset
+    ? headerCurrencyAsset
+    : `${headerCurrencyName} ${headerCurrencyAsset}`;
   const isSandboxMockOrder = Boolean(order?.sandbox_mock);
   const localMockFallbackAllowed = Boolean(config?.local_mock_fallback_allowed);
   const opsMocksAllowed = Boolean(config?.ops_mocks_allowed);
@@ -1377,15 +1399,19 @@ export default function PixRampClient({
         label: L("Valor", "Amount"),
         detail: quote
           ? transferFlow && transferRecipientLabel
-            ? L(`${effectiveOnRampPixPayDisplay} via PIX para enviar a ${transferRecipientLabel}.`, `${effectiveOnRampPixPayDisplay} via PIX to send to ${transferRecipientLabel}.`)
-            : L(`${effectiveOnRampPixPayDisplay} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${effectiveOnRampPixPayDisplay} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
+            ? L(`${effectiveOnRampPixPayDisplay} via PIX para enviar ${requestedOnRampTargetDisplay} a ${transferRecipientLabel}.`, `${effectiveOnRampPixPayDisplay} via PIX to send ${requestedOnRampTargetDisplay} to ${transferRecipientLabel}.`)
+            : exactOnRampValueContract
+              ? L(`${effectiveOnRampPixPayDisplay} via PIX para receber ${requestedOnRampTargetDisplay}.`, `${effectiveOnRampPixPayDisplay} via PIX to receive ${requestedOnRampTargetDisplay}.`)
+              : L(`${effectiveOnRampPixPayDisplay} fica disponível como ${friendlyAssetName(targetAsset, language)}.`, `${effectiveOnRampPixPayDisplay} becomes available as ${friendlyAssetName(targetAsset, language)}.`)
           : receiveEstimateRequired && !receiveEstimateReady
             ? receiveEstimateLoading
               ? L("Calculando a cotação atual.", "Calculating the current quote.")
               : L("Aguardando cotação atual antes de gerar o PIX.", "Waiting for the current quote before creating PIX.")
           : transferFlow && transferRecipientLabel
             ? L(`Alvo: mandar ${requestedOnRampTargetDisplay} para ${transferRecipientLabel}.`, `Target: send ${requestedOnRampTargetDisplay} to ${transferRecipientLabel}.`)
-            : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
+            : exactOnRampValueContract
+              ? L(`Alvo: receber ${requestedOnRampTargetDisplay} na conta.`, `Target: receive ${requestedOnRampTargetDisplay} in the account.`)
+              : L(`Alvo: colocar ${formatMoney(amountBrl)} na conta.`, `Target: add ${formatMoney(amountBrl)} to the account.`),
         state: quote
           ? quoteExpired ? "warning" : "done"
           : receiveEstimateRequired
@@ -1438,6 +1464,7 @@ export default function PixRampClient({
     quote,
     quoteExpired,
     requestedOnRampTargetDisplay,
+    exactOnRampValueContract,
     rampMode,
     receivedCode,
     onRampReceivedDisplay,
@@ -2408,7 +2435,8 @@ export default function PixRampClient({
     clearQuoteState();
   }
 
-  async function requestQuote(): Promise<{ auth: RampAuth; customerResult: RampResponse; quoteResult: RampResponse }> {
+  async function requestQuote(options: { displayQuote?: boolean } = {}): Promise<{ auth: RampAuth; customerResult: RampResponse; quoteResult: RampResponse }> {
+    const displayQuote = options.displayQuote !== false;
     setStep("quote");
     setOrderPayload(null);
     setGeneratedOnRampOrderKey("");
@@ -2447,8 +2475,10 @@ export default function PixRampClient({
     const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
     setCustomerPayload(nextCustomerPayload);
     setProgrammaticOnboarding(nextCustomerPayload?.programmatic_onboarding || customerResult?.programmatic_onboarding || payload?.programmatic_onboarding || null);
-    setQuotePayload(payload);
-    setQuoteReceivedAt(Date.now());
+    if (displayQuote) {
+      setQuotePayload(payload);
+      setQuoteReceivedAt(Date.now());
+    }
     return { auth, customerResult: nextCustomerPayload || customerResult, quoteResult: payload };
   }
 
@@ -2470,7 +2500,7 @@ export default function PixRampClient({
           request: { amount: amountBrl, targetAsset, desiredFinalAmount, desiredFinalAsset },
           response: { reason: quoteNeedsCustomerRefresh ? "missing_customer_context" : quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
         });
-        const fresh = await requestQuote();
+        const fresh = await requestQuote({ displayQuote: !exactOnRampValueContract });
         authForOrder = fresh.auth;
         quoteForOrder = fresh.quoteResult?.quote;
         customerForOrder = fresh.customerResult;
@@ -2559,6 +2589,7 @@ export default function PixRampClient({
 
   useEffect(() => {
     if (!quote || order || !canResolveWallet || loading || autoRefreshingQuote) return;
+    if (exactOnRampValueContract) return;
     if (!quoteDeadlineAt) return;
 
     const refreshAtMs = quoteDeadlineAt - 30000;
@@ -2580,7 +2611,7 @@ export default function PixRampClient({
     }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [addDebugLog, amountBrl, autoRefreshingQuote, canResolveWallet, desiredFinalAmount, desiredFinalAsset, loading, order, quote, quoteDeadlineAt, targetAsset]);
+  }, [addDebugLog, amountBrl, autoRefreshingQuote, canResolveWallet, desiredFinalAmount, desiredFinalAsset, exactOnRampValueContract, loading, order, quote, quoteDeadlineAt, targetAsset]);
 
   async function copyPixCode() {
     const sandboxReference = [
@@ -2883,7 +2914,7 @@ export default function PixRampClient({
   const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload);
 
   return (
-    <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:px-6 lg:px-8">
+    <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
@@ -2920,12 +2951,12 @@ export default function PixRampClient({
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
-                  {rampMode === "onramp" ? effectiveOnRampPixPayDisplay : offRampDisplayAmount}
+                  {rampMode === "onramp" ? onRampHeaderValueDisplay : offRampDisplayAmount}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{L("Moeda", "Currency")}</p>
-                <p className="mt-2 text-sm font-black text-tts-deep">{friendlyAssetName(headerCurrencyAsset, language)} {headerCurrencyAsset}</p>
+                <p className="mt-2 text-sm font-black text-tts-deep">{headerCurrencyDisplay}</p>
               </div>
                 <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                   <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{t("pix_destination")}</p>
@@ -3319,7 +3350,13 @@ export default function PixRampClient({
                   {L("Altere o valor para recalcular o PIX antes de gerar o QR.", "Change the amount to recalculate PIX before creating the QR.")}
                 </p>
                 <div className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 px-4 py-3 text-sm font-bold text-tts-confirm">
-                  {receiveEstimateLoading ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando PIX...", "Calculating PIX...")}</span> : amountBrl ? L(`PIX pela rota da sua conta: ${effectiveOnRampPixPayDisplay}`, `PIX from your account route: ${effectiveOnRampPixPayDisplay}`) : L("O PIX será calculado pela cotação dinâmica antes de gerar o QR.", "PIX will be calculated by the dynamic quote before creating the QR.")}
+                  {hasExecutableOnRampPixPayAmount
+                    ? L(`PIX final: ${effectiveOnRampPixPayDisplay}`, `Final PIX: ${effectiveOnRampPixPayDisplay}`)
+                    : receiveEstimateLoading
+                      ? <span className="inline-flex items-center gap-2"><InlineSpinner />{L("Calculando cotação exata...", "Calculating exact quote...")}</span>
+                      : receiveEstimateReady
+                        ? L("Cotação preparada. Gere o PIX para travar o valor final.", "Quote prepared. Generate PIX to lock the final amount.")
+                        : L("O PIX final será calculado pela rota dinâmica antes de gerar o QR.", "The final PIX will be calculated by the dynamic route before creating the QR.")}
                 </div>
               </>
             ) : (
@@ -3378,7 +3415,7 @@ export default function PixRampClient({
                 </button>
               ))}
             </div>
-            {!quote && (
+            {!quote && !exactOnRampValueContract && (
               <EtherfuseMeasuredFeeNotice
                 mode="onramp"
                 amount={amountBrl}

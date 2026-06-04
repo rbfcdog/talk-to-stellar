@@ -423,7 +423,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-tts-border pb-5 md:flex-row md:items-end md:justify-between">
           <div>

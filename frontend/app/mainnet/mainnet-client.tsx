@@ -440,7 +440,7 @@ export default function MainnetClient() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-black text-tts-surface">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-5 border-b border-tts-border pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl">
@@ -448,16 +448,16 @@ export default function MainnetClient() {
               <ShieldCheck className="h-4 w-4" />
               Ambiente da conta
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-tts-surface md:text-5xl">
+            <h1 className="text-3xl font-black tracking-tight text-tts-deep md:text-5xl">
               Carteira e saldo
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-deep md:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               Alterne entre a conta de validação do produto e a visualização Mainnet. PIX fica separado do saldo real;
               Mainnet é opt-in, usa apenas chave pública e permanece em leitura até liberações operacionais.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:min-w-[320px]">
-            <div className="grid grid-cols-2 border border-tts-border bg-tts-surface/[0.03] p-1">
+            <div className="grid grid-cols-2 border border-tts-border bg-tts-surface p-1">
               <button
                 type="button"
                 onClick={() => setNetworkMode("testnet")}
@@ -546,10 +546,10 @@ export default function MainnetClient() {
         ) : (
           <>
         <section className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
+          <div className="border border-tts-border bg-tts-surface p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+                <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
                   <Wallet2 className="h-5 w-5 text-tts-gold" />
                   Mainnet wallet
                 </h2>
@@ -563,10 +563,10 @@ export default function MainnetClient() {
             </div>
 
             {!session.authenticated ? (
-              <div className="mt-5 border border-tts-border bg-black p-4 text-sm text-tts-deep">
+              <div className="mt-5 border border-tts-border bg-tts-bg/60 p-4 text-sm text-tts-deep">
                 Browser login is required before attaching a Mainnet wallet.
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <a href="/login" className="inline-flex min-h-10 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
+                  <a href="/login" className="inline-flex min-h-10 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-deep">
                     Browser login
                   </a>
                 </div>
@@ -581,7 +581,7 @@ export default function MainnetClient() {
                     value={publicKey}
                     onChange={(event) => setPublicKey(event.target.value.trim())}
                     placeholder="G..."
-                    className="min-h-12 w-full border border-tts-border bg-black px-3 font-mono text-sm text-tts-surface outline-none focus:border-tts-gold"
+                    className="min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 font-mono text-sm text-tts-deep outline-none focus:border-tts-gold"
                   />
                   <label className="block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
                     Wallet label
@@ -589,13 +589,13 @@ export default function MainnetClient() {
                   <input
                     value={walletLabel}
                     onChange={(event) => setWalletLabel(event.target.value)}
-                    className="min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+                    className="min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
                   />
                   <button
                     type="button"
                     onClick={attachWallet}
                     disabled={!canAttach || apiState.loading}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-surface/40"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-deep/40"
                   >
                     {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                     Attach read-only wallet
@@ -607,17 +607,17 @@ export default function MainnetClient() {
                   ) : null}
                 </div>
 
-                <div className="mt-6 border border-tts-border bg-black p-4">
+                <div className="mt-6 border border-tts-border bg-tts-bg/60 p-4">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Attached wallet</p>
                   {hasWallet ? (
                     <div className="mt-3 space-y-3">
-                      <p className="text-lg font-black text-tts-surface">{wallet?.label || "Mainnet wallet"}</p>
+                      <p className="text-lg font-black text-tts-deep">{wallet?.label || "Mainnet wallet"}</p>
                       <p className="break-all font-mono text-xs text-tts-deep">{wallet?.public_key}</p>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={refreshBalance}
-                          className="inline-flex min-h-10 items-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-surface"
+                          className="inline-flex min-h-10 items-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-deep"
                         >
                           <RefreshCw className="h-4 w-4" />
                           Sync balance
@@ -627,7 +627,7 @@ export default function MainnetClient() {
                             href={wallet.explorer_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex min-h-10 items-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-surface"
+                            className="inline-flex min-h-10 items-center gap-2 border border-tts-border px-3 py-2 text-sm font-black text-tts-deep"
                           >
                             <ExternalLink className="h-4 w-4" />
                             Explorer
@@ -645,8 +645,8 @@ export default function MainnetClient() {
             )}
           </div>
 
-          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
-            <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+          <div className="border border-tts-border bg-tts-surface p-5">
+            <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
               <Activity className="h-5 w-5 text-tts-confirm" />
               Mainnet balance
             </h2>
@@ -656,11 +656,11 @@ export default function MainnetClient() {
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {balances.length ? balances.map((item) => (
-                <div key={`${item.asset_code}-${item.asset_issuer || "native"}`} className="border border-tts-border bg-black p-4">
+                <div key={`${item.asset_code}-${item.asset_issuer || "native"}`} className="border border-tts-border bg-tts-bg/60 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{item.asset_code}</p>
-                      <p className="mt-2 text-2xl font-black text-tts-surface">{formatAmount(item.balance)}</p>
+                      <p className="mt-2 text-2xl font-black text-tts-deep">{formatAmount(item.balance)}</p>
                     </div>
                     <span className="border border-tts-border px-2 py-1 text-xs font-bold text-tts-deep">
                       {item.asset_type === "native" ? "native" : "issued"}
@@ -671,13 +671,13 @@ export default function MainnetClient() {
                   ) : null}
                 </div>
               )) : (
-                <div className="border border-tts-border bg-black p-4 text-sm text-tts-muted sm:col-span-2">
+                <div className="border border-tts-border bg-tts-bg/60 p-4 text-sm text-tts-muted sm:col-span-2">
                   {hasWallet ? "No funded Mainnet balance found yet." : "Attach a public Mainnet wallet to show balances."}
                 </div>
               )}
             </div>
 
-            <div className="mt-5 border border-tts-border bg-black p-4">
+            <div className="mt-5 border border-tts-border bg-tts-bg/60 p-4">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Account status</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <MiniStat label="Funded" value={balance?.funded === false ? "No" : balance?.funded ? "Yes" : "-"} />
@@ -689,8 +689,8 @@ export default function MainnetClient() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
-            <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+          <div className="border border-tts-border bg-tts-surface p-5">
+            <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
               <Send className="h-5 w-5 text-tts-gold" />
               Guarded interaction preview
             </h2>
@@ -702,18 +702,18 @@ export default function MainnetClient() {
                 value={destination}
                 onChange={(event) => setDestination(event.target.value.trim())}
                 placeholder="Destination G..."
-                className="min-h-12 border border-tts-border bg-black px-3 font-mono text-sm text-tts-surface outline-none focus:border-tts-gold"
+                className="min-h-12 border border-tts-border bg-tts-bg/60 px-3 font-mono text-sm text-tts-deep outline-none focus:border-tts-gold"
               />
               <input
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 placeholder="1"
-                className="min-h-12 border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+                className="min-h-12 border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
               />
               <select
                 value={assetCode}
                 onChange={(event) => setAssetCode(event.target.value)}
-                className="min-h-12 border border-tts-border bg-black px-3 text-sm font-black text-tts-surface outline-none focus:border-tts-gold"
+                className="min-h-12 border border-tts-border bg-tts-bg/60 px-3 text-sm font-black text-tts-deep outline-none focus:border-tts-gold"
               >
                 <option value="USDC">USDC</option>
                 <option value="EURC">EURC</option>
@@ -723,13 +723,13 @@ export default function MainnetClient() {
                 type="button"
                 onClick={previewPayment}
                 disabled={!hasWallet || !isValidPublicKey(destination) || apiState.loading}
-                className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-surface/40"
+                className="inline-flex min-h-12 items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-deep/40"
               >
                 Preview
               </button>
             </div>
             {preview ? (
-              <div className="mt-5 border border-tts-border bg-black p-4">
+              <div className="mt-5 border border-tts-border bg-tts-bg/60 p-4">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Preview result</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <MiniStat label="Mode" value={preview.preview?.mode || preview.mode || "-"} />
@@ -742,17 +742,17 @@ export default function MainnetClient() {
             ) : null}
           </div>
 
-          <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
-            <h2 className="text-lg font-black text-tts-surface">Recent public operations</h2>
+          <div className="border border-tts-border bg-tts-surface p-5">
+            <h2 className="text-lg font-black text-tts-deep">Recent public operations</h2>
             <p className="mt-2 text-sm text-tts-muted">
               Public Mainnet activity from the attached wallet. Nothing here changes the account.
             </p>
             <div className="mt-5 space-y-3">
               {operations.length ? operations.map((operation) => (
-                <div key={operation.id} className="border border-tts-border bg-black p-4">
+                <div key={operation.id} className="border border-tts-border bg-tts-bg/60 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-black text-tts-surface">{operation.type || "operation"}</p>
+                      <p className="font-black text-tts-deep">{operation.type || "operation"}</p>
                       <p className="mt-1 text-sm text-tts-muted">
                         {operation.amount ? `${formatAmount(operation.amount)} ${operation.asset_code || ""}` : "No amount"}
                       </p>
@@ -771,7 +771,7 @@ export default function MainnetClient() {
                   </div>
                 </div>
               )) : (
-                <div className="border border-tts-border bg-black p-4 text-sm text-tts-muted">
+                <div className="border border-tts-border bg-tts-bg/60 p-4 text-sm text-tts-muted">
                   {hasWallet ? "No recent Mainnet operations found." : "Attach a wallet to inspect operations."}
                 </div>
               )}
@@ -782,8 +782,8 @@ export default function MainnetClient() {
           </>
         )}
 
-        <section className="border border-tts-border bg-tts-surface/[0.03] p-5">
-          <h2 className="text-lg font-black text-tts-surface">Política de uso</h2>
+        <section className="border border-tts-border bg-tts-surface p-5">
+          <h2 className="text-lg font-black text-tts-deep">Política de uso</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <InfoBlock title="Conta principal protegida" body="PIX, cotações e chat continuam no ambiente controlado do produto." />
             <InfoBlock title="PIX separado da Mainnet" body="Operações PIX não usam a carteira Mainnet anexada nesta tela." />
@@ -806,10 +806,10 @@ function TestnetRailPanel({
 }) {
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
+      <div className="border border-tts-border bg-tts-surface p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+            <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
               <QrCode className="h-5 w-5 text-tts-confirm" />
               PIX da conta de validação
             </h2>
@@ -850,14 +850,14 @@ function TestnetRailPanel({
             <QrCode className="h-4 w-4" />
             PIX in
           </a>
-          <a href="/pix-off" className="inline-flex min-h-11 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-surface">
+          <a href="/pix-off" className="inline-flex min-h-11 items-center justify-center border border-tts-border px-4 py-2 text-sm font-black text-tts-deep">
             PIX out
           </a>
         </div>
       </div>
 
-      <div className="border border-tts-border bg-tts-surface/[0.03] p-5">
-        <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+      <div className="border border-tts-border bg-tts-surface p-5">
+        <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
           <Landmark className="h-5 w-5 text-tts-gold" />
           What the toggle means
         </h2>
@@ -876,7 +876,7 @@ function TestnetRailPanel({
           />
         </div>
         {!sessionAuthenticated ? (
-          <div className="mt-5 border border-tts-border bg-black p-4 text-sm text-tts-deep">
+          <div className="mt-5 border border-tts-border bg-tts-bg/60 p-4 text-sm text-tts-deep">
             Entre na conta para usar PIX e anexar uma carteira pública Mainnet.
           </div>
         ) : null}
@@ -938,10 +938,10 @@ function DefindexYieldPanel({
   const selectedApy = selectedVault?.apy_percent || selectedVault?.apy?.apyPercent || selectedVault?.apy?.apy_percent || selectedVault?.apy?.apy;
 
   return (
-    <section className="border border-tts-border bg-tts-surface/[0.03] p-5">
+    <section className="border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-black text-tts-surface">
+          <h2 className="flex items-center gap-2 text-lg font-black text-tts-deep">
             <BadgeDollarSign className="h-5 w-5 text-tts-confirm" />
             Advanced confirmation
           </h2>
@@ -960,7 +960,7 @@ function DefindexYieldPanel({
         <button
           type="button"
           onClick={() => setAdvancedOpen(!advancedOpen)}
-          className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-surface"
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border px-4 py-2 text-sm font-black text-tts-deep"
         >
           {advancedOpen ? "Fechar modo avançado" : "Modo avançado"}
         </button>
@@ -968,13 +968,13 @@ function DefindexYieldPanel({
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         {vaults.length ? vaults.slice(0, 3).map((vault) => (
-          <div key={`${vault.asset_code}-${vault.vault_address}`} className="border border-tts-border bg-black p-4">
+          <div key={`${vault.asset_code}-${vault.vault_address}`} className="border border-tts-border bg-tts-bg/60 p-4">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{vault.display_asset_code || vault.asset_code}</p>
-            <p className="mt-2 text-lg font-black text-tts-surface">{formatYieldApy(vault.apy_percent || vault.apy?.apyPercent || vault.apy?.apy)}</p>
+            <p className="mt-2 text-lg font-black text-tts-deep">{formatYieldApy(vault.apy_percent || vault.apy?.apyPercent || vault.apy?.apy)}</p>
             <p className="mt-1 truncate text-xs text-tts-muted" title={vault.vault_address}>{vault.label || compactKey(vault.vault_address)}</p>
           </div>
         )) : (
-          <div className="border border-tts-border bg-black p-4 text-sm text-tts-muted md:col-span-3">
+          <div className="border border-tts-border bg-tts-bg/60 p-4 text-sm text-tts-muted md:col-span-3">
             {status?.runtime?.unavailable_reason || "Configure DEFINDEX_API_KEY and at least one DEFINDEX_*_VAULT."}
           </div>
         )}
@@ -982,8 +982,8 @@ function DefindexYieldPanel({
 
       {advancedOpen ? (
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="border border-tts-border bg-black p-4">
-            <div className="grid grid-cols-2 gap-2 border border-tts-border bg-tts-surface/[0.03] p-1">
+          <div className="border border-tts-border bg-tts-bg/60 p-4">
+            <div className="grid grid-cols-2 gap-2 border border-tts-border bg-tts-surface p-1">
               <button
                 type="button"
                 onClick={() => setAction("deposit")}
@@ -1004,7 +1004,7 @@ function DefindexYieldPanel({
             <select
               value={assetCode}
               onChange={(event) => setAssetCode(event.target.value)}
-              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm font-black text-tts-surface outline-none focus:border-tts-gold"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm font-black text-tts-deep outline-none focus:border-tts-gold"
             >
               {vaults.map((vault) => (
                 <option key={`${vault.asset_code}-${vault.vault_address}`} value={vault.asset_code}>
@@ -1018,7 +1018,7 @@ function DefindexYieldPanel({
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               inputMode="decimal"
-              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
             />
 
             <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Slippage bps</label>
@@ -1026,7 +1026,7 @@ function DefindexYieldPanel({
               value={slippageBps}
               onChange={(event) => setSlippageBps(event.target.value.replace(/\D/g, "").slice(0, 5))}
               inputMode="numeric"
-              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
             />
 
             <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">PIN</label>
@@ -1035,7 +1035,7 @@ function DefindexYieldPanel({
               onChange={(event) => setPin(event.target.value)}
               inputMode="numeric"
               type="password"
-              className="mt-2 min-h-12 w-full border border-tts-border bg-black px-3 text-sm text-tts-surface outline-none focus:border-tts-gold"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
             />
 
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
@@ -1043,7 +1043,7 @@ function DefindexYieldPanel({
                 type="button"
                 onClick={onRefreshBalance}
                 disabled={!canUseVault || loading}
-                className="min-h-11 border border-tts-border px-3 py-2 text-sm font-black text-tts-surface disabled:cursor-not-allowed disabled:text-tts-muted"
+                className="min-h-11 border border-tts-border px-3 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:text-tts-muted"
               >
                 Saldo
               </button>
@@ -1066,19 +1066,19 @@ function DefindexYieldPanel({
             </div>
           </div>
 
-          <div className="border border-tts-border bg-black p-4">
+          <div className="border border-tts-border bg-tts-bg/60 p-4">
             <div className="grid gap-3 sm:grid-cols-3">
               <MiniStat label="Vault" value={selectedVault ? compactKey(selectedVault.vault_address) : "-"} />
               <MiniStat label="Option" value={selectedApy ? "Configured" : "Unavailable"} />
               <MiniStat label="Asset" value={selectedVault?.display_asset_code || selectedVault?.asset_code || "-"} />
             </div>
-            <div className="mt-4 border border-tts-border bg-tts-surface/[0.03] p-3">
+            <div className="mt-4 border border-tts-border bg-tts-surface p-3">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Balance</p>
-              <p className="mt-2 break-all font-mono text-xs text-tts-surface">{compactJson(balance?.balance || balance)}</p>
+              <p className="mt-2 break-all font-mono text-xs text-tts-deep">{compactJson(balance?.balance || balance)}</p>
             </div>
-            <div className="mt-4 border border-tts-border bg-tts-surface/[0.03] p-3">
+            <div className="mt-4 border border-tts-border bg-tts-surface p-3">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Result</p>
-              <p className="mt-2 break-all font-mono text-xs text-tts-surface">
+              <p className="mt-2 break-all font-mono text-xs text-tts-deep">
                 {result?.hash ? `hash=${result.hash}` : result?.xdr ? `xdr=${compactKey(result.xdr)}` : compactJson(result)}
               </p>
             </div>
@@ -1091,9 +1091,9 @@ function DefindexYieldPanel({
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="border border-tts-border bg-tts-surface/[0.03] p-4">
+    <div className="border border-tts-border bg-tts-surface p-4">
       <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{label}</p>
-      <p className="mt-2 text-xl font-black text-tts-surface">{value}</p>
+      <p className="mt-2 text-xl font-black text-tts-deep">{value}</p>
       <p className="mt-1 text-sm text-tts-muted">{detail}</p>
     </div>
   );
@@ -1101,17 +1101,17 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-tts-border bg-tts-surface/[0.03] p-3">
+    <div className="border border-tts-border bg-tts-surface p-3">
       <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-tts-surface" title={value}>{value}</p>
+      <p className="mt-1 truncate text-sm font-black text-tts-deep" title={value}>{value}</p>
     </div>
   );
 }
 
 function InfoBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="border border-tts-border bg-black p-4">
-      <p className="font-black text-tts-surface">{title}</p>
+    <div className="border border-tts-border bg-tts-bg/60 p-4">
+      <p className="font-black text-tts-deep">{title}</p>
       <p className="mt-2 text-sm leading-6 text-tts-muted">{body}</p>
     </div>
   );

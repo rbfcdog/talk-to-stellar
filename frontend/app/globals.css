@@ -242,6 +242,117 @@
   animation: caret-blink 1s steps(1, end) infinite;
 }
 
+@layer components {
+  .tts-op-page {
+    position: relative;
+    isolation: isolate;
+    overflow-x: hidden;
+  }
+
+  .tts-op-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image: radial-gradient(circle, var(--tts-gold) 1px, transparent 1px);
+    background-size: 28px 28px;
+    opacity: 0.055;
+  }
+
+  .tts-op-page::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--tts-surface) 48%, transparent), transparent 36%),
+      linear-gradient(135deg, color-mix(in oklab, var(--tts-gold) 9%, transparent), transparent 42%);
+  }
+
+  .tts-op-page > * {
+    position: relative;
+    z-index: 0;
+  }
+
+  .tts-op-frame {
+    min-height: inherit;
+  }
+
+  .tts-op-header,
+  .tts-op-card,
+  .tts-op-stat {
+    backdrop-filter: blur(14px);
+  }
+
+  .tts-op-card,
+  .tts-op-header {
+    box-shadow:
+      0 1px 0 color-mix(in oklab, var(--tts-surface) 80%, white 20%) inset,
+      0 18px 55px rgba(28, 24, 18, 0.06);
+  }
+
+  .tts-op-page input,
+  .tts-op-page textarea,
+  .tts-op-page select {
+    border-radius: var(--radius);
+  }
+
+  .tts-op-page .bg-black,
+  .tts-op-page .bg-white {
+    background-color: var(--tts-surface) !important;
+  }
+
+  .tts-op-page .bg-black.text-tts-surface,
+  .tts-op-page .bg-white.text-tts-surface,
+  .tts-op-page .bg-tts-surface.text-tts-surface,
+  .tts-op-page .bg-black .text-tts-surface,
+  .tts-op-page .bg-white .text-tts-surface,
+  .tts-op-page .bg-tts-surface .text-tts-surface {
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page .bg-tts-deep.text-tts-surface,
+  .tts-op-page .bg-tts-deep .text-tts-surface {
+    color: var(--tts-surface) !important;
+  }
+
+  .tts-op-page .bg-tts-deep.text-tts-deep,
+  .tts-op-page .bg-tts-deep .text-tts-deep {
+    color: var(--tts-surface) !important;
+  }
+
+  .tts-op-page .bg-tts-gold.text-tts-surface,
+  .tts-op-page .bg-tts-gold .text-tts-surface,
+  .tts-op-page .bg-tts-confirm.text-tts-surface,
+  .tts-op-page .bg-tts-confirm .text-tts-surface {
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page .bg-tts-gold.text-tts-gold,
+  .tts-op-page .bg-tts-gold .text-tts-gold,
+  .tts-op-page .bg-tts-confirm.text-tts-confirm,
+  .tts-op-page .bg-tts-confirm .text-tts-confirm {
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page button,
+  .tts-op-page a {
+    text-underline-offset: 4px;
+  }
+
+  .tts-op-page .rounded-\[2rem\],
+  .tts-op-page .rounded-\[1\.75rem\],
+  .tts-op-page .rounded-3xl {
+    border-radius: 1rem;
+  }
+
+  .tts-op-page .rounded-2xl {
+    border-radius: 0.75rem;
+  }
+}
+
 /* Conditional dark operational theme.
    Older screens were built with light-theme utility classes, so these
    compatibility remaps only apply when the user selects dark mode. */
@@ -465,4 +576,3 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(-360deg); }
 }
-

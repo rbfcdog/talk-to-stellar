@@ -827,8 +827,8 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-tts-bg">
-       <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-tts-border bg-tts-surface px-3 py-3 sm:px-4">
+    <div className="relative flex h-full min-h-0 flex-col bg-tts-bg/80">
+       <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-tts-border bg-tts-surface/95 px-3 py-3 shadow-sm backdrop-blur sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
@@ -855,10 +855,10 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         </div>
         <div className="flex shrink-0 items-center gap-2 text-tts-muted sm:gap-3">
           {[
-            { Icon: Video, label: L("Chamada de vídeo indisponível nesta demo", "Video call unavailable in this demo") },
-            { Icon: Phone, label: L("Chamada indisponível nesta demo", "Call unavailable in this demo") },
-            { Icon: Search, label: L("Busca indisponível nesta demo", "Search unavailable in this demo") },
-            { Icon: MoreVertical, label: L("Mais opções indisponível nesta demo", "More options unavailable in this demo") },
+            { Icon: Video, label: L("Chamada de vídeo indisponível", "Video call unavailable") },
+            { Icon: Phone, label: L("Chamada indisponível", "Call unavailable") },
+            { Icon: Search, label: L("Busca indisponível", "Search unavailable") },
+            { Icon: MoreVertical, label: L("Mais opções indisponíveis", "More options unavailable") },
           ].map(({ Icon, label }) => (
             <button
               key={label}
@@ -876,7 +876,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
 
       <div
         ref={scrollAreaViewportRef}
-        className="flex-1 min-h-0 overflow-y-auto bg-tts-bg"
+        className="flex-1 min-h-0 overflow-y-auto bg-tts-bg/70"
       >
         <div className="flex flex-col gap-3 px-4 py-4">
           {messages.length === 0 && (
@@ -934,7 +934,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         </div>
       </div>
 
-      <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-tts-border bg-tts-surface px-4 py-3">
+      <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-tts-border bg-tts-surface/95 px-4 py-3 shadow-sm backdrop-blur">
         {retryText && !isLoading && chatId === "agent" && (
           <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-semibold text-tts-deep">
             <span>{L("A última mensagem não concluiu.", "The last message did not complete.")}</span>

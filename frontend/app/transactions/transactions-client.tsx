@@ -330,7 +330,7 @@ export default function TransactionsClient() {
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-tts-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

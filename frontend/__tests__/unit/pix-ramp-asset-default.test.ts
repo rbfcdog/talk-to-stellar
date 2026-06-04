@@ -17,7 +17,7 @@ describe("PIX asset defaults", () => {
     expect(text).toContain('const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL"]');
     expect(text).toContain('const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"]');
     expect(text).toContain('amountCurrency === "BRL") return "BRL"');
-    expect(text).toContain('const headerCurrencyAsset = rampMode === "onramp" ? "BRL" : targetAsset');
+    expect(text).toContain("const headerCurrencyAsset = rampMode === \"onramp\"");
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
   });
 
@@ -36,10 +36,14 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM");
     expect(text).toContain("PIX amount estimated from conversion matrix");
     expect(text).toContain("const requiredNetBrl = receiveTarget / rate");
-    expect(text).toContain("const effectiveOnRampPixPayAmount = String(");
-    expect(text).toContain("quote ? effectiveOnRampPixPayDisplay : formatMoney(amountBrl)");
+    expect(text).toContain("const quotedOnRampPixPayAmount = String(");
+    expect(text).toContain("const hasExecutableOnRampPixPayAmount = Boolean(normalizeHumanAmount(quotedOnRampPixPayAmount));");
+    expect(text).toContain("const onRampHeaderValueDisplay = exactOnRampValueContract");
     expect(text).toContain("const quotedOrderAmountBrl = normalizeHumanAmount(quoteForOrder?.fromAmount || \"\")");
-    expect(text).toContain("PIX pela rota da sua conta");
+    expect(text).toContain("Cotação preparada. Gere o PIX para travar o valor final.");
+    expect(text).toContain("PIX final:");
+    expect(text).toContain("if (exactOnRampValueContract) return;");
+    expect(text).toContain("await requestQuote({ displayQuote: !exactOnRampValueContract })");
     expect(text).toContain("function updateOnRampReceiveTargetAmount(nextAmount: string)");
     expect(text).toContain("value={targetReceiveInputAmount}");
     expect(text).toContain('aria-label={L("Valor que você quer receber", "Amount you want to receive")}');
@@ -50,7 +54,8 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("if (!transferFlow || transferPayload) markOperationCompleted();");
     expect(text).toContain("if (!transferFlow || transferPayload) {");
     expect(text).toContain("Chave PIX");
-    expect(text).toContain("O PIX será calculado pela cotação dinâmica antes de gerar o QR.");
+    expect(text).toContain("O PIX final será calculado pela rota dinâmica antes de gerar o QR.");
+    expect(text).not.toContain("PIX pela rota da sua conta");
     expect(text).not.toContain("PIX estimado pela rota da sua conta");
     expect(text).not.toContain("Chave PIX/e-mail");
     expect(text).not.toContain("Contato salvo validado");

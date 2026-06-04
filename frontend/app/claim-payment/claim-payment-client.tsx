@@ -265,15 +265,15 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-10 sm:px-6">
-        <section className="min-w-0 w-full overflow-hidden rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl sm:p-6">
+        <section className="min-w-0 w-full overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm sm:p-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-confirm">
             <ShieldCheck className="h-4 w-4" />
             {T(language, "Receber pagamento", "Receive Payment")}
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-tts-surface md:text-5xl">
+          <h1 className="mt-5 text-3xl font-semibold text-tts-deep md:text-5xl">
             {T(
               language,
               `${senderName} criou um link de ${sourceAmountLabel} para ${recipientName}`,
@@ -330,7 +330,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 <button
                   type="button"
                   onClick={leaveSenderSession}
-                  className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
+                  className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
                 >
                   {T(language, "Usar outra conta para receber", "Use another account to receive")}
                 </button>
@@ -344,7 +344,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               </Link>
               <Link
                 href={createAccountPath}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
               >
                 <UserPlus className="h-4 w-4" />
                 {T(language, "2) Criar conta para receber", "2) Create account to receive")}
@@ -360,7 +360,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               <button
                 type="button"
                 onClick={leaveSenderSession}
-                className="inline-flex w-full items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-surface"
+                className="inline-flex w-full items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
               >
                 {T(language, "Usar outra conta para receber", "Use another account to receive")}
               </button>

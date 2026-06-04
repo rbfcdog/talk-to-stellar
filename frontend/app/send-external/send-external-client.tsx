@@ -208,7 +208,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg px-4 py-5 text-tts-deep sm:px-6">
+    <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-5 text-tts-deep sm:px-6">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
         <header className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">

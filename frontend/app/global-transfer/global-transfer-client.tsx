@@ -82,7 +82,7 @@ const anchorProfiles: Record<AnchorProvider, { label: string; rail: string; note
   etherfuse_sandbox: {
     label: "PIX validation rail",
     rail: "PIX validation",
-    note: "Good for controlled product demos. The PIX received event is confirmed in the validation environment.",
+    note: "Good for controlled product validation. The PIX received event is confirmed in the validation environment.",
   },
   pix_psp: {
     label: "PIX account plus internal settlement",
@@ -266,7 +266,7 @@ export default function GlobalTransferClient() {
   const [payoutRail, setPayoutRail] = useState<PayoutRail>("ach")
   const [recipientType, setRecipientType] = useState<RecipientType>("own_account")
   const [kycStatus, setKycStatus] = useState<KycStatus>("approved")
-  const [payerName, setPayerName] = useState("BR Company Demo Ltda")
+  const [payerName, setPayerName] = useState("BR Company Ltda")
   const [payerDocument, setPayerDocument] = useState("12.345.678/0001-90")
   const [recipientName, setRecipientName] = useState("Recipient Legal Name")
   const [recipientBank, setRecipientBank] = useState("Wise US Inc")
@@ -677,7 +677,7 @@ export default function GlobalTransferClient() {
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <header className="border-b border-tts-border bg-tts-surface">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -697,7 +697,7 @@ export default function GlobalTransferClient() {
             </Link>
           </div>
           <div className="min-w-0 text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-gold">Controlled demo</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-gold">Controlled route</p>
             <h1 className="text-xl font-bold tracking-tight text-tts-deep sm:text-2xl">BRL to USD transfer lab</h1>
           </div>
         </div>
@@ -832,7 +832,7 @@ export default function GlobalTransferClient() {
             className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep transition hover:border-tts-border"
           >
             <Route className="h-4 w-4" aria-hidden="true" />
-            Run full demo flow
+            Run full route
           </button>
         </section>
 
