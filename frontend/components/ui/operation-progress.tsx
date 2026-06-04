@@ -58,19 +58,19 @@ export function OperationProgressPanel({
         : readyMessage
 
   return (
-    <div className={`rounded-2xl border p-4 text-sm shadow-sm ${
+    <div className={`tts-stage-panel p-4 text-sm ${
       status === "error"
-        ? "border-tts-error bg-tts-error/10 text-tts-error"
+        ? "text-tts-error"
       : status === "done"
-          ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
+          ? "text-tts-gold"
           : status === "submitting"
-            ? "border-tts-border bg-tts-surface text-tts-deep"
-            : "border-tts-border bg-tts-surface text-tts-muted"
+            ? "text-tts-deep"
+            : "text-tts-muted"
     }`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-normal opacity-70">{title}</p>
-          <p className="mt-1 font-semibold">{message}</p>
+          <p className="text-[11px] font-black uppercase tracking-normal opacity-70">{title}</p>
+          <p className="mt-1 text-sm font-semibold leading-5">{message}</p>
         </div>
       </div>
 
@@ -82,29 +82,29 @@ export function OperationProgressPanel({
               key={`${step.label}-${index}`}
               className={`rounded-xl border px-3 py-2 ${
                 stepState === "done"
-                    ? "border-tts-confirm/25 bg-tts-confirm/10"
+                    ? "border-tts-border bg-tts-bg/60"
                   : stepState === "active"
-                    ? "border-tts-gold/30 bg-tts-gold-bg"
+                    ? "border-tts-border bg-tts-bg/60"
                     : stepState === "error"
-                      ? "border-tts-error bg-tts-error/10"
+                      ? "border-tts-border bg-tts-bg/60"
                       : "border-tts-border bg-tts-bg/60 opacity-80"
               }`}
             >
               <div className="flex items-start gap-3">
                 <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${
                   stepState === "done"
-                    ? "bg-tts-confirm text-tts-deep"
+                    ? "bg-tts-deep text-tts-bg"
                     : stepState === "active"
-                      ? "bg-tts-gold text-tts-deep"
+                      ? "bg-tts-gold text-tts-bg"
                       : stepState === "error"
-                        ? "bg-tts-error text-tts-surface"
+                        ? "bg-tts-error text-tts-bg"
                         : "bg-tts-surface text-tts-muted"
                 }`}>
                   {stepState === "done" ? "✓" : index + 1}
                 </span>
                 <div>
-                  <p className="font-black">{step.label}</p>
-                  <p className="mt-0.5 text-xs opacity-75">{step.detail}</p>
+                  <p className="text-sm font-black">{step.label}</p>
+                  <p className="mt-0.5 text-xs leading-4 opacity-70">{step.detail}</p>
                 </div>
               </div>
             </div>

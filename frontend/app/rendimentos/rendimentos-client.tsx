@@ -391,17 +391,14 @@ export default function RendimentosClient({
     } catch (error) { setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) }); }
   }
 
-  const tabClass = (t: string) =>
-    `flex-1 py-3 text-sm font-bold text-center transition cursor-pointer ${tab === t ? "text-tts-deep border-b-2 border-tts-deep" : "text-tts-muted hover:text-tts-deep"}`;
-
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); /* refresh */ }} />}
 
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        <div className="flex border-b border-tts-border mb-6">
-          <div className={tabClass("returns")} onClick={() => setTab("returns")}>{L("Rendimentos", "Returns")}</div>
-          <div className={tabClass("apply")} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</div>
+      <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-8">
+        <div className="tts-stage-strip mb-5 grid-cols-2">
+          <button type="button" className="tts-stage-button" data-active={tab === "returns"} onClick={() => setTab("returns")}>{L("Rendimentos", "Returns")}</button>
+          <button type="button" className="tts-stage-button" data-active={tab === "apply"} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</button>
         </div>
 
         <AccountStatusCard
@@ -695,7 +692,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex gap-2 overflow-x-auto pb-1">
         {options.map((o) => {
           const c = optionCode(o);
@@ -719,8 +716,32 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
         </div>
       )}
 
+      <div className="tts-stage-strip grid-cols-2">
+        <button
+          type="button"
+          className="tts-stage-button"
+          data-active={activeStep === "plan"}
+          data-done={hasPrepared}
+          onClick={() => {
+            setActiveStep("plan");
+            onPinChange("");
+          }}
+        >
+          {L("Valor", "Amount")}
+        </button>
+        <button
+          type="button"
+          className="tts-stage-button"
+          data-active={activeStep === "review"}
+          disabled={!hasPrepared}
+          onClick={() => setActiveStep("review")}
+        >
+          {L("Confirmar", "Confirm")}
+        </button>
+      </div>
+
       {activeStep === "plan" && (
-        <div className="border border-tts-border bg-tts-surface p-5 space-y-5">
+        <div className="tts-stage-panel p-4 space-y-5 sm:p-5">
           <div className="flex border border-tts-border p-0.5">
             <button onClick={() => onActionChange("deposit")}
               className={`flex-1 py-2.5 text-sm font-bold text-center transition ${action === "deposit" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}>
@@ -751,14 +772,14 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             <button onClick={onPrepare} disabled={!canPrepare}
               className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3.5 text-sm font-bold text-tts-surface transition disabled:opacity-40">
               {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
-              {action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")}
+              {L("Continuar", "Continue")}
             </button>
           </div>
         </div>
       )}
 
       {activeStep === "review" && (
-        <div className="border border-tts-border bg-tts-surface p-5 space-y-5">
+        <div className="tts-stage-panel p-4 space-y-5 sm:p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold">{L("Confirmação", "Confirmation")}</h3>
