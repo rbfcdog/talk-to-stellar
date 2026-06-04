@@ -15,7 +15,6 @@ import ExternalService from '../services/core/external.service';
 import { supabase } from '../../config/supabase';
 import { getAssetIssuer, getStellarNetworkName, resolveConfiguredAsset } from '../../config/assets';
 import { WalletRepository } from '../repository/core/wallet.repository';
-import { ActivityFeedService } from '../services/activity-feed.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import crypto from 'crypto';
 
@@ -39,6 +38,23 @@ type IntentRouteCandidate = {
   quoteMode?: 'market_price' | 'send_exact';
   allQuotes?: boolean;
   recipientQuery?: string;
+  yieldAction?: 'deposit' | 'withdraw';
+  yieldMode?: 'options' | 'balance' | 'prepare' | 'confirm';
+  contactAction?: 'list' | 'add';
+  contactKey?: string;
+  contactName?: string;
+  walletAction?: 'profile' | 'public_key' | 'receiving_key' | 'manage';
+  explanationTopic?: 'assets' | 'pix' | 'earnings' | 'conversion' | 'payments' | 'security' | 'account' | 'all';
+  pin?: string;
+};
+
+type YieldRouteIntent = {
+  is_yield: boolean;
+  mode: 'options' | 'balance' | 'prepare' | 'confirm';
+  action: 'deposit' | 'withdraw';
+  amount: string;
+  asset_code: string;
+  pin?: string;
 };
 
 const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; description: string }> = [
@@ -65,7 +81,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.CONTACTS,
     toolName: 'route_contacts_intent',
-    description: 'Use only when the user is explicitly managing saved contacts/destinatarios/favorites/beneficiaries: list, see, add, save, edit, or choose a contact. Contact routing requires explicit contact-management meaning. Do not use for adding/colocar/depositing money or balance. Do not use for PIX top-up/on-ramp phrases such as "colocar 100 reais via pix" or "me ajude com o colocar 100 reais via pix"; those are route_pix_onramp_intent and must not ask for contact key/email/phone/public key. If the message contains PIX money movement or own-account top-up, this contacts tool is invalid even if the verb is adicionar/colocar.',
+    description: 'Use only when the user is explicitly managing saved contacts/destinatarios/favorites/beneficiaries: list, see, add, save, edit, or choose a contact. Fill contact_action=list for list/view requests and contact_action=add plus contact_key/contact_name when saving a contact. Contact routing requires explicit contact-management meaning. Do not use for adding/colocar/depositing money or balance. Do not use for PIX top-up/on-ramp phrases such as "colocar 100 reais via pix" or "me ajude com o colocar 100 reais via pix"; those are route_pix_onramp_intent and must not ask for contact key/email/phone/public key. If the message contains PIX money movement or own-account top-up, this contacts tool is invalid even if the verb is adicionar/colocar.',
   },
   {
     intent: IntentType.CONVERSION,
@@ -75,7 +91,7 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.YIELD,
     toolName: 'route_yield_intent',
-    description: 'Use when the user asks about investments, rendimentos, dinheiro rendendo, aplicacoes/aplicações/aolicacoes, positions/posicoes, aplicar, investir, current investment positions, or adding/removing money from those options.',
+    description: 'Use when the user asks about investments, rendimentos, dinheiro rendendo, aplicacoes/aplicações/aolicacoes, positions/posicoes, aplicar, investir, current investment positions, or adding/removing money from those options. Fill amount and asset_code when present. Fill yield_action=deposit for aplicar/investir/guardar/deixar rendendo and yield_action=withdraw for resgatar/retirar/sacar. Fill yield_mode=prepare when the user gives an amount, balance when asking current invested amount/positions, options for general yield screens/options, and confirm only when a PIN confirmation is explicitly included. When confirm is selected, fill pin only if the user explicitly typed it.',
   },
   {
     intent: IntentType.PAYMENT,
@@ -125,12 +141,12 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.WALLET,
     toolName: 'route_wallet_intent',
-    description: 'Use for wallet setup, wallet creation, account connection, wallet public key, or general wallet management that is not login/logout.',
+    description: 'Use for wallet setup, wallet creation, account connection, wallet public key, public profile, or general wallet management that is not login/logout. Fill wallet_action=profile when the user asks for profile/perfil, wallet_action=public_key when the user asks for public crypto/Stellar key, wallet_action=receiving_key when the user asks for PIX/email receiving key, and wallet_action=manage for generic wallet management.',
   },
   {
     intent: IntentType.GENERAL,
     toolName: 'route_general_intent',
-    description: 'Use only for greetings, broad help/menu/capability questions, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. Never use for actionable product requests, PIN/security changes, or money-transfer requests that contain a transfer verb, amount, asset, and recipient.',
+    description: 'Use only for greetings, broad help/menu/capability questions, educational explanations, unsupported small talk, or messages that are truly not an actionable TalkToStellar request. When the user asks to explain assets, PIX, earnings, conversions, payments, security, or account concepts, set explanation_topic to the matching topic. Never use for actionable product requests, PIN/security changes, or money-transfer requests that contain a transfer verb, amount, asset, and recipient.',
   },
 ];
 
@@ -200,6 +216,43 @@ const INTENT_ROUTING_TOOLS = INTENT_ROUTING_SPECS.map((spec) => ({
         recipient_query: {
           type: 'string',
           description: 'Optional recipient/contact exactly as understood from the user message. Use for payment and PIX-funded contact payments. Leave empty for own-account PIX on-ramp/off-ramp.',
+        },
+        yield_action: {
+          type: 'string',
+          enum: ['deposit', 'withdraw', ''],
+          description: 'Only for route_yield_intent. Use deposit for aplicar/investir/guardar rendendo and withdraw for resgatar/retirar/sacar rendimentos.',
+        },
+        yield_mode: {
+          type: 'string',
+          enum: ['options', 'balance', 'prepare', 'confirm', ''],
+          description: 'Only for route_yield_intent. Use prepare when an amount is present, balance when the user asks current invested/rendimento balance, options for general yield screens/options, and confirm only when a PIN confirmation is explicitly present.',
+        },
+        contact_action: {
+          type: 'string',
+          enum: ['list', 'add', ''],
+          description: 'Only for route_contacts_intent. Use list for seeing/listing contacts and add for saving a new contact.',
+        },
+        contact_key: {
+          type: 'string',
+          description: 'Only for route_contacts_intent with contact_action=add. The email, phone, CPF, PIX key, or public key being saved.',
+        },
+        contact_name: {
+          type: 'string',
+          description: 'Only for route_contacts_intent with contact_action=add. The contact name if explicitly present.',
+        },
+        wallet_action: {
+          type: 'string',
+          enum: ['profile', 'public_key', 'receiving_key', 'manage', ''],
+          description: 'Only for route_wallet_intent. Use profile for public profile page, public_key for Stellar/public crypto key, receiving_key for PIX/email receiving key, and manage for generic wallet/account management.',
+        },
+        explanation_topic: {
+          type: 'string',
+          enum: ['assets', 'pix', 'earnings', 'conversion', 'payments', 'security', 'account', 'all', ''],
+          description: 'Only for route_general_intent when the user asks for an educational explanation, such as explaining assets, PIX, earnings, conversion, payments, security, or account concepts.',
+        },
+        pin: {
+          type: 'string',
+          description: 'Only when the user explicitly typed a PIN for a route that can confirm an operation, such as route_yield_intent with yield_mode=confirm. Never infer or invent a PIN.',
         },
       },
       required: ['confidence', 'reason', 'needs_clarification', 'language', 'risk'],
@@ -755,82 +808,6 @@ export class AgentGraph {
     return this.repairNoisyIntentText(normalized);
   }
 
-  private isConversionRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!normalized) return false;
-    if (this.extractPixRampIntentFromText(normalized).is_pix_ramp) return false;
-    return /\b(converter|conversao|trocar|cambiar|exchange|swap)\b/.test(normalized) ||
-      /\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b.*\b(?:para|pra|por|em)\b.*\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized);
-  }
-
-  private normalizeHistoryIntentText(text: string): string {
-    return this.normalizeTextForIntent(text)
-      .replace(/\bhistoric[p0]?\b/g, 'historico')
-      .replace(/\bhist[o0]ric[p0]?\b/g, 'historico')
-      .replace(/\bhistori[ck]o\b/g, 'historico');
-  }
-
-  private isPaymentLinkRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text);
-    const asksForLink =
-      /\blink\b/.test(normalized) ||
-      normalized.includes('payment link') ||
-      normalized.includes('link de pagamento') ||
-      normalized.includes('link de pagto') ||
-      normalized.includes('link de transacao') ||
-      normalized.includes('link de transferencia');
-    const createVerb =
-      normalized.includes('criar') ||
-      normalized.includes('gerar') ||
-      normalized.includes('fazer') ||
-      normalized.includes('montar') ||
-      normalized.includes('create') ||
-      normalized.includes('generate');
-
-    return asksForLink && createVerb;
-  }
-
-  private isReceiveLinkRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text);
-    const asksForLink =
-      /\blink\b/.test(normalized) ||
-      normalized.includes('link para receber') ||
-      normalized.includes('link de recebimento');
-    const receiveRef =
-      normalized.includes('receber') ||
-      normalized.includes('recebimento') ||
-      normalized.includes('me pagar') ||
-      normalized.includes('cobrar') ||
-      normalized.includes('cliente pagar');
-    const selfRef =
-      normalized.includes('meu') ||
-      normalized.includes('minha') ||
-      normalized.includes('pra mim') ||
-      normalized.includes('para mim') ||
-      normalized.includes('qual');
-
-    return asksForLink && receiveRef && selfRef;
-  }
-
-  private isOwnProfileRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[^\w\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!normalized) return false;
-    const asksForProfile = /\b(perfil|profile)\b/.test(normalized);
-    if (!asksForProfile) return false;
-    if (/\b(contato|cliente|destinatario|beneficiario|outra pessoa|alguem)\b/.test(normalized)) {
-      return false;
-    }
-    const selfRef = /\b(meu|minha|meus|minhas|pra mim|para mim|my|mine|own)\b/.test(normalized);
-    const viewVerb = /\b(ver|ve|abrir|mostrar|consultar|olhar|acessar|show|open|see|view)\b/.test(normalized);
-    return selfRef || viewVerb || normalized === 'perfil' || normalized === 'profile';
-  }
-
   private async handleOwnProfileRequest(state: AgentState): Promise<AgentState> {
     const language = this.getLanguage(state);
     const displayName = String(state.session_data?.email || state.session_data?.user_id || '').trim();
@@ -896,69 +873,6 @@ export class AgentGraph {
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
-  }
-
-  private isReceiptImageRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text);
-    const wantsReceipt = normalized.includes('recibo') || normalized.includes('comprovante');
-    const wantsImage =
-      normalized.includes('imagem') ||
-      normalized.includes('foto') ||
-      normalized.includes('visual') ||
-      normalized.includes('mostrar') ||
-      normalized.includes('mostre') ||
-      normalized.includes('ver ');
-    return wantsReceipt && wantsImage;
-  }
-
-  private isIntentHelpRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/([a-z])\1{2,}/g, '$1$1')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const fuzzy = normalized
-      .replace(/([a-z])\1+/g, '$1$1')
-      .replace(/\b(?:consguee|consegui|consegu|conseg|consego|conseguee)\b/gi, 'consegue')
-      .replace(/\b(?:voce|vc)\b/gi, 'voce')
-      .replace(/\b(?:fazer|faze|faco)\b/gi, 'fazer')
-      .trim();
-    const asksCapabilities =
-      /\bo\s+que\b.*\b(?:voce\s+)?(?:pode|consegue)\b.*\bfazer\b/.test(fuzzy) ||
-      /\bo\s+que\b.*\b(?:eu\s+)?posso\b.*\bfazer\b/.test(fuzzy) ||
-      /\b(?:quais|que)\b.*\b(?:funcionalidades|comandos|coisas)\b/.test(fuzzy);
-    return (
-      normalized === 'ajuda' ||
-      normalized === 'help' ||
-      normalized === 'menu' ||
-      asksCapabilities ||
-      fuzzy.includes('o que fazer') ||
-      fuzzy.includes('o que posso fazer') ||
-      fuzzy.includes('o que eu posso fazer') ||
-      fuzzy.includes('oq fazer') ||
-      fuzzy.includes('que posso fazer') ||
-      fuzzy.includes('que eu posso fazer') ||
-      fuzzy.includes('que pode fazer') ||
-      fuzzy.includes('que consegue fazer') ||
-      fuzzy.includes('que da para fazer') ||
-      fuzzy.includes('que da pra fazer') ||
-      fuzzy.includes('como funciona') ||
-      normalized.includes('principais comandos') ||
-      normalized.includes('comandos disponiveis') ||
-      normalized.includes('what can you do') ||
-      normalized.includes('como usar') ||
-      normalized.includes('mostrar comandos') ||
-      normalized.includes('mostre os comandos')
-    );
-  }
-
-  private isSimpleGreetingRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/^\/+/, '')
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return /^(o+i+|ola+a*|opa+a*|bom dia+|boa tarde+|boa noite+|e ai+|fala+a*|hello+|hi+|hey+|start|menu)$/.test(normalized);
   }
 
   private assetCodeFromTextToken(value?: string): string {
@@ -1033,34 +947,9 @@ export class AgentGraph {
     return state;
   }
 
-  private explanationTopicFromText(text: string): '' | 'assets' | 'pix' | 'earnings' | 'conversion' | 'payments' | 'security' | 'account' {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!normalized) return '';
-
-    const asksExplanation =
-      /\b(explique|explica|explicar|me explica|detalhe|detalhar|o que e|o que sao|quais sao|quais ativos|quais moedas|what is|what are|explain|describe)\b/.test(normalized) ||
-      normalized.includes('sobre cada') ||
-      normalized.includes('cada um deles');
-
-    if (!asksExplanation) return '';
-
-    if (/\b(assets?|ativos?|moedas?|currencies|brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized)) return 'assets';
-    if (/\b(pix|chave pix|qr code|deposito|saque|retirada)\b/.test(normalized)) return 'pix';
-    if (/\b(rendimento|rendimentos|investimento|investir|aplicacao|aplicacoes|posicao|posicoes|dinheiro rendendo)\b/.test(normalized)) return 'earnings';
-    if (/\b(conversao|converter|trocar|cambio|cotacao)\b/.test(normalized)) return 'conversion';
-    if (/\b(pagamento|pagar|enviar|mandar|transferir|link de pagamento|link de recebimento)\b/.test(normalized)) return 'payments';
-    if (/\b(seguranca|pin|biometria|senha|acesso)\b/.test(normalized)) return 'security';
-    if (/\b(conta|perfil|saldo)\b/.test(normalized)) return 'account';
-
-    return '';
-  }
-
-  private async handleExplanationRequest(
+  private async handleExplanationTopicRequest(
     state: AgentState,
-    topic: ReturnType<AgentGraph['explanationTopicFromText']>
+    topic: IntentRouteCandidate['explanationTopic']
   ): Promise<AgentState> {
     const resultRaw = await executeTool('get_explanations', {
       topic: topic || 'all',
@@ -1081,161 +970,6 @@ export class AgentGraph {
         'Não consegui carregar essa explicação agora.',
         'I could not load that explanation right now.'
       );
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
-  }
-
-  private extractPaymentLinkIntentFromText(text: string): {
-    amount?: string;
-    asset_code?: string;
-    receive_asset_code?: string;
-    recipient_query?: string;
-  } {
-    const original = String(text || '');
-    const normalized = this.normalizeTextForIntent(original);
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
-    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
-
-    const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
-    let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|eur|eurc|cetes|usd|usdc|dolar|dolares|xlm|lumens?)/);
-    if (receiveMatch?.[1]) {
-      const receive = receiveMatch[1];
-      receiveAssetCode = this.assetCodeFromTextToken(receive);
-    }
-
-    return {
-      amount,
-      asset_code: assetCode,
-      receive_asset_code: receiveAssetCode,
-      recipient_query: '',
-    };
-  }
-
-  private extractDirectPaymentIntentFromText(text: string): {
-    recipient_query?: string;
-    amount?: string;
-    asset_code?: string;
-    receive_asset_code?: string;
-    memo?: string;
-    category?: string;
-    is_payment_link?: boolean;
-    needs_clarification?: boolean;
-    clarification_question?: string;
-  } {
-    const normalized = this.normalizeTextForIntent(text);
-    if (!/\b(mandar|enviar|pagar|transferir|manda|envia|pague|fazer pagamento)\b/.test(normalized)) {
-      return {};
-    }
-    if (this.isPaymentLinkRequest(text) || this.extractPixRampIntentFromText(text).is_pix_ramp) {
-      return {};
-    }
-
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
-    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
-    if (!amount) return {};
-
-    const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
-
-    let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|eur|eurc|cetes|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
-    if (receiveMatch?.[1]) {
-      const receive = receiveMatch[1];
-      receiveAssetCode = this.assetCodeFromTextToken(receive);
-    }
-
-    const recipientMatch = normalized.match(/\b(?:para|pra|pro|a)\s+(.+)$/);
-    const recipientQuery = recipientMatch?.[1]
-      ?.replace(/\b(?:mas|porque|pois|via|por|com|receber|em|sem saldo|saldo insuficiente|nao tenho saldo|não tenho saldo)\b.*$/i, '')
-      .replace(/^(?:o|a|ao|aos|as)\s+/, '')
-      .trim();
-
-    if (!recipientQuery || /\b(minha conta|meu pix|fora da minha conta|fora da conta)\b/.test(recipientQuery)) {
-      return {};
-    }
-
-    return {
-      recipient_query: recipientQuery,
-      amount,
-      asset_code: assetCode,
-      receive_asset_code: receiveAssetCode,
-    };
-  }
-
-  private extractExternalWalletIntentFromText(text: string): {
-    is_external_wallet: boolean;
-    destination?: string;
-    amount?: string;
-    asset_code?: string;
-  } {
-    const original = String(text || '');
-    const normalized = this.normalizeTextForIntent(original);
-    const destination = original.match(/\bG[A-Z2-7]{55}\b/i)?.[0]?.trim();
-    const mentionsExternal =
-      /\b(carteira externa|wallet externa|public key|chave publica|chave pública|stellar address|endereco stellar|endereço stellar)\b/.test(normalized);
-
-    if (!destination && !mentionsExternal) {
-      return { is_external_wallet: false };
-    }
-
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
-    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
-    const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
-
-    return {
-      is_external_wallet: true,
-      destination,
-      amount,
-      asset_code: assetCode === 'BRL' ? 'USDC' : assetCode,
-    };
-  }
-
-  private async handleExternalWalletRequest(state: AgentState): Promise<AgentState> {
-    const language = this.getLanguage(state);
-    if (!state.session_data?.public_key) {
-      state.success = false;
-      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
-      await this.saveAssistantResponse(state);
-      await this.repository.saveState(state.session_id, state);
-      return state;
-    }
-
-    const intent = this.extractExternalWalletIntentFromText(state.current_input);
-    const base = this.getFrontendBaseUrl();
-    const url = new URL(`${base}/send-external`);
-    url.searchParams.set('lang', language);
-    if (intent.destination) url.searchParams.set('destination', intent.destination);
-    if (intent.amount) url.searchParams.set('amount', intent.amount);
-    if (intent.asset_code) url.searchParams.set('asset', intent.asset_code);
-
-    let finalUrl = url.toString();
-    try {
-      finalUrl = await this.externalService.shortenPublicUrl({
-        url: finalUrl,
-        purpose: 'send_external_wallet',
-        sessionId: state.session_id,
-        userId: String(state.session_data?.user_id || '').trim() || undefined,
-        expiresInHours: 24,
-      });
-    } catch (error) {
-      logger.warn(`[send-external-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
-    }
-
-    state.success = true;
-    state.response_message = this.text(
-      language,
-      [
-        'Esse envio é para uma conta externa, fora do ecossistema TalkToStellar.',
-        'Por segurança, a confirmação acontece em uma tela dedicada com chave completa e autenticação.',
-        `Abra o link:\n\n${finalUrl}`,
-      ].join('\n\n'),
-      [
-        'This is an external account transfer outside the TalkToStellar ecosystem.',
-        'For safety, confirmation happens on a dedicated page with the full key and authentication.',
-        `Open the link:\n\n${finalUrl}`,
-      ].join('\n\n')
-    );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -1380,180 +1114,10 @@ export class AgentGraph {
     return `${this.getFrontendBaseUrl()}/pay-anyone${qs ? `?${qs}` : ''}`;
   }
 
-  private extractPixRampIntentFromText(text: string): {
-    is_pix_ramp: boolean;
-    direction: 'onramp' | 'offramp';
-    flow?: 'fund_wallet' | 'fund_and_pay';
-    amount?: string;
-    amount_currency?: string;
-    asset_code: string;
-    recipient_query?: string;
-  } {
-    const normalized = this.normalizeTextForIntent(text);
-    const mentionsPix = /\bpix\b/.test(normalized);
-    const mentionsPixOffRampWording =
-      /\b(?:para|pra|pro|a)\s+fora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
-      /\bfora\s+(?:do|de|da)\s+pix\b/.test(normalized) ||
-      /\b(?:mandar|enviar|tirar|retirar|sacar)\s+(?:pra|para|pro|a)\s+fora\b/.test(normalized) ||
-      /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/.test(normalized) ||
-      /\b(?:pra|para|pro|a)\s+fora\b.*\bvia\s+pix\b/.test(normalized);
-    const extractPixFundedPaymentRecipient = (): string => {
-      const isOffRampRecipientNoise = (value: string) =>
-        /\bfora\s+(?:do|de|da)\s+pix\b/.test(value) ||
-        /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(value) ||
-        /^fora$/i.test(value.trim());
-      const stopAtFlowWords = (value: string) => String(value || '')
-        .replace(/\s+\b(?:de|do|da)\s+(?:r\$\s*)?\d.*$/i, '')
-        .replace(/\s+\b(?:na|no)\s+qual\b.*$/i, '')
-        .replace(/\s+\b(?:via|por|com|em|usando|pago|paga|pagando)\b.*$/i, '')
-        .replace(/\s+(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:[.,]\d{1,8})?\b.*$/i, '')
-        .replace(/\s+\b(?:receber|receba|em)\s+(?:brl|real|reais|usd|usdc|dolar|dolares|xlm)\b.*$/i, '')
-        .replace(/\b(minha|meu|conta|banco|bancaria|bancária)\b/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const patterns = [
-        /\b(?:direto|diretamente)\s+(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/,
-        /\b(?:transacao|transação|trasacao|transferencia|transferência|pagamento)\s+(?:direto\s+|diretamente\s+)?(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/,
-        /\b(?:mandar|enviar|pagar|transferir)\s+(?:direto\s+|diretamente\s+)?(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/,
-      ];
-
-      for (const pattern of patterns) {
-        const candidate = stopAtFlowWords(normalized.match(pattern)?.[1] || '');
-        if (candidate && !isOffRampRecipientNoise(candidate)) return candidate;
-      }
-
-      const genericMatches = Array.from(normalized.matchAll(/\b(?:para|pra|pro|a)\s+([a-z0-9._%+-]+(?:\s+[a-z0-9._%+-]+){0,4})/g));
-      for (const match of genericMatches.reverse()) {
-        const candidate = stopAtFlowWords(match[1] || '');
-        if (candidate && !isOffRampRecipientNoise(candidate) && !/\b(?:minha conta|meu pix|meu banco|outro banco|conta externa)\b/.test(candidate)) {
-          return candidate;
-        }
-      }
-
-      return '';
-    };
-    const pixFundedPaymentRecipient = extractPixFundedPaymentRecipient();
-    const mentionsMoneyOutOfOwnAccount =
-      mentionsPixOffRampWording ||
-      /\b(?:pra|para|pro)\s+fora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
-      /\b(?:mandar|enviar|tirar|retirar|sacar)\b.*\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
-      /\bfora\s+da\s+(?:minha\s+)?(?:conta|wallet|carteira)\b/.test(normalized) ||
-      /\b(?:mandar|enviar)\s+(?:pra|para|pro|a)\s+fora\b.*\b(?:via|por|com)\s+pix\b/.test(normalized);
-    const mentionsBankOffRamp =
-      /\b(off\s*ramp|offramp)\b/.test(normalized) ||
-      /\b(?:banco|bancaria|bancario|bancária|bancário|conta externa|outro banco)\b/.test(normalized) ||
-      /\b(?:retirar|sacar|saque|retirada|tirar|resgatar)\b/.test(normalized) ||
-      mentionsMoneyOutOfOwnAccount;
-
-    const mentionsOwnPixDestination =
-      /\b(?:meu|minha|meus|minhas)\s+(?:pix|chave\s+pix|conta\s+pix)\b/.test(normalized) ||
-      /\b(?:para|pra|pro|a)\s+o\s+meu\s+pix\b/.test(normalized) ||
-      /\b(?:para|pra|pro|a)\s+a\s+minha\s+chave\s+pix\b/.test(normalized);
-
-    const wantsPixFundedPayment =
-      /\b(mandar|enviar|pagar|transferir|transacao|transação|trasacao|transferencia|transferência|pagamento|fazer\s+(?:um\s+|uma\s+)?pix|fazer uma transacao|fazer uma transação|fazer uma trasacao|fazer transacao|fazer transação|fazer trasacao|fazer uma transferencia|fazer transferencia|faca uma transferencia|faça uma transferência)\b/.test(normalized) &&
-      Boolean(pixFundedPaymentRecipient) &&
-      !mentionsOwnPixDestination &&
-      !mentionsMoneyOutOfOwnAccount &&
-      mentionsPix &&
-      !/\b(meu banco|conta bancaria|conta bancária|outro banco|conta externa)\b/.test(normalized);
-
-    const wantsOffRamp =
-      /\b(sacar|saque|retirar|tirar|resgatar|vender|off\s*ramp|offramp)\b/.test(normalized) ||
-      mentionsOwnPixDestination ||
-      /\b(retirada|retiradas)\b/.test(normalized) ||
-      normalized.includes('tirar dinheiro') ||
-      normalized.includes('retirar dinheiro') ||
-      normalized.includes('mandar para minha conta bancaria') ||
-      normalized.includes('mandar pra minha conta bancaria') ||
-      normalized.includes('mandar pra outro banco') ||
-      normalized.includes('mandar para outro banco') ||
-      normalized.includes('para outro banco') ||
-      normalized.includes('pra outro banco') ||
-      normalized.includes('conta externa') ||
-      normalized.includes('enviar para o banco') ||
-      normalized.includes('enviar pro banco') ||
-      normalized.includes('cair no banco') ||
-      mentionsMoneyOutOfOwnAccount;
-
-    const wantsOnRamp =
-      /\b(depositar|deposito|colocar|adicionar|carregar|recarregar|comprar|trazer|botar|fundar|entrar|receber|on\s*ramp|onramp)\b/.test(normalized) ||
-      wantsPixFundedPayment ||
-      normalized.includes('pagar com pix') ||
-      normalized.includes('trazer dinheiro') ||
-      normalized.includes('trazer saldo') ||
-      normalized.includes('por pix na conta') ||
-      normalized.includes('pra minha conta via pix') ||
-      normalized.includes('para minha conta via pix') ||
-      normalized.includes('pix para wallet') ||
-      normalized.includes('pix pra wallet') ||
-      normalized.includes('pix na conta') ||
-      normalized.includes('saldo com pix');
-
-    if (!mentionsPix && !mentionsBankOffRamp) {
-      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
-    }
-
-    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
-    const explicitlyMentionsAsset = /\b(brl|real|reais|r\$|usd|usdc|dolar|dolares|dólar|dólares|dollar|dollars|cetes|xlm|lumen|lumens|tesouro|tesouros)\b/.test(normalized);
-    const inferredAssetCode = explicitlyMentionsAsset ? this.inferPaymentAssetFromText(normalized, amountMatch) : '';
-    const mentionsBrl = /\b(brl|real|reais|r\$)\b/.test(normalized);
-    const mentionsTesouro = /\b(tesouro|tesouros)\b/.test(normalized);
-    const mentionsUsdc = /\b(usdc|usd|dolar|dolares|dólar|dólares|dollar|dollars)\b/.test(normalized);
-    const impliedPixOnRamp = Boolean(mentionsPix && amountMatch && !wantsOffRamp);
-    if (!wantsOnRamp && !wantsOffRamp && !impliedPixOnRamp) {
-      return { is_pix_ramp: false, direction: 'onramp', asset_code: 'BRL' };
-    }
-    const explicitReceiveUsdc = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:usdc|usd|dolar|dolares|dólar|dólares)/.test(normalized);
-    const explicitReceiveBrl = /(?:receber|cair|saldo|converter|em)\s+(?:em\s+)?(?:brl|real|reais|r\$)/.test(normalized);
-    const onRampTargetAsset = explicitReceiveBrl || (mentionsBrl && !mentionsUsdc)
-      ? 'BRL'
-      : (explicitReceiveUsdc || mentionsUsdc || !mentionsTesouro ? inferredAssetCode || 'USDC' : 'BRL');
-    const fundAndPayAsset = inferredAssetCode || (mentionsUsdc && !mentionsBrl ? 'USDC' : 'BRL');
-    return {
-      is_pix_ramp: true,
-      direction: wantsOffRamp ? 'offramp' : 'onramp',
-      flow: wantsPixFundedPayment && !wantsOffRamp ? 'fund_and_pay' : 'fund_wallet',
-      amount: amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined,
-      amount_currency: wantsPixFundedPayment
-        ? fundAndPayAsset
-        : (mentionsUsdc && !mentionsBrl && !mentionsTesouro ? 'USDC' : inferredAssetCode || 'BRL'),
-      asset_code: wantsOffRamp && !wantsOnRamp
-        ? (mentionsUsdc ? 'USDC' : inferredAssetCode || 'BRL')
-        : (wantsPixFundedPayment ? fundAndPayAsset : onRampTargetAsset),
-      recipient_query: wantsPixFundedPayment && !(wantsOffRamp && !wantsOnRamp) ? pixFundedPaymentRecipient : undefined,
-    };
-  }
-
   private extractAmountFollowUpFromText(text: string): string | undefined {
     const normalized = this.normalizeTextForIntent(text);
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
     return amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
-  }
-
-  private resumePendingPixRampIntent(state: AgentState): {
-    is_pix_ramp: boolean;
-    direction: 'onramp' | 'offramp';
-    flow?: 'fund_wallet' | 'fund_and_pay';
-    amount?: string;
-    amount_currency?: string;
-    asset_code: string;
-    recipient_query?: string;
-  } | null {
-    const pending = state.pending_pix_ramp || (state.action_params as any)?.pending_pix_ramp;
-    if (!pending?.direction || !pending?.asset_code) return null;
-    const amount = this.extractAmountFollowUpFromText(state.current_input);
-    if (!amount) return null;
-    return {
-      is_pix_ramp: true,
-      direction: pending.direction === 'offramp' ? 'offramp' : 'onramp',
-      flow: pending.flow === 'fund_and_pay' ? 'fund_and_pay' : 'fund_wallet',
-      amount,
-      amount_currency: String(pending.amount_currency || pending.asset_code || 'BRL').trim().toUpperCase(),
-      asset_code: String(pending.asset_code || 'BRL').trim().toUpperCase(),
-      recipient_query: String(pending.recipient_query || '').trim() || undefined,
-    };
   }
 
   private pixFundedPaymentIntentFromLlmRoute(state: AgentState): {
@@ -1573,7 +1137,7 @@ export class AgentGraph {
     const amount = String(route.amount || '').trim();
     const assetCode = this.normalizeAgentAssetCode(route.asset_code || '');
     const recipientQuery = String(route.recipient_query || '').trim();
-    if (!amount || !assetCode || !recipientQuery) {
+    if (!recipientQuery) {
       return null;
     }
 
@@ -1581,9 +1145,9 @@ export class AgentGraph {
       is_pix_ramp: true,
       direction: 'onramp',
       flow: 'fund_and_pay',
-      amount,
-      amount_currency: assetCode,
-      asset_code: assetCode,
+      amount: amount || undefined,
+      amount_currency: assetCode || 'BRL',
+      asset_code: assetCode || 'BRL',
       recipient_query: recipientQuery,
     };
   }
@@ -1612,9 +1176,6 @@ export class AgentGraph {
     const destAssetCode = this.normalizeAgentAssetCode(route.dest_asset_code || route.destination_asset_code || '');
     const quoteAssetCode = this.normalizeAgentAssetCode(route.quote_asset_code || route.quoteAssetCode || '');
     const quoteAmount = String(route.quote_amount || route.quoteAmount || '').trim();
-    if (!amount && !assetCode && !sourceAssetCode) {
-      return null;
-    }
 
     const direction = toolName === 'route_pix_offramp_intent' ? 'offramp' : 'onramp';
     const normalizedAsset = direction === 'offramp'
@@ -1809,10 +1370,11 @@ export class AgentGraph {
   private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
     const llmOwnAccountPixIntent = this.pixOwnAccountIntentFromLlmRoute(state);
     const llmPixFundedPaymentIntent = this.pixFundedPaymentIntentFromLlmRoute(state);
-    const extractedIntent = this.extractPixRampIntentFromText(state.current_input);
-    const intent = llmOwnAccountPixIntent || llmPixFundedPaymentIntent || (extractedIntent.is_pix_ramp
-      ? extractedIntent
-      : (this.resumePendingPixRampIntent(state) || extractedIntent));
+    const intent = llmOwnAccountPixIntent || llmPixFundedPaymentIntent || {
+      is_pix_ramp: false,
+      direction: 'onramp' as const,
+      asset_code: 'BRL',
+    };
     const language = this.getLanguage(state);
     if (!intent.is_pix_ramp) {
       const onRampUrl = new URL(`/pix-on`, this.getFrontendBaseUrl());
@@ -1944,13 +1506,13 @@ export class AgentGraph {
       state.success = false;
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
-      const deterministicParsed = this.extractPaymentLinkIntentFromText(state.current_input);
-      const llmParsed = deterministicParsed.amount
-        ? deterministicParsed
-        : {
-            ...deterministicParsed,
-            is_payment_link: true,
-          };
+      const route = (state.action_params as any)?.llm_route || {};
+      const llmParsed = {
+        amount: String(route.amount || '').trim(),
+        asset_code: this.normalizeAgentAssetCode(route.asset_code || 'USDC') || 'USDC',
+        receive_asset_code: this.normalizeAgentAssetCode(route.dest_asset_code || route.asset_code || 'USDC') || 'USDC',
+        recipient_query: String(route.recipient_query || '').trim(),
+      };
       const amountInfo = this.normalizePaymentAmountAndAsset(
         String(llmParsed.amount || ''),
         llmParsed.asset_code
@@ -2365,15 +1927,6 @@ export class AgentGraph {
     return lines.join(' ');
   }
 
-  private isOptimizedRouteRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text);
-    return /\b(melhor rota|rota mais otimizada|rota otimizada|rota mais barata|melhor caminho)\b/.test(normalized);
-  }
-
-  private isBestRouteGuidanceRequest(text: string): boolean {
-    return this.isOptimizedRouteRequest(text);
-  }
-
   private bestRouteGuidanceText(language: 'pt-BR' | 'en'): string {
     return this.text(
       language,
@@ -2400,223 +1953,6 @@ export class AgentGraph {
         'The screen shows final amount, fees, and selected route before any PIN.',
       ].join('\n')
     );
-  }
-
-  private isGenericRecipientReference(value: unknown): boolean {
-    const normalized = this.normalizeTextForIntent(String(value || ''));
-    if (!normalized) return true;
-    return /\b(outra pessoa|alguem|alguém|uma pessoa|pessoa|destinatario|destinatário|beneficiario|beneficiário)\b/.test(normalized);
-  }
-
-  private extractGenericBestRouteEstimateIntent(text: string, parsed?: {
-    amount?: string;
-    asset_code?: string;
-    receive_asset_code?: string;
-    recipient_query?: string;
-  }): {
-    amount: string;
-    destAssetCode: string;
-    sourceAssetCode: string;
-  } | null {
-    const normalized = this.normalizeTextForIntent(text);
-    if (!this.isOptimizedRouteRequest(text)) return null;
-    if (!/\b(enviar|mandar|transferir|pagar|chegar|receber)\b/.test(normalized)) return null;
-
-    const amountPattern = '((?:\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,8})?|\\d+(?:[.,]\\d{1,8})?))';
-    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares)?\\b`));
-    const genericRecipient = this.isGenericRecipientReference(parsed?.recipient_query || text);
-    if (!receiveMatch && !genericRecipient) return null;
-
-    const amount = normalizeHumanAmountText(receiveMatch?.[1] || parsed?.amount || '');
-    if (!amount) return null;
-
-    const destAssetCode = (
-      this.assetCodeFromTextToken(receiveMatch?.[2]) ||
-      String(parsed?.receive_asset_code || parsed?.asset_code || 'BRL')
-    ).toUpperCase().replace(/^USD$/, 'USDC');
-    const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
-      ? ['BRL', 'USDC', 'CETES', 'XLM']
-      : ['BRL', 'USDC', 'CETES', 'XLM'];
-    const safeDestAssetCode = allowedRouteAssets.includes(destAssetCode) ? destAssetCode : 'BRL';
-    const sourceAssetCode = safeDestAssetCode === 'BRL' ? 'USDC' : 'BRL';
-
-    return {
-      amount,
-      destAssetCode: safeDestAssetCode,
-      sourceAssetCode,
-    };
-  }
-
-  private extractConversionBestRouteEstimateIntent(text: string): {
-    amount: string;
-    destAssetCode: string;
-    sourceAssetCode: string;
-  } | null {
-    const normalized = this.normalizeTextForIntent(text);
-    if (!this.isOptimizedRouteRequest(text)) return null;
-    const isConversionRoute = this.isConversionRequest(normalized) ||
-      /\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b.*\b(?:para|pra|por|em)\b.*\b(?:brl|real|reais|r\$|usd|usdc|dolar|dolares|cetes|xlm)\b/.test(normalized);
-    if (!isConversionRoute) return null;
-
-    const amount = this.extractAmountFollowUpFromText(normalized);
-    if (!amount) return null;
-
-    const inferredAssets = this.inferConversionAssetsFromText(normalized);
-    const sourceAssetCode = this.normalizeAgentAssetCode(inferredAssets.sourceAssetCode || '');
-    const destAssetCode = this.normalizeAgentAssetCode(inferredAssets.destAssetCode || '');
-    if (!sourceAssetCode || !destAssetCode || sourceAssetCode === destAssetCode) return null;
-
-    const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
-      ? ['BRL', 'USDC', 'CETES', 'XLM']
-      : ['BRL', 'USDC', 'CETES', 'XLM'];
-    if (!allowedRouteAssets.includes(sourceAssetCode) || !allowedRouteAssets.includes(destAssetCode)) {
-      return null;
-    }
-
-    return {
-      amount,
-      sourceAssetCode,
-      destAssetCode,
-    };
-  }
-
-  private async handleBestRouteConversionEstimate(state: AgentState, estimate: {
-    amount: string;
-    destAssetCode: string;
-    sourceAssetCode: string;
-  }): Promise<AgentState> {
-    const language = this.getLanguage(state);
-    const publicKey = String(state.session_data?.public_key || '').trim();
-    if (!publicKey) {
-      state.success = false;
-      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
-      await this.saveAssistantResponse(state);
-      await this.repository.saveState(state.session_id, state);
-      return state;
-    }
-
-    const routeSourceAssetCode = this.toSettlementAssetCode(estimate.sourceAssetCode) || estimate.sourceAssetCode;
-    const routeDestAssetCode = this.toSettlementAssetCode(estimate.destAssetCode) || estimate.destAssetCode;
-    const sourceIssuer = getAssetIssuer(routeSourceAssetCode) ||
-      await this.resolveWalletAssetIssuer(publicKey, routeSourceAssetCode);
-    const destIssuer = getAssetIssuer(routeDestAssetCode) ||
-      await this.resolveWalletAssetIssuer(publicKey, routeDestAssetCode);
-
-    const raw = await executeTool('get_best_route', {
-      source_public_key: publicKey,
-      destination: publicKey,
-      source_amount: estimate.amount,
-      source_asset_code: routeSourceAssetCode,
-      source_asset_issuer: sourceIssuer,
-      dest_asset_code: routeDestAssetCode,
-      dest_asset_issuer: destIssuer,
-    });
-
-    let result: any;
-    try {
-      result = JSON.parse(raw);
-    } catch {
-      result = { success: false, error: 'route_quote_parse_failed' };
-    }
-
-    if (!result?.success) {
-      state.success = false;
-      state.response_message = result?.error || this.conversionUnavailableMessage(language);
-      await this.saveAssistantResponse(state);
-      await this.repository.saveState(state.session_id, state);
-      return state;
-    }
-
-    const sourceAmount = String(result.source?.amount || result.quote?.sourceAmount || estimate.amount).trim();
-    const destinationAmount = String(result.destination?.amount || result.quote?.destinationAmount || '').trim();
-    const rate = this.toAmountNumber(result.effective_rate?.destination_per_source);
-    const transparencyLine = this.formatBestRouteTransparency(result);
-    const rateLine = rate > 0
-      ? `Cotação efetiva: 1 ${this.formatUserFacingAssetName(estimate.sourceAssetCode, language)} ≈ ${this.formatMoneyByAsset(String(rate), estimate.destAssetCode)}.`
-      : '';
-
-    state.success = true;
-    state.response_message = [
-      `Melhor rota agora para converter ${this.formatMoneyByAsset(sourceAmount, estimate.sourceAssetCode)} em ${this.formatUserFacingAssetName(estimate.destAssetCode, language)}:`,
-      destinationAmount ? `Recebe aproximadamente ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}.` : '',
-      rateLine,
-      transparencyLine || result.message,
-      'Nada é confirmado sem abrir a tela de confirmação e digitar o PIN.',
-    ].filter(Boolean).join('\n');
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
-  }
-
-  private async handleGenericBestRouteEstimate(state: AgentState, estimate: {
-    amount: string;
-    destAssetCode: string;
-    sourceAssetCode: string;
-  }): Promise<AgentState> {
-    const routeSourceAssetCode = this.toSettlementAssetCode(estimate.sourceAssetCode) || estimate.sourceAssetCode;
-    const routeDestAssetCode = this.toSettlementAssetCode(estimate.destAssetCode) || estimate.destAssetCode;
-    const sourceIssuer = getAssetIssuer(routeSourceAssetCode) ||
-      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), routeSourceAssetCode);
-    const destIssuer = getAssetIssuer(routeDestAssetCode) ||
-      await this.resolveWalletAssetIssuer(String(state.session_data?.public_key || ''), routeDestAssetCode);
-    let sourceAmount = '';
-    let destinationAmount = estimate.amount;
-    let feeDisplay = 'R$ 0,01';
-    let validityLine = 'A tela final recalcula antes de confirmar.';
-
-    try {
-      const raw = await executeTool('get_best_route', {
-        source_public_key: state.session_data?.public_key,
-        destination: state.session_data?.public_key,
-        dest_amount: estimate.amount,
-        source_asset_code: routeSourceAssetCode,
-        source_asset_issuer: sourceIssuer,
-        dest_asset_code: routeDestAssetCode,
-        dest_asset_issuer: destIssuer,
-      });
-      const result = JSON.parse(raw);
-      if (!result?.success) throw new Error(result?.error || 'route_quote_failed');
-      sourceAmount = String(result.source?.amount || result.quote?.sourceAmount || '').trim();
-      destinationAmount = String(result.destination?.amount || result.quote?.destinationAmount || estimate.amount).trim();
-      feeDisplay = String(result.fee_breakdown?.total_fee_display || result.quote?.fee_display || feeDisplay).trim() || feeDisplay;
-      const ttlSeconds = this.toAmountNumber(result.quote_ttl_seconds);
-      if (ttlSeconds > 0) {
-        validityLine = `Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`;
-      }
-    } catch (error) {
-      logger.warn(`[generic-route-estimate] route quote failed, using product fallback: ${error instanceof Error ? error.message : String(error)}`);
-      try {
-        const raw = await executeTool('get_brl_usdc_quote', {});
-        const quote = JSON.parse(raw);
-        const brlPerUsdc = this.toAmountNumber(quote?.brl_per_usdc);
-        const amount = this.toAmountNumber(estimate.amount);
-        if (quote?.success && brlPerUsdc > 0 && amount > 0) {
-          const estimatedSource = estimate.destAssetCode === 'BRL'
-            ? amount / brlPerUsdc
-            : amount * brlPerUsdc;
-          sourceAmount = estimatedSource.toFixed(estimate.sourceAssetCode === 'BRL' ? 2 : 7);
-        }
-      } catch (fallbackError) {
-        logger.warn(`[generic-route-estimate] quote fallback failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
-      }
-    }
-
-    const sourceLine = sourceAmount
-      ? `Envio estimado: ${this.formatMoneyByAsset(sourceAmount, estimate.sourceAssetCode)}.`
-      : `Envio estimado: calculado na tela de confirmação.`;
-
-    state.success = true;
-    state.response_message = [
-      `Estimativa para alguém receber ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}:`,
-      sourceLine,
-      `Recebimento: ${this.formatMoneyByAsset(destinationAmount, estimate.destAssetCode)}.`,
-      `Taxa estimada: ${feeDisplay}.`,
-      validityLine,
-      'Para finalizar, me envie o nome salvo, e-mail, CPF, telefone ou chave PIX do destinatário.',
-    ].join('\n');
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
   }
 
   private pairQuoteRequestFromLlmRoute(state: AgentState): {
@@ -2710,15 +2046,6 @@ export class AgentGraph {
       'Não consegui carregar todas as cotações agora. Tente novamente em alguns segundos.',
       'I could not load all quotes right now. Try again in a few seconds.'
     ));
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
-  }
-
-  private async handleBestRouteGuidanceRequest(state: AgentState): Promise<AgentState> {
-    const language = this.getLanguage(state);
-    state.success = true;
-    state.response_message = this.bestRouteGuidanceText(language);
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -2998,76 +2325,6 @@ export class AgentGraph {
     ].join('\n\n');
   }
 
-  private isRampHistoryRequest(text: string): boolean {
-    const normalized = this.normalizeHistoryIntentText(text);
-    const mentionsRamp = /\b(pix|deposit|deposito|depositei|depositou|sacar|saque|saquei|sacou|retirada|retirei|ramp|onramp|offramp)\b/.test(normalized);
-    const asksAmount = /\b(quanto|total|historico|mes|maio|hoje|depositei|saquei|movimentei)\b/.test(normalized);
-    return mentionsRamp && asksAmount && (
-      /\bquanto\s+(?:eu\s+)?(?:depositei|sacei|saquei|retirei)\b/.test(normalized) ||
-      /\b(?:depositos|saques|retiradas)\s+(?:do|no|esse|este)\s+(?:mes)\b/.test(normalized) ||
-      /\bhistorico\s+(?:de\s+)?(?:pix|ramp|depositos|saques)\b/.test(normalized)
-    );
-  }
-
-  private rampHistoryPeriodFromText(text: string): 'month' | 'today' | 'lifetime' {
-    const normalized = this.normalizeHistoryIntentText(text);
-    if (/\bhoje\b/.test(normalized)) return 'today';
-    if (/\b(total|sempre|todo\s+historico|historico\s+todo|desde\s+o\s+inicio)\b/.test(normalized)) return 'lifetime';
-    return 'month';
-  }
-
-  private isTransactionHistoryRequest(text: string): boolean {
-    const normalized = this.normalizeHistoryIntentText(text)
-      .replace(/[!?.,;:]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!normalized) return false;
-
-    const asksToInitiateTransaction =
-      /\b(fazer|criar|montar|preparar|mandar|enviar|pagar|transferir|converter)\b.*\b(transacoes|transacao|operacoes|operacao|pagamento|transferencia)\b/.test(normalized) ||
-      /\b(transacoes|transacao|operacoes|operacao|pagamento|transferencia)\b.*\b(?:para|pra|pro|a)\b/.test(normalized);
-    const explicitlyAsksHistory =
-      /\b(historico|extrato|recibos|comprovantes|listar|mostrar|ver|consultar|minhas|meus)\b/.test(normalized);
-    if (asksToInitiateTransaction && !explicitlyAsksHistory) return false;
-
-    const asksHistory =
-      /\b(historico|extrato|transacoes|transacao|operacoes|operacao|movimentacoes|movimentacao|recibos|comprovantes)\b/.test(normalized) ||
-      normalized.includes('meu historic');
-    if (!asksHistory) return false;
-
-    const onlySavings =
-      normalized.includes('economia') ||
-      normalized.includes('economizei') ||
-      normalized.includes('savings') ||
-      normalized.includes('metodos tradicionais');
-    return !onlySavings;
-  }
-
-  private async handleRampHistoryRequest(state: AgentState): Promise<AgentState> {
-    if (!state.session_data?.public_key) {
-      state.success = false;
-      state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
-    } else {
-      try {
-        const summary = await ActivityFeedService.summarizeRamps({
-          sessionId: state.session_id,
-          userId: state.session_data?.user_id,
-          period: this.rampHistoryPeriodFromText(state.current_input),
-        });
-        state.success = true;
-        state.response_message = summary.message;
-      } catch (error) {
-        state.success = false;
-        const language = this.getLanguage(state);
-        state.response_message = this.text(language, `Não consegui consultar seu histórico de PIX agora: ${error instanceof Error ? error.message : String(error)}`, `I could not check your PIX history right now: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
-  }
-
   private async extractPaymentIntentWithLlm(userMessage: string, userId?: string): Promise<{
     recipient_query?: string;
     amount?: string;
@@ -3154,12 +2411,9 @@ export class AgentGraph {
       routeParsed.recipient_query ||
       routeParsed.needs_clarification
     );
-    const deterministicParsed = routeHasStructuredPayment ? {} : this.extractDirectPaymentIntentFromText(state.current_input);
     const llmParsed = routeHasStructuredPayment
       ? routeParsed
-      : deterministicParsed.amount && deterministicParsed.recipient_query
-        ? deterministicParsed
-        : await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
+      : await this.extractPaymentIntentWithLlm(state.current_input, state.session_data.user_id);
     const recipientQuery = String(llmParsed.recipient_query || '').trim();
     const amountInfo = this.normalizePaymentAmountAndAsset(
       String(llmParsed.amount || ''),
@@ -3170,16 +2424,6 @@ export class AgentGraph {
 
     if (llmParsed.is_payment_link) {
       return await this.handlePayAnyoneLinkRequest(state);
-    }
-
-    const genericBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input, {
-      recipient_query: recipientQuery,
-      amount,
-      asset_code: assetCode,
-      receive_asset_code: llmParsed.receive_asset_code,
-    });
-    if (genericBestRouteEstimate && (!recipientQuery || this.isGenericRecipientReference(recipientQuery))) {
-      return await this.handleGenericBestRouteEstimate(state, genericBestRouteEstimate);
     }
 
     if (llmParsed.needs_clarification || !recipientQuery || !amount || !assetCode) {
@@ -3466,106 +2710,6 @@ export class AgentGraph {
       logger.debug(`[prependContactsContext] Error: ${error instanceof Error ? error.message : String(error)}`);
       return messages;
     }
-  }
-
-  private isContactsRequest(text: string): boolean {
-    const normalized = this.normalizeTextForIntent(text)
-      .replace(/[^\w\s@.+-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!normalized) {
-      return false;
-    }
-
-    return (
-      /\b(contatos?|destinat[aá]ri(?:o|os)?|favorit(?:o|os)?|salv(?:o|os)?|agenda)\b/.test(normalized) ||
-      normalized === 'contatos' ||
-      normalized === 'meus contatos' ||
-      normalized === 'contatos salvos' ||
-      normalized === 'meus destinatarios' ||
-      normalized === 'destinatarios salvos' ||
-      normalized === 'meus favoritos'
-    );
-  }
-
-  private extractContactIntentFromText(userMessage: string): {
-    action?: 'add' | 'list';
-    contact_key?: string;
-    contact_name?: string;
-    needs_clarification?: boolean;
-    clarification_question?: string;
-  } | null {
-    const normalized = this.normalizeTextForIntent(userMessage)
-      .replace(/[^\w\s@.+-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const mentionsPix = /\bpix\b/.test(normalized);
-    if (mentionsPix) {
-      return null;
-    }
-
-    const looksLikeApplicationRequest =
-      /\b(rendendo|rendimento|rendimentos|render|investir|investimento|investimentos|aplicar|aplicacao|aplicacoes|posicao|posicoes)\b/.test(normalized);
-    if (looksLikeApplicationRequest) {
-      return null;
-    }
-
-    if (!normalized || !this.isContactsRequest(normalized)) {
-      const addVerbFallback = /\b(adicion(?:a|ar|e)?|salv(?:a|ar|e)?|inclu(?:i|ir|a)?|cadastr(?:a|ar|e)?|novo contato|criar contato|coloc(?:a|ar|e)?|guardar|registrar)\b/.test(normalized);
-      if (!addVerbFallback) {
-        return null;
-      }
-    }
-
-    const listVerb = /\b(ver|mostrar|listar|abrir|consultar|exibir|quem|quais|cade|cad[eê]|revisar|olhar)\b/.test(normalized);
-    const directList = /^(meus contatos|contatos|contatos salvos|meus destinatarios|destinatarios salvos|meus favoritos)$/.test(normalized);
-    const addVerb = /\b(adicion(?:a|ar|e)?|salv(?:a|ar|e)?|inclu(?:i|ir|a)?|cadastr(?:a|ar|e)?|novo contato|criar contato|coloc(?:a|ar|e)?|guardar|registrar)\b/.test(normalized);
-
-    if (directList || (listVerb && !addVerb)) {
-      return { action: 'list' };
-    }
-
-    if (addVerb) {
-      const publicKeyMatch = normalized.match(/\bG[A-Z2-7]{55}\b/i)?.[0]?.trim();
-      const emailMatch = normalized.match(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/i)?.[0]?.trim();
-      const phoneMatch = normalized.match(/(?:\+?\d[\d\s().-]{7,}\d)/)?.[0]?.replace(/\D+/g, '');
-      const pixKeyMatch = normalized.match(/\b(?:pix\s*[:=]\s*)?([\w.+-]+@[\w-]+(?:\.[\w-]+)+|\+?\d[\d\s().-]{7,}\d|G[A-Z2-7]{55})\b/i)?.[1]?.trim();
-
-      const contactKey = publicKeyMatch || emailMatch || phoneMatch || pixKeyMatch || '';
-      const addTargetMatch = /\b(?:nos?|meus|minha)\s+contatos?\b/i.test(normalized) || /\b(?:salvar|adicionar|incluir|cadastrar|registrar)\s+(.+)$/i.test(normalized) || Boolean(contactKey);
-
-      if (!contactKey || !addTargetMatch) {
-        return {
-          action: 'add',
-          contact_key: contactKey,
-          contact_name: '',
-          needs_clarification: !contactKey,
-          clarification_question: !contactKey
-            ? 'Me diga a chave, email, telefone ou public key do contato.'
-            : '',
-        };
-      }
-
-      const contactName = normalized
-        .replace(publicKeyMatch || '', '')
-        .replace(emailMatch || '', '')
-        .replace(phoneMatch || '', '')
-        .replace(/\b(?:adicion(?:a|e|ar)?|salv(?:a|e|ar)?|inclu(?:i|ir|a)?|cadastr(?:a|e|ar)?|coloc(?:a|ar)?|guardar|registrar|quero|gostaria|preciso|desejo|pode|poderia|por favor|favor|nos?|meus|minha|contatos?|contato|novo contato|criar contato)\b/g, ' ')
-        .replace(/[\s,.;:!?]+/g, ' ')
-        .trim();
-
-      return {
-        action: 'add',
-        contact_key: contactKey,
-        contact_name: contactName,
-        needs_clarification: false,
-        clarification_question: '',
-      };
-    }
-
-    return null;
   }
 
   private maskPublicKey(publicKey?: string): string {
@@ -3947,6 +3091,32 @@ export class AgentGraph {
       ? rawQuoteMode
       : undefined;
     const recipientQuery = String(call.args?.recipient_query || '').trim();
+    const rawYieldAction = String(call.args?.yield_action || '').trim();
+    const yieldAction = rawYieldAction === 'deposit' || rawYieldAction === 'withdraw' ? rawYieldAction : undefined;
+    const rawYieldMode = String(call.args?.yield_mode || '').trim();
+    const yieldMode = rawYieldMode === 'options' || rawYieldMode === 'balance' || rawYieldMode === 'prepare' || rawYieldMode === 'confirm'
+      ? rawYieldMode
+      : undefined;
+    const rawContactAction = String(call.args?.contact_action || '').trim();
+    const contactAction = rawContactAction === 'list' || rawContactAction === 'add' ? rawContactAction : undefined;
+    const contactKey = String(call.args?.contact_key || '').trim();
+    const contactName = String(call.args?.contact_name || '').trim();
+    const rawWalletAction = String(call.args?.wallet_action || '').trim();
+    const walletAction = rawWalletAction === 'profile' || rawWalletAction === 'public_key' || rawWalletAction === 'receiving_key' || rawWalletAction === 'manage'
+      ? rawWalletAction
+      : undefined;
+    const rawExplanationTopic = String(call.args?.explanation_topic || '').trim();
+    const explanationTopic = rawExplanationTopic === 'assets' ||
+      rawExplanationTopic === 'pix' ||
+      rawExplanationTopic === 'earnings' ||
+      rawExplanationTopic === 'conversion' ||
+      rawExplanationTopic === 'payments' ||
+      rawExplanationTopic === 'security' ||
+      rawExplanationTopic === 'account' ||
+      rawExplanationTopic === 'all'
+      ? rawExplanationTopic
+      : undefined;
+    const pin = String(call.args?.pin || '').trim();
 
     return {
       intent,
@@ -3967,6 +3137,14 @@ export class AgentGraph {
       quoteMode,
       allQuotes: call.args?.all_quotes === true || String(call.args?.all_quotes || '').trim().toLowerCase() === 'true',
       recipientQuery: recipientQuery || undefined,
+      yieldAction,
+      yieldMode,
+      contactAction,
+      contactKey: contactKey || undefined,
+      contactName: contactName || undefined,
+      walletAction,
+      explanationTopic,
+      pin: pin || undefined,
     };
   }
 
@@ -3988,6 +3166,14 @@ export class AgentGraph {
       quote_mode: candidate.quoteMode,
       all_quotes: candidate.allQuotes,
       recipient_query: candidate.recipientQuery,
+      yield_action: candidate.yieldAction,
+      yield_mode: candidate.yieldMode,
+      contact_action: candidate.contactAction,
+      contact_key: candidate.contactKey,
+      contact_name: candidate.contactName,
+      wallet_action: candidate.walletAction,
+      explanation_topic: candidate.explanationTopic,
+      pin: candidate.pin,
     };
   }
 
@@ -4078,6 +3264,10 @@ Structured extraction fields:
 - For price/cotacao/preco/custo questions about a pair, set quote_mode=market_price. This means "how much of dest_asset is needed to receive/buy source_asset"; for example "cotacao XLM/BRL", "preco de XLM em reais", and "quanto custa 100 XLM em BRL" use market_price.
 - For sell/send/convert/route-direction simulations, set quote_mode=send_exact. This means "if I send source_asset, how much dest_asset do I receive"; for example "melhor rota de USDC pra BRL", "converter 100 XLM para BRL", "vender 100 XLM por reais", and "quanto recebo mandando 100 XLM para BRL" use send_exact.
 - When the user names a payment recipient/contact, fill recipient_query with the recipient name/key from the message.
+- For route_contacts_intent, fill contact_action=list for "ver/listar/mostrar contatos" and contact_action=add for "salvar/adicionar contato"; fill contact_key and contact_name when present.
+- For route_wallet_intent, fill wallet_action=profile for profile/perfil, public_key for Stellar/public crypto key, receiving_key for PIX/email receiving key, and manage for generic wallet management.
+- For route_general_intent educational explanations, fill explanation_topic. Use assets for "quais são os assets/explique cada ativo", pix for PIX explanations, earnings for rendimentos/vault explanations, conversion for conversion explanations, payments for payment/link explanations, security for PIN/passkey/security, account for account/profile/login concepts, and all for broad help.
+- For route_yield_intent confirmations, fill pin only when the user explicitly typed a PIN in the current message or recent same-operation context. If no explicit PIN is present, do not set pin and do not use yield_mode=confirm.
 - For route_pix_intent, amount and asset_code are the final amount and asset the recipient should receive. Example: "quero fazer pix pra Ana Silva de 100 XLM" -> route_pix_intent with amount="100", asset_code="XLM", recipient_query="Ana Silva".
 - For multi-turn route_pix_intent, combine context. Example: previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix" -> route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva". Do not route to route_pix_onramp_intent or generic PIX page.
 - For route_pix_onramp_intent, asset_code is the exact first asset the user wants to fund through PIX into their own account. If the user says "chegar/entrar/cair/receber ... na minha conta" with reais, use asset_code=BRL. If the user mentions USDC/dollars there, use asset_code=USDC: "uero mandar um pix pra chegar 100 usdc na minha conta" -> route_pix_onramp_intent, amount="100", asset_code="USDC", recipient_query empty. If the user mentions two assets in an own-account on-ramp, preserve the sequence with dest_asset_code as the post-PIX conversion target: "uero colocar 100 xlm pra eu receber em usdc" -> route_pix_onramp_intent, amount="100", asset_code="XLM", dest_asset_code="USDC", recipient_query empty. This means receive 100 XLM first and then convert 100 XLM to USDC; do not rewrite the amount as 100 USDC and do not reuse a previous contact. The PIX itself is still paid in BRL; the page calculates the BRL amount required to deliver the requested first asset.
@@ -4096,24 +3286,24 @@ Priority order when multiple intents appear:
 
 Route selection guide:
 - route_balance_intent: user asks to see balance, saldo, holdings, available money, quanto tenho, current wallet amount, or any asset balance such as XLM/USDC/CETES/BRL.
-- route_contacts_intent: user explicitly asks to list, see, add, save, edit, choose, or manage contacts, destinatarios, beneficiaries, favorites, saved recipients, or payment aliases linked to contacts. Contact routing requires explicit contact-management meaning; adding money/saldo is not contact management.
+- route_contacts_intent: user explicitly asks to list, see, add, save, edit, choose, or manage contacts, destinatarios, beneficiaries, favorites, saved recipients, or payment aliases linked to contacts. Contact routing requires explicit contact-management meaning; adding money/saldo is not contact management. Fill contact_action/contact_key/contact_name.
 - route_pix_onramp_intent: user wants to add/place/deposit/load/bring/receive money into their own TalkToStellar account via PIX. This includes "colocar 100 reais via pix", "me ajude com o colocar 100 reais via pix", "me ajuda a adicionar 100 reais por PIX", "adicionar saldo com pix", "depositar via PIX", "receber PIX na minha conta", "uero mandar um pix pra chegar 100 usdc na minha conta", and "uero colocar 100 xlm pra eu receber em usdc". It never needs a contact. It is invalid if a separate person/contact is named as the recipient. Words like "chegar", "entrar", "cair" before an amount plus "na minha conta" describe the target balance, not a recipient.
 - route_pix_offramp_intent: user wants to withdraw/send out/remove money from their TalkToStellar account to their own PIX key, own bank, or "pra fora" through PIX. This includes "sacar para meu PIX", "retirar para minha chave PIX", "mandar pra fora 50 reais em pix", "uero mandar 100 reais pra fora do pix". It does not cover cross-asset external-transfer wording like "10 USDC em XLM pra fora" unless the user explicitly says own PIX/bank.
 - route_pix_intent: PIX-funded payment to another person/contact/recipient, or other PIX money movement that is clearly PIX but not own-account on-ramp/off-ramp. PIX wins over contacts and generic payment. If PIX pays another person/contact, preserve the requested final asset and amount exactly, e.g. "100 XLM" means the recipient should receive 100 XLM, not R$100.
 - route_pix_intent also covers follow-ups where the current message only says the recipient plus "via PIX" and prior context has the amount/asset. Example context "quero mandar 100 CETES..." followed by "pra Ana Silva via pix" means PIX-funded payment delivering 100 CETES to Ana Silva.
 - route_conversion_intent: user wants to convert, swap, exchange, trocar, cambiar, or convert money/assets, including vague conversion requests without source/destination details.
 - route_price_quote_intent: user asks about best route, cotacao, quote, price, cost, fee, taxa, spread, economy, comparison with bank, or whether a transaction is worth it before doing it. For "todas as cotações", "todas as cotacoes", "todas as taxas", "tabela de câmbio", or "matriz de conversão", set all_quotes=true and do not fill source_asset_code/dest_asset_code unless the user also asks for a specific pair. For any two-asset quote such as XLM/USDC, BRL para CETES, USDC pra BRL, or CETES to XLM, fill source_asset_code and dest_asset_code. For single-asset quotes such as "cotação do CETES", infer CETES/BRL. Use quote_mode=market_price for price/cotacao/preco/custo questions; use quote_mode=send_exact for "de A pra B" route direction, conversion, sell, or send simulations.
-- route_yield_intent: user asks about investments, aplicar, aplicações, aplicacoes, positions, posições, rendimentos, dinheiro rendendo, guardar rendendo, current invested amount, or moving money into/out of earning options.
+- route_yield_intent: user asks about investments, aplicar, aplicações, aplicacoes, positions, posições, rendimentos, dinheiro rendendo, guardar rendendo, current invested amount, or moving money into/out of earning options. Fill yield_action and yield_mode. Examples: "quero ver rendimentos" -> yield_mode=options; "quero ver minhas aplicações" -> yield_mode=balance; "aplicar 1 XLM" -> yield_action=deposit, yield_mode=prepare, amount=1, asset_code=XLM; "resgatar 5 USDC" -> yield_action=withdraw, yield_mode=prepare, amount=5, asset_code=USDC; "confirmar rendimento de 100 reais PIN 1234" -> yield_action=deposit, yield_mode=confirm, amount=100, asset_code=BRL, pin=1234.
 - route_history_intent: user asks for history, extrato, transactions, transações, movimentações, receipts, comprovantes, recibos, recent activity, or full history.
 - route_financial_memory_intent: user asks what nicknames/labels/preferences were saved, what the system remembers financially, savings/economy summaries, or learned payment memory.
 - route_reset_pin_intent: user asks to change, alter, reset, recover, redefine, update, fix, troubleshoot, or handle a forgotten/invalid PIN. Any PIN problem/change request routes here.
 - route_payment_link_intent: user asks to create, generate, open, share, charge/cobrar, receive with, or get a payment/receive link.
 - route_payment_intent: user wants to send, transfer, pay, or move money to a recipient who is not explicitly the user's own PIX/bank exit. Recipients can be person names, saved contacts, emails, phones, CPFs, keys, or external wallets. Use this even with typos when amount/asset/recipient are present or implied. Use this for "10 USDC em XLM pra fora": source is USDC, destination asset is XLM, recipient/destination is still missing.
-- route_wallet_intent: user asks for own profile, public receiving key, wallet public key, account identity, wallet setup, or wallet management that is not login/logout/PIN.
+- route_wallet_intent: user asks for own profile, public receiving key, wallet public key, account identity, wallet setup, or wallet management that is not login/logout/PIN. Fill wallet_action.
 - route_login_intent: user wants to enter, sign in, access, reconnect, or continue an existing account.
 - route_onboard_intent: user wants to create, open, register, cadastrar, or start a new account.
 - route_wallet_logout_intent: user wants to logout, sign out, deslogar, sair da conta, disconnect, or end the current session.
-- route_general_intent: greetings, "what can you do?", menu/help, broad explanations such as explaining assets/features, or unsupported conversation not asking to run a product action.
+- route_general_intent: greetings, "what can you do?", menu/help, broad explanations such as explaining assets/features, or unsupported conversation not asking to run a product action. Fill explanation_topic for educational explanations.
 
 Disambiguation:
 - "mandar/enviar/pagar + PIX" routes to a PIX tool, not payment.
@@ -4296,8 +3486,22 @@ When calling the selected route tool:
   }
 
   private async handleContactsRequest(state: AgentState): Promise<AgentState> {
-    const localContactIntent = this.extractContactIntentFromText(state.current_input);
-    const contactIntent = localContactIntent || await this.extractContactIntentWithLlm(state.current_input);
+    const route = (state.action_params as any)?.llm_route || {};
+    const routeContactAction = String(route.contact_action || '').trim();
+    const hasRouteContactIntent = String(route.tool_name || '').trim() === 'route_contacts_intent';
+    const contactIntent = hasRouteContactIntent && (routeContactAction || route.contact_key || route.contact_name)
+      ? {
+          action: routeContactAction === 'add' ? 'add' as const : 'list' as const,
+          contact_key: String(route.contact_key || '').trim(),
+          contact_name: String(route.contact_name || '').trim(),
+          needs_clarification: routeContactAction === 'add' && !String(route.contact_key || '').trim(),
+          clarification_question: routeContactAction === 'add' && !String(route.contact_key || '').trim()
+            ? 'Me diga a chave, email, telefone ou public key do contato.'
+            : '',
+        }
+      : hasRouteContactIntent
+        ? { action: 'list' as const }
+        : await this.extractContactIntentWithLlm(state.current_input);
     const contactKey = String(contactIntent.contact_key || '').trim();
 
     if (contactIntent.action === 'list') {
@@ -4391,37 +3595,6 @@ When calling the selected route tool:
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
-  }
-
-  private isOwnReceivingKeyRequest(message: string): boolean {
-    const normalized = String(message || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-
-    if (this.extractPixRampIntentFromText(message).is_pix_ramp) {
-      return false;
-    }
-
-    const selfRef = /\b(minha|minhas|meu|meus|my|da minha conta|da minha carteira)\b/.test(normalized);
-    const keyRef =
-      /\b(chave|chave pix|public key|chave publica|chave pública|endereco|endereço)\b/.test(normalized) ||
-      /\b(qual|mostrar|ver|me passa|manda)\b.*\bpix\b/.test(normalized);
-    const transferRef = /\b(transfer|pagar|mandar|enviar|receber|depositar|trazer|colocar|adicionar|carregar|recarregar|sacar|saque|tirar|retirar|resgatar|comprar|vender)\b/.test(normalized);
-    const amountRef = /(?:^|\s)(?:r\$\s*)?\d+(?:[.,]\d{1,8})?(?=\s|$)/.test(normalized);
-
-    return selfRef && keyRef && !transferRef && !amountRef;
-  }
-
-  private isOwnCryptoPublicKeyRequest(message: string): boolean {
-    const normalized = String(message || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-
-    const publicKeyRef = /\b(public key|chave publica|chave stellar|endereco stellar|endereco da carteira|carteira publica|wallet public key|publica da carteira)\b/.test(normalized);
-    const pixOnlyRef = /\b(chave pix|pix|email|e-mail|telefone|cpf)\b/.test(normalized);
-    return publicKeyRef && !pixOnlyRef;
   }
 
   private async resolveOwnReceivingKeys(state: AgentState): Promise<{ publicKey?: string; pixKey?: string }> {
@@ -5111,64 +4284,21 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     return { period, view };
   }
 
-  private extractYieldIntentFromText(message: string): {
-    is_yield: boolean;
-    mode: 'options' | 'balance' | 'prepare' | 'confirm';
-    action: 'deposit' | 'withdraw';
-    amount: string;
-    asset_code: string;
-    pin?: string;
-  } {
-    const raw = String(message || '');
-    const normalized = this.normalizeTextForIntent(raw);
-    const hasYieldKeyword =
-      /\b(yield|earning|earnings|apy|income|interest)\b/.test(normalized) ||
-      /\b(rendimento|rendimentos|render|rendendo|rentabilidade|juros|renda|investir|investimento|investimentos|aplicar|aplicacao|aplicacoes)\b/.test(normalized);
-
-    const hasYieldAction =
-      /\b(guardar|aplicar|investir|deixar|poupar|save|deposit|put|resgatar|retirar|sacar|withdraw|redeem)\b/.test(normalized) &&
-      /\b(rendendo|rendimento|yield|earn|earning|interest)\b/.test(normalized);
-
-    if (!hasYieldKeyword && !hasYieldAction) {
-      return { is_yield: false, mode: 'options', action: 'deposit', amount: '', asset_code: '' };
+  private yieldIntentFromLlmRoute(state: AgentState): YieldRouteIntent {
+    const route = (state.action_params as any)?.llm_route || {};
+    if (String(route.tool_name || '').trim() !== 'route_yield_intent') {
+      return { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' };
     }
 
-    const action = /\b(resgatar|retirar|sacar|withdraw|redeem)\b/.test(normalized) ? 'withdraw' : 'deposit';
-    const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
-    const amountNumber = parseHumanAmountNumber(rawWithoutPin);
-    const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
-    const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
-    const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
-    const confirms =
-      /\b(confirmo|confirmar|confirma|pode confirmar|ok pode|pode fazer|confirm|confirmed|go ahead)\b/.test(normalized);
-
-    const asksBalance =
-      normalized.includes('quanto tenho rendendo') ||
-      normalized.includes('saldo rendendo') ||
-      normalized.includes('saldo de rendimento') ||
-      normalized.includes('yield balance') ||
-      normalized.includes('earning balance') ||
-      (normalized.includes('meu rendimento') && !amount);
-    const asksOptions =
-      normalized.includes('opcoes') ||
-      normalized.includes('opcao') ||
-      normalized.includes('disponiveis') ||
-      normalized.includes('available') ||
-      normalized.includes('quanto rende') ||
-      normalized.includes('taxa de rendimento') ||
-      normalized.includes('yield rate') ||
-      normalized.includes('apy');
-
-    const mode = confirms && pinMatch?.[1] && amount
-      ? 'confirm'
+    const amount = String(route.amount || '').trim();
+    const assetCode = this.normalizeAgentAssetCode(route.asset_code || route.source_asset_code || '');
+    const action = route.yield_action === 'withdraw' ? 'withdraw' : 'deposit';
+    const routeMode = String(route.yield_mode || '').trim();
+    const mode = routeMode === 'balance' || routeMode === 'prepare' || routeMode === 'confirm' || routeMode === 'options'
+      ? routeMode
       : amount
         ? 'prepare'
-        : asksBalance
-          ? 'balance'
-          : asksOptions
-            ? 'options'
-            : 'options';
+        : 'options';
 
     return {
       is_yield: true,
@@ -5176,11 +4306,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       action,
       amount,
       asset_code: assetCode,
-      pin: pinMatch?.[1],
+      pin: String(route.pin || '').trim() || undefined,
     };
   }
 
-  private async handleYieldRequest(state: AgentState, intent: ReturnType<AgentGraph['extractYieldIntentFromText']>): Promise<AgentState> {
+  private async handleYieldRequest(state: AgentState, intent: YieldRouteIntent): Promise<AgentState> {
     const language = this.getLanguage(state);
     const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
     const assetCode = intent.asset_code || 'USDC';
@@ -5260,74 +4390,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       );
     }
 
-    await this.saveAssistantResponse(state);
-    await this.repository.saveState(state.session_id, state);
-    return state;
-  }
-
-  private extractAssetInterfaceIntentFromText(message: string): {
-    is_asset_interface: boolean;
-    action: 'bring' | 'keep' | 'send_out';
-    amount: string;
-    asset_code: string;
-    destination_pix_key?: string;
-  } {
-    const raw = String(message || '');
-    const normalized = this.normalizeTextForIntent(raw);
-    const wantsBring =
-      /\b(trazer|adicionar|colocar|depositar|entrada|add money|top up|bring)\b/.test(normalized);
-    const wantsKeep =
-      /\b(manter|guardar|deixar parado|deixar rendendo|keep|hold|earning|yield)\b/.test(normalized);
-    const wantsSendOut =
-      normalized.includes('mandar embora') ||
-      /\b(retirar|sacar|saque|mandar para pix|mandar pro pix|send out|cash out|withdraw)\b/.test(normalized);
-
-    if (!wantsBring && !wantsKeep && !wantsSendOut) {
-      return { is_asset_interface: false, action: 'bring', amount: '', asset_code: '' };
-    }
-
-    const amountNumber = parseHumanAmountNumber(raw);
-    const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
-    const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
-      raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
-      '';
-
-    return {
-      is_asset_interface: true,
-      action: wantsSendOut ? 'send_out' : wantsKeep ? 'keep' : 'bring',
-      amount,
-      asset_code: this.assetCodeFromTextToken(assetMatch?.[1]) || '',
-      destination_pix_key: destinationPixKey,
-    };
-  }
-
-  private async handleAssetInterfaceRequest(state: AgentState, intent: ReturnType<AgentGraph['extractAssetInterfaceIntentFromText']>): Promise<AgentState> {
-    const language = this.getLanguage(state);
-    const resultRaw = await executeTool('open_asset_interface', {
-      session_id: state.session_id,
-      action: intent.action,
-      amount: intent.amount,
-      asset_code: intent.asset_code || 'BRL',
-      destination_pix_key: intent.destination_pix_key,
-      language,
-    });
-
-    let result: any;
-    try {
-      result = JSON.parse(resultRaw);
-    } catch {
-      result = { success: false, error: 'Failed to parse interface tool response' };
-    }
-
-    state.success = Boolean(result.success);
-    state.response_message = result.success
-      ? result.message
-      : this.text(
-          language,
-          `Não consegui abrir a interface agora: ${result.error || 'erro desconhecido'}`,
-          `I could not open the interface right now: ${result.error || 'unknown error'}`
-        );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
@@ -5883,17 +4945,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleWalletCreation(state);
       }
 
-      if (this.resumePendingPixRampIntent(state)) {
-        state.detected_intent = IntentType.PIX;
-        state.action_type = ActionType.INITIATE_PIX;
-        await this.repository.saveMessage(
-          state.session_id,
-          "user",
-          this.sanitizeUserMessage(state.current_input)
-        );
-        return await this.handlePixRampRequest(state);
-      }
-
       const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id, state.messages);
       if (this.lastIntentRouterFailure) {
         state.detected_intent = IntentType.GENERAL;
@@ -5926,27 +4977,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         this.sanitizeUserMessage(state.current_input)
       );
 
-      if (state.detected_intent === IntentType.CONTACTS) {
-        const localContactIntent = this.extractContactIntentFromText(state.current_input);
-        if (localContactIntent?.action === 'add') {
-          state.detected_intent = IntentType.CONTACTS;
-          state.action_type = ActionType.LIST_CONTACTS;
-          return await this.handleContactsRequest(state);
-        }
-      }
-
       const hasActiveWallet = Boolean(String(state.session_data?.public_key || '').trim());
       if (state.detected_intent === IntentType.PRICE_QUOTE || state.detected_intent === IntentType.FINANCIAL_MEMORY) {
         const savingsCalculator = this.savingsCalculatorIntent(state.current_input);
         if (savingsCalculator) {
           return await this.handleSavingsCalculatorIntent(state, savingsCalculator);
-        }
-      }
-
-      if (state.detected_intent === IntentType.GENERAL) {
-        const explanationTopic = this.explanationTopicFromText(state.current_input);
-        if (explanationTopic) {
-          return await this.handleExplanationRequest(state, explanationTopic);
         }
       }
 
@@ -5987,30 +5022,34 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handleWalletCreation(state);
       }
 
-      if (state.detected_intent === IntentType.HISTORY) {
-        const wantsReceiptImage = this.isReceiptImageRequest(state.current_input);
-        if (wantsReceiptImage) {
-          return await this.handleReceiptImageRequest(state);
+      if (state.detected_intent === IntentType.WALLET && hasActiveWallet) {
+        const walletAction = String((state.action_params as any)?.llm_route?.wallet_action || '').trim();
+        if (walletAction === 'profile') {
+          return await this.handleOwnProfileRequest(state);
         }
+        const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
+        state.response_message = this.formatOwnReceivingKeysForLanguage(
+          this.getLanguage(state),
+          publicKey,
+          pixKey,
+          walletAction !== 'receiving_key'
+        );
+        state.success = true;
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
       }
 
-      if (state.detected_intent === IntentType.WALLET && hasActiveWallet && this.isOwnProfileRequest(state.current_input)) {
-        return await this.handleOwnProfileRequest(state);
-      }
-
-      if (state.detected_intent === IntentType.GENERAL && (this.isIntentHelpRequest(state.current_input) || this.isSimpleGreetingRequest(state.current_input))) {
+      if (state.detected_intent === IntentType.GENERAL) {
+        const explanationTopic = (state.action_params as any)?.llm_route?.explanation_topic;
+        if (explanationTopic) {
+          return await this.handleExplanationTopicRequest(state, explanationTopic);
+        }
         return await this.handleIntentHelpRequest(state);
       }
 
-      if (state.detected_intent === IntentType.HISTORY && this.isRampHistoryRequest(state.current_input)) {
-        return await this.handleRampHistoryRequest(state);
-      }
-
       if (state.detected_intent === IntentType.HISTORY) {
-        const wantsTransactionHistory = this.isTransactionHistoryRequest(state.current_input);
-        if (wantsTransactionHistory) {
-          return await this.handleHistoryCheck(state);
-        }
+        return await this.handleHistoryCheck(state);
       }
 
       if (state.detected_intent === IntentType.PRICE_QUOTE) {
@@ -6019,19 +5058,15 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           return await this.handleCurrentPairQuoteRequest(state, llmPairQuoteRequest);
         }
 
-        const deterministicConversionBestRouteEstimate = this.extractConversionBestRouteEstimateIntent(state.current_input);
-        if (deterministicConversionBestRouteEstimate) {
-          return await this.handleBestRouteConversionEstimate(state, deterministicConversionBestRouteEstimate);
+        if ((state.action_params as any)?.llm_route?.all_quotes === true) {
+          return await this.handlePriceQuoteRequest(state);
         }
 
-        const deterministicBestRouteEstimate = this.extractGenericBestRouteEstimateIntent(state.current_input);
-        if (deterministicBestRouteEstimate) {
-          return await this.handleGenericBestRouteEstimate(state, deterministicBestRouteEstimate);
-        }
-
-        if (this.isBestRouteGuidanceRequest(state.current_input)) {
-          return await this.handleBestRouteGuidanceRequest(state);
-        }
+        state.success = true;
+        state.response_message = this.bestRouteGuidanceText(this.getLanguage(state));
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
       }
 
       if (state.action_type === ActionType.INITIATE_PIX) {
@@ -6039,30 +5074,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
 
       if (state.action_type === ActionType.MANAGE_YIELD) {
-        const deterministicYield = this.extractYieldIntentFromText(state.current_input);
-        if (deterministicYield.is_yield) {
-          return await this.handleYieldRequest(state, deterministicYield.is_yield
-            ? deterministicYield
-            : { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
-        }
-      }
-
-      if (state.detected_intent === IntentType.GENERAL) {
-        const deterministicAssetInterface = this.extractAssetInterfaceIntentFromText(state.current_input);
-        if (deterministicAssetInterface.is_asset_interface) {
-          return await this.handleAssetInterfaceRequest(state, deterministicAssetInterface);
-        }
-      }
-
-      if (state.action_type === ActionType.MANAGE_YIELD) {
-        return await this.handleYieldRequest(state, { is_yield: true, mode: 'options', action: 'deposit', amount: '', asset_code: '' });
-      }
-
-      if (state.detected_intent === IntentType.PAYMENT) {
-        const deterministicExternalWallet = this.extractExternalWalletIntentFromText(state.current_input);
-        if (deterministicExternalWallet.is_external_wallet) {
-          return await this.handleExternalWalletRequest(state);
-        }
+        return await this.handleYieldRequest(state, this.yieldIntentFromLlmRoute(state));
       }
 
       if (state.detected_intent === IntentType.FINANCIAL_MEMORY) {
@@ -6077,21 +5089,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         }
       }
 
-      if (state.detected_intent === IntentType.WALLET && hasActiveWallet && this.isOwnReceivingKeyRequest(state.current_input)) {
-        const { publicKey, pixKey } = await this.resolveOwnReceivingKeys(state);
-        state.response_message = this.formatOwnReceivingKeysForLanguage(
-          this.getLanguage(state),
-          publicKey,
-          pixKey,
-          this.isOwnCryptoPublicKeyRequest(state.current_input)
-        );
-        state.success = true;
-        await this.saveAssistantResponse(state);
-        await this.repository.saveState(state.session_id, state);
-        return state;
-      }
-
-      if (state.detected_intent === IntentType.PAYMENT_LINK && hasActiveWallet && this.isReceiveLinkRequest(state.current_input)) {
+      if (state.detected_intent === IntentType.PAYMENT_LINK && hasActiveWallet && !String((state.action_params as any)?.llm_route?.amount || '').trim()) {
         return await this.handleReceiveLinkRequest(state);
       }
 
@@ -6230,9 +5228,6 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Fallback response generation failed: ${errorMessage}`);
-      if (this.isBestRouteGuidanceRequest(input)) {
-        return this.bestRouteGuidanceText(language);
-      }
       try {
         const retry = await this.llm.invoke([
           new SystemMessage({ content: `O usuario mandou uma mensagem que nao foi processada. Responda em ${language === 'en' ? 'English' : 'portugues'} com uma sugestao util baseada no historico.` }),
