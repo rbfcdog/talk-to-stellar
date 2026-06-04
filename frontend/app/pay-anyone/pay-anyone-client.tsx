@@ -203,10 +203,10 @@ export default function PayAnyoneClient() {
           </div>
           <div className="space-y-4">
             <p className="text-lg font-semibold text-tts-confirm">Welcome, {userName}</p>
-            <h1 className="max-w-xl text-4xl font-semibold text-tts-deep md:text-6xl">
+            <h1 className="max-w-xl text-2xl font-bold text-tts-deep md:text-3xl">
               {isReceiveMode ? "Receive money through your global link" : "Send money to someone who does not have an account yet"}
             </h1>
-            <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
+            <p className="max-w-2xl text-sm leading-6 text-tts-muted">
               {isReceiveMode
                 ? "Share your link with customers. They open it, enter the amount, and pay directly to your account."
                 : "Your PIN authorizes link creation. The recipient must sign in or create their own global account to receive the amount."}
@@ -227,7 +227,7 @@ export default function PayAnyoneClient() {
           </div>
         </section>
 
-        <section className="min-w-0 overflow-hidden rounded-lg border border-tts-border bg-tts-deep/40 p-5 shadow-2xl md:p-6">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
           {booting && (
             <div className="mb-5 space-y-3">
               <Shimmer className="h-12 w-full rounded-xl" />
@@ -370,7 +370,7 @@ export default function PayAnyoneClient() {
             </button>
           </form>
 
-          <div className="mt-5 rounded-lg border border-tts-border bg-tts-deep/20 p-4 text-sm">
+          <div className="mt-5 rounded-lg border border-tts-border bg-tts-bg p-4 text-sm">
               <p className="font-medium text-tts-deep">Link</p>
             {status === "idle" && (
               <p className="mt-2 text-tts-muted">

@@ -1450,21 +1450,21 @@ export default function InternationalTransferClient() {
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
                 <h2 className="text-base font-bold">Quote</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(quote))}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(quote))}</pre>
             </div>
             <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
                 <h2 className="text-base font-bold">Settlement record</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(transfer))}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(transfer))}</pre>
             </div>
             <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
                 <h2 className="text-base font-bold">Reconciliation</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(reconciliation))}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(reconciliation))}</pre>
             </div>
           </section>
 

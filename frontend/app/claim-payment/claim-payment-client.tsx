@@ -377,7 +377,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           {status === "done" && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
               <p className="text-base font-semibold text-tts-confirm">{T(language, "Pagamento recebido com sucesso", "Payment received successfully")}</p>
-              <div className="space-y-2 rounded-lg border border-tts-confirm bg-tts-deep/40 p-4">
+              <div className="space-y-2 rounded-lg border border-tts-confirm bg-tts-bg p-4">
                 <p><span className="text-tts-deep">{T(language, "Valor", "Amount")}: </span>{formatAmount(successAmount, successAsset)}</p>
                 <p><span className="text-tts-deep">{T(language, "Destino", "Destination")}: </span>{T(language, "Sua conta", "Your account")}</p>
                 <p><span className="text-tts-deep">{T(language, "Horário", "Time")}: </span>{formatTimestamp(result?.completed_at, language)}</p>

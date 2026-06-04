@@ -1102,25 +1102,25 @@ export default function GlobalTransferClient() {
           <section className="grid gap-5 lg:grid-cols-2">
             <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">Quote payload preview</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(quotePayload, null, 2)}
               </pre>
             </div>
             <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">Anchor order preview</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(anchorPayload, null, 2)}
               </pre>
             </div>
             <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">Transfer payload preview</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(transferPayload, null, 2)}
               </pre>
             </div>
             <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">External payout instruction</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-deep/20 p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(externalInstruction, null, 2)}
               </pre>
             </div>

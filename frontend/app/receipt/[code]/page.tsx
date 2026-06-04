@@ -14,7 +14,7 @@ function inferFileName(imageUrl: string) {
 function ReceiptFallback() {
   return (
     <main className="tts-op-page flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
-      <section className="max-w-lg rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur">
+      <section className="max-w-lg rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur">
         <h1 className="text-2xl font-semibold text-tts-deep">Receipt not found</h1>
         <p className="mt-3 text-sm leading-6 text-tts-deep">
           This link may have expired. Open the receipt from your transaction history.
@@ -73,7 +73,7 @@ export default function ReceiptByCodePage() {
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-8 text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center">
-        <section className="w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-4 shadow-2xl backdrop-blur md:p-6">
+        <section className="w-full overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-tts-confirm">Receipt</p>
@@ -91,7 +91,7 @@ export default function ReceiptByCodePage() {
             </div>
           </div>
 
-          <div className="mt-6 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/40 p-3 shadow-xl">
+          <div className="mt-6 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-3 shadow-sm">
             <img
               src={imageUrl}
               alt="TalkToStellar receipt"
