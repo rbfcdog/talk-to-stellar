@@ -232,9 +232,11 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("actualOnRampFeeBrl");
     expect(text).toContain("showSavingsCard");
     expect(text).toContain("estimatedSavingsBrl");
-    expect(text).toContain("const onRampPixGenerationBlocked = onRampPixAlreadyGenerated && !quoteExpired;");
+    expect(text).toContain("const checkoutExpired = Boolean(order && !isSuccessStatus(rawOrderStatus) && (orderExplicitlyExpired || quoteExpired));");
+    expect(text).toContain("!checkoutExpired &&");
+    expect(text).toContain("function restartOnRampCheckout()");
     expect(text).toContain("const canPrepareOnRampPix = Boolean(");
-    expect(text).toContain("createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${quoteForOrder?.id || \"no-quote\"}`)");
+    expect(text).toContain("createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${executionIntentId}:${quoteForOrder?.id || \"no-quote\"}`)");
     expect(text).toContain('quoteExpired\n                    ? L("Continuar", "Continue")');
     expect(text).toContain('disabled={!canPrepareOnRampPix}');
     expect(text).toContain('L("Economia nesta rota", "Savings on this route")');

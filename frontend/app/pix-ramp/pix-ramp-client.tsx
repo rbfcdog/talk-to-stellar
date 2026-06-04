@@ -975,6 +975,7 @@ export default function PixRampClient({
   const [quotePayload, setQuotePayload] = useState<RampResponse | null>(null);
   const [quoteReceivedAt, setQuoteReceivedAt] = useState(0);
   const [orderPayload, setOrderPayload] = useState<RampResponse | null>(null);
+  const [activeOnRampIntentId, setActiveOnRampIntentId] = useState("");
   const [generatedOnRampOrderKey, setGeneratedOnRampOrderKey] = useState("");
   const [statusPayload, setStatusPayload] = useState<RampResponse | null>(null);
   const [onRampBalancesBefore, setOnRampBalancesBefore] = useState<BalanceItem[]>([]);
@@ -1042,6 +1043,7 @@ export default function PixRampClient({
     autoPayAmount,
     autoPayAsset,
   ].join(":"))}`;
+  const currentOnRampIntentId = activeOnRampIntentId || atomicIntentKey;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
   const offRampExactReceiveBrl = Boolean(rampMode === "offramp" && offRampInputAsset !== "BRL" && offRampFiatAmount.trim());
   const offRampInputValue = offRampExactReceiveBrl
@@ -1333,14 +1335,19 @@ export default function PixRampClient({
   const quoteCountdown = quote ? formatCountdown(quoteTimeRemainingMs, language) : "not quoted";
   const quoteExpired = Boolean(quote && Number.isFinite(quoteTimeRemainingMs) && quoteTimeRemainingMs <= 0);
   const quoteStaleForOrder = Boolean(quote && (!Number.isFinite(quoteTimeRemainingMs) || quoteTimeRemainingMs <= 15000));
-  const status = order ? normalizeStatus(order.status) : quoteExpired ? "quote expired" : "not started";
+  const orderExpiresAt = parseRampTimestamp(order?.expiresAt || order?.expires_at || paymentInstructions?.expiresAt || paymentInstructions?.expires_at);
+  const orderExplicitlyExpired = Boolean(order && Number.isFinite(orderExpiresAt) && orderExpiresAt <= now);
+  const rawOrderStatus = order ? normalizeStatus(order.status) : "";
+  const checkoutExpired = Boolean(order && !isSuccessStatus(rawOrderStatus) && (orderExplicitlyExpired || quoteExpired));
+  const status = order ? (checkoutExpired ? "expired" : rawOrderStatus) : quoteExpired ? "quote expired" : "not started";
   const onRampComplete = Boolean(order && isSuccessStatus(status));
-  const orderFailed = Boolean(order && isFailureStatus(status));
+  const orderFailed = Boolean(order && (isFailureStatus(status) || checkoutExpired));
   const onRampPixCheckoutAvailable = Boolean(orderId && (pixCode || pixKey || Object.keys(paymentInstructions).length > 0 || isSandboxMockOrder));
   const onRampPixAlreadyGenerated = Boolean(
     rampMode === "onramp" &&
     onRampPixCheckoutAvailable &&
     !orderFailed &&
+    !checkoutExpired &&
     generatedOnRampOrderKey === onRampOrderInputKey
   );
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
@@ -1592,14 +1599,14 @@ export default function PixRampClient({
       setMobileStage("receipt");
       return;
     }
-    if (rampMode === "onramp" && onRampPixCheckoutAvailable) {
+    if (rampMode === "onramp" && onRampPixCheckoutAvailable && !checkoutExpired && !orderFailed) {
       setMobileStage("payment");
       return;
     }
     if (rampMode === "offramp" && offRampQuote) {
       setMobileStage("payment");
     }
-  }, [offRampQuote, onRampPixCheckoutAvailable, rampMode, step, temporaryOffRampTestResult]);
+  }, [checkoutExpired, offRampQuote, onRampPixCheckoutAvailable, orderFailed, rampMode, step, temporaryOffRampTestResult]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2539,10 +2546,15 @@ export default function PixRampClient({
     setRampEmail(nextEmail);
   }
 
-  function clearQuoteState() {
+  function createOnRampRetryIntentId() {
+    return `${atomicIntentKey}:retry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function clearQuoteState(options: { keepActiveOnRampIntent?: boolean } = {}) {
     setQuotePayload(null);
     setQuoteReceivedAt(0);
     setOrderPayload(null);
+    if (!options.keepActiveOnRampIntent) setActiveOnRampIntentId("");
     setGeneratedOnRampOrderKey("");
     setStatusPayload(null);
     setOffRampPreviewPayload(null);
@@ -2557,6 +2569,21 @@ export default function PixRampClient({
     setOperationLocked(false);
     setPolling(false);
     setStep("quote");
+  }
+
+  function restartOnRampCheckout() {
+    setActiveOnRampIntentId(createOnRampRetryIntentId());
+    clearQuoteState({ keepActiveOnRampIntent: true });
+    setError("");
+    setMobileStage("details");
+  }
+
+  function returnToOnRampDetails() {
+    if (rampMode === "onramp" && order && !onRampComplete && (checkoutExpired || orderFailed || quoteExpired)) {
+      restartOnRampCheckout();
+      return;
+    }
+    setMobileStage("details");
   }
 
   function updateOnRampReceiveTargetAmount(nextAmount: string) {
@@ -2630,6 +2657,19 @@ export default function PixRampClient({
       if (transferFlow && !transferRecipientVerified) {
         throw new Error(transferRecipientBlocker || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX."));
       }
+      const previousCheckoutCannotContinue = Boolean(order && !onRampComplete && (checkoutExpired || orderFailed || quoteExpired));
+      const executionIntentId = previousCheckoutCannotContinue
+        ? createOnRampRetryIntentId()
+        : currentOnRampIntentId;
+      if (previousCheckoutCannotContinue) {
+        setActiveOnRampIntentId(executionIntentId);
+        setOrderPayload(null);
+        setGeneratedOnRampOrderKey("");
+        setStatusPayload(null);
+        setPolling(false);
+      } else if (!activeOnRampIntentId) {
+        setActiveOnRampIntentId(executionIntentId);
+      }
       let quoteForOrder = quote;
       let customerForOrder = customerPayload;
       let authForOrder: RampAuth | undefined;
@@ -2671,9 +2711,9 @@ export default function PixRampClient({
           ? estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)
           : amountBrl
       );
-      const createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${quoteForOrder?.id || "no-quote"}`);
+      const createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${executionIntentId}:${quoteForOrder?.id || "no-quote"}`);
       const payload = await callRamp("/api/ramp/etherfuse/onramp", {
-        intent_id: atomicIntentKey,
+        intent_id: executionIntentId,
         customer_id: orderCustomerId || undefined,
         bank_account_id: orderBankAccountId || undefined,
         quote_id: quoteForOrder?.id || undefined,
@@ -2712,9 +2752,9 @@ export default function PixRampClient({
   useEffect(() => {
     if (rampMode !== "onramp") return;
     if (generatedOnRampOrderKey) return;
-    if (!onRampPixCheckoutAvailable || orderFailed) return;
+    if (!onRampPixCheckoutAvailable || orderFailed || checkoutExpired) return;
     setGeneratedOnRampOrderKey(onRampOrderInputKey);
-  }, [generatedOnRampOrderKey, onRampOrderInputKey, onRampPixCheckoutAvailable, orderFailed, rampMode]);
+  }, [checkoutExpired, generatedOnRampOrderKey, onRampOrderInputKey, onRampPixCheckoutAvailable, orderFailed, rampMode]);
 
   useEffect(() => {
     const params = new URLSearchParams(queryString);
@@ -2777,14 +2817,15 @@ export default function PixRampClient({
         throw new Error(L("Este PIX expirou. Gere um novo PIX para continuar.", "This PIX expired. Create a new PIX to continue."));
       }
       const pin = getValidatedWalletPin();
+      const executionIntentId = currentOnRampIntentId;
       const payload = await callRamp("/api/ramp/etherfuse/sandbox/simulate-fiat", {
-        intent_id: atomicIntentKey,
+        intent_id: executionIntentId,
         order_id: orderId,
         operation_id: operationId,
         pin,
         wallet_pin: pin,
         walletPin: pin,
-      }, "POST", undefined, buildIdempotencyKey("confirm-onramp"));
+      }, "POST", undefined, buildIdempotencyKey(`confirm-onramp:${operationId || orderId || executionIntentId}`));
       if (payload?.transaction) setStatusPayload(payload);
       setPolling(true);
       const refreshed = await refreshOrder(false);
@@ -2828,8 +2869,9 @@ export default function PixRampClient({
     if (!transferAmount) {
       throw new Error(L("A conversão final ainda não retornou valor suficiente para enviar automaticamente.", "The final conversion has not returned enough value to send automatically yet."));
     }
+    const executionIntentId = currentOnRampIntentId;
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/pix-funded-transfer", {
-      intent_id: atomicIntentKey,
+      intent_id: executionIntentId,
       recipient: transferRecipientLabel,
       recipient_name: transferRecipientLabel,
       recipient_key: transferRecipientDisplayKey || undefined,
@@ -2841,7 +2883,7 @@ export default function PixRampClient({
       pin,
       wallet_pin: pin,
       walletPin: pin,
-    }, "POST", auth, buildIdempotencyKey("pix-funded-transfer"));
+    }, "POST", auth, buildIdempotencyKey(`pix-funded-transfer:${operationId || orderId || executionIntentId}`));
     setPixFundedTransferResult(payload);
     return payload;
   }
@@ -2851,14 +2893,15 @@ export default function PixRampClient({
       throw new Error(L("Este atalho não está disponível agora. Use o fluxo PIX normal.", "This shortcut is not available now. Use the normal PIX flow."));
     }
     const auth = await resolveWalletFromEmail();
+    const executionIntentId = currentOnRampIntentId;
     const payload = await callRamp("/api/ramp/etherfuse/sandbox/test-onramp", {
-      intent_id: atomicIntentKey,
+      intent_id: executionIntentId,
       amount: amountBrl,
       to_currency: "TESOURO",
       final_asset: settlementAssetCode(targetAsset),
       desired_final_amount: transferFlow ? undefined : desiredFinalAmount || undefined,
       desired_final_asset: transferFlow ? undefined : optionalSettlementAssetCode(desiredFinalAsset),
-    }, "POST", auth, buildIdempotencyKey("test-onramp"));
+    }, "POST", auth, buildIdempotencyKey(`test-onramp:${executionIntentId}`));
     setTemporaryTestResult(payload);
     setWalletPublicKey(String(payload.wallet_public_key || ""));
     setOnRampBalancesBefore(Array.isArray(payload.balances_before) ? payload.balances_before : []);
@@ -3246,7 +3289,7 @@ export default function PixRampClient({
           language={language}
           loading={loading}
           status={statusLabel(status, language)}
-          hasPaymentStep={rampMode === "onramp" ? onRampPixCheckoutAvailable : Boolean(offRampQuote)}
+          hasPaymentStep={rampMode === "onramp" ? onRampPixCheckoutAvailable && !checkoutExpired && !orderFailed : Boolean(offRampQuote)}
           hasReceiptStep={step === "success" || Boolean(temporaryOffRampTestResult)}
         />
 
@@ -3714,7 +3757,7 @@ export default function PixRampClient({
             <button
               type="button"
               className="mb-4 rounded-full border border-tts-border px-4 py-2 text-xs font-black text-tts-muted md:hidden"
-              onClick={() => setMobileStage("details")}
+              onClick={returnToOnRampDetails}
             >
               {L("Voltar", "Back")}
             </button>
@@ -3806,7 +3849,7 @@ export default function PixRampClient({
                       <p className="mt-2 text-sm font-bold text-tts-error">{L("Gere um novo PIX e tente novamente.", "Create a new PIX and try again.")}</p>
                       <button
                         className="mt-4 rounded-2xl bg-tts-error px-4 py-3 text-xs font-black text-tts-deep"
-                        onClick={clearQuoteState}
+                        onClick={restartOnRampCheckout}
                       >
                         {L("Gerar novo PIX", "Create new PIX")}
                       </button>
