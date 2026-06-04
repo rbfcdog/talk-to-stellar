@@ -833,9 +833,9 @@ export default function ConfirmPaymentClient({
     : T(feedbackLanguage, "Não consegui confirmar esse pagamento agora. Tente novamente em alguns segundos.", "I could not confirm this payment right now. Try again in a few seconds.")
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-3 py-5 sm:px-6 sm:py-12">
-        <div className="grid min-w-0 w-full gap-5 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-8 md:p-10">
-          <section className="min-w-0 space-y-6 overflow-hidden">
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl items-start px-4 py-4 sm:px-6 sm:py-10">
+        <div className="grid min-w-0 w-full gap-4 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] md:gap-6 md:p-8">
+          <section className="min-w-0 space-y-5 overflow-hidden">
             <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de pagamento", "Payment Confirmation")}
             </div>
@@ -847,7 +847,7 @@ export default function ConfirmPaymentClient({
                 {T(feedbackLanguage, "Confira os dados abaixo e digite seu PIN para autorizar a transferência.", "Check the details below and enter your PIN to authorize the transfer.")}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-tts-border bg-tts-bg p-2 text-xs">
+            <div className="tts-stage-strip grid-cols-3 text-xs">
               {[
                 T(feedbackLanguage, "Conferir", "Check"),
                 T(feedbackLanguage, "Autorizar", "Authorize"),
@@ -858,7 +858,8 @@ export default function ConfirmPaymentClient({
                   <motion.div
                     key={step}
                     layout
-                    className={`rounded-xl px-3 py-2 text-center transition ${active ? "bg-tts-confirm/10 text-tts-confirm" : "text-tts-muted"}`}
+                    data-active={active}
+                    className={`tts-stage-button grid place-items-center px-2 text-center transition ${active ? "bg-tts-deep text-tts-bg" : "text-tts-muted"}`}
                   >
                     {step}
                   </motion.div>
@@ -887,7 +888,7 @@ export default function ConfirmPaymentClient({
             )}
           </section>
 
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
+          <section className="tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
                 <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
@@ -962,7 +963,7 @@ export default function ConfirmPaymentClient({
 	              )}
 	            </form>
 
-	            <div className={`mt-5 ${status === "ready" ? "hidden md:block" : "block"}`}>
+	            <div className={`mt-4 ${status === "ready" ? "hidden md:block" : "block"}`}>
 	              <OperationProgressPanel
 	                status={progressStatus}
 	                elapsedSeconds={progressElapsedSeconds}
@@ -989,7 +990,7 @@ export default function ConfirmPaymentClient({
               </div>
             )}
 
-            <div className={`mt-5 rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep ${status === "ready" ? "hidden md:block" : "block"}`}>
+            <div className={`tts-stage-panel mt-4 p-4 text-sm text-tts-deep ${status === "ready" ? "hidden md:block" : "block"}`}>
               <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && (

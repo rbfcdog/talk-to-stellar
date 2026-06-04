@@ -264,7 +264,7 @@
     position: relative;
     isolation: isolate;
     overflow-x: hidden;
-    padding-top: 4.75rem;
+    padding-top: 1rem;
     --tts-bg: #06070a;
     --tts-surface: #0d1117;
     --tts-deep: #f4f6f8;
@@ -279,15 +279,14 @@
     --tts-confirm: #c8aa68;
     --tts-error: #ef7777;
     background:
-      radial-gradient(circle at 50% -16rem, rgba(200, 170, 104, 0.14), transparent 33rem),
-      linear-gradient(180deg, #090b0f 0%, var(--tts-bg) 22rem),
+      linear-gradient(180deg, #090b0f 0%, var(--tts-bg) 14rem),
       var(--tts-bg) !important;
     color: var(--tts-deep);
   }
 
   @media (min-width: 640px) {
     .tts-op-page {
-      padding-top: 2.5rem;
+      padding-top: 1.5rem;
     }
   }
 
@@ -330,7 +329,7 @@
   .tts-op-header {
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 18px 48px rgba(0, 0, 0, 0.22);
+      0 14px 34px rgba(0, 0, 0, 0.18);
   }
 
   .tts-op-page .shadow-sm,
@@ -341,7 +340,7 @@
   .tts-op-page .shadow-2xl {
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 18px 48px rgba(0, 0, 0, 0.22) !important;
+      0 14px 34px rgba(0, 0, 0, 0.18) !important;
   }
 
   .tts-op-page .bg-tts-deep\/20,
@@ -392,12 +391,12 @@
 
   .tts-op-page :is(header, section)[class*='border-b'] {
     border: 1px solid var(--tts-border) !important;
-    border-radius: 1rem;
+    border-radius: 0.5rem;
     background-color: color-mix(in oklab, var(--tts-surface) 94%, white 6%) !important;
     padding: 1.5rem !important;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 18px 48px rgba(0, 0, 0, 0.22);
+      0 14px 34px rgba(0, 0, 0, 0.18);
   }
 
   .tts-op-page :is(header, section)[class*='border-b'] + * {
@@ -478,15 +477,15 @@
   .tts-op-page .rounded-\[2rem\],
   .tts-op-page .rounded-\[1\.75rem\],
   .tts-op-page .rounded-3xl {
-    border-radius: 1rem;
+    border-radius: 0.5rem;
   }
 
   .tts-op-page .rounded-2xl {
-    border-radius: 1rem;
+    border-radius: 0.5rem;
   }
 
   .tts-op-page .rounded-xl {
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
   }
 
   .tts-op-page .bg-tts-bg,
@@ -648,7 +647,7 @@
 
   @media (max-width: 639px) {
     .tts-op-page {
-      padding-top: 4.25rem;
+      padding-top: 0.75rem;
       padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
     }
 
@@ -682,10 +681,8 @@
       margin: 0 !important;
       padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
       border-top: 1px solid var(--tts-border);
-      background:
-        linear-gradient(180deg, rgba(6, 7, 10, 0), var(--tts-bg) 24%),
-        color-mix(in oklab, var(--tts-surface) 92%, var(--tts-bg) 8%);
-      box-shadow: 0 -18px 36px rgba(0, 0, 0, 0.32);
+      background: color-mix(in oklab, var(--tts-surface) 92%, var(--tts-bg) 8%);
+      box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.26);
       backdrop-filter: blur(16px);
     }
 
@@ -697,7 +694,7 @@
       margin-top: 0 !important;
       width: 100% !important;
       min-height: 3.25rem;
-      border-radius: 0.875rem !important;
+      border-radius: 0.5rem !important;
     }
 
     .tts-op-page .tts-mobile-scroll {
@@ -715,6 +712,47 @@
       min-width: 100% !important;
       scroll-snap-align: start;
     }
+  }
+
+  .tts-op-page .tts-stage-panel {
+    border: 1px solid var(--tts-border);
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--tts-surface) 94%, white 6%);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 14px 34px rgba(0, 0, 0, 0.18);
+  }
+
+  .tts-op-page .tts-stage-strip {
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid var(--tts-border);
+    border-radius: 0.5rem;
+    background: var(--tts-bg);
+    padding: 0.25rem;
+  }
+
+  .tts-op-page .tts-stage-button {
+    min-height: 2.75rem;
+    border-radius: 0.375rem !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .tts-op-page .tts-stage-button[data-active='true'] {
+    background: var(--tts-deep) !important;
+    color: var(--tts-bg) !important;
+  }
+
+  .tts-op-page .tts-stage-button[data-done='true']:not([data-active='true']) {
+    background: rgba(255, 255, 255, 0.055) !important;
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page .tts-stage-current {
+    border-top: 1px solid var(--tts-border);
+    margin-top: 0.5rem;
+    padding-top: 0.65rem;
   }
 }
 

@@ -3993,18 +3993,18 @@ function MobilePixStepper({
   const currentLabel = mode === "onramp" ? L("PIX para saldo", "PIX to balance") : L("Saldo para PIX", "Balance to PIX");
 
   return (
-    <section className="sticky top-2 z-40 mt-4 rounded-2xl border border-tts-border bg-tts-surface/95 p-2 shadow-lg backdrop-blur md:hidden">
+    <section className="tts-stage-panel sticky top-2 z-40 mt-3 p-2 backdrop-blur md:hidden">
       <div className="flex items-center justify-between gap-3 px-2 py-2">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">PIX</p>
           <p className="truncate text-sm font-black text-tts-deep">{currentLabel}</p>
         </div>
-        <p className="shrink-0 text-[11px] font-black text-tts-muted">
+        <p className="max-w-[44%] shrink-0 truncate text-right text-[11px] font-black text-tts-muted">
           {loading ? publicLoadingLabel(loading, language) : status}
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-1">
+      <div className="tts-stage-strip grid-cols-3">
         {stageItems.map((item, index) => {
           const active = item.key === stage;
           const reached = index <= stageIndex || item.done;
@@ -4013,18 +4013,20 @@ function MobilePixStepper({
               key={item.key}
               type="button"
               disabled={!item.enabled}
-              className={`min-h-11 rounded-xl px-2 text-center text-[11px] font-black transition ${
+              data-active={active}
+              data-done={item.done}
+              className={`tts-stage-button px-2 text-center text-[11px] font-black transition ${
                 active
                   ? "bg-tts-deep text-tts-bg"
                   : item.done
                     ? "bg-tts-bg text-tts-deep"
                     : reached
-                      ? "border border-tts-border text-tts-deep"
-                      : "border border-tts-border text-tts-muted"
+                      ? "text-tts-deep"
+                      : "text-tts-muted"
               } disabled:opacity-40`}
               onClick={() => onStageChange(item.key)}
             >
-              <span className="block text-[10px] opacity-70">{index + 1}</span>
+              <span className="block text-[10px] opacity-65">{index + 1}</span>
               {item.label}
             </button>
           );
@@ -4032,7 +4034,7 @@ function MobilePixStepper({
       </div>
 
       {activeStep && (
-        <div className="mt-2 rounded-xl border border-tts-border bg-tts-bg/60 px-3 py-2">
+        <div className="tts-stage-current px-1 pb-1">
           <p className="truncate text-xs font-black text-tts-deep">{activeStep.label}</p>
           <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-4 text-tts-muted">{activeStep.detail}</p>
         </div>

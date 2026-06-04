@@ -346,9 +346,9 @@ export default function ConfirmConversionClient({
 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
-          <section className="min-w-0 space-y-6 overflow-hidden">
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl items-start px-4 py-4 sm:px-6 sm:py-10">
+        <div className="grid min-w-0 w-full gap-4 overflow-hidden border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] md:gap-6 md:p-8">
+          <section className="min-w-0 space-y-5 overflow-hidden">
             <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
             </div>
@@ -360,9 +360,14 @@ export default function ConfirmConversionClient({
                 {T(feedbackLanguage, "Confira os valores e digite seu PIN para concluir na sua conta.", "Check the details and enter your PIN to complete it in your account.")}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2 border border-tts-border bg-tts-bg p-2 text-xs">
+            <div className="tts-stage-strip grid-cols-3 text-xs">
               {[T(feedbackLanguage, "Conferir", "Check"), T(feedbackLanguage, "Autorizar", "Authorize"), T(feedbackLanguage, "Concluir", "Complete")].map((step, index) => (
-                <motion.div key={step} layout className={`px-3 py-2 text-center transition ${currentStep >= index + 1 ? "bg-tts-confirm/10 text-tts-confirm" : "text-tts-muted"}`}>
+                <motion.div
+                  key={step}
+                  layout
+                  data-active={currentStep >= index + 1}
+                  className={`tts-stage-button grid place-items-center px-2 text-center transition ${currentStep >= index + 1 ? "bg-tts-deep text-tts-bg" : "text-tts-muted"}`}
+                >
                   {step}
                 </motion.div>
               ))}
@@ -398,7 +403,7 @@ export default function ConfirmConversionClient({
             </div>
           </section>
 
-          <section className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
+          <section className="tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
                 <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
@@ -454,7 +459,7 @@ export default function ConfirmConversionClient({
 	              </div>
 	            </form>
 
-	            <div className={`mt-5 ${status === "ready" ? "hidden md:block" : "block"}`}>
+	            <div className={`mt-4 ${status === "ready" ? "hidden md:block" : "block"}`}>
 	              <OperationProgressPanel
 	                status={progressStatus}
 	                elapsedSeconds={progressElapsedSeconds}
@@ -467,7 +472,7 @@ export default function ConfirmConversionClient({
 	              />
 	            </div>
 
-	            <div className={`mt-5 border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep ${status === "ready" ? "hidden md:block" : "block"}`}>
+	            <div className={`tts-stage-panel mt-4 p-4 text-sm text-tts-deep ${status === "ready" ? "hidden md:block" : "block"}`}>
               <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Executando conversão com a cotação confirmada...", "Executing conversion with the confirmed quote...")}</div>}
