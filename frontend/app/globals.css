@@ -260,6 +260,11 @@
 }
 
 @layer components {
+  .tts-chat-user-bubble,
+  .tts-chat-user-bubble * {
+    color: #ffffff !important;
+  }
+
   .tts-op-page {
     position: relative;
     isolation: isolate;

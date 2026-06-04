@@ -815,7 +815,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 }
                 title={part}
               >
-                <span className={role === "user" ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black" : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tts-gold-bg text-tts-gold"}>
+                <span className={role === "user" ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white" : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tts-gold-bg text-tts-gold"}>
                   <ExternalLink className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1 overflow-hidden">
@@ -904,7 +904,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 <div
                   className={
                     m.role === "user"
-                      ? "min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm !text-white shadow-sm dark:border dark:border-white/10 dark:bg-white/10 dark:!text-white [&_*]:!text-white"
+                      ? "tts-chat-user-bubble min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm shadow-sm dark:border dark:border-white/10 dark:bg-white/10"
                       : "min-w-0 max-w-[80%] overflow-hidden rounded-2xl rounded-bl-sm border border-tts-border bg-tts-surface px-4 py-2.5 text-sm text-tts-deep shadow-sm"
                   }
                 >
