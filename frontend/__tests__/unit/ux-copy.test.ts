@@ -32,6 +32,7 @@ describe("UX copy guardrails", () => {
   it("keeps chat link labels mapped to product screens", () => {
     const i18nText = source("lib/i18n.tsx");
     const chatText = source("components/chat/chat-window.tsx");
+    const globalCss = source("app/globals.css");
 
     expect(i18nText).toContain('chat_link_yield: "Abrir rendimentos"');
     expect(i18nText).toContain('chat_link_profile: "Abrir perfil"');
@@ -43,6 +44,9 @@ describe("UX copy guardrails", () => {
     expect(chatText).toContain('path.endsWith("/balance")');
     expect(chatText).toContain('path.endsWith("/transactions")');
     expect(chatText).toContain('path.endsWith("/send-external")');
+    expect(chatText).toContain("tts-chat-user-bubble");
+    expect(globalCss).toContain(".tts-chat-user-bubble");
+    expect(globalCss).toContain("color: #ffffff !important");
   });
 
   it("keeps compact account cards short", () => {
