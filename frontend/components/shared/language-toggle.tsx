@@ -37,24 +37,24 @@ export function LanguageToggle() {
       <button
         type="button"
         onClick={toggleLanguage}
-        className="inline-flex h-8 min-w-12 items-center justify-center gap-1.5 rounded-full px-2 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold"
+        className="inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-12 sm:px-2"
         aria-label={languageTitle}
         title={languageTitle}
       >
         <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>{languageLabel}</span>
+        <span className="hidden sm:inline">{languageLabel}</span>
       </button>
       <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
       <button
         type="button"
         onClick={() => setTheme(nextTheme)}
-        className="inline-flex h-8 min-w-16 items-center justify-center gap-1.5 rounded-full px-2 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold"
+        className="inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-16 sm:px-2"
         aria-label={themeTitle}
         aria-pressed={isDark}
         title={themeTitle}
       >
         {isDark ? <Sun className="h-3.5 w-3.5" aria-hidden="true" /> : <Moon className="h-3.5 w-3.5" aria-hidden="true" />}
-        <span>{themeLabel}</span>
+        <span className="hidden sm:inline">{themeLabel}</span>
       </button>
       <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
       <Link
