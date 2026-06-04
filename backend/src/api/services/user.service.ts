@@ -6,7 +6,7 @@ import { WalletRepository } from '../repository/core/wallet.repository';
 import VaultService from './core/vault.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
-import { ContactSeedService } from './contact-seed.service';
+import { ContactSeedService, STARTER_CONTACTS } from './contact-seed.service';
 import { getStellarNetworkName, isInitialUsdcConversionEnabled } from '../../config/assets';
 
 function normalizeEmail(value?: string): string {
@@ -405,7 +405,7 @@ export class UserService {
     return contact;
   }
 
-    static async listContacts(payload: ListContactsPayload): Promise<any[]> {
+  static async listContacts(payload: ListContactsPayload): Promise<any[]> {
     const { userId } = payload;
 
     const { data: user, error: userError } = await supabase
@@ -418,18 +418,30 @@ export class UserService {
       throw new Error(`User with ID ${userId} not found.`);
     }
 
-    const { data: contacts, error: contactsError } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('owner_id', userId)
-      .order('contact_name', { ascending: true });
+    const loadContacts = async () => {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('owner_id', userId)
+        .order('contact_name', { ascending: true });
 
-    if (contactsError) {
-      throw new Error(`Database error: ${contactsError.message}`);
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    let contacts = await loadContacts();
+    if (contacts.length < STARTER_CONTACTS.length) {
+      try {
+        await ContactSeedService.ensureStarterContactsForUser(userId);
+        contacts = await loadContacts();
+      } catch (contactSeedError) {
+        console.warn('Warning: Could not ensure starter contacts before listing:', contactSeedError);
+      }
     }
 
-    return contacts || [];
+    return contacts;
   }
-
-  
 }

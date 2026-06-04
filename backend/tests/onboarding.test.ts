@@ -23,6 +23,13 @@ jest.mock('../src/api/services/contact-seed.service', () => ({
     })),
     ensureStarterContactsForUser: jest.fn(async () => undefined),
   },
+  STARTER_CONTACTS: [
+    { contact_name: 'Ana Silva', pix_prefix: 'ana.silva' },
+    { contact_name: 'Carlos Souza', pix_prefix: 'carlos.souza' },
+    { contact_name: 'Marina Costa', pix_prefix: 'marina.costa' },
+    { contact_name: 'Fernando Oliveira', pix_prefix: 'fernando.oliveira' },
+    { contact_name: 'Juliana Lima', pix_prefix: 'juliana.lima' },
+  ],
 }));
 
 jest.mock('../src/api/services/core/stellar.service', () => {
