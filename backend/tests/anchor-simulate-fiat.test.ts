@@ -2,7 +2,9 @@ import { AnchorService } from '../src/api/services/anchor.service';
 import { StellarService } from '../src/api/services/stellar.service';
 import { AgentRepository } from '../src/api/repository/core/agent.repository';
 import { WalletRepository } from '../src/api/repository/core/wallet.repository';
+import { OperationRepository } from '../src/api/repository/operation.repository';
 import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
+import VaultService from '../src/api/services/core/vault.service';
 
 describe('AnchorService sandbox PIX confirmation', () => {
   const originalEnv = { ...process.env };
@@ -387,5 +389,96 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Conversão final depois do PIX concluída.');
     expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Convertido: 100 XLM');
     expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Recebido final: US$ 65.00');
+  });
+
+  it('finishes pending sandbox post-PIX conversion while polling on-ramp status', async () => {
+    const record: any = {
+      transaction: {
+        id: 'sandbox-pix-xlm-usdc',
+        status: 'completed',
+        fromAmount: '158.47',
+        fromCurrency: 'BRL',
+        toAmount: '100',
+        toCurrency: 'XLM',
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        paymentInstructions: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sandbox_mock: true,
+        post_conversion: {
+          required: true,
+          status: 'pending',
+          source_asset_code: 'XLM',
+          source_amount: '100',
+          destination_asset_code: 'USDC',
+          destination_asset_issuer: usdcIssuer,
+        },
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+      sourceAmountBrl: '158.47',
+      destinationAmount: '100',
+      finalAssetCode: 'XLM',
+      finalAmount: '100',
+      postConversionAssetCode: 'USDC',
+      postConversionAssetIssuer: usdcIssuer,
+      operationId: 'op-1',
+      operationContext: {
+        post_conversion_status: 'pending',
+        post_conversion_source_asset_code: 'XLM',
+        post_conversion_source_amount: '100',
+        post_conversion_asset_code: 'USDC',
+        post_conversion_asset_issuer: usdcIssuer,
+      },
+    };
+
+    jest.spyOn(AnchorService as any, 'hydrateSandboxOnRampFromOperation').mockResolvedValue(record);
+    jest.spyOn(AnchorService as any, 'updateRampOperationStatus').mockResolvedValue(undefined);
+    jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'USDC',
+      asset_issuer: usdcIssuer,
+    });
+    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    jest.spyOn(OperationRepository, 'update').mockResolvedValue({} as any);
+    const conversionSpy = jest.spyOn(StellarService, 'submitStrictSendPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'sandbox-xlm-usdc-hash',
+      destinationAmount: '65.4321',
+    } as any);
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt')
+      .mockResolvedValue('https://talktostellar.com/receipt/conversion-complete');
+
+    const result = await AnchorService.getOnRampStatus('sandbox-pix-xlm-usdc', 'op-1');
+
+    expect(conversionSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAsset: { code: 'XLM', issuer: undefined },
+      sourceAmount: '100.0000000',
+      destinationAsset: { code: 'USDC', issuer: usdcIssuer },
+      memoText: 'PIX POST CONVERT',
+    }));
+    expect((result.transaction as any).post_conversion).toMatchObject({
+      status: 'completed',
+      source_asset_code: 'XLM',
+      source_amount: '100.0000000',
+      destination_asset_code: 'USDC',
+      destination_amount: '65.4321000',
+      hash: 'sandbox-xlm-usdc-hash',
+    });
+    expect(result.transaction.toAmount).toBe('65.4321000');
+    expect(result.transaction.toCurrency).toBe(`USDC:${usdcIssuer}`);
+    expect((result.transaction as any).receipt_url).toBe('https://talktostellar.com/receipt/conversion-complete');
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'conversion',
+      sourceAmount: '100.0000000',
+      sourceAssetCode: 'XLM',
+      destinationAmount: '65.4321000',
+      destinationAssetCode: 'USDC',
+      hash: 'sandbox-xlm-usdc-hash',
+      status: 'completed',
+    }));
   });
 });

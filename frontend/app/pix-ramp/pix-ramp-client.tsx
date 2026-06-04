@@ -2509,8 +2509,8 @@ export default function PixRampClient({
     let current = transaction || null;
     if (!getPostConversionState(current, targetAsset).pending) return current;
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await sleep(900);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await sleep(1200);
       const refreshed = await refreshOrder(false).catch(() => null);
       current = refreshed?.transaction || current;
       if (!getPostConversionState(current, targetAsset).pending) return current;
@@ -2845,7 +2845,7 @@ export default function PixRampClient({
         if (!transferFlow || transferPayload) {
           notifyChatAfterPixCompletion({
             kind: transferPayload ? "funded-transfer" : "onramp",
-            receiptUrl: extractRampReceiptUrl(payload, refreshed),
+            receiptUrl: extractRampReceiptUrl(completedTransaction, refreshed, payload),
             completedTransaction,
             transferPayload,
           });

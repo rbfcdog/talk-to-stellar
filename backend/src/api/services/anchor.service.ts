@@ -1009,6 +1009,7 @@ export class AnchorService {
   private static programmaticOnboardingCache = new Map<string, { cryptoWalletId?: string }>();
   private static sandboxMockOnRampOrders = new Map<string, SandboxMockOnRampOrder>();
   private static sandboxMockOffRampOrders = new Map<string, SandboxMockOffRampOrder>();
+  private static sandboxPostConversionLocks = new Map<string, Promise<SandboxMockOnRampOrder>>();
 
   static getTesouroIssuer(): string {
     return getAssetIssuer('TESOURO') || ETHERFUSE_TESOURO_ISSUER;
@@ -2429,7 +2430,10 @@ export class AnchorService {
 
   private static async sendSandboxPostConversionReceipt(record: SandboxMockOnRampOrder): Promise<string> {
     const existing = coalesceString(record.postConversionReceiptUrl, record.operationContext?.post_conversion_receipt_url);
-    if (existing) return existing;
+    if (existing) {
+      this.attachSandboxPostConversionReceipt(record, existing);
+      return existing;
+    }
 
     const postConversion = (record.transaction as OnRampTransaction & { post_conversion?: Record<string, unknown> }).post_conversion || {};
     const sourceAssetCode = normalizeAssetCode(coalesceString(
@@ -2484,13 +2488,26 @@ export class AnchorService {
     });
 
     if (receiptUrl) {
-      record.postConversionReceiptUrl = receiptUrl;
+      this.attachSandboxPostConversionReceipt(record, receiptUrl);
       await this.persistSandboxOnRampContext(record, {
         post_conversion_receipt_url: receiptUrl,
       });
     }
 
     return receiptUrl;
+  }
+
+  private static attachSandboxPostConversionReceipt(record: SandboxMockOnRampOrder, receiptUrl: string): void {
+    if (!receiptUrl) return;
+    record.postConversionReceiptUrl = receiptUrl;
+    const tx = record.transaction as OnRampTransaction & Record<string, unknown>;
+    tx.post_conversion_receipt_url = receiptUrl;
+    tx.receiptUrl = receiptUrl;
+    tx.receipt_url = receiptUrl;
+    tx.post_conversion = {
+      ...((tx.post_conversion as Record<string, unknown> | undefined) || {}),
+      receipt_url: receiptUrl,
+    };
   }
 
   private static async markSandboxPostConversionFailed(
@@ -2612,6 +2629,78 @@ export class AnchorService {
     });
 
     return record;
+  }
+
+  private static async hydrateSandboxPostConversionWalletSecret(record: SandboxMockOnRampOrder): Promise<void> {
+    if (record.vaultSecretId || !record.sessionId) return;
+    try {
+      const wallet = await new WalletRepository(supabase).getWalletBySession(record.sessionId);
+      const vaultSecretId = coalesceString(wallet?.vault_secret_id);
+      if (vaultSecretId) record.vaultSecretId = vaultSecretId;
+    } catch (error) {
+      console.warn('[ramp] Could not hydrate wallet secret for sandbox post-PIX conversion:', debugErrorMessage(error));
+    }
+  }
+
+  private static async finishSandboxPostOnRampConversionIfPending(record: SandboxMockOnRampOrder): Promise<SandboxMockOnRampOrder> {
+    const postAsset = this.resolveSandboxPostConversionAsset(record);
+    if (!postAsset) return record;
+
+    const txPostConversion = ((record.transaction as OnRampTransaction & { post_conversion?: Record<string, unknown> }).post_conversion || {});
+    const status = coalesceString(txPostConversion.status, record.operationContext?.post_conversion_status).toLowerCase();
+    const existingHash = coalesceString(txPostConversion.hash, record.postConversionHash, record.operationContext?.post_conversion_hash);
+    if (status === 'failed') return record;
+    if (status === 'completed' || existingHash) {
+      await this.sendSandboxPostConversionReceipt(record);
+      return record;
+    }
+
+    const sourceAmount = coalesceString(
+      txPostConversion.source_amount,
+      record.postConversionSourceAmount,
+      record.operationContext?.post_conversion_source_amount,
+      record.finalAmount,
+      record.transaction.toAmount,
+    );
+    if (!sourceAmount || Number(sourceAmount) <= 0) return record;
+
+    const sourceAsset = resolveRampFinalAsset(
+      coalesceString(
+        txPostConversion.source_asset_code,
+        record.operationContext?.post_conversion_source_asset_code,
+        record.finalAssetCode,
+      ),
+      coalesceString(
+        txPostConversion.source_asset_issuer,
+        record.operationContext?.post_conversion_source_asset_issuer,
+        record.finalAssetIssuer,
+      ),
+    );
+
+    const lockKey = coalesceString(record.operationId, record.transaction.id);
+    const existingLock = this.sandboxPostConversionLocks.get(lockKey);
+    if (existingLock) return existingLock;
+
+    const run = (async () => {
+      await this.hydrateSandboxPostConversionWalletSecret(record);
+      const converted = await this.applySandboxPostOnRampConversion({
+        record,
+        sourceAsset,
+        sourceAmount,
+      });
+      const convertedPostConversion = (converted.transaction as OnRampTransaction & { post_conversion?: Record<string, unknown> }).post_conversion || {};
+      if (coalesceString(convertedPostConversion.status).toLowerCase() === 'completed') {
+        await this.sendSandboxPostConversionReceipt(converted);
+      }
+      return converted;
+    })();
+
+    this.sandboxPostConversionLocks.set(lockKey, run);
+    try {
+      return await run;
+    } finally {
+      this.sandboxPostConversionLocks.delete(lockKey);
+    }
   }
 
   private static async settleSandboxOnRampFinalAsset(input: {
@@ -4483,11 +4572,12 @@ export class AnchorService {
   }> {
     const mockRecord = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (mockRecord) {
+      const finalMockRecord = await this.finishSandboxPostOnRampConversionIfPending(mockRecord);
       await this.updateRampOperationStatus(
-        operationId || mockRecord.operationId,
-        mapAnchorStatusToOperationStatus(mockRecord.transaction.status),
+        operationId || finalMockRecord.operationId,
+        mapAnchorStatusToOperationStatus(finalMockRecord.transaction.status),
       );
-      return { transaction: mockRecord.transaction };
+      return { transaction: finalMockRecord.transaction };
     }
 
     if (orderId.startsWith('sandbox-pix-')) {
