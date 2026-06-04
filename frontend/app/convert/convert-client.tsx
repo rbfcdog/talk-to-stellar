@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowRightLeft,
   CheckCircle2,
   Coins,
@@ -141,6 +142,14 @@ function formatDecimal(value: number, language: AppLanguage, maximumFractionDigi
     minimumFractionDigits: value > 0 && value < 1 ? Math.min(4, maximumFractionDigits) : 2,
     maximumFractionDigits,
   }).format(value);
+}
+
+function formatQueryDecimal(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  let text = value.toFixed(7);
+  while (text.includes(".") && text.endsWith("0")) text = text.slice(0, -1);
+  if (text.endsWith(".")) text = text.slice(0, -1);
+  return text;
 }
 
 function assetName(asset: AssetOption, language: AppLanguage) {
@@ -355,11 +364,11 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     : 0;
   const normalizedSourceBalanceAmount = Number.isFinite(sourceBalanceAmount) ? sourceBalanceAmount : 0;
   const sourceBalanceDisplay = sourceBalance
-    ? `${formatDecimal(normalizedSourceBalanceAmount, language, 7)} ${sourceAsset.short}`
+    ? formatAssetAmount(normalizedSourceBalanceAmount, sourceAsset, language)
     : accountStatus === "loading"
       ? L("Carregando saldo", "Loading balance")
       : session.authenticated
-        ? `0 ${sourceAsset.short}`
+        ? formatAssetAmount(0, sourceAsset, language)
         : L("Entre para consultar", "Sign in to check");
   const sameAsset = sourceCode === destCode;
   const primaryLabel = L("Calcular e confirmar", "Calculate and confirm");
@@ -379,15 +388,32 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const hasZeroSourceBalance = balanceCheckReady && normalizedSourceBalanceAmount <= 0;
   const hasAmountAboveSourceBalance = balanceCheckReady && numericAmount > 0 && normalizedSourceBalanceAmount > 0 && normalizedSourceBalanceAmount < numericAmount;
   const hasBlockingBalanceIssue = balanceCheckReady && numericAmount > 0 && normalizedSourceBalanceAmount < numericAmount;
+  const missingSourceAmount = hasBlockingBalanceIssue ? Math.max(0, numericAmount - normalizedSourceBalanceAmount) : 0;
+  const missingSourceDisplay = missingSourceAmount > 0 ? formatAssetAmount(missingSourceAmount, sourceAsset, language) : "";
+  const conversionReturnHref = buildUrl("/convert", {
+    amount,
+    amount_mode: amountMode,
+    source_asset: sourceCode,
+    dest_asset: destCode,
+    lang: language,
+  });
+  const sourceTopUpHref = buildUrl("/pix-on", {
+    from: "convert",
+    receive_amount: formatQueryDecimal(missingSourceAmount || numericAmount),
+    receive_asset: sourceCode,
+    target_asset: sourceCode,
+    return_to: conversionReturnHref,
+    lang: language,
+  });
   const balanceNoticeTitle = hasZeroSourceBalance
     ? L(`Sem saldo em ${sourceAsset.short}`, `No ${sourceAsset.short} balance`)
     : hasAmountAboveSourceBalance
-      ? L("Saldo insuficiente", "Insufficient balance")
+      ? L("Saldo insuficiente para converter", "Insufficient balance to convert")
       : L("Saldo disponível", "Available balance");
   const balanceNoticeBody = hasZeroSourceBalance
-    ? L("Escolha outra moeda de origem ou adicione saldo antes de converter.", "Choose another source asset or add funds before converting.")
+    ? L("Você não tem saldo nesta moeda. Adicione saldo ou escolha outra origem antes de continuar.", "You do not have balance in this asset. Add funds or choose another source before continuing.")
     : hasAmountAboveSourceBalance
-      ? L(`Você tem ${sourceBalanceDisplay}, abaixo do valor escolhido.`, `You have ${sourceBalanceDisplay}, below the selected amount.`)
+      ? L(`Você tem ${sourceBalanceDisplay}. Falta ${missingSourceDisplay} para liberar esta conversão.`, `You have ${sourceBalanceDisplay}. You need ${missingSourceDisplay} more to unlock this conversion.`)
       : L(`${sourceBalanceDisplay} disponível para conversão.`, `${sourceBalanceDisplay} available for conversion.`);
   const showBalanceNotice = balanceCheckReady;
   const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
@@ -557,6 +583,12 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   tone={hasBlockingBalanceIssue || hasZeroSourceBalance ? "error" : "ok"}
                   title={balanceNoticeTitle}
                   body={balanceNoticeBody}
+                  currentLabel={L("Disponível", "Available")}
+                  currentValue={sourceBalanceDisplay}
+                  missingLabel={missingSourceDisplay ? L("Falta", "Missing") : undefined}
+                  missingValue={missingSourceDisplay || undefined}
+                  actionHref={hasBlockingBalanceIssue || hasZeroSourceBalance ? sourceTopUpHref : undefined}
+                  actionLabel={L("Adicionar saldo", "Add money")}
                 />
               ) : null}
 
@@ -626,11 +658,23 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   {L("Escolha moedas diferentes para continuar.", "Choose different currencies to continue.")}
                 </div>
               ) : !canProceed ? (
-                <div className="border border-tts-border bg-tts-surface p-3 text-sm font-bold leading-6 text-tts-muted">
-                  {hasBlockingBalanceIssue
-                    ? balanceNoticeBody
-                    : L("Confira o valor antes de continuar.", "Check the amount before continuing.")}
-                </div>
+                hasBlockingBalanceIssue ? (
+                  <BalanceAvailabilityCard
+                    tone="error"
+                    title={balanceNoticeTitle}
+                    body={balanceNoticeBody}
+                    currentLabel={L("Disponível", "Available")}
+                    currentValue={sourceBalanceDisplay}
+                    missingLabel={L("Falta", "Missing")}
+                    missingValue={missingSourceDisplay}
+                    actionHref={sourceTopUpHref}
+                    actionLabel={L("Adicionar saldo", "Add money")}
+                  />
+                ) : (
+                  <div className="border border-tts-border bg-tts-surface p-3 text-sm font-bold leading-6 text-tts-muted">
+                    {L("Confira o valor antes de continuar.", "Check the amount before continuing.")}
+                  </div>
+                )
               ) : null}
 
               {reviewStatus === "error" ? (
@@ -789,6 +833,12 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   tone={hasBlockingBalanceIssue || hasZeroSourceBalance ? "error" : "ok"}
                   title={balanceNoticeTitle}
                   body={balanceNoticeBody}
+                  currentLabel={L("Disponível", "Available")}
+                  currentValue={sourceBalanceDisplay}
+                  missingLabel={missingSourceDisplay ? L("Falta", "Missing") : undefined}
+                  missingValue={missingSourceDisplay || undefined}
+                  actionHref={hasBlockingBalanceIssue || hasZeroSourceBalance ? sourceTopUpHref : undefined}
+                  actionLabel={L("Adicionar saldo", "Add money")}
                 />
               </div>
             ) : null}
@@ -879,9 +929,25 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   {L("Escolha moedas diferentes para continuar.", "Choose different currencies to continue.")}
                 </p>
               ) : !canProceed ? (
-                <p className="mt-3 text-sm leading-6 text-tts-muted">
-                  {hasBlockingBalanceIssue ? balanceNoticeBody : L("Confira os dados antes de confirmar.", "Check the details before confirming.")}
-                </p>
+                hasBlockingBalanceIssue ? (
+                  <div className="mt-4">
+                    <BalanceAvailabilityCard
+                      tone="error"
+                      title={balanceNoticeTitle}
+                      body={balanceNoticeBody}
+                      currentLabel={L("Disponível", "Available")}
+                      currentValue={sourceBalanceDisplay}
+                      missingLabel={L("Falta", "Missing")}
+                      missingValue={missingSourceDisplay}
+                      actionHref={sourceTopUpHref}
+                      actionLabel={L("Adicionar saldo", "Add money")}
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm leading-6 text-tts-muted">
+                    {L("Confira os dados antes de confirmar.", "Check the details before confirming.")}
+                  </p>
+                )
               ) : (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">
                   {L("Vamos calcular a rota real e mostrar a confirmação aqui. Nada passa pelo chat.", "We will calculate the live route and show confirmation here. Nothing goes through chat.")}
@@ -970,21 +1036,50 @@ function BalanceAvailabilityCard({
   tone,
   title,
   body,
+  currentLabel,
+  currentValue,
+  missingLabel,
+  missingValue,
+  actionHref,
+  actionLabel,
 }: {
   tone: "ok" | "error";
   title: string;
   body: string;
+  currentLabel?: string;
+  currentValue?: string;
+  missingLabel?: string;
+  missingValue?: string;
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   const isError = tone === "error";
   return (
-    <div className={`flex gap-3 border p-3 ${isError ? "border-tts-error bg-tts-error/10" : "border-tts-confirm/60 bg-tts-confirm/10"}`}>
-      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border ${isError ? "border-tts-error text-tts-error" : "border-tts-confirm text-tts-confirm"}`}>
-        {isError ? <AlertTriangle className="h-4 w-4" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+    <div className={`border p-3 ${isError ? "border-tts-error bg-tts-error/10" : "border-tts-confirm/60 bg-tts-confirm/10"}`}>
+      <div className="flex gap-3">
+        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border ${isError ? "border-tts-error text-tts-error" : "border-tts-confirm text-tts-confirm"}`}>
+          {isError ? <AlertTriangle className="h-4 w-4" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+        </div>
+        <div className="min-w-0">
+          <p className={`text-sm font-black ${isError ? "text-tts-error" : "text-tts-deep"}`}>{title}</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-tts-muted">{body}</p>
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className={`text-sm font-black ${isError ? "text-tts-error" : "text-tts-deep"}`}>{title}</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-tts-muted">{body}</p>
-      </div>
+      {currentValue || missingValue ? (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {currentValue ? <MiniStat label={currentLabel || "Saldo"} value={currentValue} /> : null}
+          {missingValue ? <MiniStat label={missingLabel || "Falta"} value={missingValue} /> : null}
+        </div>
+      ) : null}
+      {actionHref && actionLabel ? (
+        <a
+          href={actionHref}
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-confirm bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
+        >
+          {actionLabel}
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </a>
+      ) : null}
     </div>
   );
 }
