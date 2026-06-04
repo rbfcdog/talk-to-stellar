@@ -253,11 +253,6 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
             </p>
             {result.tx_hash && <p className="mt-2 break-all font-mono text-xs">{result.tx_hash}</p>}
             <p className="mt-2 font-semibold">{T(language, INTERMEDIATE_PAGE_CLOSE_COPY, "This screen closes automatically.")}</p>
-            {result.receipt_url && (
-              <a href={result.receipt_url} className="mt-3 inline-flex h-10 items-center rounded-xl bg-tts-deep px-4 text-sm font-bold text-tts-surface">
-                {T(language, "Abrir comprovante", "Open receipt")}
-              </a>
-            )}
             <button
               type="button"
               onClick={() => closeIntermediatePage(0)}

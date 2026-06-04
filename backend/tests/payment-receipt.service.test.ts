@@ -290,11 +290,12 @@ describe('PaymentReceiptService', () => {
       provider: 'whatsapp',
       providerUserId: '5519997624114',
       text: expect.stringContaining('Pagamento concluido.'),
-      buttonText: 'Abrir comprovante',
+      buttonText: null,
+      buttonUrl: null,
     }));
     expect(notifySpy.mock.calls[0][0].text).toContain('Valor: US$ 100.00');
     expect(notifySpy.mock.calls[0][0].text).toContain('Destino: Ana Silva');
-    expect(notifySpy.mock.calls[0][0].text).toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Comprovante:');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('💰 *Você economizou');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Liquidação');
@@ -336,16 +337,18 @@ describe('PaymentReceiptService', () => {
     const fallbackUrl = 'https://talk-to-stellar-owxg.vercel.app/api/external/receipts/sandbox-pix-fallback-1';
     expect(result).toBe(fallbackUrl);
     expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
-      buttonText: 'Abrir comprovante',
-      buttonUrl: fallbackUrl,
-      text: expect.stringContaining(`Comprovante: ${fallbackUrl}`),
+      buttonText: null,
+      buttonUrl: null,
+      text: expect.stringContaining('PIX confirmado com sucesso.'),
     }));
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain(fallbackUrl);
 
     createSpy.mockRestore();
     notifySpy.mockRestore();
   });
 
-  it('preserves explicit conversion callback text and appends the receipt link', async () => {
+  it('preserves explicit conversion callback text without appending a receipt link', async () => {
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
         attempted: true,
@@ -374,12 +377,13 @@ describe('PaymentReceiptService', () => {
     expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'whatsapp',
       providerUserId: '5519997624114',
-      buttonText: 'Abrir comprovante',
+      buttonText: null,
+      buttonUrl: null,
       text: expect.stringContaining('Conversão concluída.'),
     }));
     expect(notifySpy.mock.calls[0][0].text).toContain('Convertido: 100 XLM');
     expect(notifySpy.mock.calls[0][0].text).toContain('Recebido: US$ 65.00');
-    expect(notifySpy.mock.calls[0][0].text).toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Comprovante:');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Você economizou');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
 

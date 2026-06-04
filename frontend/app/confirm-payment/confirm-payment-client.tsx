@@ -627,7 +627,6 @@ export default function ConfirmPaymentClient({
       setStatus(response.ok && payload?.success ? "done" : "error")
 
       if (response.ok && payload?.success) {
-        const receiptUrl = String(payload.receipt_url || "")
         const conversionMessage = getAutoConversionMessage(payload, feedbackLanguage)
         const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
         const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
@@ -655,7 +654,6 @@ export default function ConfirmPaymentClient({
           feedbackIsCrossAsset && savingsForFeedback ? `${T(feedbackLanguage, "Economia estimada", "Estimated savings")}: ${savingsForFeedback}` : "",
           monthlySavingsForFeedback ? `${T(feedbackLanguage, "Economia no mês até agora", "Monthly savings so far")}: ${monthlySavingsForFeedback}` : "",
           `${T(feedbackLanguage, "Horário", "Time")}: ${formatTimestamp(payload.completed_at, feedbackLanguage)}`,
-          receiptUrl ? `${T(feedbackLanguage, "Comprovante", "Receipt")}: ${receiptUrl}` : "",
         ].filter(Boolean).join("\n"))
       }
 
@@ -820,13 +818,12 @@ export default function ConfirmPaymentClient({
       detail: T(feedbackLanguage, "A operação é assinada e enviada para a rede.", "The operation is signed and submitted to the network."),
     },
     {
-      label: T(feedbackLanguage, "Comprovante e chat", "Receipt and chat"),
-      detail: T(feedbackLanguage, "O comprovante é salvo e a mensagem final é enviada ao canal de origem.", "The receipt is saved and the final message is sent to the origin channel."),
+      label: T(feedbackLanguage, "Conclusão", "Completion"),
+      detail: T(feedbackLanguage, "A mensagem final é enviada ao canal de origem.", "The final message is sent to the origin channel."),
     },
   ]
   const successAmount = String(result?.amount || result?.transferDetails?.destinationAmount || payload.amount || "")
   const successAsset = String(result?.asset || result?.assetCode || result?.transferDetails?.destinationAssetCode || assetCode || "")
-  const successReceiptUrl = String(result?.receipt_url || "")
   const successDestinationKey = formatRecipientKey(result) || destinationKeyLabel
   const visibleError = result?.error || result?.message
     ? publicPaymentErrorMessage(result?.error || result?.message, feedbackLanguage)
@@ -968,9 +965,9 @@ export default function ConfirmPaymentClient({
 	                status={progressStatus}
 	                elapsedSeconds={progressElapsedSeconds}
 	                title={T(feedbackLanguage, "Andamento da operação", "Operation progress")}
-	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra cada etapa até o comprovante.", "After you confirm, this screen shows each step until the receipt.")}
-	                runningMessage={T(feedbackLanguage, "Pagamento em andamento. Não clique de novo; estamos aguardando a rede e o comprovante.", "Payment in progress. Do not click again; we are waiting for the network and receipt.")}
-	                doneMessage={T(feedbackLanguage, "Pagamento concluído. O comprovante e o chat serão atualizados.", "Payment completed. The receipt and chat will be updated.")}
+	                readyMessage={T(feedbackLanguage, "Depois de confirmar, esta tela mostra cada etapa até a conclusão.", "After you confirm, this screen shows each step until completion.")}
+	                runningMessage={T(feedbackLanguage, "Pagamento em andamento. Não clique de novo; estamos aguardando a rede.", "Payment in progress. Do not click again; we are waiting for the network.")}
+	                doneMessage={T(feedbackLanguage, "Pagamento concluído.", "Payment completed.")}
 	                errorMessage={T(feedbackLanguage, "A operação parou antes de concluir. Leia o erro abaixo antes de tentar novamente.", "The operation stopped before completion. Read the error below before trying again.")}
 	                steps={paymentProgressSteps}
 	              />
@@ -1010,33 +1007,12 @@ export default function ConfirmPaymentClient({
                     {successDestinationKey && <p><span className="text-tts-deep">{T(feedbackLanguage, "Chave", "Key")}: </span>{successDestinationKey}</p>}
                     <p><span className="text-tts-deep">{T(feedbackLanguage, "Horário", "Time")}: </span>{formatTimestamp(result.completed_at, feedbackLanguage)}</p>
                   </div>
-                  {successReceiptUrl && (
-                    <a
-                      href={successReceiptUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
-                    >
-                      {T(feedbackLanguage, "Ver comprovante", "View receipt")}
-                    </a>
-                  )}
                   <a
                     href={returnTarget.href}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-deep px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep2"
                   >
                     {returnTarget.label}
                   </a>
-                  {result.receiptImageDataUrl && (
-                    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg">
-                      <motion.img
-                        src={result.receiptImageDataUrl}
-                        alt={T(feedbackLanguage, "Comprovante TalkToStellar", "TalkToStellar receipt")}
-                        className="h-auto w-full"
-                        initial={{ y: 12, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                      />
-                    </motion.div>
-                  )}
                   {returnMessage && <p>{returnMessage}</p>}
                   <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
                 </motion.div>
