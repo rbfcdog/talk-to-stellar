@@ -899,7 +899,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 <div
                   className={
                     m.role === "user"
-                      ? "min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm text-tts-surface shadow-sm"
+                      ? "min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm text-tts-surface shadow-sm dark:border dark:border-white/10 dark:bg-white/10 dark:text-white"
                       : "min-w-0 max-w-[80%] overflow-hidden rounded-2xl rounded-bl-sm border border-tts-border bg-tts-surface px-4 py-2.5 text-sm text-tts-deep shadow-sm"
                   }
                 >
@@ -907,7 +907,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                   <div
                     className={
                       m.role === "user"
-                        ? "mt-1 text-right font-mono text-[10px] text-tts-surface/60"
+                        ? "mt-1 text-right font-mono text-[10px] text-tts-surface/60 dark:text-white/60"
                         : "mt-1 text-right font-mono text-[10px] text-tts-muted"
                     }
                   >
