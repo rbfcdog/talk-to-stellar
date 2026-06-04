@@ -373,7 +373,6 @@ function normalizeYieldAssetInput(value: unknown): string {
 function formatYieldAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
   const displayCode = userFacingAssetCode(normalizeYieldAssetInput(assetCode));
   if (displayCode === 'BRL') return language === 'en' ? 'reais' : 'reais';
-  if (displayCode === 'EUR') return language === 'en' ? 'euros' : 'euros';
   if (displayCode === 'USDC') return language === 'en' ? 'dollars' : 'dólares';
   if (displayCode === 'CETES') return language === 'en' ? 'Mexico test option' : 'opção México em teste';
   return displayCode;
@@ -1053,7 +1052,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency. For PIX bring, this is the exact first asset to receive through the PIX flow. Use BRL, USDC/USD, CETES on testnet, or EURC only on public/mainnet.",
+          description: "User-facing currency. For PIX bring, this is the exact first asset to receive through the PIX flow. Use BRL, USDC/USD, CETES, or XLM.",
         },
         post_conversion_asset_code: {
           type: "string",
@@ -1097,11 +1096,11 @@ export const toolDefinitions = [
         },
         source_asset_code: {
           type: "string",
-          description: "Source currency, such as BRL, USDC, USD, CETES, XLM, or another configured asset. On testnet, CETES replaces EUR/EURC.",
+          description: "Source currency, such as BRL, USDC, USD, CETES, XLM, or another configured asset. Use dollars/USDC for dollar wording.",
         },
         dest_asset_code: {
           type: "string",
-          description: "Destination currency, such as BRL, USDC, USD, CETES, XLM, or another configured asset. On testnet, CETES replaces EUR/EURC.",
+          description: "Destination currency, such as BRL, USDC, USD, CETES, XLM, or another configured asset. Use dollars/USDC for dollar wording.",
         },
         language: {
           type: "string",
@@ -1124,7 +1123,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for application, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for application, such as USDC, CETES, XLM, BRL, or USD.",
         },
         language: {
           type: "string",
@@ -1156,7 +1155,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for application, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for application, such as USDC, CETES, XLM, BRL, or USD.",
         },
         slippage_bps: {
           type: "number",
@@ -1192,7 +1191,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency requested for rendimentos, such as USDC, CETES, XLM, BRL, or USD. On testnet, CETES replaces EUR/EURC.",
+          description: "User-facing currency requested for rendimentos, such as USDC, CETES, XLM, BRL, or USD.",
         },
         pin: {
           type: "string",
@@ -1306,7 +1305,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_balance",
-    description: "Get the user-facing balance summary. Returns R$, US$, CETES/EUR when configured, and XLM. Never expose account identifiers in chat.",
+    description: "Get the user-facing balance summary. Returns R$, US$, CETES when configured, and XLM. Never expose account identifiers in chat.",
     parameters: {
       type: "object",
       properties: {
@@ -1394,7 +1393,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code to send. For user-facing flows use BRL, USDC or CETES on testnet; EURC is public/mainnet only.",
+          description: "Asset code to send. For user-facing flows use BRL, USDC, CETES, or XLM.",
         },
         asset_issuer: {
           type: "string",
@@ -1576,7 +1575,7 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "Asset code the recipient receives. For user-facing flows use BRL, USDC or CETES on testnet; EURC is public/mainnet only.",
+          description: "Asset code the recipient receives. For user-facing flows use BRL, USDC, CETES, or XLM.",
         },
         asset_issuer: {
           type: "string",
@@ -3579,9 +3578,10 @@ async function executeGetBalance(input: any): Promise<string> {
 
     const defaultVisibleAssets = getStellarNetworkName() === 'TESTNET'
       ? ['BRL', 'USDC', 'CETES', 'XLM']
-      : ['BRL', 'USDC', 'EUR', 'XLM'];
+      : ['BRL', 'USDC', 'XLM'];
     const visibleAssets = [...defaultVisibleAssets, ...getUserFacingAssetCodes()]
       .map((asset) => userFacingAssetCode(asset))
+      .filter((asset) => asset !== 'EUR')
       .filter((asset, index, all) => asset && all.indexOf(asset) === index);
     let balances = account.balances.map(normalizeBalanceLine);
 

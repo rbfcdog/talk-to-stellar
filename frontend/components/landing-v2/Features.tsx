@@ -14,11 +14,11 @@ const FEATURES: Feature[] = [
   {
     title: 'Conversão multi-moeda',
     description:
-      'O chat entende reais, dólares, euros e moedas configuradas, abre a interface certa e mostra valores antes do PIN.',
+      'O chat entende reais, dólares, XLM e moedas configuradas, abre a interface certa e mostra valores antes do PIN.',
     snippetLines: [
       { key: 'intent', value: 'convert', type: 'string' },
       { key: 'from', value: 'R$', type: 'string' },
-      { key: 'to', value: '€', type: 'string' },
+      { key: 'to', value: 'US$', type: 'string' },
     ],
   },
   {
@@ -27,7 +27,7 @@ const FEATURES: Feature[] = [
       'A experiência mostra opções por moeda e ação de entrada ou saída sem termos técnicos.',
     snippetLines: [
       { key: 'intent', value: 'apply', type: 'string' },
-      { key: 'asset', value: 'euro', type: 'string' },
+      { key: 'asset', value: 'dollar', type: 'string' },
       { key: 'pin_last', value: 'true', type: 'boolean' },
     ],
   },

@@ -95,13 +95,13 @@ export default function SolutionSection() {
             {/* Chat Bubble Mockup */}
              <div className="space-y-4 w-full px-6">
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tr-sm p-4 max-w-[80%] self-end ml-auto text-sm text-slate-200">
-                  {L("Colocar R$ 500, converter para euros e aplicar.", "Add R$500, convert to euros, and apply.")}
+                  {L("Colocar R$ 500, converter para dólares e aplicar.", "Add R$500, convert to dollars, and apply.")}
                 </div>
                 <div className="bg-[#162032] border border-white/[0.03] rounded-2xl rounded-tl-sm p-4 max-w-[85%] text-sm text-slate-200 flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] shadow-[#00D2FF]/5">
                    <p>{L("Pronto. Cotação preparada para você.", "Done. Quote prepared for you.")}</p>
                    <div className="bg-[#162032] p-3 rounded-xl border border-white/[0.03]">
                       <p className="text-xs text-[#9BA4B5]">{L("Valor para aplicar", "Amount to apply")}</p>
-                      <p className="text-lg font-bold text-[#00D2FF]">€ 92,00</p>
+                      <p className="text-lg font-bold text-[#00D2FF]">US$ 92,00</p>
                    </div>
                    <button className="bg-[#4CA1EF] text-white font-medium py-2 rounded-lg mt-1 text-xs uppercase tracking-wider w-full">{L("Aplicar", "Apply")}</button>
                 </div>

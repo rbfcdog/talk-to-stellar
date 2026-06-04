@@ -863,6 +863,34 @@ function rawIssuedBalanceAmount(
   return parseHumanAmountNumber(match?.balance || '0');
 }
 
+function accountXlmBalanceAmount(account: any): number {
+  const balance = (Array.isArray(account?.balances) ? account.balances : []).find((item: any) => (
+    item?.asset_type === 'native' || normalizeAssetCode(item?.asset_code) === 'XLM'
+  ));
+  return parseHumanAmountNumber(balance?.balance || '0');
+}
+
+function accountMinimumXlmReserve(account: any): number {
+  const baseReserve = Math.max(0.5, parseHumanAmountNumber(process.env.STELLAR_BASE_RESERVE_XLM || '0.5'));
+  const floorReserve = Math.max(0, parseHumanAmountNumber(process.env.DEFINDEX_MIN_XLM_KEEP || process.env.STELLAR_MIN_XLM_RESERVE || '1.5'));
+  const subentries = Math.max(0, Number(account?.subentry_count || 0));
+  const sponsoring = Math.max(0, Number(account?.num_sponsoring || 0));
+  const sponsored = Math.max(0, Number(account?.num_sponsored || 0));
+  const calculatedReserve = Math.max(0, (2 + subentries + sponsoring - sponsored) * baseReserve);
+  const feeBuffer = Math.max(0, parseHumanAmountNumber(process.env.DEFINDEX_XLM_FEE_BUFFER || '0.05'));
+  return Math.max(floorReserve, calculatedReserve) + feeBuffer;
+}
+
+function accountSpendableXlmAmount(account: any): { total: number; reserve: number; spendable: number } {
+  const total = accountXlmBalanceAmount(account);
+  const reserve = accountMinimumXlmReserve(account);
+  return {
+    total,
+    reserve,
+    spendable: Math.max(0, total - reserve),
+  };
+}
+
 function defindexSameCodeConversionSane(input: {
   requestedDestinationAmount: string;
   quotedSourceAmount?: unknown;
@@ -5406,6 +5434,70 @@ export class AnchorService {
     return { amount: input.amount, amountUnits, prepared };
   }
 
+  private static async getDefindexDirectDepositReadiness(input: {
+    requestId?: string;
+    context: SessionWalletContext;
+    action: DefindexYieldAction;
+    amount: string;
+    sourceAsset: { code: string; issuer?: string };
+    vault: ReturnType<typeof DefindexYieldService.requireVault>;
+  }): Promise<{
+    executionBlockedCode?: 'insufficient_balance';
+    executionBlockedReason?: string;
+    sourceAvailable?: string;
+    sourceTotal?: string;
+    reserved?: string;
+    checked?: boolean;
+    sufficient?: boolean;
+  }> {
+    if (input.action !== 'deposit' || normalizeAssetCode(input.sourceAsset.code) !== 'XLM') {
+      return {};
+    }
+
+    const account = await StellarService.loadAccount(input.context.publicKey);
+    const xlm = accountSpendableXlmAmount(account);
+    const requested = parseHumanAmountNumber(input.amount);
+    const sufficient = xlm.spendable + 0.0000001 >= requested;
+
+    logDefindex(sufficient ? 'info' : 'warn', 'prepare_direct_xlm_balance_checked', {
+      request_id: input.requestId,
+      session_id: maskLogValue(input.context.sessionId),
+      user_id: maskLogValue(input.context.userId),
+      public_key: maskLogValue(input.context.publicKey),
+      asset_code: input.vault.asset_code,
+      vault_address: maskLogValue(input.vault.vault_address),
+      requested_amount: input.amount,
+      xlm_total: formatDecimalAmount(xlm.total),
+      xlm_reserved: formatDecimalAmount(xlm.reserve),
+      xlm_spendable: formatDecimalAmount(xlm.spendable),
+      sufficient,
+    });
+
+    if (!sufficient) {
+      return {
+        checked: true,
+        sufficient: false,
+        executionBlockedCode: 'insufficient_balance',
+        executionBlockedReason:
+          `Aplicacao preparada, mas XLM precisa manter reserva de rede. ` +
+          `Disponivel para aplicar: ${formatDisplayAmount(formatDecimalAmount(xlm.spendable), 'XLM')}. ` +
+          `Saldo total: ${formatDisplayAmount(formatDecimalAmount(xlm.total), 'XLM')}. ` +
+          `Reserva estimada: ${formatDisplayAmount(formatDecimalAmount(xlm.reserve), 'XLM')}.`,
+        sourceAvailable: formatDecimalAmount(xlm.spendable),
+        sourceTotal: formatDecimalAmount(xlm.total),
+        reserved: formatDecimalAmount(xlm.reserve),
+      };
+    }
+
+    return {
+      checked: true,
+      sufficient: true,
+      sourceAvailable: formatDecimalAmount(xlm.spendable),
+      sourceTotal: formatDecimalAmount(xlm.total),
+      reserved: formatDecimalAmount(xlm.reserve),
+    };
+  }
+
   static async prepareDefindexYieldForSession(input: RampSessionInput & {
     action?: string;
     amount?: string;
@@ -5606,6 +5698,32 @@ export class AnchorService {
         ...(depositReadiness.conversionQuote ? { asset_conversion: depositReadiness.conversionQuote } : {}),
       };
     }
+    const directDepositReadiness = await this.getDefindexDirectDepositReadiness({
+      requestId: defindexRequestId(input),
+      context,
+      action,
+      amount,
+      sourceAsset,
+      vault,
+    });
+    if (directDepositReadiness.executionBlockedCode) {
+      return {
+        ...reviewWithVaultAsset,
+        review_only: true,
+        execution_ready: false,
+        execution_blocked_reason: directDepositReadiness.executionBlockedReason,
+        execution_blocked_code: directDepositReadiness.executionBlockedCode,
+        setup_required: false,
+        asset_conversion: {
+          conversion_mode: 'direct_deposit_balance_check',
+          source_asset: sourceAsset,
+          requested_amount: amount,
+          source_available: directDepositReadiness.sourceAvailable,
+          source_total: directDepositReadiness.sourceTotal,
+          reserved: directDepositReadiness.reserved,
+        },
+      };
+    }
     let prepared: { xdr: string; raw: any };
     try {
       const built = await this.buildDefindexVaultAction({
@@ -5618,7 +5736,14 @@ export class AnchorService {
       });
       prepared = built.prepared;
     } catch (error) {
-      const block = classifyDefindexBuildFailure(error);
+      const classified = classifyDefindexBuildFailure(error);
+      const block = classified.code === 'insufficient_balance' && directDepositReadiness.sufficient
+        ? {
+            code: 'yield_execution_unavailable' as const,
+            reason: 'Aplicacao preparada, mas a confirmacao de investimento esta indisponivel agora. Tente novamente em alguns segundos.',
+            setupRequired: false,
+          }
+        : classified;
       logDefindex('warn', 'prepare_build_failed', {
         request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
@@ -5633,6 +5758,8 @@ export class AnchorService {
         slippage_bps: Number.isFinite(slippageBps) ? slippageBps : 100,
         blocked_code: block.code,
         setup_required: block.setupRequired,
+        direct_balance_checked: directDepositReadiness.checked,
+        direct_balance_sufficient: directDepositReadiness.sufficient,
         ...defindexErrorFields(error),
       });
       return {

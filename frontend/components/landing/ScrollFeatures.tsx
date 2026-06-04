@@ -56,7 +56,7 @@ export default function ScrollFeatures() {
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={ArrowDownToLine} color="#4CA1EF" delay={0.5} />,
       messages: [
-        { type: 'user', text: L('Colocar R$ 500 via PIX e manter em euro.', 'Add R$500 with PIX and keep it in euros.'), time: '09:45' },
+        { type: 'user', text: L('Colocar R$ 500 via PIX e manter em dólares.', 'Add R$500 with PIX and keep it in dollars.'), time: '09:45' },
         { type: 'bot', text: L('Abri o PIX com valor e moeda preenchidos. Antes do PIN, você vê taxa, valor final e saldo esperado.', 'I opened PIX with amount and currency prefilled. Before PIN, you see fee, final amount, and expected balance.'), time: '09:45' },
         { type: 'bot', text: <a href="#" className="text-blue-500 underline font-medium">{L("Abrir PIX", "Open PIX")}</a>, time: '09:45' },
       ]
@@ -68,8 +68,8 @@ export default function ScrollFeatures() {
       animIcon: <PhaseIconAnim Icon={PiggyBank} color="#00D2FF" delay={1} />,
       messages: [
         { type: 'user', text: L('Quais opções eu tenho?', 'Which options do I have?'), time: '09:50' },
-        { type: 'bot', text: L('Opções disponíveis agora:\n1. Reais\n2. Dólares\n3. Euros\n\nVocê confere os valores antes de confirmar.', 'Available options now:\n1. Reais\n2. Dollars\n3. Euros\n\nYou check values before confirming.'), time: '09:50' },
-        { type: 'user', text: L('Aplicar 200 euros.', 'Apply 200 euros.'), time: '09:51' },
+        { type: 'bot', text: L('Opções disponíveis agora:\n1. Reais\n2. Dólares\n3. XLM\n\nVocê confere os valores antes de confirmar.', 'Available options now:\n1. Reais\n2. Dollars\n3. XLM\n\nYou check values before confirming.'), time: '09:50' },
+        { type: 'user', text: L('Aplicar 200 dólares.', 'Apply 200 dollars.'), time: '09:51' },
       ]
     },
     {
@@ -78,7 +78,7 @@ export default function ScrollFeatures() {
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={ArrowUpFromLine} color="#4CA1EF" delay={1.5} />,
       messages: [
-        { type: 'user', text: L('Retirar 80 euros para meu PIX user@example.com', 'Withdraw 80 euros to my PIX user@example.com'), time: '09:52' },
+        { type: 'user', text: L('Retirar 80 dólares para meu PIX user@example.com', 'Withdraw 80 dollars to my PIX user@example.com'), time: '09:52' },
         { type: 'bot', text: L('A retirada está pronta. Antes do PIN, você verá quanto chega em reais no seu PIX.', 'The withdrawal is ready. Before PIN, you will see how much arrives in reais in your PIX.'), time: '09:52' },
         { type: 'bot', text: (
           <div className="flex flex-col gap-2">

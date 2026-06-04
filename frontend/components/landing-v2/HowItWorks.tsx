@@ -23,7 +23,7 @@ const STEPS: Step[] = [
     number: '02',
     title: 'Moeda escolhida',
     description:
-      'Reais podem virar dólares, euros ou outra moeda configurada, sempre com taxa e valor final antes da confirmação.',
+      'Reais podem virar dólares, XLM ou outra moeda configurada, sempre com taxa e valor final antes da confirmação.',
     emphasis: true,
   },
   {

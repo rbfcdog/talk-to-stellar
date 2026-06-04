@@ -57,7 +57,7 @@ export class PaymentReceiptService {
   private static userFacingAssetCode(assetCode?: string | null): string {
     const normalized = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
     if (normalized === 'TESOURO') return 'BRL';
-    if (normalized === 'EURC') return 'EUR';
+    if (normalized === 'EURC' || normalized === 'EUR') return 'CETES';
     return normalized;
   }
 

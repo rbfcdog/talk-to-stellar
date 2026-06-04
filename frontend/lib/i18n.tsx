@@ -29,10 +29,10 @@ const englishDictionary: Dictionary = {
     theme_dark_short: "Dark",
     theme_light_short: "Light",
     chat_agent_welcome:
-      "Hi, this is TalkToStellar.\n\nI can help with contacts, balance, PIX, sending, payment links, conversions, applications, best route, history and PIN.\n\nExamples:\n1. contacts\n2. balance\n3. add 10 reais with PIX\n4. convert 500 reais to euros\n5. apply 200 dollars\n\nIf you are not signed in yet, send “login” and I will create a secure access link.",
+      "Hi, this is TalkToStellar.\n\nI can help with contacts, balance, PIX, sending, payment links, conversions, applications, best route, history and PIN.\n\nExamples:\n1. contacts\n2. balance\n3. add 10 reais with PIX\n4. convert 500 reais to dollars\n5. apply 200 dollars\n\nIf you are not signed in yet, send “login” and I will create a secure access link.",
     chat_search_placeholder: "Search account contacts...",
     chat_sidebar_preview: "Hi. I can help with contacts, balance, PIX, conversion, sending, applications, and history.",
-    chat_input_placeholder: "Type: convert 500 reais to euros, apply dollars, or withdraw to PIX",
+    chat_input_placeholder: "Type: convert 500 reais to dollars, apply dollars, or withdraw to PIX",
     chat_wait_session: "Give me a moment while I start the session...",
     chat_api_error: "I could not connect to the service right now. Try again in a few seconds.",
     chat_no_response: "No response received",
@@ -53,7 +53,7 @@ const englishDictionary: Dictionary = {
     chat_link_whatsapp: "Share on WhatsApp",
     chat_link_generic: "Open link",
     welcome_select:
-      'Select TalkToStellar in the sidebar. Start with: 1) "contacts", 2) "balance", 3) "deposit 150 reais with PIX", 4) "convert 500 reais to euros", 5) "apply 200 dollars".',
+      'Select TalkToStellar in the sidebar. Start with: 1) "contacts", 2) "balance", 3) "deposit 150 reais with PIX", 4) "convert 500 reais to dollars", 5) "apply 200 dollars".',
     welcome_protected: "Your conversations stay protected while you use your account.",
     login_title: "Sign in to your account",
     login_subtitle:
@@ -99,7 +99,7 @@ const englishDictionary: Dictionary = {
     hero_card_1_body: "Ask for contacts, balance, PIX, payment, conversion, application, or withdrawal without downloading a new app.",
     hero_card_2_title: "Confirm with clarity",
     hero_card_2_body:
-      "The platform compares routes in real time to use the most optimized path, reduce effective cost across R$, US$, and €, and show fees before confirmation.",
+      "The platform compares routes in real time to use the most optimized path, reduce effective cost across R$ and US$, and show fees before confirmation.",
     nav_solution: "Solution",
     nav_simulator: "Conversion Simulator",
     nav_how: "How It Works",
@@ -126,10 +126,10 @@ const portugueseDictionary: Dictionary = {
     theme_dark_short: "Escuro",
     theme_light_short: "Claro",
     chat_agent_welcome:
-      "Olá, aqui é o TalkToStellar.\n\nPosso ajudar com contatos, saldo, PIX, envio, link de pagamento, conversões, aplicações, melhor rota, histórico e PIN.\n\nExemplos:\n1. contatos\n2. saldo\n3. colocar 10 reais via PIX\n4. converter 500 reais para euros\n5. aplicar 200 dólares\n\nSe ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
+      "Olá, aqui é o TalkToStellar.\n\nPosso ajudar com contatos, saldo, PIX, envio, link de pagamento, conversões, aplicações, melhor rota, histórico e PIN.\n\nExemplos:\n1. contatos\n2. saldo\n3. colocar 10 reais via PIX\n4. converter 500 reais para dólares\n5. aplicar 200 dólares\n\nSe ainda não entrou, mande “login” e eu gero um link seguro de acesso.",
     chat_search_placeholder: "Buscar contatos da conta...",
     chat_sidebar_preview: "Oi. Posso ajudar com contatos, saldo, PIX, conversão, envio, aplicação e histórico.",
-    chat_input_placeholder: "Digite: converter 500 reais para euros, aplicar dólares ou retirar para PIX",
+    chat_input_placeholder: "Digite: converter 500 reais para dólares, aplicar dólares ou retirar para PIX",
     chat_wait_session: "Só um momento enquanto inicio a sessão...",
     chat_api_error: "Não consegui conectar ao serviço agora. Tente novamente em alguns segundos.",
     chat_no_response: "Nenhuma resposta recebida",
@@ -150,7 +150,7 @@ const portugueseDictionary: Dictionary = {
     chat_link_whatsapp: "Compartilhar no WhatsApp",
     chat_link_generic: "Abrir link",
     welcome_select:
-      'Selecione TalkToStellar na lateral. Comece com: 1) "contatos", 2) "saldo", 3) "colocar 150 reais com PIX", 4) "converter 500 reais para euros", 5) "aplicar 200 dólares".',
+      'Selecione TalkToStellar na lateral. Comece com: 1) "contatos", 2) "saldo", 3) "colocar 150 reais com PIX", 4) "converter 500 reais para dólares", 5) "aplicar 200 dólares".',
     welcome_protected: "Suas conversas ficam protegidas enquanto você usa sua conta.",
     login_title: "Entre na sua conta",
     login_subtitle:
@@ -196,7 +196,7 @@ const portugueseDictionary: Dictionary = {
     hero_card_1_body: "Peça contatos, saldo, PIX, pagamento, conversão, aplicação ou retirada sem baixar um novo app.",
     hero_card_2_title: "Confirme com clareza",
     hero_card_2_body:
-      "A plataforma compara rotas em tempo real para usar a forma mais otimizada, reduzir o custo efetivo em R$, US$ e € e mostrar a taxa antes da confirmação.",
+      "A plataforma compara rotas em tempo real para usar a forma mais otimizada, reduzir o custo efetivo em R$ e US$ e mostrar a taxa antes da confirmação.",
     nav_solution: "Solução",
     nav_simulator: "Simulador de Conversão",
     nav_how: "Como Funciona",

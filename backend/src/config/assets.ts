@@ -48,7 +48,7 @@ export function normalizeAssetCode(value: unknown): string {
   if (!code || code === 'NATIVE') return 'XLM';
   if (code === 'USD') return 'USDC';
   if (['EUR', 'EURO', 'EUROS', 'EURC'].includes(code)) {
-    return getStellarNetworkName() === 'TESTNET' ? 'CETES' : 'EURC';
+    return 'CETES';
   }
   return code;
 }
@@ -63,7 +63,6 @@ export function settlementAssetCode(value: unknown): string {
 export function userFacingAssetCode(value: unknown): string {
   const code = normalizeAssetCode(value);
   if (code === 'TESOURO') return 'BRL';
-  if (code === 'EURC') return 'EUR';
   return code;
 }
 
@@ -149,12 +148,10 @@ export function getUserFacingAssetCodes(): string[] {
   const includeTesouro = envFlag('ENABLE_TESOURO_ASSET', true);
   const network = getStellarNetworkName();
   const includeCetes = envFlag('ENABLE_CETES_ASSET', network === 'TESTNET');
-  const includeEurc = envFlag('ENABLE_EURC_ASSET', network === 'PUBLIC');
   return uniqueAssetCodes([
     ...(includeTesouro ? ['TESOURO'] : []),
     'USDC',
     ...(includeCetes ? ['CETES'] : []),
-    ...(includeEurc ? ['EURC'] : []),
     ...configured,
   ]);
 }

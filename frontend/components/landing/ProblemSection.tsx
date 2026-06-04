@@ -75,7 +75,7 @@ export default function ProblemSection() {
                       transition={{ delay: 0.5 }}
                       className="self-end bg-[#005c4b] text-[#e9edef] px-3 py-2.5 rounded-xl rounded-tr-sm text-[13px] shadow-[0_2px_10px_rgba(0,0,0,0.1)] max-w-[90%] leading-relaxed border border-[#005c4b] relative z-10"
                     >
-                      {L("Colocar R$5.000, aplicar parte em euro e retirar para meu PIX depois.", "Add R$5,000, apply part in euros, and withdraw to my PIX later.")}
+                      {L("Colocar R$5.000, aplicar parte em dólares e retirar para meu PIX depois.", "Add R$5,000, apply part in dollars, and withdraw to my PIX later.")}
                       <div className="flex items-center justify-end gap-1 mt-1 opacity-80">
                         <span className="text-[9px] text-white/70">09:42</span>
                         <CheckCheck className="w-3 h-3 text-[#4CA1EF]" />
@@ -97,7 +97,7 @@ export default function ProblemSection() {
           <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center">
             <h3 className="text-2xl md:text-3xl font-bold text-white mb-6 tracking-tight">{L("Custo claro, sem surpresa.", "Real cost, no fine print.")}</h3>
             <p className="text-[#9BA4B5] text-lg leading-relaxed mb-8">
-              {L("Antes de confirmar, o TalkToStellar mostra taxa, valor de saída, valor que chega e a opção escolhida. A comparação fica simples e o usuário não precisa interpretar infraestrutura.", "Traditional providers often hide part of the cost in spread and operational fees. TalkToStellar shows the fee before confirmation and keeps the reais, dollars, and euros path clear.")}
+              {L("Antes de confirmar, o TalkToStellar mostra taxa, valor de saída, valor que chega e a opção escolhida. A comparação fica simples e o usuário não precisa interpretar infraestrutura.", "Traditional providers often hide part of the cost in spread and operational fees. TalkToStellar shows the fee before confirmation and keeps the reais and dollars path clear.")}
             </p>
           </div>
           <div className="w-full md:w-1/2 bg-[#0C1421] min-h-[350px] flex items-center justify-center p-8 relative overflow-hidden">
@@ -135,11 +135,11 @@ export default function ProblemSection() {
                   transition={{ duration: 0.3 }}
                 >
                   <div>
-                    <div className="text-[#00D2FF]/80 text-xs uppercase tracking-widest font-medium mb-1">{L("Saldo em euro", "Euro balance")}</div>
-                    <div className="text-2xl font-bold text-[#00D2FF] tracking-tight">€ 915,00</div>
+                    <div className="text-[#00D2FF]/80 text-xs uppercase tracking-widest font-medium mb-1">{L("Saldo em dólar", "Dollar balance")}</div>
+                    <div className="text-2xl font-bold text-[#00D2FF] tracking-tight">US$ 915,00</div>
                   </div>
                   <div className="w-10 h-10 rounded-full bg-[#4CA1EF] flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                    <span className="text-white font-bold text-sm tracking-tighter">€</span>
+                    <span className="text-white font-bold text-sm tracking-tighter">US$</span>
                   </div>
                 </motion.div>
                 

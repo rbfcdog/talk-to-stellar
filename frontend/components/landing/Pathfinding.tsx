@@ -36,7 +36,7 @@ export default function Pathfinding() {
           viewport={{ once: true }}
           className="bg-[#00D87A] text-[#e9edef] px-4 py-2 md:px-5 md:py-3 rounded-2xl rounded-br-sm shadow-[0_4px_24px_rgba(0,0,0,0.2)] mb-8 relative flex items-end gap-3 z-10"
         >
-          <p className="text-base md:text-lg leading-snug pb-1 text-left">{L("Converta R$250 para euros e confirme.", "Convert R$250 to euros and confirm.")}</p>
+          <p className="text-base md:text-lg leading-snug pb-1 text-left">{L("Converta R$250 para dólares e confirme.", "Convert R$250 to dollars and confirm.")}</p>
           <div className="flex items-center gap-1 shrink-0 mb-1">
             <span className="text-xs text-[#9BA4B5]">14:42</span>
             <CheckCheck className="text-[#4CA1EF] w-4 h-4" />
@@ -104,7 +104,7 @@ export default function Pathfinding() {
             >
               <span className="text-[#00D2FF]">R$</span>
               <ArrowRight size={16} className="text-gray-400" />
-              <span className="text-[#00D2FF]">€</span>
+              <span className="text-[#00D2FF]">US$</span>
             </motion.div>
 
             <div className="flex w-full justify-between items-center mt-auto pt-4 border-t border-white/[0.03]">

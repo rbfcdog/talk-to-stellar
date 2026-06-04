@@ -38,7 +38,7 @@ const PROBLEMS: ProblemCard[] = [
     figureSuffix: ' moedas',
     title: 'Multi-moeda sem confusão',
     description:
-      'Reais, dólares, euros e outras moedas precisam aparecer em linguagem simples, sem expor infraestrutura para o usuário.',
+      'Reais, dólares, XLM e outras moedas precisam aparecer em linguagem simples, sem expor infraestrutura para o usuário.',
   },
 ]
 
