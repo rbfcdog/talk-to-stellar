@@ -34,6 +34,8 @@ type SessionState = {
   sessionId?: string;
 };
 
+type ConvertMobileStage = "source" | "destination" | "review";
+
 type BalanceLine = {
   asset_code: string;
   asset_type?: string;
@@ -251,6 +253,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [returnSource, setReturnSource] = useState("convert");
   const [returnTo, setReturnTo] = useState("");
   const [amountMode, setAmountMode] = useState<"send" | "receive">("send");
+  const [mobileStage, setMobileStage] = useState<ConvertMobileStage>("source");
   const [rateMatrix, setRateMatrix] = useState<ConversionRateMatrix | null>(null);
   const [rateMatrixStatus, setRateMatrixStatus] = useState<"idle" | "loading" | "error">("idle");
   const [rateMatrixError, setRateMatrixError] = useState("");
@@ -390,6 +393,22 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     source: returnSource || "convert",
     fallbackSource: "convert",
   });
+  const mobileStages: Array<{ key: ConvertMobileStage; label: string }> = [
+    { key: "source", label: L("Origem", "Source") },
+    { key: "destination", label: L("Destino", "Target") },
+    { key: "review", label: L("Confirmar", "Review") },
+  ];
+  const currentMobileStageIndex = Math.max(0, mobileStages.findIndex((item) => item.key === mobileStage));
+  const selectedRateLabel = selectedRateCell?.rate
+    ? `1 ${sourceCode} = ${formatRateValue(selectedRateCell, language)} ${destCode}`
+    : L("Cotação na confirmação", "Quote at confirmation");
+
+  function setMobileStageAndScroll(stage: ConvertMobileStage) {
+    setMobileStage(stage);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
 
   async function prepareConversionReview() {
     if (!session.authenticated) {
@@ -439,7 +458,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 border-b border-tts-border pb-5 md:flex-row md:items-end md:justify-between">
+        <header className="hidden flex-col gap-4 border-b border-tts-border pb-5 md:flex md:flex-row md:items-end md:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-confirm">
               <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
@@ -464,7 +483,178 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </div>
         </header>
 
-        <section className="grid gap-3 lg:grid-cols-3" aria-label={L("Resumo da conversão", "Conversion summary")}>
+        <section className="md:hidden" aria-label={L("Conversão em etapas", "Step conversion")}>
+          <div className="sticky top-0 z-20 -mx-4 border-b border-tts-border bg-tts-bg/95 px-4 py-3 backdrop-blur">
+            <div className="grid grid-cols-3 gap-2">
+              {mobileStages.map((stage, index) => {
+                const active = stage.key === mobileStage;
+                const done = index < currentMobileStageIndex;
+                return (
+                  <button
+                    key={stage.key}
+                    type="button"
+                    onClick={() => setMobileStageAndScroll(stage.key)}
+                    className={`min-h-10 border px-2 text-xs font-black transition ${
+                      active
+                        ? "border-tts-confirm bg-tts-confirm text-tts-deep"
+                        : done
+                          ? "border-tts-confirm/50 bg-tts-confirm/10 text-tts-deep"
+                          : "border-tts-border bg-tts-surface text-tts-muted"
+                    }`}
+                  >
+                    <span className="block text-[10px]">{index + 1}</span>
+                    <span className="block truncate">{stage.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {mobileStage === "source" ? (
+            <div className="mt-5 space-y-5">
+              <div>
+                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("1 de 3", "1 of 3")}</p>
+                <h1 className="mt-2 text-3xl font-black text-tts-deep">{L("O que sai?", "What leaves?")}</h1>
+              </div>
+
+              <div className="border border-tts-border bg-tts-surface p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm font-black text-tts-deep" htmlFor="convert-mobile-amount">
+                    {amountMode === "receive" ? L("Quero receber", "I want to receive") : L("Vou converter", "I will convert")}
+                  </label>
+                  <div className="grid grid-cols-2 border border-tts-border bg-tts-bg p-1 text-xs font-black text-tts-muted">
+                    <button
+                      type="button"
+                      onClick={() => setAmountMode("send")}
+                      className={`px-3 py-2 transition ${amountMode === "send" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}
+                    >
+                      {L("Enviar", "Send")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAmountMode("receive")}
+                      className={`px-3 py-2 transition ${amountMode === "receive" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}
+                    >
+                      {L("Receber", "Receive")}
+                    </button>
+                  </div>
+                </div>
+                <input
+                  id="convert-mobile-amount"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
+                  inputMode="decimal"
+                  className="mt-3 min-h-14 w-full border border-tts-border bg-tts-bg px-3 text-2xl font-black text-tts-deep outline-none focus:border-tts-confirm"
+                />
+              </div>
+
+              <AssetPicker title={L("Moeda de origem", "Source asset")} selectedCode={sourceCode} otherCode={destCode} onSelect={setSourceCode} compact />
+
+              <button
+                type="button"
+                onClick={() => setMobileStageAndScroll("destination")}
+                disabled={numericAmount <= 0}
+                className="min-h-12 w-full bg-tts-confirm px-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90 disabled:cursor-not-allowed disabled:bg-tts-border disabled:text-tts-muted"
+              >
+                {L("Continuar", "Continue")}
+              </button>
+            </div>
+          ) : null}
+
+          {mobileStage === "destination" ? (
+            <div className="mt-5 space-y-5">
+              <div>
+                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("2 de 3", "2 of 3")}</p>
+                <h1 className="mt-2 text-3xl font-black text-tts-deep">{L("Para onde vai?", "Where to?")}</h1>
+                <p className="mt-2 text-sm font-bold text-tts-muted">{selectedRateLabel}</p>
+              </div>
+
+              <AssetPicker title={L("Moeda de destino", "Destination asset")} selectedCode={destCode} otherCode={sourceCode} onSelect={setDestCode} compact />
+
+              {sameAsset ? (
+                <div className="border border-tts-error bg-tts-error/10 p-3 text-sm font-bold leading-6 text-tts-error">
+                  {L("Escolha moedas diferentes.", "Choose different currencies.")}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-[112px_1fr] gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileStageAndScroll("source")}
+                  className="min-h-12 border border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-deep"
+                >
+                  {L("Voltar", "Back")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileStageAndScroll("review")}
+                  disabled={sameAsset}
+                  className="min-h-12 bg-tts-confirm px-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90 disabled:cursor-not-allowed disabled:bg-tts-border disabled:text-tts-muted"
+                >
+                  {L("Continuar", "Continue")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {mobileStage === "review" ? (
+            <div className="mt-5 space-y-5">
+              <div>
+                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("3 de 3", "3 of 3")}</p>
+                <h1 className="mt-2 text-3xl font-black text-tts-deep">{L("Conferir", "Review")}</h1>
+              </div>
+
+              <div className="divide-y divide-tts-border border border-tts-border bg-tts-surface">
+                <MobileSummaryLine label={L("Sai", "Leaves")} value={sourceSummaryValue} />
+                <MobileSummaryLine label={L("Recebe", "Receives")} value={destinationSummaryValue} />
+                <MobileSummaryLine label={L("Saldo", "Balance")} value={sourceBalanceDisplay} />
+                <MobileSummaryLine label={L("PIN", "PIN")} value={L("Só no final", "Only at the end")} />
+              </div>
+
+              {sameAsset ? (
+                <div className="border border-tts-error bg-tts-error/10 p-3 text-sm font-bold leading-6 text-tts-error">
+                  {L("Escolha moedas diferentes para continuar.", "Choose different currencies to continue.")}
+                </div>
+              ) : !canProceed ? (
+                <div className="border border-tts-border bg-tts-surface p-3 text-sm font-bold leading-6 text-tts-muted">
+                  {hasBlockingBalanceIssue
+                    ? L("Valor maior que o saldo disponível.", "Amount is above available balance.")
+                    : L("Confira o valor antes de continuar.", "Check the amount before continuing.")}
+                </div>
+              ) : null}
+
+              {reviewStatus === "error" ? (
+                <div className="flex gap-2 border border-tts-error bg-tts-error/10 p-3 text-sm leading-6 text-tts-error">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{reviewError}</span>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-[112px_1fr] gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileStageAndScroll("destination")}
+                  className="min-h-12 border border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-deep"
+                >
+                  {L("Voltar", "Back")}
+                </button>
+                <button
+                  type="button"
+                  onClick={prepareConversionReview}
+                  disabled={!canProceed || reviewStatus === "loading"}
+                  className={`inline-flex min-h-12 items-center justify-center gap-2 px-4 text-sm font-black transition ${
+                    canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"
+                  } disabled:cursor-not-allowed disabled:opacity-70`}
+                >
+                  {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                  {reviewStatus === "loading" ? L("Abrindo...", "Opening...") : L("Confirmar", "Confirm")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="hidden gap-3 md:grid lg:grid-cols-3" aria-label={L("Resumo da conversão", "Conversion summary")}>
           <Metric label={L("Sai da conta", "Leaves account")} value={sourceSummaryValue} detail={sourceBalanceDisplay} />
           <Metric
             label={L("Destino", "Destination")}
@@ -478,7 +668,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           />
         </section>
 
-        <section className="border border-tts-border bg-tts-surface p-5" aria-label={L("Taxas dinâmicas", "Dynamic rates")}>
+        <section className="hidden border border-tts-border bg-tts-surface p-5 md:block" aria-label={L("Taxas dinâmicas", "Dynamic rates")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
@@ -564,7 +754,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </div>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <section className="hidden gap-5 md:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <section className="border border-tts-border bg-tts-surface p-5">
             <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
               <WalletCards className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
@@ -644,7 +834,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </section>
         </section>
 
-        <section className="border border-tts-confirm bg-tts-confirm/10 p-5">
+        <section className="hidden border border-tts-confirm bg-tts-confirm/10 p-5 md:block">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
@@ -708,17 +898,19 @@ function AssetPicker({
   selectedCode,
   otherCode,
   onSelect,
+  compact = false,
 }: {
   title: string;
   selectedCode: string;
   otherCode: string;
   onSelect: (code: string) => void;
+  compact?: boolean;
 }) {
   const { language } = useLanguage();
   return (
     <div>
       <h3 className="text-sm font-black text-tts-deep">{title}</h3>
-      <div className="mt-3 grid gap-2">
+      <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : ""}`}>
         {ASSETS.map((asset) => {
           const selected = asset.code === selectedCode;
           const paired = asset.code === otherCode;
@@ -727,17 +919,30 @@ function AssetPicker({
               key={`${title}-${asset.code}`}
               type="button"
               onClick={() => onSelect(asset.code)}
-              className={`min-h-[96px] border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
+              className={`border text-left transition ${
+                compact ? "flex min-h-14 items-center gap-3 px-3 py-2" : "min-h-[96px] p-3"
+              } ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
-              <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-normal ${asset.tone}`}>
+              <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-normal ${asset.tone}`}>
                 {asset.short}
               </span>
-              <span className="mt-3 block text-sm font-black text-tts-deep">{assetName(asset, language)}</span>
-              <span className="mt-1 block text-xs leading-5 text-tts-muted">{assetDescription(asset, language)}</span>
+              <span className={compact ? "block min-w-0" : "block"}>
+                <span className={`${compact ? "mt-0" : "mt-3"} block truncate text-sm font-black text-tts-deep`}>{assetName(asset, language)}</span>
+                <span className={`${compact ? "hidden" : "mt-1 block"} text-xs leading-5 text-tts-muted`}>{assetDescription(asset, language)}</span>
+              </span>
             </button>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function MobileSummaryLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2">
+      <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{label}</p>
+      <p className="min-w-0 break-words text-right text-sm font-black text-tts-deep">{value}</p>
     </div>
   );
 }
