@@ -1124,8 +1124,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           <p className="font-bold">{t("login_passkey_qr_title")}</p>
           <p className="mt-1 text-tts-muted">
             {language === "pt-BR"
-              ? "Escaneie, use a passkey no celular e digite aqui o código gerado."
-              : "Scan it, use Passkey on your phone, and enter the generated code here."}
+              ? "Use este QR somente se esta tela estiver em outro dispositivo. Escaneie com o celular onde sua Passkey está cadastrada e digite aqui o código gerado."
+              : "Use this QR only when this screen is on another device. Scan it with the phone where your Passkey is registered, then enter the generated code here."}
           </p>
           <div className="mt-3 flex justify-center">
             <img
