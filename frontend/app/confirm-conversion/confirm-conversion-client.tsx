@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
+import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target"
@@ -162,7 +163,7 @@ export default function ConfirmConversionClient({
   const [status, setStatus] = useState("ready")
   const [result, setResult] = useState<ConfirmResponse | null>(null)
   const [pin, setPin] = useState("")
-  const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
+  const [validation, setValidation] = useState<ValidationResult>(initialValidation || {})
   const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
   const [progressNow, setProgressNow] = useState(Date.now())
   const submitLockRef = useRef(false)
@@ -182,7 +183,14 @@ export default function ConfirmConversionClient({
 
   useEffect(() => {
     async function validateToken() {
-      if (!token) return
+      if (!token) {
+        setValidation({
+          success: false,
+          valid: false,
+          message: T(feedbackLanguage, "Link inválido ou expirado.", "Invalid or expired link."),
+        })
+        return
+      }
       const fallbackPayload = decodeJwtPayload(token)
       try {
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
@@ -191,14 +199,17 @@ export default function ConfirmConversionClient({
           setValidation({
             success: false,
             valid: false,
-            payload: payload?.payload || fallbackPayload,
             message: publicConversionErrorMessage(payload?.message || "Invalid or expired link.", feedbackLanguage),
           })
           return
         }
         setValidation(payload?.payload ? payload : { success: true, valid: true, payload: fallbackPayload })
       } catch {
-        setValidation({ success: true, valid: true, payload: fallbackPayload })
+        setValidation({
+          success: false,
+          valid: false,
+          message: T(feedbackLanguage, "Não foi possível validar este link. Peça uma nova confirmação para continuar.", "Could not validate this link. Request a new confirmation to continue."),
+        })
       }
     }
     validateToken()
@@ -264,8 +275,18 @@ export default function ConfirmConversionClient({
     }
   }
 
-  const linkInvalid = validation?.valid === false && Boolean(validation?.message)
-  const payload = linkInvalid ? {} : (validation?.payload || decodeJwtPayload(token))
+  if (!token.trim() || validation?.valid !== true) {
+    const state = validation?.valid === false ? "expired" : "checking"
+    return (
+      <SecureLinkState
+        language={feedbackLanguage}
+        state={state}
+        message={validation?.valid === false ? validation.message : undefined}
+      />
+    )
+  }
+
+  const payload = validation?.payload || {}
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "")
   const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "")
   const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
@@ -347,12 +368,6 @@ export default function ConfirmConversionClient({
               ))}
             </div>
 
-            {linkInvalid && (
-              <div className="border border-tts-error/40 bg-tts-error/10 p-4 text-sm text-tts-error">
-                {validation.message}
-              </div>
-            )}
-
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm font-black uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Origem", "Source")}</p>
@@ -430,7 +445,7 @@ export default function ConfirmConversionClient({
 
 	              <button
 	                type="submit"
-	                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
+	                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
                 className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-3 text-sm font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
               >
 	                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}

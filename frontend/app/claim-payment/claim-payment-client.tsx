@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { LogIn, ShieldCheck, UserPlus } from "lucide-react"
@@ -8,6 +8,7 @@ import { clearClientSession, getClientSession, isClientSessionExpired } from "@/
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { TypingDots } from "@/components/shared/feedback"
+import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { useLanguage, type AppLanguage } from "@/lib/i18n"
 
 type ValidationResult = {
@@ -106,7 +107,13 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
   useEffect(() => {
     async function validate() {
-      if (!token) return
+      if (!token) {
+        setValidation({
+          valid: false,
+          message: T(language, "Link inválido ou expirado.", "Invalid or expired link."),
+        })
+        return
+      }
       const fallback = decodeJwtPayload(token)
       try {
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
@@ -114,14 +121,18 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
         if (!response.ok || !payload?.valid) {
           setValidation({
             valid: false,
-            payload: fallback,
             message: payload?.message || T(language, "Link inválido ou expirado.", "Invalid or expired link."),
+            expired: Boolean(payload?.used || payload?.expired),
+            expired_at: payload?.expired_at,
           })
           return
         }
-        setValidation(payload)
+        setValidation(payload?.payload ? payload : { valid: true, payload: fallback })
       } catch {
-        setValidation({ valid: true, payload: fallback })
+        setValidation({
+          valid: false,
+          message: T(language, "Não foi possível validar este link. Peça um novo link para continuar.", "Could not validate this link. Request a new link to continue."),
+        })
       }
     }
     validate()
@@ -176,7 +187,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
   }, [sessionId, language])
 
   async function claim() {
-    if (!token || validation.valid === false || !sessionId) return
+    if (!token || validation.valid !== true || !sessionId) return
     if (claimLockRef.current) return
     claimLockRef.current = true
     setStatus("claiming")
@@ -224,11 +235,8 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     }
   }
 
-  const payload = validation.payload || decodeJwtPayload(token)
-  const sourceAmountLabel = useMemo(
-    () => formatAmount(payload.amount, payload.asset_code),
-    [payload.amount, payload.asset_code]
-  )
+  const payload = validation.valid === true ? (validation.payload || {}) : {}
+  const sourceAmountLabel = formatAmount(payload.amount, payload.asset_code)
   const destinationAssetCode = normalizeAssetCode(payload.destination_asset_code || payload.asset_code || "USDC")
   const sourceAssetCode = normalizeAssetCode(payload.asset_code || "USDC")
   const isCrossAsset = destinationAssetCode !== sourceAssetCode
@@ -264,6 +272,17 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     setAutoClaimAttempted(false)
   }
 
+  if (!token.trim() || validation.valid !== true) {
+    const state = !token.trim() || validation.valid === false ? "expired" : "checking"
+    return (
+      <SecureLinkState
+        language={language}
+        state={state}
+        message={validation.valid === false ? validation.message : undefined}
+      />
+    )
+  }
+
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-10 sm:px-6">
@@ -296,17 +315,9 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
           <div className="mt-6 rounded-xl border border-tts-border bg-tts-surface p-4 text-sm">
             <p className="text-tts-muted">{T(language, "Status do link", "Link status")}</p>
-            {validation.valid === false ? (
-              <p className="mt-1 text-tts-error">
-                {isExpiredLink
-                  ? `${T(language, "Link expirado.", "Expired link.")} ${validation.message || T(language, "Peça um novo link.", "Request a new link.")}`
-                  : (validation.message || T(language, "Link inválido.", "Invalid link."))}
-              </p>
-            ) : (
-              <p className="mt-1 text-tts-confirm">
-                {T(language, "Link pronto. Próximo passo: entre ou crie uma conta para receber este valor.", "Link ready. Next step: sign in or create an account to receive this amount.")}
-              </p>
-            )}
+            <p className="mt-1 text-tts-confirm">
+              {T(language, "Link pronto. Próximo passo: entre ou crie uma conta para receber este valor.", "Link ready. Next step: sign in or create an account to receive this amount.")}
+            </p>
           </div>
 
           {(!loggedIn || isSenderSession) && !isExpiredLink && (

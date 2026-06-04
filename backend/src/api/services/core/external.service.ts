@@ -378,7 +378,7 @@ export class ExternalService {
 
     const { data, error } = await this.supabase
       .from('short_links')
-      .select('url, purpose, session_id, user_id, expires_at')
+      .select('url, purpose, token_hash, session_id, user_id, expires_at')
       .eq('code', normalized)
       .maybeSingle();
 
@@ -389,12 +389,79 @@ export class ExternalService {
     if (!data?.url) return null;
     const expiresAt = data.expires_at ? Date.parse(String(data.expires_at)) : 0;
     if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
+    if (await this.isShortLinkConfirmationConsumed(data)) return null;
     return {
       url: String(data.url),
       purpose: data.purpose || null,
       session_id: data.session_id || null,
       user_id: data.user_id || null,
     };
+  }
+
+  private confirmationTableForShortLinkPurpose(purpose: unknown): 'payment_confirmations' | 'logout_confirmations' | '' {
+    const normalized = String(purpose || '').trim().toLowerCase();
+    if (normalized === 'logout_confirm') return 'logout_confirmations';
+    if (normalized === 'payment_confirm' || normalized === 'payment_claim' || normalized === 'conversion_confirm') {
+      return 'payment_confirmations';
+    }
+    return '';
+  }
+
+  private tokenHashFromShortLinkData(data: any): string {
+    const storedHash = String(data?.token_hash || '').trim();
+    if (storedHash) return storedHash;
+
+    try {
+      const token = new URL(String(data?.url || '')).searchParams.get('token') || '';
+      return token ? tokenHash(token) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private async isShortLinkConfirmationConsumed(data: any): Promise<boolean> {
+    const table = this.confirmationTableForShortLinkPurpose(data?.purpose);
+    const hash = this.tokenHashFromShortLinkData(data);
+    if (!table || !hash) return false;
+
+    try {
+      const { data: confirmation, error } = await this.supabase
+        .from(table)
+        .select('used, status, expires_at')
+        .eq('token_hash', hash)
+        .maybeSingle();
+
+      if (error || !confirmation) return false;
+      const status = String((confirmation as any)?.status || '').trim().toLowerCase();
+      const consumed = Boolean((confirmation as any)?.used) || status === 'completed' || status === 'claimed';
+      if (consumed) return true;
+      const expiresAt = (confirmation as any)?.expires_at ? Date.parse(String((confirmation as any).expires_at)) : 0;
+      return Boolean(expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now());
+    } catch (error) {
+      logger.warn(`[short-links] could not check confirmation consumption: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  async expireShortLink(code: string): Promise<boolean> {
+    const normalized = String(code || '').trim();
+    if (!normalized) return false;
+
+    try {
+      const { error } = await this.supabase
+        .from('short_links')
+        .update({ expires_at: new Date(Date.now() - 1000).toISOString() })
+        .eq('code', normalized);
+
+      if (error) {
+        logger.warn(`[short-links] could not expire short link ${normalized}: ${error.message}`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      logger.warn(`[short-links] failed to expire short link ${normalized}: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   async resolveShortLink(code: string): Promise<string | null> {

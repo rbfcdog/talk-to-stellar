@@ -17,6 +17,7 @@ router.post('/link-session', ExternalController.linkSessionToExternalAccount);
 router.post('/finalize', ExternalFinalizeController.finalize);
 router.get('/validate-token', ExternalValidateController.validate);
 router.get('/short-links/:code', ShortLinkController.resolve);
+router.post('/short-links/:code/consume', ShortLinkController.consume);
 router.post('/pay-links', PayLinkController.create);
 router.post('/pay-links/claim', PayLinkController.claim);
 router.post('/send-to-wallet', SendWalletController.sendToWallet);

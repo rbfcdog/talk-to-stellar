@@ -1,6 +1,7 @@
 const mockShortenPublicUrl = jest.fn();
 const mockResolveShortLink = jest.fn();
 const mockResolveShortLinkRecord = jest.fn();
+const mockExpireShortLink = jest.fn();
 const mockSupabase = {
   from: jest.fn(),
 };
@@ -11,6 +12,7 @@ jest.mock('../src/api/services/core/external.service', () => ({
     shortenPublicUrl: mockShortenPublicUrl,
     resolveShortLink: mockResolveShortLink,
     resolveShortLinkRecord: mockResolveShortLinkRecord,
+    expireShortLink: mockExpireShortLink,
   })),
 }));
 
@@ -45,6 +47,7 @@ describe('ShortLinkController security validation', () => {
     jest.clearAllMocks();
     mockShortenPublicUrl.mockResolvedValue('https://app.example.com/r/abc123');
     mockResolveShortLinkRecord.mockReset();
+    mockExpireShortLink.mockReset();
     mockSupabase.from.mockReset();
     process.env = {
       ...originalEnv,
@@ -179,5 +182,34 @@ describe('ShortLinkController security validation', () => {
       updated_at: expect.any(String),
     }));
     expect(updateEq).toHaveBeenCalledWith('session_id', 'session-1');
+  });
+
+  it('expires a short link when the frontend consumes it after completion', async () => {
+    mockExpireShortLink.mockResolvedValue(true);
+    const req = createRequest({}, {}, { code: 'abc123' });
+    const res = createResponse();
+
+    await ShortLinkController.consume(req, res);
+
+    expect(mockExpireShortLink).toHaveBeenCalledWith('abc123');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      message: 'Link marcado como usado.',
+    }));
+  });
+
+  it('does not resolve an already expired or consumed short link', async () => {
+    mockResolveShortLinkRecord.mockResolvedValue(null);
+    const req = createRequest({}, {}, { code: 'used-link' });
+    const res = createResponse();
+
+    await ShortLinkController.resolve(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      message: 'Link não encontrado ou expirado.',
+    }));
   });
 });

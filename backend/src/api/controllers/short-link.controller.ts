@@ -271,4 +271,21 @@ export class ShortLinkController {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
     }
   }
+
+  static async consume(req: Request, res: Response) {
+    try {
+      const code = String(req.params.code || req.query.code || '').trim();
+      if (!code) {
+        return res.status(400).json({ success: false, message: 'code é obrigatório.' });
+      }
+
+      const consumed = await externalService.expireShortLink(code);
+      return res.status(consumed ? 200 : 404).json({
+        success: consumed,
+        message: consumed ? 'Link marcado como usado.' : 'Link não encontrado.',
+      });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error?.message || String(error) });
+    }
+  }
 }

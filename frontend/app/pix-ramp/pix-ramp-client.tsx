@@ -908,10 +908,12 @@ export default function PixRampClient({
   const L = useCallback((pt: string, en: string) => language === "pt-BR" ? pt : en, [language]);
   const queryParams = useMemo(() => new URLSearchParams(queryString), [queryString]);
   const debugEnabled = useMemo(() => queryParams.get("debug") === "1", [queryParams]);
+  const shortLinkCode = useMemo(() => String(queryParams.get("short_link_code") || "").trim(), [queryParams]);
   const queryAppliedRef = useRef(false);
   const autoStartedRef = useRef(false);
   const offRampAutoResolvedRef = useRef(false);
   const atomicActionRef = useRef(false);
+  const shortLinkConsumedRef = useRef(false);
   const pixFeedbackKeysRef = useRef<Set<string>>(new Set());
   const recipientValidationKeyRef = useRef("");
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
@@ -2174,9 +2176,32 @@ export default function PixRampClient({
 
   function markOperationCompleted() {
     setOperationLocked(true);
+    consumeShortLinkAfterUse();
+    scrubCompletedShortLinkUrl();
     if (!operationStorageKey) return;
     try {
       window.localStorage.setItem(operationStorageKey, "completed");
+    } catch {}
+  }
+
+  function consumeShortLinkAfterUse() {
+    if (!shortLinkCode || shortLinkConsumedRef.current) return;
+    shortLinkConsumedRef.current = true;
+    void fetch(`/api/external/short-links/${encodeURIComponent(shortLinkCode)}/consume`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "operation_completed" }),
+    }).catch(() => {
+      shortLinkConsumedRef.current = false;
+    });
+  }
+
+  function scrubCompletedShortLinkUrl() {
+    if (!shortLinkCode || typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      url.search = "completed=1";
+      window.history.replaceState(null, "", url.toString());
     } catch {}
   }
 

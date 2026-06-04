@@ -8,6 +8,7 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
+import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 import { resolveReturnTarget } from "@/lib/return-target"
@@ -302,50 +303,6 @@ function buildFeeSummary(input: {
   return fallbackParts.length ? `${fallbackParts.join(" + ")} + ${computed}` : computed
 }
 
-function buildConfirmedFeedback(payload: any, language: AppLanguage) {
-  const amount = String(
-    payload?.destination_amount ||
-    payload?.amount ||
-    payload?.source_amount ||
-    payload?.quote?.destinationAmount ||
-    payload?.quote?.sourceAmount ||
-    ""
-  ).trim()
-  const asset = String(
-    payload?.destination_asset_code ||
-    payload?.asset_code ||
-    payload?.source_asset_code ||
-    payload?.quote?.destinationAsset?.code ||
-    payload?.quote?.sourceAsset?.code ||
-    ""
-  ).trim()
-  const route = formatRouteChainFromPayload(payload)
-  const sourceCode = normalizeAssetCode(String(payload?.source_asset_code || payload?.quote?.sourceAsset?.code || ""))
-  const destinationCode = normalizeAssetCode(String(payload?.destination_asset_code || payload?.quote?.destinationAsset?.code || payload?.asset_code || ""))
-  const isCrossAsset = Boolean(sourceCode && destinationCode && sourceCode !== destinationCode)
-  const fee = buildFeeSummary({
-    feeDisplay: String(payload?.estimated_fee_display || payload?.quote?.fee_display || ""),
-    feeUsdc: String(payload?.estimated_fee_usdc || payload?.quote?.fee_usdc || ""),
-    feeBrl: String(payload?.estimated_fee_brl || payload?.quote?.fee_brl || ""),
-    sourceAmount: String(payload?.source_amount || payload?.quote?.sourceAmount || payload?.amount || ""),
-    sourceAssetCode: String(payload?.source_asset_code || payload?.quote?.sourceAsset?.code || payload?.asset_code || ""),
-  })
-  const savings = formatBrl(String(payload?.savings_estimate?.estimated_savings_brl || ""), language)
-  const recipientKey = formatRecipientKey(payload)
-
-  return [
-    T(language, "Pagamento confirmado.", "Payment confirmed."),
-    amount && asset ? `${T(language, "Valor", "Amount")}: ${formatPaymentAmount(amount, asset)}` : "",
-    `${T(language, "Destino", "Destination")}: ${formatRecipientLabel(payload, language)}`,
-    recipientKey ? `${T(language, "Chave", "Key")}: ${recipientKey}` : "",
-    isCrossAsset && route ? T(language, "Cotação aplicada antes do PIN.", "Quote applied before PIN.") : "",
-    hasUsableFeeDisplay(fee) ? `${T(language, "Taxa estimada", "Estimated fee")}: ${fee}` : "",
-    isCrossAsset && savings ? `${T(language, "Economia estimada", "Estimated savings")}: ${savings}` : "",
-    `${T(language, "Horário", "Time")}: ${formatTimestamp(undefined, language)}`,
-    T(language, "Comprovante registrado no histórico.", "Receipt saved in history."),
-  ].filter(Boolean).join("\n")
-}
-
 function getProviderLabel(provider?: string) {
   const normalized = String(provider || "").trim().toLowerCase()
   if (normalized === "telegram") return "Telegram"
@@ -419,7 +376,7 @@ export default function ConfirmPaymentClient({
   const [mobileSyncStatus, setMobileSyncStatus] = useState("")
   const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
   const [progressNow, setProgressNow] = useState(Date.now())
-  const [validation, setValidation] = useState<ValidationResult>(initialValidation || { success: false, valid: false })
+  const [validation, setValidation] = useState<ValidationResult>(initialValidation || {})
   const submitLockRef = useRef(false)
   const passkeyAutoTriggerRef = useRef(false)
   const urlScrubbedRef = useRef(false)
@@ -454,7 +411,14 @@ export default function ConfirmPaymentClient({
 
   useEffect(() => {
     async function validateToken() {
-      if (!token) return
+      if (!token) {
+        setValidation({
+          success: false,
+          valid: false,
+          message: T(feedbackLanguage, "Link inválido ou expirado.", "Invalid or expired link."),
+        })
+        return
+      }
       const fallbackPayload = decodeJwtPayload(token)
       try {
         const response = await fetch(`/api/external/validate-token?token=${encodeURIComponent(token)}`)
@@ -470,27 +434,23 @@ export default function ConfirmPaymentClient({
           return
         }
         if (!response.ok || !payload?.valid) {
-          if (payload?.used) {
-            setResult({
-              success: true,
-              message: "Payment already confirmed on this link.",
-            })
-            setStatus("done")
-            submitLockRef.current = true
-            return
-          }
           setValidation({
             success: false,
             valid: false,
-            payload: fallbackPayload,
             message: publicPaymentErrorMessage(payload?.message || "Invalid or expired link.", feedbackLanguage),
+            expired: Boolean(payload?.used || payload?.expired),
+            expired_at: payload?.expired_at,
           })
           return
         }
         setMobileSyncStatus("")
         setValidation(payload?.payload ? payload : { success: true, valid: true, payload: fallbackPayload })
-      } catch (error) {
-        setValidation({ success: true, valid: true, payload: fallbackPayload })
+      } catch {
+        setValidation({
+          success: false,
+          valid: false,
+          message: T(feedbackLanguage, "Não foi possível validar este link. Peça um novo link para continuar.", "Could not validate this link. Request a new link to continue."),
+        })
       }
     }
 
@@ -515,16 +475,15 @@ export default function ConfirmPaymentClient({
         }
 
         if (response.status === 409 && payload?.used) {
-          const payloadForFeedback = payload?.payload || validation?.payload || decodeJwtPayload(token)
-          const feedback = buildConfirmedFeedback(payloadForFeedback, feedbackLanguage)
           submitLockRef.current = true
-          setResult((prev) => prev || {
-            success: true,
-            message: feedback,
+          setValidation({
+            success: false,
+            valid: false,
+            message: publicPaymentErrorMessage(payload?.message || "Invalid or expired link.", feedbackLanguage),
+            expired: true,
           })
-          setStatus("done")
+          setStatus("error")
           setMobileSyncStatus("")
-          enqueueWebChatFeedback(feedback)
           return
         }
 
@@ -815,7 +774,18 @@ export default function ConfirmPaymentClient({
     }
   }
 
-  const payload = validation?.payload || decodeJwtPayload(token)
+  if (!token.trim() || validation?.valid !== true) {
+    const state = validation?.valid === false ? "expired" : "checking"
+    return (
+      <SecureLinkState
+        language={feedbackLanguage}
+        state={state}
+        message={validation?.valid === false ? validation.message : undefined}
+      />
+    )
+  }
+
+  const payload = validation?.payload || {}
   const externalProvider = String(searchParams.get("provider") || payload.provider || payload.source || "").trim().toLowerCase()
   const providerLabel = getProviderLabel(externalProvider)
   const returnMessage = providerLabel ? `Completed. Return to ${providerLabel} to continue.` : ""
@@ -950,7 +920,7 @@ export default function ConfirmPaymentClient({
 
               <button
                 type="submit"
-                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim() || validation?.valid === false}
+                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {status === "submitting"
@@ -961,7 +931,7 @@ export default function ConfirmPaymentClient({
                 <button
                   type="button"
                   onClick={() => setShowPasskeyOptions((current) => !current)}
-                  disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
+                  disabled={status === "submitting" || status === "done" || !token.trim()}
                   className="inline-flex w-full items-center justify-center rounded-2xl border border-tts-gold bg-tts-gold-bg px-4 py-3 text-sm font-semibold text-tts-gold transition hover:bg-tts-gold-bg disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {showPasskeyOptions
@@ -974,7 +944,7 @@ export default function ConfirmPaymentClient({
                   <button
                     type="button"
                     onClick={() => { void handlePasskeyConfirm(); }}
-                    disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
+                    disabled={status === "submitting" || status === "done" || !token.trim()}
                     className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-gold disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
