@@ -249,6 +249,10 @@ interface PixFundedTransferInput extends RampSessionInput {
   amount?: string;
   asset_code?: string;
   assetCode?: string;
+  source_asset_code?: string;
+  sourceAssetCode?: string;
+  destination_asset_code?: string;
+  destinationAssetCode?: string;
   order_id?: string;
   orderId?: string;
   operation_id?: string;
@@ -6906,9 +6910,20 @@ export class AnchorService {
     }
 
     const amount = normalizeAmount(input.amount, 'amount');
-    const asset = normalizeRampUserAsset(input.asset_code, input.assetCode, 'BRL');
-    if (asset.code !== 'XLM' && !asset.issuer) {
-      throw apiError(`${asset.code} is not configured for PIX-funded transfer.`, 400);
+    const sourceAsset = normalizeRampUserAsset(input.source_asset_code, input.sourceAssetCode, input.asset_code, input.assetCode, 'BRL');
+    const destinationAsset = normalizeRampUserAsset(
+      input.destination_asset_code,
+      input.destinationAssetCode,
+      input.asset_code,
+      input.assetCode,
+      sourceAsset.code
+    );
+    const crossAssetTransfer = !sameIssuedAsset(sourceAsset, destinationAsset);
+    if (sourceAsset.code !== 'XLM' && !sourceAsset.issuer) {
+      throw apiError(`${sourceAsset.code} is not configured for PIX-funded transfer.`, 400);
+    }
+    if (destinationAsset.code !== 'XLM' && !destinationAsset.issuer) {
+      throw apiError(`${destinationAsset.code} is not configured for PIX-funded transfer.`, 400);
     }
 
     const recipient = await this.resolveTransferRecipient(
@@ -6920,16 +6935,16 @@ export class AnchorService {
         preferredPublicKey: coalesceString(input.recipient_public_key, input.recipientPublicKey),
       }
     );
-    if (asset.code !== 'XLM' && asset.issuer && recipient.vaultSecretId) {
+    if (destinationAsset.code !== 'XLM' && destinationAsset.issuer && recipient.vaultSecretId) {
       try {
         const destinationSecret = await new VaultService(supabase).getSecret(recipient.vaultSecretId);
         const trustline = await StellarService.ensureTrustlineFromSecret({
           sourceSecret: destinationSecret,
-          assetCode: asset.code,
-          assetIssuer: asset.issuer,
+          assetCode: destinationAsset.code,
+          assetIssuer: destinationAsset.issuer,
         });
         if (!trustline.success && !ledgerFallback) {
-          throw apiError(`Could not activate ${asset.code} for recipient: ${trustline.error || 'unknown trustline error'}`, 409);
+          throw apiError(`Could not activate ${destinationAsset.code} for recipient: ${trustline.error || 'unknown trustline error'}`, 409);
         }
         if (!trustline.success) {
           console.warn(`[ramp] Continuing sandbox PIX-funded transfer without recipient trustline: ${trustline.error || 'unknown trustline error'}`);
@@ -6940,19 +6955,28 @@ export class AnchorService {
       }
     }
 
-    let result: { success: boolean; hash?: string; error?: string };
+    let result: { success: boolean; hash?: string; error?: string; destinationAmount?: string; destinationMin?: string };
     let sandboxLedgerTransfer = false;
     if (context.vaultSecretId) {
       try {
         const sourceSecret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-        result = await StellarService.submitAssetPaymentFromSecret({
-          sourceSecret,
-          destination: recipient.publicKey,
-          amount: toStellarAmount(amount),
-          assetCode: asset.code,
-          assetIssuer: asset.issuer,
-          memoText: 'PIX funded',
-        });
+        result = crossAssetTransfer
+          ? await StellarService.submitStrictSendPaymentFromSecret({
+              sourceSecret,
+              destination: recipient.publicKey,
+              sourceAsset,
+              sourceAmount: toStellarAmount(amount),
+              destinationAsset,
+              memoText: 'PIX funded',
+            })
+          : await StellarService.submitAssetPaymentFromSecret({
+              sourceSecret,
+              destination: recipient.publicKey,
+              amount: toStellarAmount(amount),
+              assetCode: sourceAsset.code,
+              assetIssuer: sourceAsset.issuer,
+              memoText: 'PIX funded',
+            });
       } catch (error) {
         result = { success: false, error: debugErrorMessage(error) };
       }
@@ -6971,13 +6995,20 @@ export class AnchorService {
       };
     }
 
+    const destinationAmount = crossAssetTransfer
+      ? normalizeAmount(result.destinationAmount || amount, 'destination_amount')
+      : amount;
     const route = {
-      selected: `${asset.code} direto`,
+      selected: crossAssetTransfer
+        ? `${userFacingAssetCode(sourceAsset.code)} -> ${userFacingAssetCode(destinationAsset.code)}`
+        : `${userFacingAssetCode(sourceAsset.code)} direto`,
       criteria: 'menor custo após a conversão do PIX',
-      reason: `O saldo final já estava em ${asset.code}; enviar direto evita conversão extra antes de chegar em ${recipient.displayName}.`,
+      reason: crossAssetTransfer
+        ? `O saldo foi usado em ${userFacingAssetCode(sourceAsset.code)} e entregue em ${userFacingAssetCode(destinationAsset.code)} para ${recipient.displayName}.`
+        : `O saldo final já estava em ${userFacingAssetCode(sourceAsset.code)}; enviar direto evita conversão extra antes de chegar em ${recipient.displayName}.`,
     };
     const routeContext = `Escolhemos a melhor rota para essa conversão: ${route.selected}. ${route.reason}`;
-    const displayAmount = formatDisplayAmount(amount, asset.code);
+    const displayAmount = formatDisplayAmount(destinationAmount, destinationAsset.code);
     const externalDeliveryText = [
       'PIX confirmado e transferencia enviada.',
       `Valor: ${displayAmount}`,
@@ -6994,9 +7025,9 @@ export class AnchorService {
         providerUserId: externalChannelProviderUserId(input) || undefined,
         counterpartyLabel: recipient.displayName,
         sourceAmount: amount,
-        sourceAssetCode: asset.code,
-        destinationAmount: amount,
-        destinationAssetCode: asset.code,
+        sourceAssetCode: userFacingAssetCode(sourceAsset.code),
+        destinationAmount,
+        destinationAssetCode: userFacingAssetCode(destinationAsset.code),
         hash: result.hash || null,
         status: 'completed',
         contextMessage: routeContext,
@@ -7015,9 +7046,9 @@ export class AnchorService {
           userId: coalesceString(recipientSession?.user_id) || recipient.sessionId,
           counterpartyLabel: 'PIX via TalkToStellar',
           sourceAmount: amount,
-          sourceAssetCode: asset.code,
-          destinationAmount: amount,
-          destinationAssetCode: asset.code,
+          sourceAssetCode: userFacingAssetCode(sourceAsset.code),
+          destinationAmount,
+          destinationAssetCode: userFacingAssetCode(destinationAsset.code),
           hash: result.hash || null,
           status: 'completed',
           contextMessage: routeContext,
@@ -7047,9 +7078,15 @@ export class AnchorService {
       recipient_name: recipient.displayName,
       recipient_key: recipient.recipientKey || recipient.pixKey,
       recipient_pix_key: recipient.pixKey,
-      amount,
-      asset_code: asset.code,
-      asset_issuer: asset.issuer,
+      amount: destinationAmount,
+      asset_code: userFacingAssetCode(destinationAsset.code),
+      asset_issuer: destinationAsset.issuer,
+      source_amount: amount,
+      source_asset_code: userFacingAssetCode(sourceAsset.code),
+      source_asset_issuer: sourceAsset.issuer,
+      destination_amount: destinationAmount,
+      destination_asset_code: userFacingAssetCode(destinationAsset.code),
+      destination_asset_issuer: destinationAsset.issuer,
       transaction_hash: result.hash,
       sandbox_ledger_transfer: sandboxLedgerTransfer,
       receipt_url: receiptUrl,

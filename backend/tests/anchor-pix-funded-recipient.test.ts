@@ -1,6 +1,8 @@
 import { supabase } from '../src/config/supabase';
 import { AnchorService } from '../src/api/services/anchor.service';
 import { PaymentReceiptService } from '../src/api/services/receipts/payment-receipt.service';
+import { StellarService } from '../src/api/services/stellar.service';
+import VaultService from '../src/api/services/core/vault.service';
 
 function createContactsBuilder(contactRows: any[]) {
   return {
@@ -211,6 +213,82 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
     const receiptInput = receiptSpy.mock.calls[0][0] as any;
     expect(receiptInput.externalDeliveryText).toContain('Valor: 100 CETES');
     expect(receiptInput.externalDeliveryText).toContain('Destino: Ana Silva');
+  });
+
+  it('converts the topped-up source asset before sending when recipient should receive another asset', async () => {
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/brl-usdc-pix');
+    jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({ sandbox: true });
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'sender-session',
+      userId: 'sender-user',
+      publicKey: 'GB7L4QQQAMRJQI7GGRH2Y6TSDD2JTFNGEHPKLB3XU43YSOE6GJLMFZWT',
+      vaultSecretId: 'sender-vault',
+    });
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
+    jest.spyOn(AnchorService as any, 'sandboxLedgerSettlementEnabled').mockReturnValue(false);
+    jest.spyOn(AnchorService as any, 'resolveTransferRecipient').mockResolvedValue({
+      publicKey: anaPublicKey,
+      displayName: 'Marina Costa',
+      pixKey: 'marina@example.com',
+      recipientKey: 'marina@example.com',
+      sessionId: '',
+      userId: '',
+      vaultSecretId: '',
+    });
+    jest.spyOn(AnchorService as any, 'upsertRecentContactFromPayment').mockResolvedValue(undefined);
+    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SBYFUNDINGSECRET');
+    const strictSendSpy = jest.spyOn(StellarService, 'submitStrictSendPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'strict-send-hash',
+      destinationAmount: '18.2500000',
+      destinationMin: '17.8850000',
+    });
+    const directSendSpy = jest.spyOn(StellarService, 'submitAssetPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'direct-should-not-run',
+    });
+
+    const result = await AnchorService.submitPixFundedTransferForSession({
+      session_id: 'sender-session',
+      pin: '1234',
+      amount: '100',
+      asset_code: 'BRL',
+      source_asset_code: 'BRL',
+      destination_asset_code: 'USDC',
+      recipient: 'Marina Costa',
+      recipient_key: 'marina@example.com',
+      provider: 'whatsapp',
+      provider_user_id: '+5519997624114',
+      order_id: 'sandbox-pix-order',
+    } as any);
+
+    expect(strictSendSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAmount: '100.0000000',
+      sourceAsset: expect.objectContaining({ code: 'TESOURO' }),
+      destinationAsset: expect.objectContaining({ code: 'USDC' }),
+      destination: anaPublicKey,
+    }));
+    expect(directSendSpy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      success: true,
+      recipient_name: 'Marina Costa',
+      amount: '18.2500000',
+      asset_code: 'USDC',
+      source_amount: '100',
+      source_asset_code: 'BRL',
+      destination_amount: '18.2500000',
+      destination_asset_code: 'USDC',
+      receipt_url: 'https://talktostellar.com/receipt/brl-usdc-pix',
+    });
+    expect(String(result.message)).toContain('US$ 18.25');
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'payment_sent',
+      sourceAmount: '100',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '18.2500000',
+      destinationAssetCode: 'USDC',
+      externalDeliveryText: expect.stringContaining('Valor: US$ 18.25'),
+    }));
   });
 
   it('simulates the post-PIX transfer in sandbox ledger mode when no on-chain funding secret is available', async () => {

@@ -1110,6 +1110,7 @@ describe('Agent production evals', () => {
       { name: 'payment stellar rail explicit', input: 'mandar 10 xlm pra Ana Silva pela Stellar', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment not pix explicit typo', input: 'uero mandar 10 xlm pra ana sem pix', expectedIntent: IntentType.PAYMENT, risk: 'high' },
       { name: 'payment phone recipient no pix', input: 'transferir 8 cetes para +55 11 99999-0000', expectedIntent: IntentType.PAYMENT, risk: 'high' },
+      { name: 'payment contact brl source usdc destination typo', input: 'quero mandar pra Marina Costa 100 brl da minha conta pra chegar na dela como usss', expectedIntent: IntentType.PAYMENT, expectedTool: 'route_payment_intent', risk: 'high', expectedAmount: '100', expectedAssetCode: 'BRL', expectedSourceAssetCode: 'BRL', expectedDestAssetCode: 'USDC' },
       { name: 'payment layered external conversion missing destination', input: 'uero mandar 10 usdc em xlm pra fora', expectedIntent: IntentType.PAYMENT, expectedTool: 'route_payment_intent', risk: 'high', needsClarification: true, expectedAmount: '10', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'XLM' },
       { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix off ramp outside without pix word', input: 'quero mandar 50 reais pra fora da minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
@@ -1661,6 +1662,78 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('/pix-on');
     expect(result.response_message).not.toContain('/pix-off');
     expect(result.response_message).not.toContain('Me diga a chave, email, telefone ou public key do contato');
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+  });
+
+  it('preserves destination asset when PIX tops up a cross-asset contact payment', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const contactPublicKey = 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC';
+    mockRouteIntent(graph, 'route_payment_intent', {
+      amount: '100',
+      asset_code: 'BRL',
+      source_asset_code: 'BRL',
+      dest_asset_code: 'USDC',
+      recipient_query: 'Marina Costa',
+    });
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for cross-asset payment');
+      }
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Marina Costa',
+              stellar_public_key: contactPublicKey,
+              email: 'marina@example.com',
+            },
+          ],
+        });
+      }
+      if (name === 'get_balance') {
+        return JSON.stringify({
+          success: true,
+          balances: [
+            { asset: 'BRL', balance: '0.0000000' },
+            { asset: 'USDC', balance: '0.0000000' },
+          ],
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('quero mandar pra Marina Costa 100 brl da minha conta pra chegar na dela como usss'));
+    const link = result.response_message.match(/https?:\/\/\S+/)?.[0] || '';
+    const parsed = new URL(link);
+
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Marina Costa');
+    expect(result.response_message).toContain('R$ 100.00');
+    expect(result.response_message).toContain('US$');
+    expect(result.response_message).toContain('converte');
+    expect(parsed.pathname).toBe('/pix-on');
+    expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+    expect(parsed.searchParams.get('amount')).toBe('100');
+    expect(parsed.searchParams.get('currency')).toBe('BRL');
+    expect(parsed.searchParams.get('asset')).toBe('BRL');
+    expect(parsed.searchParams.get('target_asset')).toBeNull();
+    expect(parsed.searchParams.get('receive_amount')).toBeNull();
+    expect(parsed.searchParams.get('receive_asset')).toBeNull();
+    expect(parsed.searchParams.get('recipient')).toBe('Marina Costa');
+    expect(parsed.searchParams.get('recipient_public_key')).toBe(contactPublicKey);
+    expect(parsed.searchParams.get('pay_amount')).toBe('100');
+    expect(parsed.searchParams.get('pay_asset')).toBe('BRL');
+    expect(parsed.searchParams.get('pay_source_amount')).toBe('100');
+    expect(parsed.searchParams.get('pay_source_asset')).toBe('BRL');
+    expect(parsed.searchParams.get('pay_destination_asset')).toBe('USDC');
     expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
   });
 
