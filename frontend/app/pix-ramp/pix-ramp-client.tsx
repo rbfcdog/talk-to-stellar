@@ -1058,6 +1058,7 @@ export default function PixRampClient({
   );
   const offRampPixTargetDisplay = offRampPixTargetAmount ? formatMoney(offRampPixTargetAmount) : "Calculando BRL";
   const exactOnRampReceiveTarget = Boolean(rampMode === "onramp" && desiredReceiveAsset && desiredReceiveAsset === targetAsset);
+  const editingOnRampReceiveTarget = Boolean(rampMode === "onramp" && (targetAsset === "BRL" || exactOnRampReceiveTarget));
   const desiredFinalAmount = rampMode === "onramp"
     ? desiredReceiveAmount && desiredReceiveAsset === targetAsset
       ? desiredReceiveAmount
@@ -1078,8 +1079,12 @@ export default function PixRampClient({
       postConversionAsset !== desiredFinalAsset
   );
   const showOnRampReceiveTargetInput = Boolean(rampMode === "onramp" && (targetAsset === "BRL" || exactOnRampReceiveTarget || desiredFinalAmount));
-  const targetReceiveInputAmount = exactOnRampReceiveTarget ? desiredReceiveAmount : (targetAsset === "BRL" ? amountBrl : desiredFinalAmount);
-  const targetReceiveInputAsset = exactOnRampReceiveTarget ? desiredReceiveAsset : (desiredFinalAsset || targetAsset);
+  const targetReceiveInputAmount = editingOnRampReceiveTarget
+    ? (desiredReceiveAmount || (targetAsset === "BRL" ? amountBrl : desiredFinalAmount))
+    : desiredFinalAmount;
+  const targetReceiveInputAsset = editingOnRampReceiveTarget
+    ? (desiredReceiveAsset || targetAsset)
+    : (desiredFinalAsset || targetAsset);
   const autoPayDisplayAmount = autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : autoPaySourceAmount && autoPayDestinationAsset
@@ -2593,9 +2598,10 @@ export default function PixRampClient({
   }
 
   function updateOnRampReceiveTargetAmount(nextAmount: string) {
-    if (exactOnRampReceiveTarget) {
+    if (targetAsset === "BRL" || exactOnRampReceiveTarget) {
       const hasAmount = toPositiveNumber(nextAmount, 0) > 0;
       setDesiredReceiveAmount(nextAmount);
+      if (!desiredReceiveAsset) setDesiredReceiveAsset(targetAsset);
       setReceiveEstimateReady(false);
       setReceiveEstimateLoading(hasAmount);
       if (transferFlow) {
