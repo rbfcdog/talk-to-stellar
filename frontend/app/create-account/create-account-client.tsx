@@ -1209,20 +1209,20 @@ export default function CreateAccountClient({
               </p>
               {passkeyHint && <p className="text-[11px] text-tts-gold">{passkeyHint}</p>}
               {passkeyQrImageUrl && (
-                <div className="rounded-xl border border-tts-border bg-tts-bg p-3 text-[11px] text-tts-muted">
+                <div className="hidden rounded-xl border border-tts-border bg-tts-bg p-3 text-[11px] text-tts-muted lg:block">
                   <p className="font-medium text-tts-deep">
-                    {L("Usar Passkey no celular", "Use Passkey on your phone")}
+                    {L("Usar Passkey em outro dispositivo", "Use Passkey on another device")}
                   </p>
                   <p className="mt-1">
                     {L(
-                      "Escaneie para abrir o login com Passkey no celular.",
-                      "Scan to open Passkey login on your phone.",
+                      "Use este QR somente se esta tela estiver no computador. Escaneie com o celular onde a Passkey será usada.",
+                      "Use this QR only when this screen is on a computer. Scan it with the phone where the Passkey will be used.",
                     )}
                   </p>
                   <div className="mt-2 flex justify-center">
                     <img
                       src={passkeyQrImageUrl}
-                      alt="QR code for Passkey login on mobile"
+                      alt={L("QR code para usar Passkey em outro dispositivo", "QR code to use Passkey on another device")}
                       className="h-44 w-44 rounded-xl border border-tts-border bg-white p-2"
                     />
                   </div>

@@ -977,9 +977,9 @@ export default function ConfirmPaymentClient({
 	            </div>
 
 	            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
-              <div className="mt-5 hidden rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep md:block">
+              <div className="mt-5 hidden rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep lg:block">
                 <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Confirmar com Passkey", "Confirm with Passkey")}</p>
-                <p className="mt-1 text-tts-deep">{T(feedbackLanguage, "Abra esta confirmação no aparelho onde sua Passkey está cadastrada.", "Open this confirmation on the device where your Passkey is registered.")}</p>
+                <p className="mt-1 text-tts-deep">{T(feedbackLanguage, "Use este QR somente se esta tela estiver em outro dispositivo. Escaneie com o celular onde sua Passkey está cadastrada.", "Use this QR only when this screen is on another device. Scan it with the phone where your Passkey is registered.")}</p>
                 <div className="mt-3 flex justify-center">
                   <img
                     src={qrImageUrl}
