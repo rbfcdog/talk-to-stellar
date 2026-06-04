@@ -495,7 +495,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col gap-0 px-4 py-3 md:gap-5 md:py-6 sm:px-6 lg:px-8">
         <header className="hidden flex-col gap-4 border-b border-tts-border pb-5 pr-24 md:flex">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-confirm">
@@ -511,8 +511,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </div>
         </header>
 
-        <section className="md:hidden" aria-label={L("Conversão em etapas", "Step conversion")}>
-          <div className="sticky top-0 z-20 -mx-4 border-b border-tts-border bg-tts-bg/95 px-4 py-3 backdrop-blur">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden" aria-label={L("Conversão em etapas", "Step conversion")}>
+          <div className="-mx-4 border-b border-tts-border bg-tts-bg/95 px-4 py-2 backdrop-blur">
             <div className="grid grid-cols-3 gap-2">
               {mobileStages.map((stage, index) => {
                 const active = stage.key === mobileStage;
@@ -522,7 +522,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                     key={stage.key}
                     type="button"
                     onClick={() => setMobileStageAndScroll(stage.key)}
-                    className={`min-h-10 border px-2 text-xs font-black transition ${
+                    className={`min-h-9 border px-2 text-[11px] font-black transition ${
                       active
                         ? "border-tts-confirm bg-tts-confirm text-tts-deep"
                         : done
@@ -530,7 +530,6 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                           : "border-tts-border bg-tts-surface text-tts-muted"
                     }`}
                   >
-                    <span className="block text-[10px]">{index + 1}</span>
                     <span className="block truncate">{stage.label}</span>
                   </button>
                 );
@@ -539,29 +538,29 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </div>
 
           {mobileStage === "source" ? (
-            <div className="mt-5 space-y-5">
-              <div>
-                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("1 de 3", "1 of 3")}</p>
-                <h1 className="mt-2 text-3xl font-black text-tts-deep">{L("O que sai?", "What leaves?")}</h1>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
+              <div className="shrink-0">
+                <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{L("1 de 3", "1 of 3")}</p>
+                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("O que sai?", "What leaves?")}</h1>
               </div>
 
-              <div className="border border-tts-border bg-tts-surface p-4">
+              <div className="shrink-0 border border-tts-border bg-tts-surface p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <label className="text-sm font-black text-tts-deep" htmlFor="convert-mobile-amount">
+                  <label className="text-xs font-black text-tts-deep" htmlFor="convert-mobile-amount">
                     {amountMode === "receive" ? L("Quero receber", "I want to receive") : L("Vou converter", "I will convert")}
                   </label>
-                  <div className="grid grid-cols-2 border border-tts-border bg-tts-bg p-1 text-xs font-black text-tts-muted">
+                  <div className="grid grid-cols-2 border border-tts-border bg-tts-bg p-0.5 text-[11px] font-black text-tts-muted">
                     <button
                       type="button"
                       onClick={() => setAmountMode("send")}
-                      className={`px-3 py-2 transition ${amountMode === "send" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}
+                      className={`min-h-8 px-2 transition ${amountMode === "send" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}
                     >
                       {L("Enviar", "Send")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setAmountMode("receive")}
-                      className={`px-3 py-2 transition ${amountMode === "receive" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}
+                      className={`min-h-8 px-2 transition ${amountMode === "receive" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}
                     >
                       {L("Receber", "Receive")}
                     </button>
@@ -572,13 +571,13 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   value={amount}
                   onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
                   inputMode="decimal"
-                  className="mt-3 min-h-14 w-full border border-tts-border bg-tts-bg px-3 text-2xl font-black text-tts-deep outline-none focus:border-tts-confirm"
+                  className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-2xl font-black text-tts-deep outline-none focus:border-tts-confirm"
                 />
               </div>
 
               <AssetPicker title={L("Moeda de origem", "Source asset")} selectedCode={sourceCode} otherCode={destCode} onSelect={setSourceCode} compact />
 
-              {showBalanceNotice ? (
+              {showBalanceNotice && (hasBlockingBalanceIssue || hasZeroSourceBalance) ? (
                 <BalanceAvailabilityCard
                   tone={hasBlockingBalanceIssue || hasZeroSourceBalance ? "error" : "ok"}
                   title={balanceNoticeTitle}
@@ -589,6 +588,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   missingValue={missingSourceDisplay || undefined}
                   actionHref={hasBlockingBalanceIssue || hasZeroSourceBalance ? sourceTopUpHref : undefined}
                   actionLabel={L("Adicionar saldo", "Add money")}
+                  compact
                 />
               ) : null}
 
@@ -596,7 +596,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 type="button"
                 onClick={() => setMobileStageAndScroll("destination")}
                 disabled={numericAmount <= 0}
-                className="min-h-12 w-full bg-tts-confirm px-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90 disabled:cursor-not-allowed disabled:bg-tts-border disabled:text-tts-muted"
+                className="mt-auto min-h-12 w-full shrink-0 bg-tts-confirm px-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90 disabled:cursor-not-allowed disabled:bg-tts-border disabled:text-tts-muted"
               >
                 {L("Continuar", "Continue")}
               </button>
@@ -604,11 +604,11 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           ) : null}
 
           {mobileStage === "destination" ? (
-            <div className="mt-5 space-y-5">
-              <div>
-                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("2 de 3", "2 of 3")}</p>
-                <h1 className="mt-2 text-3xl font-black text-tts-deep">{L("Para onde vai?", "Where to?")}</h1>
-                <p className="mt-2 text-sm font-bold text-tts-muted">{selectedRateLabel}</p>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
+              <div className="shrink-0">
+                <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{L("2 de 3", "2 of 3")}</p>
+                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Para onde vai?", "Where to?")}</h1>
+                <p className="mt-1 truncate text-xs font-bold text-tts-muted">{selectedRateLabel}</p>
               </div>
 
               <AssetPicker title={L("Moeda de destino", "Destination asset")} selectedCode={destCode} otherCode={sourceCode} onSelect={setDestCode} compact />
@@ -619,7 +619,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-[112px_1fr] gap-3">
+              <div className="mt-auto grid shrink-0 grid-cols-[96px_1fr] gap-2">
                 <button
                   type="button"
                   onClick={() => setMobileStageAndScroll("source")}
@@ -640,17 +640,16 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           ) : null}
 
           {mobileStage === "review" ? (
-            <div className="mt-5 space-y-5">
-              <div>
-                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("3 de 3", "3 of 3")}</p>
-                <h1 className="mt-2 text-3xl font-black text-tts-deep">{L("Conferir", "Review")}</h1>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
+              <div className="shrink-0">
+                <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{L("3 de 3", "3 of 3")}</p>
+                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Conferir", "Review")}</h1>
               </div>
 
-              <div className="divide-y divide-tts-border border border-tts-border bg-tts-surface">
+              <div className="shrink-0 divide-y divide-tts-border border border-tts-border bg-tts-surface">
                 <MobileSummaryLine label={L("Sai", "Leaves")} value={sourceSummaryValue} />
                 <MobileSummaryLine label={L("Recebe", "Receives")} value={destinationSummaryValue} />
                 <MobileSummaryLine label={L("Saldo", "Balance")} value={sourceBalanceDisplay} />
-                <MobileSummaryLine label={L("PIN", "PIN")} value={L("Só no final", "Only at the end")} />
               </div>
 
               {sameAsset ? (
@@ -669,6 +668,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                     missingValue={missingSourceDisplay}
                     actionHref={sourceTopUpHref}
                     actionLabel={L("Adicionar saldo", "Add money")}
+                    compact
                   />
                 ) : (
                   <div className="border border-tts-border bg-tts-surface p-3 text-sm font-bold leading-6 text-tts-muted">
@@ -684,7 +684,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-[112px_1fr] gap-3">
+              <div className="mt-auto grid shrink-0 grid-cols-[96px_1fr] gap-2">
                 <button
                   type="button"
                   onClick={() => setMobileStageAndScroll("destination")}
@@ -994,8 +994,8 @@ function AssetPicker({
   const { language } = useLanguage();
   return (
     <div>
-      <h3 className="text-sm font-black text-tts-deep">{title}</h3>
-      <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : ""}`}>
+      <h3 className={compact ? "text-xs font-black text-tts-deep" : "text-sm font-black text-tts-deep"}>{title}</h3>
+      <div className={`mt-2 grid gap-2 ${compact ? "grid-cols-2" : ""}`}>
         {ASSETS.map((asset) => {
           const selected = asset.code === selectedCode;
           const paired = asset.code === otherCode;
@@ -1005,14 +1005,14 @@ function AssetPicker({
               type="button"
               onClick={() => onSelect(asset.code)}
               className={`border text-left transition ${
-                compact ? "flex min-h-14 items-center gap-3 px-3 py-2" : "min-h-[96px] p-3"
+                compact ? "flex min-h-[3.35rem] items-center gap-2 px-2 py-2" : "min-h-[96px] p-3"
               } ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
-              <span className={`inline-flex shrink-0 border px-2 py-1 text-[11px] font-black uppercase tracking-normal ${asset.tone}`}>
+              <span className={`inline-flex shrink-0 border px-1.5 py-1 text-[10px] font-black uppercase tracking-normal ${asset.tone}`}>
                 {asset.short}
               </span>
               <span className={compact ? "block min-w-0" : "block"}>
-                <span className={`${compact ? "mt-0" : "mt-3"} block truncate text-sm font-black text-tts-deep`}>{assetName(asset, language)}</span>
+                <span className={`${compact ? "mt-0 text-xs" : "mt-3 text-sm"} block truncate font-black text-tts-deep`}>{assetName(asset, language)}</span>
                 <span className={`${compact ? "hidden" : "mt-1 block"} text-xs leading-5 text-tts-muted`}>{assetDescription(asset, language)}</span>
               </span>
             </button>
@@ -1025,8 +1025,8 @@ function AssetPicker({
 
 function MobileSummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2">
-      <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{label}</p>
+    <div className="flex min-h-11 items-center justify-between gap-3 px-3 py-2">
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="min-w-0 break-words text-right text-sm font-black text-tts-deep">{value}</p>
     </div>
   );
@@ -1042,6 +1042,7 @@ function BalanceAvailabilityCard({
   missingValue,
   actionHref,
   actionLabel,
+  compact = false,
 }: {
   tone: "ok" | "error";
   title: string;
@@ -1052,29 +1053,30 @@ function BalanceAvailabilityCard({
   missingValue?: string;
   actionHref?: string;
   actionLabel?: string;
+  compact?: boolean;
 }) {
   const isError = tone === "error";
   return (
-    <div className={`border p-3 ${isError ? "border-tts-error bg-tts-error/10" : "border-tts-confirm/60 bg-tts-confirm/10"}`}>
+    <div className={`border ${compact ? "p-2" : "p-3"} ${isError ? "border-tts-error bg-tts-error/10" : "border-tts-confirm/60 bg-tts-confirm/10"}`}>
       <div className="flex gap-3">
-        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border ${isError ? "border-tts-error text-tts-error" : "border-tts-confirm text-tts-confirm"}`}>
+        <div className={`mt-0.5 flex shrink-0 items-center justify-center border ${compact ? "h-7 w-7" : "h-8 w-8"} ${isError ? "border-tts-error text-tts-error" : "border-tts-confirm text-tts-confirm"}`}>
           {isError ? <AlertTriangle className="h-4 w-4" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
         </div>
         <div className="min-w-0">
-          <p className={`text-sm font-black ${isError ? "text-tts-error" : "text-tts-deep"}`}>{title}</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-tts-muted">{body}</p>
+          <p className={`${compact ? "text-xs" : "text-sm"} font-black ${isError ? "text-tts-error" : "text-tts-deep"}`}>{title}</p>
+          <p className={`${compact ? "mt-0.5 text-[11px] leading-4" : "mt-1 text-xs leading-5"} font-bold text-tts-muted`}>{body}</p>
         </div>
       </div>
       {currentValue || missingValue ? (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {currentValue ? <MiniStat label={currentLabel || "Saldo"} value={currentValue} /> : null}
-          {missingValue ? <MiniStat label={missingLabel || "Falta"} value={missingValue} /> : null}
+        <div className={`${compact ? "mt-2" : "mt-3"} grid grid-cols-2 gap-2`}>
+          {currentValue ? <MiniStat label={currentLabel || "Saldo"} value={currentValue} compact={compact} /> : null}
+          {missingValue ? <MiniStat label={missingLabel || "Falta"} value={missingValue} compact={compact} /> : null}
         </div>
       ) : null}
       {actionHref && actionLabel ? (
         <a
           href={actionHref}
-          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-confirm bg-tts-confirm px-4 py-2 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
+          className={`${compact ? "mt-2 min-h-10 text-xs" : "mt-3 min-h-11 text-sm"} inline-flex w-full items-center justify-center gap-2 border border-tts-confirm bg-tts-confirm px-4 py-2 font-black text-tts-deep transition hover:bg-tts-confirm/90`}
         >
           {actionLabel}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -1093,11 +1095,11 @@ function Step({ title, body }: { title: string; body: string }) {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className="border border-tts-border bg-tts-bg p-3">
-      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
-      <p className="mt-1 break-words text-sm font-black text-tts-deep">{value}</p>
+    <div className={`border border-tts-border bg-tts-bg ${compact ? "p-2" : "p-3"}`}>
+      <p className={`${compact ? "text-[10px]" : "text-[11px]"} font-black uppercase tracking-normal text-tts-muted`}>{label}</p>
+      <p className={`${compact ? "mt-0.5 text-xs" : "mt-1 text-sm"} break-words font-black text-tts-deep`}>{value}</p>
     </div>
   );
 }
