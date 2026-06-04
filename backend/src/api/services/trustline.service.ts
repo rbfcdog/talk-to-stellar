@@ -245,7 +245,7 @@ export class TrustlineService {
     userId: string,
     asset: TrustlineAsset,
     existingTrustlines?: Set<string>
-  ): Promise<{ success: boolean; asset?: string; error?: string; existing: boolean }> {
+  ): Promise<{ success: boolean; asset?: string; hash?: string; error?: string; existing: boolean }> {
     const normalizedAsset = {
       code: String(asset.code || '').trim().toUpperCase(),
       issuer: String(asset.issuer || '').trim(),
@@ -299,7 +299,7 @@ export class TrustlineService {
         if (result.success && result.hash) {
           logger.info(`${normalizedAsset.code} trustline created successfully: ${result.hash}`);
           knownTrustlines.add(trustlineKey);
-          return { success: true, asset: `${normalizedAsset.code} (hash: ${result.hash})`, existing: false };
+          return { success: true, asset: normalizedAsset.code, hash: result.hash, existing: false };
         }
 
         lastError = result.error || `Failed to create ${normalizedAsset.code} trustline`;
@@ -326,6 +326,28 @@ export class TrustlineService {
     const error = lastError || `Failed to create ${normalizedAsset.code} trustline`;
     logger.error(error);
     return { success: false, error, existing: false };
+  }
+
+  static async ensureTrustline(
+    publicKey: string,
+    secretKey: string,
+    userId: string,
+    asset: TrustlineAsset
+  ): Promise<{ success: boolean; asset?: string; hash?: string; error?: string; existing: boolean }> {
+    const normalizedAsset = {
+      code: String(asset.code || '').trim().toUpperCase(),
+      issuer: String(asset.issuer || '').trim(),
+    };
+
+    let account = await this.loadAccountOrCreateTestnet(publicKey);
+    let existingTrustlines = this.trustlinesFromAccount(account);
+    if (existingTrustlines.has(this.trustlineKey(normalizedAsset))) {
+      return { success: true, asset: normalizedAsset.code, existing: true };
+    }
+
+    account = await this.topUpReserveIfNeeded(publicKey, account, 1);
+    existingTrustlines = this.trustlinesFromAccount(account);
+    return this.createTrustline(publicKey, secretKey, userId, normalizedAsset, existingTrustlines);
   }
 
   private static async createDefaultTrustlinesUnlocked(

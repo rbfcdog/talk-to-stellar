@@ -30,6 +30,7 @@ import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
 import { PlatformFeeService } from './platform-fee.service';
 import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.service';
+import { TrustlineService } from './trustline.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
 import { verifyWalletPin } from '../../utils/pin-hash';
 import { logger } from '../../utils/logger';
@@ -3516,23 +3517,11 @@ export class AnchorService {
       throw apiError(`Wallet private key is not available in Vault; cannot create ${code} trustline automatically.`, 409);
     }
 
-    const unsignedXdr = await StellarService.buildTrustlineXdr({
-      sourcePublicKey: context.publicKey,
-      assetCode: code,
-      assetIssuer: issuer,
-    });
     const secret = await new VaultService(supabase).getSecret(context.vaultSecretId);
-    const result = await StellarService.signAndSubmitXdr(context.userId, secret, unsignedXdr, {
-      user_id: context.userId,
-      type: 'CHANGE_TRUST' as any,
-      asset_code: code,
-      context: JSON.stringify({
-        provider: 'etherfuse',
-        rail: 'pix',
-        asset_issuer: issuer,
-        reason: `${code} trustline before PIX ramp`,
-      }),
-    } as any);
+    const result = await TrustlineService.ensureTrustline(context.publicKey, secret, context.userId, {
+      code,
+      issuer,
+    });
 
     if (!result.success) {
       return {
@@ -3544,9 +3533,22 @@ export class AnchorService {
       };
     }
 
+    if (!result.existing) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await sleep(700);
+        const refreshedBalances = await StellarService.getAccountBalance(context.publicKey);
+        const refreshed = refreshedBalances.some((balance) => (
+          balance?.asset_type !== 'native' &&
+          String(balance?.asset_code || '').toUpperCase() === code &&
+          String(balance?.asset_issuer || '') === issuer
+        ));
+        if (refreshed) break;
+      }
+    }
+
     return {
       success: true,
-      existing: false,
+      existing: result.existing,
       asset_code: code,
       asset_issuer: issuer,
       hash: result.hash,

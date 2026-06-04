@@ -235,7 +235,7 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("const onRampPixGenerationBlocked = onRampPixAlreadyGenerated && !quoteExpired;");
     expect(text).toContain("const canPrepareOnRampPix = Boolean(");
     expect(text).toContain("createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${quoteForOrder?.id || \"no-quote\"}`)");
-    expect(text).toContain('quoteExpired\n                  ? L("Continuar", "Continue")');
+    expect(text).toContain('quoteExpired\n                    ? L("Continuar", "Continue")');
     expect(text).toContain('disabled={!canPrepareOnRampPix}');
     expect(text).toContain('L("Economia nesta rota", "Savings on this route")');
     expect(text).toContain('L("Economia estimada", "Estimated savings")');
@@ -307,7 +307,7 @@ describe("UX copy guardrails", () => {
     expect(returnsPage).toContain('"application"');
     expect(returnsPage).toContain('"returns"');
     expect(pixText).toContain("offRampInsufficientBalance");
-    expect(pixText).toContain("Converter outro ativo para R$");
+    expect(pixText).toContain("Converter outro ativo para ${friendlyAssetName(offRampInputAsset, language)}");
     expect(pixText).toContain("source_asset: offRampAlternativeAsset");
     expect(pixText).not.toContain("source_asset: offRampAlternativeAsset || offRampInputAsset");
     expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");
