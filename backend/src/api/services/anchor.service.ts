@@ -2344,9 +2344,9 @@ export class AnchorService {
       status: 'completed',
       contextMessage: 'Conversão automática depois do PIX concluída.',
       externalDeliveryText: [
-        'Conversão concluída.',
+        'Conversão final depois do PIX concluída.',
         `Convertido: ${formatDisplayAmount(sourceAmount, input.sourceAsset.code)}`,
-        `Recebido: ${formatDisplayAmount(destinationAmount, input.destinationAsset.code)}`,
+        `Recebido final: ${formatDisplayAmount(destinationAmount, input.destinationAsset.code)}`,
         'Status: concluído',
       ].join('\n'),
     });
@@ -2476,9 +2476,9 @@ export class AnchorService {
       status: 'completed',
       contextMessage: `Conversão automática depois do PIX concluída.`,
       externalDeliveryText: [
-        'Conversão concluída.',
+        'Conversão final depois do PIX concluída.',
         `Convertido: ${formatDisplayAmount(sourceAmount, sourceAssetCode)}`,
-        `Recebido: ${formatDisplayAmount(destinationAmount, destinationAssetCode)}`,
+        `Recebido final: ${formatDisplayAmount(destinationAmount, destinationAssetCode)}`,
         'Status: concluído',
       ].join('\n'),
     });

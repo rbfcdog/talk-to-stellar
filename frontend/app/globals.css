@@ -712,6 +712,41 @@
       min-width: 100% !important;
       scroll-snap-align: start;
     }
+
+    .tts-op-page .tts-mobile-flow-card {
+      margin-top: 0.75rem !important;
+      padding: 0.95rem !important;
+      min-height: calc(100dvh - 10.75rem);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tts-op-page .tts-mobile-flow-card h2 {
+      font-size: 1.25rem !important;
+      line-height: 1.2 !important;
+    }
+
+    .tts-op-page .tts-mobile-flow-card label {
+      margin-top: 1rem !important;
+    }
+
+    .tts-op-page .tts-mobile-flow-card input {
+      padding-top: 0.8rem !important;
+      padding-bottom: 0.8rem !important;
+      font-size: 1.2rem !important;
+    }
+
+    .tts-op-page .tts-mobile-flow-card .tts-mobile-soft-hide {
+      display: none !important;
+    }
+
+    .tts-op-page .tts-mobile-qr {
+      max-width: 11.5rem !important;
+    }
+
+    .tts-op-page .tts-mobile-action button {
+      min-height: 3.15rem;
+    }
   }
 
   .tts-op-page .tts-stage-panel {

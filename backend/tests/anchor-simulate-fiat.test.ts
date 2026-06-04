@@ -384,8 +384,8 @@ describe('AnchorService sandbox PIX confirmation', () => {
       hash: 'sandbox-xlm-usdc-hash',
       status: 'completed',
     });
-    expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Conversão concluída.');
+    expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Conversão final depois do PIX concluída.');
     expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Convertido: 100 XLM');
-    expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Recebido: US$ 65.00');
+    expect(receiptSpy.mock.calls[1][0].externalDeliveryText).toContain('Recebido final: US$ 65.00');
   });
 });
