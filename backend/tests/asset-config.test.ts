@@ -27,7 +27,6 @@ describe('asset config', () => {
     expect(normalizeAssetCode('usd')).toBe('USDC');
     expect(normalizeAssetCode('native')).toBe('XLM');
     expect(normalizeAssetCode('brl')).toBe('BRL');
-    expect(normalizeAssetCode('euro')).toBe('CETES');
   });
 
   it('uses Circle testnet USDC issuer by default on testnet', () => {
@@ -111,17 +110,20 @@ describe('asset config', () => {
     expect(getDefaultTrustedAssets().map((asset) => asset.code)).toContain('USDC');
   });
 
-  it('resolves user-facing EUR to Circle EURC issuer on public network', () => {
+  it('keeps legacy EUR aliases hidden behind CETES', () => {
     process.env.STELLAR_NETWORK = 'PUBLIC';
     process.env.EURC_ISSUER_PUBLIC = 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2';
     process.env.EURC_ISSUER = 'GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO';
     delete process.env.EUR_ISSUER;
 
     expect(resolveConfiguredAsset('EUR')).toEqual({
-      code: 'EURC',
-      issuer: 'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2',
+      code: 'CETES',
+      issuer: undefined,
     });
-    expect(getAssetIssuer('EURC')).toBe('GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2');
+    expect(resolveConfiguredAsset('EURC')).toEqual({
+      code: 'CETES',
+      issuer: undefined,
+    });
   });
 
   it('uses network-specific issuer envs for additional assets', () => {

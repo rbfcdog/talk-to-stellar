@@ -47,7 +47,7 @@ export function normalizeAssetCode(value: unknown): string {
   const code = String(value || 'XLM').trim().toUpperCase();
   if (!code || code === 'NATIVE') return 'XLM';
   if (code === 'USD') return 'USDC';
-  if (['EUR', 'EURO', 'EUROS', 'EURC'].includes(code)) {
+  if (['EUR', 'EURC'].includes(code)) {
     return 'CETES';
   }
   return code;

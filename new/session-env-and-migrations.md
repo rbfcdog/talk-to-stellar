@@ -366,7 +366,7 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `TESOURO_DISTRIBUTOR_PUBLIC` | Backend | Conta distributor pública para TESOURO, quando emissão/distribuição real estiver habilitada. |
 | `TESOURO_DISTRIBUTOR_SECRET` | Backend | Secret da distributor TESOURO. Só backend/custody. |
 | `ENABLE_CETES_ASSET` | Backend | Liga CETES em testnet como substituto operacional de EUR/EURC. |
-| `ENABLE_EURC_ASSET` | Backend | Liga suporte a euro/EURC apenas quando houver issuer/liquidez/vault validado, normalmente public/mainnet. Em testnet atual fica `false`. |
+| `ENABLE_EURC_ASSET` | Backend | Flag legada desativada no produto atual. Em testnet atual fica `false`; CETES é o asset visível nessa rota. |
 | `EURC_ISSUER` | Backend | Issuer EURC genérico/fallback. |
 | `EURC_ISSUER_PUBLIC` | Backend | Issuer EURC em public/mainnet. |
 | `EURC_ISSUER_TESTNET` | Backend | Issuer EURC em testnet. Deixe vazio ate existir issuer/vault validado. |
@@ -398,7 +398,7 @@ O erro `AGENT_INGEST_SECRET is required` significa que o adapter Telegram subiu 
 | `DEFINDEX_ALLOW_MAINNET_EXECUTION` | Backend | Guarda adicional para mainnet. Mantenha `false` em testnet; mainnet so executa quando esta flag tambem for `true`. |
 | `DEFINDEX_USDC_VAULT` | Backend | Endereco `C...` do vault para rendimento em USDC. |
 | `DEFINDEX_CETES_VAULT` | Backend | Endereco `C...` do vault para rendimento em CETES testnet. |
-| `DEFINDEX_EURC_VAULT` | Backend | Endereco `C...` do vault para rendimento em EURC/euro. Nao usar em testnet atual; CETES substitui EURC. |
+| `DEFINDEX_EURC_VAULT` | Backend | Flag legada de vault. Nao usar em testnet atual; CETES é o asset visível nessa rota. |
 | `DEFINDEX_TESOURO_VAULT` | Backend | Endereco `C...` do vault para rendimento em TESOURO/Real. |
 | `DEFINDEX_XLM_VAULT` | Backend | Endereco `C...` do vault para rendimento em XLM. |
 | `DEFINDEX_VAULTS_JSON` | Backend | Lista/objeto JSON para vaults extras, labels, network e enable por asset. |

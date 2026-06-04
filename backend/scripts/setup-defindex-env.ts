@@ -53,7 +53,7 @@ function normalizeAsset(value: unknown): YieldAsset | undefined {
   if (!raw) return undefined;
   if (raw === 'NATIVE') return 'XLM';
   if (raw === 'USD') return 'USDC';
-  if (raw === 'EUR' || raw === 'EURO') return 'EURC';
+  if (raw === 'EUR') return 'EURC';
   if (raw === 'BRL' || raw === 'REAL' || raw === 'REAIS') return 'TESOURO';
   return ASSETS.includes(raw as YieldAsset) ? raw as YieldAsset : undefined;
 }

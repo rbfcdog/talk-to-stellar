@@ -51,7 +51,7 @@ function normalizeAssetCode(value?: string | null) {
   const code = String(value || "").trim().toUpperCase().replace(/^USD$/, "USDC")
   if (code === "TESOURO" || code === "BRL") return "BRL"
   if (code === "USDC") return "USD"
-  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES"
+  if (code === "EUR" || code === "EURC") return "CETES"
   return code
 }
 

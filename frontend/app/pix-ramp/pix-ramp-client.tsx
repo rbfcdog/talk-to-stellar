@@ -105,8 +105,6 @@ const ASSET_ALIASES: Record<string, TargetAsset> = {
   DOLLARS: "USDC",
   EUR: "CETES",
   EURC: "CETES",
-  EURO: "CETES",
-  EUROS: "CETES",
 };
 
 function canonicalAssetCode(value: unknown, fallback = ""): TargetAsset {
