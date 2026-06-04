@@ -1084,7 +1084,18 @@ export class ExternalService {
         dest_asset_issuer: destAssetIssuer || null,
       },
     });
-    const longUrl = this.buildFrontendUrl('/confirm-conversion', token, externalContext);
+    const returnTo = String((compactedExtra as any).return_to || (compactedExtra as any).returnTo || '').trim();
+    const returnSource = String(
+      (compactedExtra as any).return_source ||
+      (compactedExtra as any).returnSource ||
+      (compactedExtra as any).from ||
+      ''
+    ).trim();
+    const longUrl = this.buildFrontendUrl('/confirm-conversion', token, externalContext, {
+      return_to: returnTo,
+      from: returnSource,
+      return_source: returnSource,
+    });
     const url = await this.shortenFrontendUrl({
       token,
       url: longUrl,

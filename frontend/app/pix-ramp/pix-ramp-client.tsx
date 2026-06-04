@@ -1191,6 +1191,10 @@ export default function PixRampClient({
     destination_pix_key: normalizedOffRampPixKey,
     from: "pix-off",
     return_source: "pix-off",
+    source: externalSource && externalSource !== "chat" ? externalSource : "",
+    session_scope: queryParams.get("session_scope") || queryParams.get("sessionScope") || "",
+    provider: externalProvider,
+    provider_user_id: externalProviderUserId,
     stay_open: "1",
     lang: language,
   });
