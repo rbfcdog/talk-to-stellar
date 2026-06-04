@@ -15,7 +15,7 @@ const CHANNELS: Channel[] = [
   { name: 'WhatsApp', status: 'active' },
   { name: 'Telegram', status: 'active' },
   { name: 'Chat web', status: 'active' },
-  { name: 'Modo avançado', status: 'active' },
+  { name: 'Painel web', status: 'active' },
 ]
 
 const WHATSAPP_URL =

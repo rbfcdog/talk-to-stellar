@@ -1006,10 +1006,10 @@ export default function InternationalTransferClient() {
             )}
             <details className="rounded-xl border border-tts-border bg-tts-surface p-3">
               <summary className="cursor-pointer text-sm font-bold text-tts-deep">
-                Advanced execution credentials
+                Execution credentials
               </summary>
               <p className="mt-2 text-xs font-semibold leading-5 text-tts-muted">
-                Keep this closed for normal review sessions. Open only when you intentionally want to execute advanced internal helpers.
+                Keep this closed for normal review sessions. Open only when you intentionally want to execute internal helpers.
               </p>
               <div className="mt-3 grid gap-3">
                 {payoutProvider === "etherfuse" ? (

@@ -95,8 +95,7 @@ const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
 const TRADITIONAL_METHOD_FEE_PCT = 0.035;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
-const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL"];
-const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"];
+const DEFAULT_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"];
 const FIAT_FORMAT_ASSETS = new Set(["BRL", "USD"]);
 const ASSET_SYMBOLS: Record<string, string> = {
   BRL: "R$",
@@ -255,15 +254,7 @@ const CONFIGURED_TARGET_ASSETS = parseConfiguredAssetList(
   process.env.NEXT_PUBLIC_SUPPORTED_ASSET_CODES ||
   ""
 );
-const ADVANCED_TARGET_ASSETS: TargetAsset[] = uniqueAssets([...DEFAULT_ADVANCED_TARGET_ASSETS, ...CONFIGURED_TARGET_ASSETS]);
-
-function isBasicAsset(asset: TargetAsset) {
-  return BASIC_TARGET_ASSETS.includes(canonicalAssetCode(asset));
-}
-
-function isAdvancedAsset(asset: TargetAsset) {
-  return !isBasicAsset(asset);
-}
+const TARGET_ASSETS: TargetAsset[] = uniqueAssets([...DEFAULT_TARGET_ASSETS, ...CONFIGURED_TARGET_ASSETS]);
 
 function clientTtsTransactionFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_TALKTOSTELLAR_TRANSACTION_FEE_BPS || process.env.NEXT_PUBLIC_TTS_SPREAD_BPS || DEFAULT_TTS_TRANSACTION_FEE_BPS);
@@ -968,7 +959,6 @@ export default function PixRampClient({
   const [desiredReceiveAmount, setDesiredReceiveAmount] = useState("");
   const [desiredReceiveAsset, setDesiredReceiveAsset] = useState<TargetAsset | "">("");
   const [postConversionAsset, setPostConversionAsset] = useState<TargetAsset | "">("");
-  const [advancedAssetMode, setAdvancedAssetMode] = useState(false);
   const [receiveEstimateLoading, setReceiveEstimateLoading] = useState(false);
   const [receiveEstimateReady, setReceiveEstimateReady] = useState(false);
   const [customerPayload, setCustomerPayload] = useState<RampResponse | null>(null);
@@ -1677,8 +1667,6 @@ export default function PixRampClient({
     if (nextIntentId) setIntentId(nextIntentId);
     const normalizedReceiveAsset = normalizeTargetAsset(receiveAsset, "USDC");
     const normalizedPostConversionAsset = postConversionAssetParam ? normalizeTargetAsset(postConversionAssetParam, "USDC") : "";
-    if (isAdvancedAsset(normalizedReceiveAsset)) setAdvancedAssetMode(true);
-    if (normalizedPostConversionAsset && isAdvancedAsset(normalizedPostConversionAsset)) setAdvancedAssetMode(true);
     if (normalizedPostConversionAsset && normalizedPostConversionAsset !== normalizedReceiveAsset) {
       setPostConversionAsset(normalizedPostConversionAsset);
     }
@@ -1723,7 +1711,6 @@ export default function PixRampClient({
             requestedTargetAsset: receiveAsset,
           })
         : normalizeTargetAsset(asset, "BRL");
-      if (isAdvancedAsset(normalizedAsset)) setAdvancedAssetMode(true);
       setTargetAsset(normalizedAsset);
     }
     if (email.includes("@")) setRampEmail(email);
@@ -1735,7 +1722,6 @@ export default function PixRampClient({
     if (payAmount) setAutoPayAmount(payAmount);
     if (payAsset) {
       const normalizedPayAsset = normalizeTargetAsset(payAsset, "USDC");
-      if (isAdvancedAsset(normalizedPayAsset)) setAdvancedAssetMode(true);
       setAutoPayAsset(normalizedPayAsset);
     }
     setQueryReady(true);
@@ -3602,38 +3588,21 @@ export default function PixRampClient({
               </>
             )}
 
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <label className="block text-sm font-bold text-tts-deep">{transferFlow ? L("Enviar como", "Send as") : L("Receber como", "Receive as")}</label>
-              <button
-                type="button"
-                className={`rounded-2xl border px-3 py-2 text-xs font-black uppercase tracking-normal transition ${advancedAssetMode ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm" : "border-tts-border text-tts-muted hover:bg-tts-surface"}`}
-                onClick={() => setAdvancedAssetMode((current) => {
-                  const next = !current;
-                  if (!next && isAdvancedAsset(targetAsset)) {
-                    setTargetAsset("USDC");
-                    setDesiredReceiveAmount("");
-                    setDesiredReceiveAsset("");
-                    clearQuoteState();
-                  }
-                  return next;
-                })}
-              >
-                {L("Avançado", "Advanced")}
-              </button>
-            </div>
-            <div className={`mt-2 grid gap-2 rounded-2xl border border-tts-border bg-tts-bg/60 p-2 ${advancedAssetMode ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2"}`}>
-              {(advancedAssetMode ? ADVANCED_TARGET_ASSETS : BASIC_TARGET_ASSETS).map((asset) => (
+            <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-tts-border bg-tts-bg/60 p-2 sm:grid-cols-4" aria-label={transferFlow ? L("Moeda de envio", "Send currency") : L("Moeda de recebimento", "Receive currency")}>
+              {TARGET_ASSETS.map((asset) => (
                 <button
                   key={asset}
-                    className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-sm" : "text-tts-muted hover:bg-tts-surface"}`}
-                    onClick={() => {
+                  type="button"
+                  className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-sm" : "text-tts-muted hover:bg-tts-surface"}`}
+                  aria-pressed={targetAsset === asset}
+                  onClick={() => {
                     if (asset !== targetAsset) {
                       setTargetAsset(asset);
                       setDesiredReceiveAmount("");
                       setDesiredReceiveAsset("");
                       clearQuoteState();
                     }
-                    }}
+                  }}
                 >
                   {friendlyAssetName(asset, language)}
                 </button>
