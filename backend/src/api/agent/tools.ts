@@ -481,14 +481,23 @@ function buildYieldFrontendUrl(input: {
 
 function buildConversionFrontendUrl(input: {
   sourceAmount?: unknown;
+  destAmount?: unknown;
+  amountMode?: unknown;
   sourceAssetCode?: unknown;
   destAssetCode?: unknown;
   language?: 'pt-BR' | 'en';
 }): string {
+  const rawDestAmount = String(input.destAmount || '').trim();
+  const rawSourceAmount = String(input.sourceAmount || '').trim();
+  const normalizedMode = String(input.amountMode || '').trim().toLowerCase();
+  const receiveMode = Boolean(rawDestAmount && (normalizedMode === 'receive' || !rawSourceAmount));
   return buildFrontendInterfaceUrl({
     path: '/convert',
     params: {
-      amount: input.sourceAmount,
+      amount: receiveMode ? rawDestAmount : rawSourceAmount,
+      source_amount: receiveMode ? '' : rawSourceAmount,
+      dest_amount: receiveMode ? rawDestAmount : '',
+      amount_mode: receiveMode ? 'receive' : 'send',
       source_asset: frontendAssetCode(input.sourceAssetCode || 'BRL'),
       dest_asset: frontendAssetCode(input.destAssetCode || 'USDC'),
       from: 'chat',
@@ -1075,7 +1084,16 @@ export const toolDefinitions = [
       properties: {
         source_amount: {
           type: "string",
-          description: "Optional source amount to prefill.",
+          description: "Optional amount to spend. Use only when the user specified the origin/source amount.",
+        },
+        dest_amount: {
+          type: "string",
+          description: "Optional destination amount to receive. Use when the user asked for the amount needed to get, receive, chegar, dar, or arrive at a final value.",
+        },
+        amount_mode: {
+          type: "string",
+          enum: ["send", "receive"],
+          description: "send when amount is source_amount; receive when amount is dest_amount.",
         },
         source_asset_code: {
           type: "string",
@@ -1634,7 +1652,7 @@ export const toolDefinitions = [
   },
   {
     name: "prepare_conversion_confirmation",
-    description: "Create a one-time frontend conversion confirmation link for an account self-conversion. source_asset_code is the origin asset being spent; dest_asset_code is the destination asset being received. Use this for normal user chat conversion requests after quoting.",
+    description: "Create a one-time frontend conversion confirmation link for an account self-conversion. source_asset_code is the origin asset being spent; dest_asset_code is the destination asset being received. Use source_amount for strict-send. For requests like 'receive/get/chegar/dar R$10', quote first with dest_amount, then pass source_amount from quote.sourceAmount and dest_amount from quote.destinationAmount.",
     parameters: {
       type: "object",
       properties: {
@@ -1648,7 +1666,7 @@ export const toolDefinitions = [
         },
         source_amount: {
           type: "string",
-          description: "Exact source amount to spend (strict-send).",
+          description: "Exact source amount to spend. For strict-receive, this must come from quote.sourceAmount, not from the user's destination amount.",
         },
         source_asset_code: {
           type: "string",
@@ -1660,7 +1678,7 @@ export const toolDefinitions = [
         },
         dest_amount: {
           type: "string",
-          description: "Destination amount expected from quote.",
+          description: "Exact destination amount expected from quote. For 'dar/chegar/receber R$10', this is 10 BRL while source_amount is the computed source amount.",
         },
         dest_asset_code: {
           type: "string",
@@ -2989,11 +3007,22 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
     const hasDestAsset = Boolean(String(input.dest_asset_code || input.destAssetCode || input.to_asset || input.toAsset || '').trim());
     const sourceAsset = normalizeYieldAssetInput(input.source_asset_code || input.sourceAssetCode || input.from_asset || input.fromAsset || 'BRL');
     const destAsset = normalizeYieldAssetInput(input.dest_asset_code || input.destAssetCode || input.to_asset || input.toAsset || 'USDC');
-    const sourceAmount = String(input.source_amount || input.sourceAmount || input.amount || '').trim();
-    const hasCompletePrefill = Boolean(sourceAmount && hasSourceAsset && hasDestAsset);
+    const requestedMode = String(input.amount_mode || input.amountMode || '').trim().toLowerCase();
+    const genericAmount = String(input.amount || '').trim();
+    const explicitSourceAmount = String(input.source_amount || input.sourceAmount || '').trim();
+    const explicitDestAmount = String(input.dest_amount || input.destAmount || input.receive_amount || input.receiveAmount || '').trim();
+    const sourceAmount = requestedMode === 'receive' ? explicitSourceAmount : (explicitSourceAmount || genericAmount);
+    const destAmount = requestedMode === 'receive' ? (explicitDestAmount || genericAmount) : explicitDestAmount;
+    const amountMode = requestedMode === 'receive' || (destAmount && !sourceAmount)
+      ? 'receive'
+      : 'send';
+    const prefillAmount = amountMode === 'receive' ? destAmount : sourceAmount;
+    const hasCompletePrefill = Boolean(prefillAmount && hasSourceAsset && hasDestAsset);
     const sessionId = String(input.session_id || '').trim() || undefined;
     const rawUrl = buildConversionFrontendUrl({
       sourceAmount,
+      destAmount,
+      amountMode,
       sourceAssetCode: sourceAsset,
       destAssetCode: destAsset,
       language,
@@ -3006,15 +3035,21 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
       success: true,
       action: hasCompletePrefill ? 'conversion_confirmation_prefill' : 'conversion_picker',
       source_amount: sourceAmount || null,
+      dest_amount: destAmount || null,
+      amount_mode: amountMode,
       source_asset_code: sourceDisplay,
       dest_asset_code: destDisplay,
       frontend_url: frontendUrl,
       message: language === 'en'
         ? hasCompletePrefill
-          ? `Conversion is ready to review: ${sourceAmount} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
+          ? amountMode === 'receive'
+            ? `Conversion is ready to review: receive ${destAmount} ${destDisplay} from ${sourceDisplay}.\n\nOpen:\n${frontendUrl}`
+            : `Conversion is ready to review: ${sourceAmount} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
           : `Open the conversion screen to choose amount and assets.\n\nOpen:\n${frontendUrl}`
         : hasCompletePrefill
-          ? `Conversão pronta para revisar: ${sourceAmount} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`
+          ? amountMode === 'receive'
+            ? `Conversão pronta para revisar: receber ${destAmount} ${destDisplay} usando ${sourceDisplay}.\n\nAbra:\n${frontendUrl}`
+            : `Conversão pronta para revisar: ${sourceAmount} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`
           : `Abra a tela de conversão para escolher valor e moedas.\n\nAbra:\n${frontendUrl}`,
     });
   } catch (error) {

@@ -154,6 +154,76 @@ describe('Agent conversion UX', () => {
     expect(result.response_message).not.toMatch(/TESOURO|issuer|trustline|Horizon|XDR/i);
   });
 
+  it('uses strict receive when the user asks for the source needed to get a BRL target', async () => {
+    const repository = {
+      saveMessage: jest.fn().mockResolvedValue(undefined),
+      saveState: jest.fn().mockResolvedValue(undefined),
+    };
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'system prompt') as any;
+    graph.extractConversionIntentWithLlm = jest.fn().mockResolvedValue({
+      sourceAmount: '',
+      destAmount: '10',
+      sourceAssetCode: 'USDC',
+      destAssetCode: 'BRL',
+      needs_clarification: false,
+      clarification_question: '',
+    });
+    graph.resolveWalletAssetIssuer = jest
+      .fn()
+      .mockResolvedValueOnce('GUSDC')
+      .mockResolvedValueOnce('GTESOURO');
+
+    executeToolMock
+      .mockResolvedValueOnce(JSON.stringify({
+        success: true,
+        quote: {
+          sourceAmount: '2.2765000',
+          destinationAmount: '10.0000000',
+          sourceAsset: { code: 'USDC', issuer: 'GUSDC' },
+          destinationAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
+          path: [],
+        },
+        optimization_criteria: 'melhor cotação disponível para o valor final informado',
+        message: 'Cotação atual.',
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        success: true,
+        url: 'https://app.example.com/confirm-conversion?token=receive-target',
+      }));
+
+    const result = await graph.handleAssetConversion({
+      session_id: 'session-4',
+      session_data: {
+        user_id: 'user-1',
+        public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      },
+      messages: [],
+      current_input: 'converter dólares pra dar 10 reais',
+      detected_intent: IntentType.CONVERSION,
+      action_type: ActionType.CONVERT_ASSETS,
+      action_params: {},
+      response_message: '',
+      success: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executeToolMock).toHaveBeenNthCalledWith(1, 'get_best_route', expect.objectContaining({
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+      dest_amount: '10',
+    }));
+    expect(executeToolMock.mock.calls[0][1]).not.toHaveProperty('source_amount', '10');
+    expect(executeToolMock).toHaveBeenNthCalledWith(2, 'prepare_conversion_confirmation', expect.objectContaining({
+      source_asset_code: 'USDC',
+      dest_asset_code: 'TESOURO',
+      source_amount: '2.2765000',
+      dest_amount: '10.0000000',
+    }));
+    expect(result.response_message).toContain('US$ 2.28');
+    expect(result.response_message).toContain('R$ 10.00');
+    expect(result.response_message).not.toContain('US$ 10.00');
+  });
+
   it('opens the visual conversion interface when conversion details are incomplete', async () => {
     const repository = {
       saveMessage: jest.fn().mockResolvedValue(undefined),

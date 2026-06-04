@@ -1180,12 +1180,30 @@ export default function PixRampClient({
   const offRampAlternativeBalance = offRampAlternativeAsset
     ? sumVisibleBalance(offRampBalancesBefore, offRampAlternativeAsset)
     : 0;
+  const offRampReturnHref = buildAppPath("/pix-off", {
+    mode: "offramp",
+    amount: offRampInputValue,
+    source_amount: offRampInputValue,
+    source_asset: offRampInputAsset,
+    asset: offRampInputAsset,
+    currency: offRampInputAsset,
+    fiat_amount: offRampExactReceiveBrl ? offRampFiatAmount : "",
+    destination_pix_key: normalizedOffRampPixKey,
+    from: "pix-off",
+    return_source: "pix-off",
+    stay_open: "1",
+    lang: language,
+  });
   const offRampConversionHref = buildAppPath("/convert", {
     amount: offRampInputValue,
+    dest_amount: offRampInputValue,
+    amount_mode: "receive",
     source_asset: offRampAlternativeAsset,
-    dest_asset: "BRL",
+    dest_asset: offRampInputAsset,
     destination_pix_key: normalizedOffRampPixKey,
-    next: "pix-off",
+    next: offRampReturnHref,
+    return_to: offRampReturnHref,
+    return_source: "pix-off",
     from: "pix-off",
     lang: language,
   });
@@ -3060,7 +3078,7 @@ export default function PixRampClient({
                   className="inline-flex min-h-10 items-center justify-center rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-normal text-tts-deep transition hover:bg-tts-error/90"
                   href={offRampConversionHref}
                 >
-                  {L("Converter outro ativo para R$", "Convert another asset to R$")}
+                  {L(`Converter outro ativo para ${friendlyAssetName(offRampInputAsset, language)}`, `Convert another asset to ${friendlyAssetName(offRampInputAsset, language)}`)}
                 </a>
                 {offRampAlternativeAsset ? (
                   <button

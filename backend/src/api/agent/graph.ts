@@ -3277,6 +3277,7 @@ export class AgentGraph {
 
   private async extractConversionIntentWithLlm(userMessage: string): Promise<{
     sourceAmount?: string;
+    destAmount?: string;
     sourceAssetCode?: string;
     destAssetCode?: string;
     needs_clarification?: boolean;
@@ -3287,6 +3288,8 @@ export class AgentGraph {
         'Extraia apenas o intento de conversão de ativos em JSON válido, sem markdown e sem texto extra.',
         'Regras:',
         '- sourceAmount deve conter apenas o valor numérico a ser convertido.',
+        '- destAmount deve conter apenas o valor numérico desejado no destino quando o usuário pedir para "chegar", "receber", "dar", "ficar com" ou "converter o necessário para" um valor final.',
+        '- Nunca preencha sourceAmount e destAmount com o mesmo número por padrão. Use sourceAmount para valor de origem/gasto; use destAmount para valor final/recebido.',
         '- sourceAssetCode deve ser o ativo de origem (USDC, BRL, CETES, XLM ou outro código configurado quando citado explicitamente).',
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
@@ -3298,11 +3301,13 @@ export class AgentGraph {
         'Exemplos:',
         '- "quero converter 3 usdc pra brl" => {"sourceAmount":"3","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
         '- "trocar 10 brl por usdc" => {"sourceAmount":"10","sourceAssetCode":"BRL","destAssetCode":"USDC","needs_clarification":false,"clarification_question":""}',
+        '- "converter dólares pra dar 10 reais" => {"destAmount":"10","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
+        '- "quanto em usdc preciso para receber 10 reais" => {"destAmount":"10","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
         '',
         `Mensagem do usuário: ${userMessage}`,
         '',
         'Formato esperado:',
-        '{"sourceAmount":"10","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
+        '{"sourceAmount":"10","destAmount":"","sourceAssetCode":"USDC","destAssetCode":"BRL","needs_clarification":false,"clarification_question":""}',
       ].join('\n'),
     });
 
@@ -3313,6 +3318,7 @@ export class AgentGraph {
       const parsed = JSON.parse(text);
       return {
         sourceAmount: parsed.sourceAmount || parsed.amount,
+        destAmount: parsed.destAmount || parsed.dest_amount || parsed.receiveAmount || parsed.receive_amount || '',
         sourceAssetCode: String(parsed.sourceAssetCode || parsed.source_asset_code || parsed.asset_code || parsed.asset || '')
           ? this.normalizeAgentAssetCode(parsed.sourceAssetCode || parsed.source_asset_code || parsed.asset_code || parsed.asset)
           : undefined,
@@ -5629,6 +5635,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const llmParsed = await this.extractConversionIntentWithLlm(state.current_input);
       const inferredAssets = this.inferConversionAssetsFromText(state.current_input);
       let finalSourceAmount = String(llmParsed.sourceAmount || '').trim() || this.extractAmountFollowUpFromText(state.current_input) || '';
+      let finalDestAmount = String(llmParsed.destAmount || '').trim();
       const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '');
       const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || inferredAssets.destAssetCode || '');
       const finalSourceAssetCode = this.toSettlementAssetCode(requestedSourceAssetCode) || requestedSourceAssetCode;
@@ -5651,9 +5658,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         };
       }
 
-      if (!finalSourceAmount || !finalSourceAssetCode || !finalDestAssetCode) {
+      if ((!finalSourceAmount && !finalDestAmount) || !finalSourceAssetCode || !finalDestAssetCode) {
         const conversionInterfaceRaw = await executeTool('open_conversion_interface', {
           source_amount: finalSourceAmount,
+          dest_amount: finalDestAmount,
+          amount_mode: finalDestAmount ? 'receive' : 'send',
           source_asset_code: finalSourceAssetCode || 'BRL',
           dest_asset_code: finalDestAssetCode || 'USDC',
           language: this.getLanguage(state),
@@ -5720,7 +5729,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           const toolResultRaw = await executeTool('get_best_route', {
             source_public_key: state.session_data.public_key,
             destination: state.session_data.public_key,
-            source_amount: finalSourceAmount,
+            ...(finalDestAmount ? { dest_amount: finalDestAmount } : { source_amount: finalSourceAmount }),
             source_asset_code: finalSourceAssetCode,
             source_asset_issuer: sourceIssuer,
             dest_asset_code: finalDestAssetCode,
@@ -5738,6 +5747,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             state.success = false;
             state.response_message = this.conversionUnavailableMessage(this.getLanguage(state));
           } else {
+            finalSourceAmount = String(toolResult.quote?.sourceAmount || finalSourceAmount || '').trim();
+            finalDestAmount = String(toolResult.quote?.destinationAmount || finalDestAmount || '').trim();
             const conversionDestAmount = String(toolResult.quote?.destinationAmount || '').trim();
             const conversionPrepareRaw = await executeTool('prepare_conversion_confirmation', {
               session_id: state.session_id,
@@ -5745,7 +5756,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
               source_amount: finalSourceAmount,
               source_asset_code: finalSourceAssetCode,
               source_asset_issuer: sourceIssuer,
-              dest_amount: conversionDestAmount,
+              dest_amount: conversionDestAmount || finalDestAmount,
               dest_asset_code: finalDestAssetCode,
               dest_asset_issuer: destIssuer,
               quote: toolResult.quote,
