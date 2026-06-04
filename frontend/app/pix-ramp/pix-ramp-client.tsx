@@ -1343,7 +1343,6 @@ export default function PixRampClient({
     !orderFailed &&
     generatedOnRampOrderKey === onRampOrderInputKey
   );
-  const onRampPixGenerationBlocked = onRampPixAlreadyGenerated && !quoteExpired;
   const sandboxSimulationComplete = Boolean(isSandboxMockOrder && onRampComplete);
   const estimatedReceiveLabel = feeAdjustedAutoPayAmount
       ? feeAdjustedAutoPayDisplayAmount
@@ -1383,6 +1382,13 @@ export default function PixRampClient({
     !receiveEstimateMissing &&
     !transferRecipientBlocker
   );
+  const canUseExistingOnRampCheckout = Boolean(
+    onRampPixAlreadyGenerated &&
+    !quoteExpired &&
+    !operationLocked &&
+    !loading
+  );
+  const onRampPrimaryDisabled = Boolean(!canUseExistingOnRampCheckout && !canPrepareOnRampPix);
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
   const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
@@ -3622,8 +3628,18 @@ export default function PixRampClient({
               </div>
             )}
 
-            <div className={`${hasSession && !order && !onRampPixAlreadyGenerated && !operationLocked ? "tts-mobile-action mt-6" : "mt-6"}`}>
-              <button className="w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-sm shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canPrepareOnRampPix || onRampPixGenerationBlocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+            <div className={`${hasSession && !operationLocked && (!order || canUseExistingOnRampCheckout) ? "tts-mobile-action mt-6" : "mt-6"}`}>
+              <button
+                className="w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-sm shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50"
+                disabled={onRampPrimaryDisabled}
+                onClick={() => {
+                  if (canUseExistingOnRampCheckout) {
+                    setMobileStage("payment");
+                    return;
+                  }
+                  void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
+                }}
+              >
                 {operationLocked
                   ? L("PIX concluído", "PIX complete")
                   : loading === "Preparing PIX checkout"
@@ -3631,7 +3647,7 @@ export default function PixRampClient({
                   : quoteExpired
                     ? L("Continuar", "Continue")
                   : onRampPixAlreadyGenerated
-                    ? L("PIX gerado para este valor", "PIX created for this amount")
+                    ? L("Continuar para o PIX", "Continue to PIX")
                     : waitingForReceiveEstimate
                       ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
                       : receiveEstimateMissing
