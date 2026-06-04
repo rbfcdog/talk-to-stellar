@@ -29,14 +29,15 @@ function getJwtSecret() {
   return getRequiredJwtSecret();
 }
 
-function getRpID() {
+export function getRpID() {
   const explicitRpId = process.env.PASSKEY_RP_ID || process.env.WEBAUTHN_RP_ID;
   if (explicitRpId) return explicitRpId;
 
   const origin = process.env.PASSKEY_ORIGIN || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL;
   if (origin) {
     try {
-      return new URL(origin).hostname;
+      const hostname = new URL(origin).hostname.toLowerCase();
+      return hostname.startsWith('www.') ? hostname.slice(4) : hostname;
     } catch {
       // fall through to local development default
     }
@@ -49,8 +50,62 @@ function getRpName() {
   return process.env.PASSKEY_RP_NAME || 'TalkToStellar';
 }
 
-function getExpectedOrigin() {
-  return process.env.PASSKEY_ORIGIN || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
+function normalizeOrigin(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    return new URL(raw).origin;
+  } catch {
+    try {
+      return new URL(`https://${raw}`).origin;
+    } catch {
+      return '';
+    }
+  }
+}
+
+function splitConfiguredOrigins(value: unknown): string[] {
+  return String(value || '')
+    .split(',')
+    .map((item) => normalizeOrigin(item))
+    .filter(Boolean);
+}
+
+function shouldIncludeWwwSibling(hostname: string): boolean {
+  const normalized = String(hostname || '').toLowerCase();
+  const apex = normalized.startsWith('www.') ? normalized.slice(4) : normalized;
+  return apex === 'talktostellar.com' || String(process.env.PASSKEY_INCLUDE_WWW_ORIGIN || '').trim().toLowerCase() === 'true';
+}
+
+function withWwwSibling(origin: string): string[] {
+  const normalized = normalizeOrigin(origin);
+  if (!normalized) return [];
+
+  try {
+    const url = new URL(normalized);
+    if (!url.hostname || url.hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname)) {
+      return [normalized];
+    }
+
+    const hostname = url.hostname.toLowerCase();
+    if (!shouldIncludeWwwSibling(hostname)) return [normalized];
+
+    const sibling = new URL(normalized);
+    sibling.hostname = hostname.startsWith('www.') ? hostname.slice(4) : `www.${hostname}`;
+    return [normalized, sibling.origin];
+  } catch {
+    return [normalized];
+  }
+}
+
+export function getExpectedOrigins() {
+  const configured = [
+    ...splitConfiguredOrigins(process.env.PASSKEY_ORIGINS || process.env.WEBAUTHN_ORIGINS),
+    normalizeOrigin(process.env.PASSKEY_ORIGIN || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000'),
+  ].filter(Boolean);
+
+  const origins = configured.flatMap(withWwwSibling);
+  return Array.from(new Set(origins));
 }
 
 function toBase64Url(value: Uint8Array | string) {
@@ -710,7 +765,7 @@ export class PasskeyService {
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: expectedChallengeMatches(challenge.challenge),
-      expectedOrigin: getExpectedOrigin(),
+      expectedOrigin: getExpectedOrigins(),
       expectedRPID: getRpID(),
       requireUserVerification: getPasskeyUserVerification() === 'required',
     });
@@ -850,7 +905,7 @@ export class PasskeyService {
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: expectedChallengeMatches(challenge.challenge),
-      expectedOrigin: getExpectedOrigin(),
+      expectedOrigin: getExpectedOrigins(),
       expectedRPID: getRpID(),
       credential: toWebAuthnCredential(passkey),
       requireUserVerification: getPasskeyUserVerification() === 'required',
@@ -1150,7 +1205,7 @@ export class PasskeyService {
     const verification = await verifyAuthenticationResponse({
       response: input.response,
       expectedChallenge: expectedChallengeMatches(challenge.challenge),
-      expectedOrigin: getExpectedOrigin(),
+      expectedOrigin: getExpectedOrigins(),
       expectedRPID: getRpID(),
       credential: toWebAuthnCredential(passkey),
       requireUserVerification: true,

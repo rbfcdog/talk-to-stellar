@@ -99,6 +99,77 @@ describe('PasskeyService challenge generation', () => {
     expect(Buffer.from(result.options.challenge, 'base64url')).toHaveLength(32);
   });
 
+  it('accepts both apex and www origins for the production passkey domain', async () => {
+    const previous = {
+      PASSKEY_ORIGIN: process.env.PASSKEY_ORIGIN,
+      PASSKEY_ORIGINS: process.env.PASSKEY_ORIGINS,
+      WEBAUTHN_ORIGINS: process.env.WEBAUTHN_ORIGINS,
+      FRONTEND_URL: process.env.FRONTEND_URL,
+      NEXT_PUBLIC_FRONTEND_URL: process.env.NEXT_PUBLIC_FRONTEND_URL,
+    };
+    try {
+      delete process.env.PASSKEY_ORIGINS;
+      delete process.env.WEBAUTHN_ORIGINS;
+      delete process.env.FRONTEND_URL;
+      delete process.env.NEXT_PUBLIC_FRONTEND_URL;
+      const { getExpectedOrigins } = await import('../src/api/services/core/passkey.service');
+      delete process.env.PASSKEY_ORIGINS;
+      delete process.env.WEBAUTHN_ORIGINS;
+      delete process.env.FRONTEND_URL;
+      delete process.env.NEXT_PUBLIC_FRONTEND_URL;
+      process.env.PASSKEY_ORIGIN = 'https://talktostellar.com';
+
+      expect(getExpectedOrigins()).toEqual([
+        'https://talktostellar.com',
+        'https://www.talktostellar.com',
+      ]);
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete (process.env as any)[key];
+        else (process.env as any)[key] = value;
+      }
+    }
+  });
+
+  it('derives the apex RP ID when the configured passkey origin has www', async () => {
+    const previous = {
+      PASSKEY_RP_ID: process.env.PASSKEY_RP_ID,
+      WEBAUTHN_RP_ID: process.env.WEBAUTHN_RP_ID,
+      PASSKEY_ORIGIN: process.env.PASSKEY_ORIGIN,
+      PASSKEY_ORIGINS: process.env.PASSKEY_ORIGINS,
+      WEBAUTHN_ORIGINS: process.env.WEBAUTHN_ORIGINS,
+      FRONTEND_URL: process.env.FRONTEND_URL,
+      NEXT_PUBLIC_FRONTEND_URL: process.env.NEXT_PUBLIC_FRONTEND_URL,
+    };
+    try {
+      delete process.env.PASSKEY_RP_ID;
+      delete process.env.WEBAUTHN_RP_ID;
+      delete process.env.PASSKEY_ORIGINS;
+      delete process.env.WEBAUTHN_ORIGINS;
+      delete process.env.FRONTEND_URL;
+      delete process.env.NEXT_PUBLIC_FRONTEND_URL;
+      const { getExpectedOrigins, getRpID } = await import('../src/api/services/core/passkey.service');
+      delete process.env.PASSKEY_RP_ID;
+      delete process.env.WEBAUTHN_RP_ID;
+      delete process.env.PASSKEY_ORIGINS;
+      delete process.env.WEBAUTHN_ORIGINS;
+      delete process.env.FRONTEND_URL;
+      delete process.env.NEXT_PUBLIC_FRONTEND_URL;
+      process.env.PASSKEY_ORIGIN = 'https://www.talktostellar.com';
+
+      expect(getRpID()).toBe('talktostellar.com');
+      expect(getExpectedOrigins()).toEqual([
+        'https://www.talktostellar.com',
+        'https://talktostellar.com',
+      ]);
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete (process.env as any)[key];
+        else (process.env as any)[key] = value;
+      }
+    }
+  });
+
   it('requires a valid session token before registration', async () => {
     const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
 
