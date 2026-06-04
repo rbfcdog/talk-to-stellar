@@ -927,6 +927,7 @@ export default function PixRampClient({
   const [targetAsset, setTargetAsset] = useState<TargetAsset>("BRL");
   const [desiredReceiveAmount, setDesiredReceiveAmount] = useState("");
   const [desiredReceiveAsset, setDesiredReceiveAsset] = useState<TargetAsset | "">("");
+  const [postConversionAsset, setPostConversionAsset] = useState<TargetAsset | "">("");
   const [advancedAssetMode, setAdvancedAssetMode] = useState(false);
   const [receiveEstimateLoading, setReceiveEstimateLoading] = useState(false);
   const [receiveEstimateReady, setReceiveEstimateReady] = useState(false);
@@ -994,6 +995,7 @@ export default function PixRampClient({
     targetAsset,
     desiredReceiveAmount,
     desiredReceiveAsset,
+    postConversionAsset,
     transferRecipient,
     transferRecipientKey,
     transferRecipientPublicKey,
@@ -1030,6 +1032,13 @@ export default function PixRampClient({
       ? desiredReceiveAsset
       : targetAsset
     : "";
+  const hasPostOnRampConversion = Boolean(
+    rampMode === "onramp" &&
+      postConversionAsset &&
+      desiredFinalAmount &&
+      desiredFinalAsset &&
+      postConversionAsset !== desiredFinalAsset
+  );
   const showOnRampReceiveTargetInput = Boolean(rampMode === "onramp" && (targetAsset === "BRL" || exactOnRampReceiveTarget || desiredFinalAmount));
   const targetReceiveInputAmount = exactOnRampReceiveTarget ? desiredReceiveAmount : (targetAsset === "BRL" ? amountBrl : desiredFinalAmount);
   const targetReceiveInputAsset = exactOnRampReceiveTarget ? desiredReceiveAsset : (desiredFinalAsset || targetAsset);
@@ -1043,6 +1052,9 @@ export default function PixRampClient({
       : targetAsset === "BRL"
         ? formatMoney(amountBrl)
         : formatRampAsset(amountBrl || "0", targetAsset);
+  const postConversionTargetDisplay = hasPostOnRampConversion && postConversionAsset
+    ? friendlyAssetName(postConversionAsset, language)
+    : "";
   const transferRecipientLabel = String(
     pixFundedTransferResult?.recipient_name ||
     verifiedTransferRecipient?.recipient_name ||
@@ -1192,6 +1204,7 @@ export default function PixRampClient({
     targetAsset,
     desiredFinalAmount,
     desiredFinalAsset,
+    postConversionAsset,
     transferFlow ? transferRecipientLabel : "",
     transferFlow ? transferRecipientDisplayKey : "",
     transferFlow ? feeAdjustedAutoPayAmount || autoPayAmount : "",
@@ -1225,13 +1238,13 @@ export default function PixRampClient({
   const localMockFallbackAllowed = Boolean(config?.local_mock_fallback_allowed);
   const opsMocksAllowed = Boolean(config?.ops_mocks_allowed);
   const displayPixKey = isSandboxMockOrder ? (pixKey || `pix-${orderId.slice(-8) || "checkout"}@talktostellar.local`) : pixKey;
-  const technicalFinalAssetCode = String(order?.finalAsset?.code || order?.auto_conversion?.destination_asset_code || targetAsset).split(":")[0];
+  const technicalFinalAssetCode = String(order?.post_conversion?.destination_asset_code || order?.finalAsset?.code || order?.auto_conversion?.destination_asset_code || targetAsset).split(":")[0];
   const receivedCode = userFacingAssetCode(technicalFinalAssetCode, targetAsset);
   const onRampFinalAssetDelta = visibleBalanceDelta(onRampBalancesBefore, onRampBalancesAfter, receivedCode);
   const onRampFinalAssetDeltaAmount = onRampFinalAssetDelta > 0.0000001
     ? onRampFinalAssetDelta.toFixed(7)
     : "";
-  const autoConversionFinalAmount = String(order?.auto_conversion?.destination_amount || "");
+  const autoConversionFinalAmount = String(order?.post_conversion?.destination_amount || order?.auto_conversion?.destination_amount || "");
   const directBrlFinalAmount = receivedCode === "BRL"
     ? String(order?.finalAmount || order?.toAmount || quote?.userFacingToAmount || quote?.toAmount || desiredFinalAmount || "")
     : "";
@@ -1525,6 +1538,7 @@ export default function PixRampClient({
     const quoteAsset = String(params.get("quote_asset") || "").trim().toUpperCase();
     const receiveAmount = normalizeHumanAmount(params.get("receive_amount") || params.get("target_amount") || quoteAmount || "");
     const receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || quoteAsset || "").trim().toUpperCase();
+    const postConversionAssetParam = String(params.get("post_conversion_asset") || params.get("convert_to_asset") || params.get("dest_asset") || "").trim().toUpperCase();
     const asset = String(params.get("source_asset") || params.get("asset") || "").trim().toUpperCase();
     const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
     const email = String(params.get("email") || "").trim().toLowerCase();
@@ -1554,7 +1568,12 @@ export default function PixRampClient({
     setRampMode(mode);
     if (nextIntentId) setIntentId(nextIntentId);
     const normalizedReceiveAsset = normalizeTargetAsset(receiveAsset, "USDC");
+    const normalizedPostConversionAsset = postConversionAssetParam ? normalizeTargetAsset(postConversionAssetParam, "USDC") : "";
     if (isAdvancedAsset(normalizedReceiveAsset)) setAdvancedAssetMode(true);
+    if (normalizedPostConversionAsset && isAdvancedAsset(normalizedPostConversionAsset)) setAdvancedAssetMode(true);
+    if (normalizedPostConversionAsset && normalizedPostConversionAsset !== normalizedReceiveAsset) {
+      setPostConversionAsset(normalizedPostConversionAsset);
+    }
     const hasExactOnRampReceiveTarget = Boolean(mode === "onramp" && receiveAmount && normalizedReceiveAsset);
     const amountParamIsPixBrl = currency === "BRL" || asset === "BRL" || asset === "TESOURO";
     if (mode === "onramp" && receiveAmount) {
@@ -1773,57 +1792,16 @@ export default function PixRampClient({
       return;
     }
 
-    let cancelled = false;
-    setReceiveEstimateLoading(true);
-    setReceiveEstimateReady(false);
-    fetchWithTimeout(`/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM&t=${Date.now()}`, { cache: "no-store" }, 22000)
-      .then((response) => response.json())
-      .then((payload) => {
-        const cell = payload?.matrix?.BRL?.[desiredReceiveAsset];
-        const rate = toPositiveNumber(cell?.rate, 0);
-        if (!rate) {
-          throw new Error(payload?.message || L("Cotação dinâmica indisponível para este ativo.", "Dynamic quote unavailable for this asset."));
-        }
-        const requiredNetBrl = receiveTarget / rate;
-        const estimatedBrl = estimatePixOnRampGrossForBrlReceive(requiredNetBrl);
-        if (cancelled) return;
-        setAmountBrl(estimatedBrl.toFixed(2));
-        setReceiveEstimateReady(true);
-        setQuotePayload(null);
-        setQuoteReceivedAt(0);
-        setOrderPayload(null);
-        setGeneratedOnRampOrderKey("");
-        setStatusPayload(null);
-        setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
-        addDebugLog({
-          label: "PIX amount estimated from conversion matrix",
-          method: "GET",
-          path: "/api/financial/conversion-matrix",
-          request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
-          response: { amount_brl: estimatedBrl.toFixed(2), brl_to_asset_rate: rate, source: cell?.source, method: cell?.method },
-        });
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setReceiveEstimateReady(false);
-          setError(L("Não consegui atualizar a cotação dinâmica agora. Aguarde alguns segundos antes de gerar o PIX.", "I could not update the dynamic quote now. Wait a few seconds before generating PIX."));
-          addDebugLog({
-            label: "PIX conversion matrix estimate failed",
-            method: "GET",
-            path: "/api/financial/conversion-matrix",
-            request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
-            response: {},
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setReceiveEstimateLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setReceiveEstimateReady(true);
+    setReceiveEstimateLoading(false);
+    setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
+    addDebugLog({
+      label: "Exact non-BRL PIX target will be quoted by backend",
+      method: "SERVER",
+      path: "/api/ramp/etherfuse/quote",
+      request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
+      response: { contract: "backend_strict_receive_quote" },
+    });
   }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
   async function resolveWalletFromEmail(): Promise<RampAuth> {
@@ -2315,6 +2293,7 @@ export default function PixRampClient({
     }
 
     const finalAsset = userFacingAssetCode(
+      input.completedTransaction?.post_conversion?.destination_asset_code ||
       input.completedTransaction?.finalAssetCode ||
       input.completedTransaction?.auto_conversion?.destination_asset_code ||
       input.completedTransaction?.toCurrency ||
@@ -2324,7 +2303,14 @@ export default function PixRampClient({
     );
     const finalAmount = finalAsset === "BRL"
       ? String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || order?.toAmount || quote?.toAmount || amountBrl)
-      : String(input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
+      : String(input.completedTransaction?.post_conversion?.destination_amount || input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
+    const intermediateConversionLine = input.completedTransaction?.post_conversion?.source_amount &&
+      input.completedTransaction?.post_conversion?.source_asset_code
+      ? L(
+          `Recebido primeiro: ${formatRampAsset(input.completedTransaction.post_conversion.source_amount, userFacingAssetCode(input.completedTransaction.post_conversion.source_asset_code, targetAsset))}`,
+          `Received first: ${formatRampAsset(input.completedTransaction.post_conversion.source_amount, userFacingAssetCode(input.completedTransaction.post_conversion.source_asset_code, targetAsset))}`
+        )
+      : "";
     const paidAmount = input.completedTransaction?.fromAmount
       ? formatMoney(input.completedTransaction.fromAmount)
       : effectiveOnRampPixPayDisplay;
@@ -2347,6 +2333,7 @@ export default function PixRampClient({
     enqueueWebChatFeedback([
       L("PIX confirmado com sucesso.", "PIX confirmed successfully."),
       L(`Valor pago: ${paidAmount}`, `Paid amount: ${paidAmount}`),
+      intermediateConversionLine,
       L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
       L("Destino: sua conta TalkToStellar", "Destination: your TalkToStellar account"),
       L("Status: concluído", "Status: completed"),
@@ -2471,6 +2458,7 @@ export default function PixRampClient({
       amount: quoteAmountBrl,
       desired_final_amount: requestedFinalAmount || undefined,
       desired_final_asset: requestedFinalAsset || undefined,
+      post_conversion_asset: hasPostOnRampConversion ? settlementAssetCode(postConversionAsset) : undefined,
     }, "POST", auth);
     const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
     setCustomerPayload(nextCustomerPayload);
@@ -2542,6 +2530,7 @@ export default function PixRampClient({
         final_asset: settlementAssetCode(targetAsset),
         desired_final_amount: requestedFinalAmount || undefined,
         desired_final_asset: requestedFinalAsset || undefined,
+        post_conversion_asset: hasPostOnRampConversion ? settlementAssetCode(postConversionAsset) : undefined,
         auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
         auto_pay_recipient: transferRecipient || undefined,
         auto_pay_amount: feeAdjustedAutoPayAmount || autoPayAmount || undefined,
@@ -3433,6 +3422,17 @@ export default function PixRampClient({
                     {transferRecipientBlocker}
                   </p>
                 )}
+              </div>
+            )}
+            {hasPostOnRampConversion && postConversionTargetDisplay && (
+              <div className="mt-4 rounded-3xl border border-tts-border bg-tts-bg/70 p-4 text-sm text-tts-muted">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-deep">{L("Depois do PIX", "After PIX")}</p>
+                <p className="mt-1 font-bold">
+                  {L(
+                    `Sua conta recebe ${requestedOnRampTargetDisplay} primeiro. Em seguida, convertemos esse saldo para ${postConversionTargetDisplay}.`,
+                    `Your account receives ${requestedOnRampTargetDisplay} first. Then we convert that balance to ${postConversionTargetDisplay}.`
+                  )}
+                </p>
               </div>
             )}
 

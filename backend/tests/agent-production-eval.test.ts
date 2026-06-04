@@ -1116,6 +1116,7 @@ describe('Agent production evals', () => {
       { name: 'pix on ramp load wording', input: 'carregar minha conta com 100 reais no pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
       { name: 'pix on ramp exact usdc receive', input: 'uero mandar um pix pra chegar 100 usdc na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', expectedAmount: '100', expectedAssetCode: 'USDC' },
       { name: 'pix on ramp exact usdc receive truncated typo', input: 'ro mandar um pix pra chegar 100 usdc na minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', expectedAmount: '100', expectedAssetCode: 'USDC' },
+      { name: 'pix on ramp exact xlm then convert to usdc', input: 'uero colocar 100 xlm pra eu receber em usdc', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', expectedAmount: '100', expectedAssetCode: 'XLM', expectedDestAssetCode: 'USDC' },
       { name: 'pix on ramp typo own account', input: 'qro botar cem reais por pix na conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high' },
       { name: 'pix on ramp missing amount', input: 'quero colocar dinheiro via pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_onramp_intent', risk: 'high', needsClarification: true },
       { name: 'pix funded payment', input: 'pagar Ana via PIX', expectedIntent: IntentType.PIX, risk: 'high' },
@@ -1882,6 +1883,49 @@ describe('Agent production evals', () => {
       expect(result.response_message).toContain('saldo entrar como USDC');
       expect(result.response_message).not.toContain('Não encontrei "chegar"');
       expect(result.response_message).not.toContain('contatos salvos');
+      expect(result.response_message).not.toContain('Me diga a chave');
+      expect(executeToolMock.mock.calls.some(([name]) => name === 'list_contacts')).toBe(false);
+      expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
+  it('routes own-account PIX two-asset wording to receive first asset then convert', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    const routerInvoke = mockRouteIntent(graph, 'route_pix_onramp_intent', {
+      amount: '100',
+      asset_code: 'XLM',
+      dest_asset_code: 'USDC',
+    });
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
+
+    try {
+      const result = await graph.processInput(createState('uero colocar 100 xlm pra eu receber em usdc'));
+
+      expect(routerInvoke).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.detected_intent).toBe(IntentType.PIX);
+      expect(result.action_type).toBe(ActionType.INITIATE_PIX);
+      expect(result.response_message).toContain('/pix-on?');
+      expect(result.response_message).toContain('asset=XLM');
+      expect(result.response_message).toContain('target_asset=XLM');
+      expect(result.response_message).toContain('receive_amount=100');
+      expect(result.response_message).toContain('receive_asset=XLM');
+      expect(result.response_message).toContain('flow=fund_and_convert');
+      expect(result.response_message).toContain('post_conversion_asset=USDC');
+      expect(result.response_message).toContain('convert_to_asset=USDC');
+      expect(result.response_message).toContain('100 XLM');
+      expect(result.response_message).toContain('converter para USDC');
+      expect(result.response_message).not.toContain('Ana Silva');
+      expect(result.response_message).not.toContain('US$ 100.00');
       expect(result.response_message).not.toContain('Me diga a chave');
       expect(executeToolMock.mock.calls.some(([name]) => name === 'list_contacts')).toBe(false);
       expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
