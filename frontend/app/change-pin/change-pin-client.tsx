@@ -166,7 +166,7 @@ export default function ChangePinClient() {
         title="PIN alterado com sucesso"
         description={
           <>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-confirm">
+            <p className="text-[10px] font-bold uppercase tracking-normal text-tts-confirm">
               Concluído
             </p>
             <p className="mt-3 text-sm leading-relaxed text-tts-muted">{state.message}</p>
@@ -246,7 +246,7 @@ export default function ChangePinClient() {
         </label>
 
         {state.errorMessage && (
-          <p className="rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error">
+          <p className="rounded-xl border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error">
             {state.errorMessage}
           </p>
         )}

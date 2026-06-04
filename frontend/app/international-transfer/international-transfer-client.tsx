@@ -231,13 +231,13 @@ function Field({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-tts-muted ">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-normal text-tts-muted ">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none placeholder:text-tts-muted focus:border-tts-gold     "
+        className="h-11 w-full rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none placeholder:text-tts-muted focus:border-tts-gold     "
       />
     </label>
   );
@@ -256,11 +256,11 @@ function SelectField<T extends string>({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-tts-muted ">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-normal text-tts-muted ">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as T)}
-        className="h-11 w-full rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none focus:border-tts-gold    "
+        className="h-11 w-full rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none focus:border-tts-gold    "
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -286,10 +286,10 @@ function ActionButton({
   full?: boolean;
 }) {
   const classes = {
-    dark: "border border-tts-gold bg-black text-tts-gold hover:border-tts-gold hover:bg-tts-surface",
-    light: "border border-tts-border bg-black text-tts-deep hover:border-tts-gold hover:bg-tts-surface",
-    green: "border border-tts-confirm bg-black text-tts-confirm hover:border-tts-confirm hover:bg-tts-surface",
-    blue: "border border-tts-gold bg-black text-tts-gold hover:border-tts-gold hover:bg-tts-surface",
+    dark: "border border-tts-gold bg-tts-surface text-tts-gold hover:border-tts-gold hover:bg-tts-surface",
+    light: "border border-tts-border bg-tts-surface text-tts-deep hover:border-tts-gold hover:bg-tts-surface",
+    green: "border border-tts-confirm bg-tts-surface text-tts-confirm hover:border-tts-confirm hover:bg-tts-surface",
+    blue: "border border-tts-gold bg-tts-surface text-tts-gold hover:border-tts-gold hover:bg-tts-surface",
   };
 
   return (
@@ -297,7 +297,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${full ? "w-full" : ""} ${classes[variant]}`}
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${full ? "w-full" : ""} ${classes[variant]}`}
     >
       {children}
     </button>
@@ -306,11 +306,11 @@ function ActionButton({
 
 function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; children: ReactNode }) {
   const classes = {
-    running: "border-tts-gold bg-black text-tts-gold",
-    ok: "border-tts-confirm bg-black text-tts-confirm",
-    error: "border-tts-error bg-black text-tts-error",
-    info: "border-tts-border bg-black text-tts-deep",
-    idle: "border-tts-border bg-black text-tts-muted",
+    running: "border-tts-gold bg-tts-surface text-tts-gold",
+    ok: "border-tts-confirm bg-tts-surface text-tts-confirm",
+    error: "border-tts-error bg-tts-surface text-tts-error",
+    info: "border-tts-border bg-tts-surface text-tts-deep",
+    idle: "border-tts-border bg-tts-surface text-tts-muted",
   };
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-bold ${classes[state]}`}>
@@ -890,26 +890,26 @@ export default function InternationalTransferClient() {
       <header className="border-b border-tts-border bg-tts-surface backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
+            <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Home
             </Link>
-            <Link href="/global-transfer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
+            <Link href="/global-transfer" className="inline-flex h-10 items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
               <Route className="h-4 w-4" aria-hidden="true" />
               Cost lab
             </Link>
           </div>
           <div className="text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-confirm">Institution settlement tester</p>
-            <h1 className="text-xl font-bold tracking-tight text-tts-deep sm:text-2xl">Cost-efficient USD route room</h1>
+            <p className="text-xs font-semibold uppercase tracking-normal text-tts-confirm">Institution settlement tester</p>
+            <h1 className="text-xl font-bold tracking-normal text-tts-deep sm:text-2xl">Cost-efficient USD route room</h1>
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <section className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm xl:sticky xl:top-5 xl:self-start">
+        <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm xl:sticky xl:top-5 xl:self-start">
           <div className="mb-4 flex items-start gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-tts-confirm text-tts-confirm">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tts-confirm text-tts-deep">
               <Building2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -918,9 +918,9 @@ export default function InternationalTransferClient() {
             </div>
           </div>
 
-          <div className="mb-4 grid gap-2 rounded-lg border border-tts-confirm/25 bg-tts-confirm/10 p-3">
+          <div className="mb-4 grid gap-2 rounded-xl border border-tts-confirm/25 bg-tts-confirm/10 p-3">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-bold uppercase tracking-[0.12em] text-tts-confirm">Empirical route fee</span>
+              <span className="text-xs font-bold uppercase tracking-normal text-tts-confirm">Empirical route fee</span>
               <span className="rounded-md border border-tts-confirm px-2 py-1 text-xs font-bold text-tts-confirm">
                 {quote ? `${formatPercent(feeBreakdown.totalFeePct)} charged fee` : "waiting quote"}
               </span>
@@ -930,7 +930,7 @@ export default function InternationalTransferClient() {
             </p>
             <div className="grid gap-2 text-xs font-semibold text-tts-muted">
               <div className="rounded-md border border-tts-border p-2">
-                <p className="uppercase tracking-[0.08em]">Charged fee model</p>
+                <p className="uppercase tracking-normal">Charged fee model</p>
                 <p className="mt-1 text-tts-deep">On-ramp + TalkToStellar + off-ramp</p>
               </div>
             </div>
@@ -990,7 +990,7 @@ export default function InternationalTransferClient() {
               ]}
             />
             {opsMocksAllowed ? (
-              <label className="flex items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm font-semibold text-tts-muted">
+              <label className="flex items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 py-2 text-sm font-semibold text-tts-muted">
                 <input
                   type="checkbox"
                   checked={mockPix}
@@ -1000,11 +1000,11 @@ export default function InternationalTransferClient() {
                 Use local PIX funding intent
               </label>
             ) : (
-              <div className="rounded-lg border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-sm font-semibold text-tts-confirm">
+              <div className="rounded-xl border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-sm font-semibold text-tts-confirm">
                 Local funding is disabled. This route creates only payment-backed PIX intents.
               </div>
             )}
-            <details className="rounded-lg border border-tts-border bg-black p-3">
+            <details className="rounded-xl border border-tts-border bg-tts-surface p-3">
               <summary className="cursor-pointer text-sm font-bold text-tts-deep">
                 Advanced execution credentials
               </summary>
@@ -1013,7 +1013,7 @@ export default function InternationalTransferClient() {
               </p>
               <div className="mt-3 grid gap-3">
                 {payoutProvider === "etherfuse" ? (
-                  <label className="flex items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm font-semibold text-tts-muted">
+                  <label className="flex items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 py-2 text-sm font-semibold text-tts-muted">
                     <input
                       type="checkbox"
                       checked={runEtherfuseOffRamp}
@@ -1088,15 +1088,15 @@ export default function InternationalTransferClient() {
 
         <div className="grid gap-5">
           {error ? (
-            <section className="rounded-lg border border-tts-error bg-tts-error p-4 text-sm font-semibold text-tts-error">
+            <section className="rounded-xl border border-tts-error bg-tts-error/10 p-4 text-sm font-semibold text-tts-error">
               {error}
               {migrationError ? (
-                <div className="mt-4 rounded-lg border border-tts-error bg-white p-3 text-sm font-semibold text-tts-error">
+                <div className="mt-4 rounded-xl border border-tts-error bg-tts-surface p-3 text-sm font-semibold text-tts-error">
                   <p className="font-bold">Migration missing in this Supabase project.</p>
                   <p className="mt-2 leading-6">
                     Run this SQL in Supabase SQL Editor, then redeploy or retry:
                   </p>
-                  <code className="mt-2 block rounded-md bg-tts-error p-2 text-xs text-tts-error">
+                  <code className="mt-2 block rounded-md bg-tts-error/10 p-2 text-xs text-tts-error">
                     backend/migrations/20260520_00_international_usd_transfers.sql
                   </code>
                   <p className="mt-2 leading-6">
@@ -1108,10 +1108,10 @@ export default function InternationalTransferClient() {
             </section>
           ) : null}
 
-          <section className="rounded-lg border border-tts-confirm bg-black p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-confirm bg-tts-surface p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-confirm">Before and after fees</p>
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-confirm">Before and after fees</p>
                 <h2 className="mt-1 text-lg font-bold text-tts-deep">Gross route value to net destination value</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
                   This is the reviewer-facing cost bridge: source BRL, theoretical USD before charged fees, source on-ramp fee, TalkToStellar transaction fee, destination off-ramp fee and the net USD that reaches the destination instruction.
@@ -1122,25 +1122,25 @@ export default function InternationalTransferClient() {
               </StatusPill>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-tts-border bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">Before fees</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Before fees</p>
                 <p className="mt-2 text-xl font-black text-tts-gold">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</p>
                 <p className="mt-1 text-sm font-semibold text-tts-muted">{quote ? `${formatCurrency(quoteDelta.sourceBrl, "BRL")} at ${quoteDelta.fxRate.toFixed(4)} BRL/USD` : "Waiting for quote"}</p>
               </div>
-              <div className="rounded-lg border border-tts-gold bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-gold">Fees deducted</p>
+              <div className="rounded-xl border border-tts-gold bg-tts-surface p-3">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-gold">Fees deducted</p>
                 <p className="mt-2 text-xl font-black text-tts-gold">{quote ? formatCurrency(feeBreakdown.totalFeeUsd, "USD") : "-"}</p>
                 <p className="mt-1 text-sm font-semibold text-tts-muted">{quote ? `${formatCurrency(feeBreakdown.totalFeeBrl, "BRL")} / ${formatPercent(feeBreakdown.totalFeePct)}` : "Waiting for quote"}</p>
               </div>
-              <div className="rounded-lg border border-tts-confirm bg-black p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-confirm">After fees</p>
+              <div className="rounded-xl border border-tts-confirm bg-tts-surface p-3">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-confirm">After fees</p>
                 <p className="mt-2 text-xl font-black text-tts-confirm">{quote ? formatCurrency(feeBreakdown.afterAllUsd, "USD") : "-"}</p>
                 <p className="mt-1 text-sm font-semibold text-tts-muted">{quote ? `${formatPercent(feeBreakdown.retainedPct)} of gross USD delivered` : "Waiting for quote"}</p>
               </div>
             </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.1em] text-tts-muted">Cost bridge</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-4">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Cost bridge</p>
                 <div className="mt-3 grid gap-2 text-sm">
                   <div className="flex items-center justify-between gap-4 rounded-md bg-tts-surface px-3 py-2">
                     <span className="text-tts-deep">Gross USD before charged fees</span>
@@ -1182,8 +1182,8 @@ export default function InternationalTransferClient() {
                   </div>
                 </div>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.1em] text-tts-muted">Route explanation</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-4">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Route explanation</p>
                 <p className="mt-3 text-sm leading-6 text-tts-deep">
                   Use this panel to explain that the app does not hide charged fees inside a final number. The reviewer sees the value before fees, on-ramp fee, TalkToStellar fee, off-ramp fee and the final destination amount before the payout instruction is created.
                 </p>
@@ -1194,10 +1194,10 @@ export default function InternationalTransferClient() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-gold ">Guided path</p>
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-gold ">Guided path</p>
                 <h2 className="mt-1 text-lg font-bold text-tts-deep">BRL source to USD destination</h2>
               </div>
               <StatusPill state={transfer ? "ok" : quoteNeedsRefresh ? "error" : quoteReady ? "running" : "idle"}>
@@ -1210,16 +1210,16 @@ export default function InternationalTransferClient() {
                 return (
                   <div
                     key={step.label}
-                    className={`rounded-lg border p-3 ${
+                    className={`rounded-xl border p-3 ${
                       step.done
-                        ? "border-tts-confirm bg-tts-confirm  "
+                        ? "border-tts-confirm bg-tts-confirm/10  "
                         : step.active
-                          ? "border-tts-gold bg-tts-gold  "
+                          ? "border-tts-gold bg-tts-gold-bg  "
                           : "border-tts-border bg-tts-surface"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className={`grid h-9 w-9 place-items-center rounded-lg ${step.done ? "bg-tts-confirm text-tts-confirm  " : step.active ? "bg-tts-gold text-tts-gold  " : "bg-white text-tts-muted"}`}>
+                      <div className={`grid h-9 w-9 place-items-center rounded-xl ${step.done ? "bg-tts-confirm text-tts-deep  " : step.active ? "bg-tts-gold text-tts-deep  " : "bg-tts-surface text-tts-muted"}`}>
                         <Icon className="h-4 w-4" aria-hidden="true" />
                       </div>
                       <span className="font-mono text-xs font-bold text-tts-muted">0{index + 1}</span>
@@ -1233,14 +1233,14 @@ export default function InternationalTransferClient() {
           </section>
 
           <section className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-tts-gold text-tts-gold">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tts-gold text-tts-deep">
                     {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Activity className="h-5 w-5" aria-hidden="true" />}
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-tts-muted">What is happening</p>
+                    <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">What is happening</p>
                     <h2 className="mt-1 text-lg font-bold text-tts-deep">{busy || transfer?.status || "Waiting for route quote"}</h2>
                     <p className="mt-2 text-sm leading-6 text-tts-muted">{busy ? latestEvent?.detail : currentPhase}</p>
                   </div>
@@ -1251,15 +1251,15 @@ export default function InternationalTransferClient() {
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">
+                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-tts-muted">
                     <Server className="h-4 w-4" aria-hidden="true" />
                     Backend call
                   </div>
                   <p className="mt-2 text-sm font-semibold text-tts-deep">{latestEvent?.path || "No request yet"}</p>
                 </div>
-                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">
+                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-tts-muted">
                     <Database className="h-4 w-4" aria-hidden="true" />
                     Persisted record
                   </div>
@@ -1271,8 +1271,8 @@ export default function InternationalTransferClient() {
                         : "-"}
                   </p>
                 </div>
-                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">
+                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-tts-muted">
                     <ListChecks className="h-4 w-4" aria-hidden="true" />
                     Next action
                   </div>
@@ -1281,7 +1281,7 @@ export default function InternationalTransferClient() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <ListChecks className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
@@ -1291,7 +1291,7 @@ export default function InternationalTransferClient() {
               </div>
               <div className="grid gap-2">
                 {evidenceItems.map((item) => (
-                  <div key={item.label} className="grid grid-cols-[22px_minmax(0,0.9fr)_minmax(0,1.1fr)] items-center gap-2 rounded-lg bg-tts-surface px-3 py-2 text-sm">
+                  <div key={item.label} className="grid grid-cols-[22px_minmax(0,0.9fr)_minmax(0,1.1fr)] items-center gap-2 rounded-xl bg-tts-surface px-3 py-2 text-sm">
                     {item.ready ? (
                       <CheckCircle2 className="h-4 w-4 text-tts-confirm" aria-hidden="true" />
                     ) : (
@@ -1306,23 +1306,23 @@ export default function InternationalTransferClient() {
           </section>
 
           <section className="grid gap-3 md:grid-cols-4">
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Source value</p>
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Source value</p>
               <p className="mt-2 text-lg font-bold text-tts-deep">{quote ? formatCurrency(quote.brl_amount, "BRL") : formatCurrency(brlAmount, "BRL")}</p>
               <p className="text-sm text-tts-muted">{quote ? `FX ${quote.fx_rate} BRL/USD - ${quoteFreshness}` : "No route quote"}</p>
             </div>
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Baseline USD</p>
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Baseline USD</p>
               <p className="mt-2 text-lg font-bold text-tts-deep">{quote ? formatCurrency(quoteDelta.baselineUsd, "USD") : "-"}</p>
               <p className="text-sm text-tts-muted">Before route costs</p>
             </div>
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Destination value</p>
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Destination value</p>
               <p className="mt-2 text-lg font-bold text-tts-confirm">{quote ? formatCurrency(quoteDelta.finalUsd, "USD") : "-"}</p>
               <p className="text-sm text-tts-muted">{quote ? `${formatPercent(quoteDelta.retainedPct)} retained` : "No destination value"}</p>
             </div>
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Route delta</p>
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Route delta</p>
               <p className={`mt-2 text-lg font-bold ${quoteDelta.deltaUsd < 0 ? "text-tts-gold" : "text-tts-confirm"}`}>
                 {quote ? `${quoteDelta.deltaUsd >= 0 ? "+" : "-"}${formatCurrency(Math.abs(quoteDelta.deltaUsd), "USD")}` : "-"}
               </p>
@@ -1331,19 +1331,19 @@ export default function InternationalTransferClient() {
           </section>
 
           <section className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <QrCode className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
                 <h2 className="text-base font-bold text-tts-deep">On/off ramp proof</h2>
               </div>
               <div className="grid gap-3">
-	                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-	                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">On-ramp</p>
+	                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                  <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">On-ramp</p>
 	                  <p className="mt-1 text-sm font-bold text-tts-deep">PIX funding</p>
 	                  <p className="mt-1 text-xs font-semibold text-tts-muted">{mockPix ? "Validation intent enabled" : "Real payment intent mode"}</p>
 	                </div>
-	                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-	                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">Off-ramp</p>
+	                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                  <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Off-ramp</p>
 	                  <p className="mt-1 text-sm font-bold text-tts-deep">{payoutProvider === "etherfuse" ? "PIX withdrawal proof" : `${payoutProvider} destination adapter`}</p>
 	                  <p className="mt-1 text-xs font-semibold text-tts-muted">
 	                    {payoutProvider === "etherfuse"
@@ -1356,7 +1356,7 @@ export default function InternationalTransferClient() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="h-5 w-5 text-tts-gold" aria-hidden="true" />
@@ -1368,7 +1368,7 @@ export default function InternationalTransferClient() {
               </div>
               <div className="grid gap-2">
                 {metricValidation.checks.map((check) => (
-                  <div key={check.label} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,0.8fr)] items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 py-2 text-sm">
+                  <div key={check.label} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,0.8fr)] items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 py-2 text-sm">
                     {check.ok ? (
                       <CheckCircle2 className="h-4 w-4 text-tts-confirm" aria-hidden="true" />
                     ) : (
@@ -1380,49 +1380,49 @@ export default function InternationalTransferClient() {
                 ))}
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">Total fee</p>
+                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                  <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Total fee</p>
                   <p className="mt-1 text-sm font-bold text-tts-deep">{quote ? formatCurrency(metricValidation.totalFeeUsd, "USD") : "-"}</p>
                 </div>
-                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">Implied cost</p>
+                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                  <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Implied cost</p>
                   <p className="mt-1 text-sm font-bold text-tts-deep">{quote ? formatCurrency(metricValidation.impliedCostUsd, "USD") : "-"}</p>
                 </div>
-                <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">Variance</p>
+                <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                  <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Variance</p>
                   <p className="mt-1 text-sm font-bold text-tts-deep">{quote ? formatCurrency(metricValidation.feeDeltaUsd, "USD") : "-"}</p>
                 </div>
               </div>
             </div>
           </section>
 
-          <section className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Network className="h-5 w-5 text-tts-gold" aria-hidden="true" />
               <h2 className="text-base font-bold text-tts-deep">Institution value route</h2>
             </div>
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">Origin institution</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Origin institution</p>
                 <p className="mt-2 text-sm font-bold text-tts-deep">{senderName}</p>
                 <p className="mt-1 text-sm text-tts-muted">{formatCurrency(quoteDelta.sourceBrl, "BRL")} funded</p>
               </div>
               <div className="hidden items-center text-tts-muted md:flex">→</div>
-              <div className="rounded-lg border border-tts-gold bg-tts-gold p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-gold">Blockchain settlement</p>
+              <div className="rounded-xl border border-tts-gold bg-tts-gold-bg p-3">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-gold">Blockchain settlement</p>
                 <p className="mt-2 text-sm font-bold text-tts-deep">{transfer?.stellar_asset_code || "USDC"} on Stellar</p>
                 <p className="mt-1 text-sm text-tts-muted">{transfer?.stellar_tx_hash ? shortId(transfer.stellar_tx_hash, 28) : "Evidence pending"}</p>
               </div>
               <div className="hidden items-center text-tts-muted md:flex">→</div>
-              <div className="rounded-lg border border-tts-confirm bg-tts-confirm p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-tts-confirm">Destination institution</p>
+              <div className="rounded-xl border border-tts-confirm bg-tts-confirm/10 p-3">
+                <p className="text-xs font-bold uppercase tracking-normal text-tts-confirm">Destination institution</p>
                 <p className="mt-2 text-sm font-bold text-tts-deep">{recipientName}</p>
                 <p className="mt-1 text-sm text-tts-muted">{quote ? formatCurrency(quoteDelta.finalUsd, "USD") : "USD instruction pending"}</p>
               </div>
             </div>
           </section>
 
-          <section className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
               <h2 className="text-base font-bold text-tts-deep">Lifecycle</h2>
@@ -1433,11 +1433,11 @@ export default function InternationalTransferClient() {
                 const done = activeRank >= index;
                 const active = activeRank === index;
                 return (
-                  <div key={item.key} className={`rounded-lg border p-3 ${done ? "border-tts-confirm bg-tts-confirm" : active ? "border-tts-gold bg-tts-gold" : "border-tts-border bg-tts-surface"}`}>
-                    <div className={`grid h-9 w-9 place-items-center rounded-lg ${done ? "bg-tts-confirm text-tts-confirm" : "bg-white text-tts-muted"}`}>
+                  <div key={item.key} className={`rounded-xl border p-3 ${done ? "border-tts-confirm bg-tts-confirm" : active ? "border-tts-gold bg-tts-gold" : "border-tts-border bg-tts-surface"}`}>
+                    <div className={`grid h-9 w-9 place-items-center rounded-xl ${done ? "bg-tts-confirm text-tts-deep" : "bg-tts-surface text-tts-muted"}`}>
                       <Icon className="h-4 w-4" aria-hidden="true" />
                     </div>
-                    <p className="mt-2 text-xs font-bold uppercase tracking-[0.08em] text-tts-muted">{item.label}</p>
+                    <p className="mt-2 text-xs font-bold uppercase tracking-normal text-tts-muted">{item.label}</p>
                   </div>
                 );
               })}
@@ -1445,30 +1445,30 @@ export default function InternationalTransferClient() {
           </section>
 
           <section className="grid gap-5 lg:grid-cols-3">
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 text-tts-deep shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
                 <h2 className="text-base font-bold">Quote</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(quote))}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(quote))}</pre>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 text-tts-deep shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
                 <h2 className="text-base font-bold">Settlement record</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(transfer))}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(transfer))}</pre>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
                 <h2 className="text-base font-bold">Reconciliation</h2>
               </div>
-              <pre className="max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(reconciliation))}</pre>
+              <pre className="max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(reconciliation))}</pre>
             </div>
           </section>
 
-          <section className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-tts-gold" aria-hidden="true" />
@@ -1477,7 +1477,7 @@ export default function InternationalTransferClient() {
               <button
                 type="button"
                 onClick={copyDebugBundle}
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-tts-border bg-white px-3 text-xs font-bold text-tts-muted transition hover:border-tts-border"
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 text-xs font-bold text-tts-muted transition hover:border-tts-border"
               >
                 <Copy className="h-4 w-4" aria-hidden="true" />
                 {copied ? "Copied" : "Copy debug bundle"}
@@ -1488,13 +1488,13 @@ export default function InternationalTransferClient() {
                 <div key={event.id} className="grid grid-cols-[34px_minmax(0,1fr)] gap-3">
                   <div className="relative flex justify-center">
                     <div
-                      className={`grid h-8 w-8 place-items-center rounded-lg ${
+                      className={`grid h-8 w-8 place-items-center rounded-xl ${
                         event.state === "ok"
-                          ? "bg-tts-confirm text-tts-confirm"
+                          ? "bg-tts-confirm text-tts-deep"
                           : event.state === "error"
-                            ? "bg-tts-error text-tts-error"
+                            ? "bg-tts-error/10 text-tts-error"
                             : event.state === "running"
-                              ? "bg-tts-gold text-tts-gold"
+                              ? "bg-tts-gold text-tts-deep"
                               : "bg-tts-surface text-tts-muted"
                       }`}
                     >
@@ -1508,7 +1508,7 @@ export default function InternationalTransferClient() {
                     </div>
                     {index < events.length - 1 ? <div className="absolute top-9 h-full w-px bg-tts-surface" /> : null}
                   </div>
-                  <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
+                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <h3 className="text-sm font-bold text-tts-deep">{event.title}</h3>
@@ -1524,14 +1524,14 @@ export default function InternationalTransferClient() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-tts-border bg-white p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Code2 className="h-5 w-5 text-tts-muted" aria-hidden="true" />
               <h2 className="text-base font-bold text-tts-deep">API log</h2>
             </div>
             <div className="mt-4 grid gap-3">
               {logs.length ? logs.map((log) => (
-                <details key={log.id} className="rounded-lg border border-tts-border bg-tts-surface p-3">
+                <details key={log.id} className="rounded-xl border border-tts-border bg-tts-surface p-3">
                   <summary className="cursor-pointer text-sm font-bold text-tts-deep">
                     <span className="inline-flex flex-wrap items-center gap-2">
                       <span className="font-mono">{log.method}</span>
@@ -1540,7 +1540,7 @@ export default function InternationalTransferClient() {
                       {log.durationMs ? <span className="text-xs text-tts-muted">{log.durationMs}ms</span> : null}
                     </span>
                   </summary>
-                  <pre className="mt-3 max-h-[320px] overflow-auto rounded-lg bg-white p-3 text-xs leading-5 text-tts-muted">
+                  <pre className="mt-3 max-h-[320px] overflow-auto rounded-xl bg-tts-surface p-3 text-xs leading-5 text-tts-muted">
                     {pretty({ label: log.label, request: log.request, response: log.response, error: log.error })}
                   </pre>
                 </details>

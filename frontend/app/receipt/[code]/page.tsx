@@ -76,14 +76,14 @@ export default function ReceiptByCodePage() {
         <section className="w-full overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-tts-confirm">Receipt</p>
+              <p className="text-xs uppercase tracking-normal text-tts-confirm">Receipt</p>
               <h1 className="mt-2 text-3xl font-semibold text-tts-deep">View and download receipt</h1>
             </div>
             <div className="flex flex-wrap gap-3">
               <a
                 href={imageUrl}
                 download={downloadName}
-                className="inline-flex items-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
+                className="inline-flex items-center gap-2 rounded-xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
               >
                 <Download className="h-4 w-4" />
                 Download image

@@ -866,11 +866,11 @@ export default function ConfirmPaymentClient({
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-tts-confirm">
+            <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de pagamento", "Payment Confirmation")}
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-2xl font-bold tracking-tight text-tts-deep md:text-3xl">
+              <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
                 {T(feedbackLanguage, "Confirme este pagamento", "Confirm this payment")}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-tts-muted">
@@ -898,20 +898,20 @@ export default function ConfirmPaymentClient({
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{T(feedbackLanguage, "Pagamento", "Payment")}</p>
+                <p className="text-sm uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Pagamento", "Payment")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {isCrossCurrency ? sourceAmountLabel : amountLabel}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{T(feedbackLanguage, "Destinatário", "Recipient")}</p>
+                <p className="text-sm uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Destinatário", "Recipient")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {destinationLabel}
                 </p>
               </div>
             </div>
             {mobileSyncStatus && (
-              <p className="rounded-lg border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm text-tts-gold">
+              <p className="rounded-xl border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm text-tts-gold">
                 {mobileSyncStatus}
               </p>
             )}
@@ -982,7 +982,7 @@ export default function ConfirmPaymentClient({
                       : T(feedbackLanguage, "Confirmar com Passkey", "Confirm with Passkey")}
                   </button>
                   {passkeyError && (
-                    <p className="rounded-lg border border-tts-error bg-tts-error/10 px-3 py-2 text-sm text-tts-error">
+                    <p className="rounded-xl border border-tts-error bg-tts-error/10 px-3 py-2 text-sm text-tts-error">
                       {passkeyError}
                     </p>
                   )}

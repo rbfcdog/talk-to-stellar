@@ -197,7 +197,7 @@ export default function PayAnyoneClient() {
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 md:grid-cols-[0.95fr_1.05fr]">
         <section className="min-w-0 space-y-6 overflow-hidden">
-          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.24em] text-tts-confirm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-normal text-tts-confirm">
             <ShieldCheck className="h-4 w-4" />
             Pay Anyone
           </div>
@@ -215,8 +215,8 @@ export default function PayAnyoneClient() {
 
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
             {(isReceiveMode ? ["Create", "Share", "Receive"] : ["Create", "Share", "Receive"]).map((label, index) => (
-              <div key={label} className="min-w-0 overflow-hidden rounded-lg border border-tts-border bg-tts-surface p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-tts-muted">{index + 1}. {label}</p>
+              <div key={label} className="min-w-0 overflow-hidden rounded-xl border border-tts-border bg-tts-surface p-4">
+                <p className="text-xs uppercase tracking-normal text-tts-muted">{index + 1}. {label}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {index === 0 && (isReceiveMode ? "Generate your public receive link." : "Enter amount, recipient, and PIN.")}
                   {index === 1 && "Send the link through your preferred channel."}
@@ -227,7 +227,7 @@ export default function PayAnyoneClient() {
           </div>
         </section>
 
-        <section className="min-w-0 overflow-hidden rounded-lg border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
           {booting && (
             <div className="mb-5 space-y-3">
               <Shimmer className="h-12 w-full rounded-xl" />
@@ -235,7 +235,7 @@ export default function PayAnyoneClient() {
             </div>
           )}
           {!loggedIn && (
-            <div className="mb-5 rounded-lg border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold">
+            <div className="mb-5 rounded-xl border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold">
               Sign in before creating a payment link.
               <Link href="/login?next=/pay-anyone" className="ml-2 font-semibold text-tts-gold underline">
                 Sign in
@@ -243,7 +243,7 @@ export default function PayAnyoneClient() {
             </div>
           )}
 
-          <div className="mb-5 grid rounded-lg border border-tts-border bg-tts-surface p-1 text-sm sm:grid-cols-2">
+          <div className="mb-5 grid rounded-xl border border-tts-border bg-tts-surface p-1 text-sm sm:grid-cols-2">
             <button
               type="button"
               onClick={() => {
@@ -280,7 +280,7 @@ export default function PayAnyoneClient() {
                   value={recipientName}
                   onChange={(event) => setRecipientName(event.target.value)}
                   placeholder="John"
-                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none placeholder:text-tts-muted focus:border-tts-confirm"
+                  className="w-full rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none placeholder:text-tts-muted focus:border-tts-confirm"
                 />
               </label>
             )}
@@ -293,7 +293,7 @@ export default function PayAnyoneClient() {
                   onChange={(event) => setAmount(event.target.value.replace(/[^\d.,]/g, ""))}
                   inputMode="decimal"
                   placeholder="15"
-                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none placeholder:text-tts-muted focus:border-tts-confirm"
+                  className="w-full rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none placeholder:text-tts-muted focus:border-tts-confirm"
                 />
               </label>
               <label className="block space-y-2">
@@ -301,7 +301,7 @@ export default function PayAnyoneClient() {
                 <select
                   value={assetCode}
                   onChange={(event) => setAssetCode(event.target.value)}
-                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none focus:border-tts-confirm"
+                  className="w-full rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none focus:border-tts-confirm"
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
@@ -313,7 +313,7 @@ export default function PayAnyoneClient() {
                 <select
                   value={destinationAssetCode}
                   onChange={(event) => setDestinationAssetCode(event.target.value)}
-                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none focus:border-tts-confirm"
+                  className="w-full rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none focus:border-tts-confirm"
                 >
                   <option value="USDC">US$</option>
                   <option value="BRL">R$</option>
@@ -326,19 +326,19 @@ export default function PayAnyoneClient() {
                   value={expiresAtLocal}
                   onChange={(event) => setExpiresAtLocal(event.target.value)}
                   type="datetime-local"
-                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none focus:border-tts-confirm"
+                  className="w-full rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none focus:border-tts-confirm"
                 />
               </label>
             </div>}
 
             {isReceiveMode && (
-              <div className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
+              <div className="rounded-xl border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
                 Your receive link is fixed. The customer chooses the amount on the public page and the payment is identified as an incoming payment for you.
               </div>
             )}
 
             {!isReceiveMode && destinationAssetCode !== assetCode && (
-              <p className="rounded-lg border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm text-tts-gold">
+              <p className="rounded-xl border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm text-tts-gold">
                 The link debits {amount || "0"} {displayAsset(assetCode)} from your account and the recipient receives it in {displayAsset(destinationAssetCode)} when they sign in.
               </p>
             )}
@@ -353,7 +353,7 @@ export default function PayAnyoneClient() {
                   inputMode="numeric"
                   maxLength={8}
                   placeholder="Authorize link creation"
-                  className="w-full rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none placeholder:text-tts-muted focus:border-tts-confirm"
+                  className="w-full rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none placeholder:text-tts-muted focus:border-tts-confirm"
                 />
               </label>
             )}
@@ -361,7 +361,7 @@ export default function PayAnyoneClient() {
             <button
               type="submit"
               disabled={!loggedIn || submitLocked || (!isReceiveMode && (!amount.trim() || !pin.trim()))}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Link2 className="h-4 w-4" />
               {status === "submitting"
@@ -370,7 +370,7 @@ export default function PayAnyoneClient() {
             </button>
           </form>
 
-          <div className="mt-5 rounded-lg border border-tts-border bg-tts-bg p-4 text-sm">
+          <div className="mt-5 rounded-xl border border-tts-border bg-tts-bg p-4 text-sm">
               <p className="font-medium text-tts-deep">Link</p>
             {status === "idle" && (
               <p className="mt-2 text-tts-muted">
@@ -382,12 +382,12 @@ export default function PayAnyoneClient() {
             <AnimatePresence mode="wait">
             {status === "done" && result?.url && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 space-y-3">
-                <p className="break-all rounded-lg bg-tts-surface p-3 font-mono text-xs text-tts-deep">{result.url}</p>
+                <p className="break-all rounded-xl bg-tts-surface p-3 font-mono text-xs text-tts-deep">{result.url}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={copyLink}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-2 font-semibold text-tts-deep transition hover:bg-tts-bg"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-4 py-2 font-semibold text-tts-deep transition hover:bg-tts-bg"
                   >
                     <Copy className="h-4 w-4" />
                     {copied ? "Copied" : "Copy"}
@@ -396,7 +396,7 @@ export default function PayAnyoneClient() {
                     href={whatsappUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-tts-gold px-4 py-2 font-semibold text-tts-deep transition hover:bg-tts-confirm"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-tts-gold px-4 py-2 font-semibold text-tts-deep transition hover:bg-tts-confirm"
                   >
                     <Send className="h-4 w-4" />
                     Send

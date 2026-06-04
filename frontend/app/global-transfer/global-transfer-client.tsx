@@ -181,8 +181,8 @@ function Field({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-tts-muted">{label}</span>
-      <div className="flex h-11 items-center rounded-lg border border-tts-border bg-tts-surface px-3 shadow-sm focus-within:border-tts-gold">
+      <span className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{label}</span>
+      <div className="flex h-11 items-center rounded-xl border border-tts-border bg-tts-surface px-3 shadow-sm focus-within:border-tts-gold">
         <input
           type="number"
           min={min}
@@ -210,12 +210,12 @@ function TextField({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-tts-muted">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{label}</span>
       <input
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none placeholder:text-tts-muted focus:border-tts-gold"
+        className="h-11 w-full rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none placeholder:text-tts-muted focus:border-tts-gold"
       />
     </label>
   )
@@ -234,11 +234,11 @@ function SelectField<T extends string>({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-tts-muted">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as T)}
-        className="h-11 w-full rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none focus:border-tts-gold"
+        className="h-11 w-full rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-deep shadow-sm outline-none focus:border-tts-gold"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -683,30 +683,30 @@ export default function GlobalTransferClient() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/"
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Home
             </Link>
             <Link
               href="/institution-settlement"
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-tts-deep px-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep"
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-tts-deep px-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep"
             >
               <Network className="h-4 w-4" aria-hidden="true" />
               Institution tester
             </Link>
           </div>
           <div className="min-w-0 text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-gold">Controlled route</p>
-            <h1 className="text-xl font-bold tracking-tight text-tts-deep sm:text-2xl">BRL to USD transfer lab</h1>
+            <p className="text-xs font-semibold uppercase tracking-normal text-tts-gold">Controlled route</p>
+            <h1 className="text-xl font-bold tracking-normal text-tts-deep sm:text-2xl">BRL to USD transfer lab</h1>
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <section className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+        <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
           <div className="mb-4 flex items-start gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-tts-confirm text-tts-confirm">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tts-confirm text-tts-deep">
               <Building2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -796,7 +796,7 @@ export default function GlobalTransferClient() {
             <button
               type="button"
               onClick={refreshQuote}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep transition hover:border-tts-border"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep transition hover:border-tts-border"
             >
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               Requote
@@ -804,7 +804,7 @@ export default function GlobalTransferClient() {
             <button
               type="button"
               onClick={createAnchorOrder}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tts-deep px-3 text-sm font-bold text-tts-surface transition hover:bg-tts-deep"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-tts-deep px-3 text-sm font-bold text-tts-surface transition hover:bg-tts-deep"
             >
               <QrCode className="h-4 w-4" aria-hidden="true" />
               PIX rail
@@ -812,7 +812,7 @@ export default function GlobalTransferClient() {
             <button
               type="button"
               onClick={markPixPaid}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-tts-confirm bg-tts-confirm px-3 text-sm font-bold text-tts-confirm transition hover:border-tts-confirm"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-tts-confirm bg-tts-confirm px-3 text-sm font-bold text-tts-deep transition hover:border-tts-confirm"
             >
               <Banknote className="h-4 w-4" aria-hidden="true" />
               Mark paid
@@ -820,7 +820,7 @@ export default function GlobalTransferClient() {
             <button
               type="button"
               onClick={sendExternalPayout}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tts-gold px-3 text-sm font-bold text-tts-surface transition hover:bg-tts-gold"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-tts-gold px-3 text-sm font-bold text-tts-surface transition hover:bg-tts-gold"
             >
               <Send className="h-4 w-4" aria-hidden="true" />
               Send USD
@@ -829,7 +829,7 @@ export default function GlobalTransferClient() {
           <button
             type="button"
             onClick={simulateTransfer}
-            className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep transition hover:border-tts-border"
+            className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep transition hover:border-tts-border"
           >
             <Route className="h-4 w-4" aria-hidden="true" />
             Run full route
@@ -837,11 +837,11 @@ export default function GlobalTransferClient() {
         </section>
 
         <div className="grid gap-5">
-          <section className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-muted">Quote result</p>
-                <h2 className="mt-1 text-2xl font-bold tracking-tight text-tts-deep">
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Quote result</p>
+                <h2 className="mt-1 text-2xl font-bold tracking-normal text-tts-deep">
                   {brlFormatter.format(quote.safeAmountBrl)}{" to "}{usdFormatter.format(quote.netUsd)}
                 </h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">
@@ -849,33 +849,33 @@ export default function GlobalTransferClient() {
                   Wise-compatible or international USD details.
                 </p>
               </div>
-              <div className="rounded-lg border border-tts-gold bg-tts-gold px-3 py-2 text-sm font-semibold text-tts-gold">
+              <div className="rounded-xl border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm font-semibold text-tts-gold">
                 Expires {quote.expiresAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
               </div>
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-4">
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Gross USD</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Gross USD</p>
                 <p className="mt-2 text-xl font-bold text-tts-deep">{usdFormatter.format(quote.grossUsd)}</p>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Net delivered</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Net delivered</p>
                 <p className="mt-2 text-xl font-bold text-tts-confirm">{usdFormatter.format(quote.netUsd)}</p>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Total cost</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Total cost</p>
                 <p className="mt-2 text-xl font-bold text-tts-deep">{pctFromBps(quote.effectiveCostBps)}</p>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">USDC sent</p>
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">USDC sent</p>
                 <p className="mt-2 text-xl font-bold text-tts-deep">{numberFormatter.format(quote.usdcSettlementAmount)}</p>
               </div>
             </div>
           </section>
 
           <section className="grid gap-5 lg:grid-cols-3">
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <QrCode className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
                 <h2 className="text-base font-bold text-tts-deep">PIX order</h2>
@@ -894,13 +894,13 @@ export default function GlobalTransferClient() {
                   <span className="font-bold text-tts-deep">PIX fee:</span> {brlFormatter.format(quote.pixFeeBrl)}
                 </p>
               </div>
-              <div className="mt-3 rounded-lg border border-tts-border bg-tts-surface p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-tts-muted">Mock copia e cola</p>
+              <div className="mt-3 rounded-xl border border-tts-border bg-tts-surface p-3">
+                <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">Mock copia e cola</p>
                 <p className="mt-2 break-all font-mono text-xs leading-5 text-tts-muted">{anchorPayload.pix.copy_paste}</p>
               </div>
             </div>
 
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <CreditCard className="h-5 w-5 text-tts-gold" aria-hidden="true" />
                 <h2 className="text-base font-bold text-tts-deep">External payout</h2>
@@ -924,7 +924,7 @@ export default function GlobalTransferClient() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Timer className="h-5 w-5 text-tts-gold" aria-hidden="true" />
                 <h2 className="text-base font-bold text-tts-deep">Release gates</h2>
@@ -936,11 +936,11 @@ export default function GlobalTransferClient() {
                   ["USDC ready", anchorStatusRank[anchorStatus] >= 4 ? "pass" : "hold"],
                   ["External screening", externalStatusRank[externalStatus] >= 1 ? "pass" : "hold"],
                 ].map(([label, state]) => (
-                  <div key={label} className="flex items-center justify-between gap-3 rounded-lg bg-tts-surface px-3 py-2 text-sm">
+                  <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-tts-surface px-3 py-2 text-sm">
                     <span className="font-semibold text-tts-muted">{label}</span>
                     <span
                       className={`rounded-md px-2 py-0.5 text-xs font-bold ${
-                        state === "pass" ? "bg-tts-confirm text-tts-confirm" : "bg-tts-gold text-tts-gold"
+                        state === "pass" ? "bg-tts-confirm text-tts-deep" : "bg-tts-gold text-tts-deep"
                       }`}
                     >
                       {state}
@@ -952,7 +952,7 @@ export default function GlobalTransferClient() {
           </section>
 
           <section className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
                 <h2 className="text-base font-bold text-tts-deep">Operational timeline</h2>
@@ -963,11 +963,11 @@ export default function GlobalTransferClient() {
                   return (
                     <div key={item.label} className="grid grid-cols-[40px_minmax(0,1fr)] gap-3 border-b border-tts-border pb-3 last:border-b-0 last:pb-0">
                       <div
-                        className={`grid h-10 w-10 place-items-center rounded-lg ${
+                        className={`grid h-10 w-10 place-items-center rounded-xl ${
                           item.status === "complete"
-                            ? "bg-tts-confirm text-tts-confirm"
+                            ? "bg-tts-confirm text-tts-deep"
                             : item.status === "ready"
-                              ? "bg-tts-gold text-tts-gold"
+                              ? "bg-tts-gold text-tts-deep"
                               : "bg-tts-surface text-tts-muted"
                         }`}
                       >
@@ -979,9 +979,9 @@ export default function GlobalTransferClient() {
                           <span
                             className={`rounded-md px-2 py-0.5 text-xs font-bold ${
                               item.status === "complete"
-                                ? "bg-tts-confirm text-tts-confirm"
+                                ? "bg-tts-confirm text-tts-deep"
                                 : item.status === "ready"
-                                  ? "bg-tts-gold text-tts-gold"
+                                  ? "bg-tts-gold text-tts-deep"
                                   : "bg-tts-surface text-tts-muted"
                             }`}
                           >
@@ -996,12 +996,12 @@ export default function GlobalTransferClient() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-tts-gold" aria-hidden="true" />
                 <h2 className="text-base font-bold text-tts-deep">Decision flags</h2>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-surface p-3">
+              <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
                 <p className="text-sm font-bold text-tts-deep">{recipientProfiles[recipientType].label}</p>
                 <p className="mt-1 text-sm text-tts-muted">
                   Risk: <span className="font-bold text-tts-deep">{recipientProfiles[recipientType].risk}</span>
@@ -1020,9 +1020,9 @@ export default function GlobalTransferClient() {
           </section>
 
           <section className="grid gap-5 lg:grid-cols-2">
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <h2 className="text-base font-bold text-tts-deep">Cost breakdown</h2>
-              <div className="mt-4 overflow-hidden rounded-lg border border-tts-border">
+              <div className="mt-4 overflow-hidden rounded-xl border border-tts-border">
                 {[
                   ["Gross USD before costs", usdFormatter.format(quote.grossUsd)],
                   [`PIX PSP fee (${pctFromBps(quote.safePixFeeBps)} + fixed)`, `${brlFormatter.format(quote.pixFeeBrl)} / ${usdFormatter.format(quote.pixFeeUsd)}`],
@@ -1049,7 +1049,7 @@ export default function GlobalTransferClient() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
               <h2 className="text-base font-bold text-tts-deep">Provider assumptions</h2>
               <div className="mt-4 space-y-3 text-sm leading-6 text-tts-muted">
                 <p>
@@ -1068,14 +1068,14 @@ export default function GlobalTransferClient() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <FileText className="h-5 w-5 text-tts-muted" aria-hidden="true" />
               <h2 className="text-base font-bold text-tts-deep">Fees paid by stage</h2>
             </div>
-            <div className="overflow-x-auto rounded-lg border border-tts-border">
+            <div className="overflow-x-auto rounded-xl border border-tts-border">
               <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-                <thead className="bg-tts-surface text-xs uppercase tracking-[0.08em] text-tts-muted">
+                <thead className="bg-tts-surface text-xs uppercase tracking-normal text-tts-muted">
                   <tr>
                     <th className="px-3 py-2 font-bold">Fee</th>
                     <th className="px-3 py-2 font-bold">Paid to</th>
@@ -1100,27 +1100,27 @@ export default function GlobalTransferClient() {
           </section>
 
           <section className="grid gap-5 lg:grid-cols-2">
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">Quote payload preview</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(quotePayload, null, 2)}
               </pre>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">Anchor order preview</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(anchorPayload, null, 2)}
               </pre>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">Transfer payload preview</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(transferPayload, null, 2)}
               </pre>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
+            <div className="rounded-xl border border-tts-border bg-tts-deep p-4 text-tts-deep shadow-sm">
               <h2 className="text-base font-bold">External payout instruction</h2>
-              <pre className="mt-3 max-h-[360px] overflow-auto rounded-lg bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
+              <pre className="mt-3 max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
                 {JSON.stringify(externalInstruction, null, 2)}
               </pre>
             </div>

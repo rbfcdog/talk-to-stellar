@@ -328,11 +328,11 @@ export default function ConfirmConversionClient({
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
         <div className="grid min-w-0 w-full gap-8 overflow-hidden border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
-            <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-[0.2em] text-tts-confirm">
+            <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-2xl font-bold tracking-tight text-tts-deep md:text-3xl">
+              <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
                 {T(feedbackLanguage, "Confirme a troca de moeda", "Confirm this conversion")}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-tts-muted">
@@ -355,13 +355,13 @@ export default function ConfirmConversionClient({
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-tts-muted">{T(feedbackLanguage, "Origem", "Source")}</p>
+                <p className="text-sm font-black uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Origem", "Source")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}
                 </p>
               </div>
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-tts-muted">{T(feedbackLanguage, "Destino", "Destination")}</p>
+                <p className="text-sm font-black uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Destino", "Destination")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {formatAmount(destAmount, destAssetCode, feedbackLanguage)}
                 </p>

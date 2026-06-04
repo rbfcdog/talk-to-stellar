@@ -247,6 +247,17 @@
     position: relative;
     isolation: isolate;
     overflow-x: hidden;
+    padding-top: 4.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .tts-op-page {
+      padding-top: 2.5rem;
+    }
+  }
+
+  .tts-op-page * {
+    letter-spacing: 0 !important;
   }
 
   .tts-op-page::before {
@@ -261,14 +272,7 @@
   }
 
   .tts-op-page::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background:
-      linear-gradient(180deg, color-mix(in oklab, var(--tts-surface) 54%, transparent), transparent 40%),
-      linear-gradient(135deg, color-mix(in oklab, var(--tts-gold) 6%, transparent), transparent 44%);
+    content: none;
   }
 
   .tts-op-page > * {
@@ -283,14 +287,14 @@
   .tts-op-header,
   .tts-op-card,
   .tts-op-stat {
-    backdrop-filter: blur(14px);
+    backdrop-filter: blur(10px);
   }
 
   .tts-op-card,
   .tts-op-header {
     box-shadow:
       0 1px 0 color-mix(in oklab, var(--tts-surface) 80%, white 20%) inset,
-      0 18px 55px rgba(28, 24, 18, 0.06);
+      0 14px 34px rgba(28, 24, 18, 0.045);
   }
 
   .tts-op-page .shadow-sm,
@@ -301,7 +305,7 @@
   .tts-op-page .shadow-2xl {
     box-shadow:
       0 1px 0 color-mix(in oklab, var(--tts-surface) 82%, white 18%) inset,
-      0 18px 48px rgba(28, 24, 18, 0.055) !important;
+      0 14px 34px rgba(28, 24, 18, 0.045) !important;
   }
 
   .tts-op-page .bg-tts-deep\/20,
@@ -316,7 +320,19 @@
     line-height: 2rem !important;
   }
 
+  .tts-op-page .text-5xl,
+  .tts-op-page .text-6xl,
+  .tts-op-page .text-7xl {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+  }
+
+  .tts-op-page .font-black {
+    font-weight: 700 !important;
+  }
+
   @media (min-width: 768px) {
+    .tts-op-page .md\:text-4xl,
     .tts-op-page .md\:text-5xl,
     .tts-op-page .md\:text-6xl {
       font-size: 1.875rem !important;
@@ -329,22 +345,67 @@
     border-color: var(--tts-border);
   }
 
+  .tts-op-page :is(section, article, aside, header)[class*='border'],
+  .tts-op-page :is(section, article, aside, header, div)[class*='rounded'][class*='border'] {
+    border-color: var(--tts-border) !important;
+  }
+
+  .tts-op-page :is(section, article, aside, header, div)[class*='border']:not([class*='rounded']) {
+    border-radius: 0.75rem;
+  }
+
+  .tts-op-page :is(header, section)[class*='border-b'] {
+    border: 1px solid var(--tts-border) !important;
+    border-radius: 1rem;
+    background-color: var(--tts-surface) !important;
+    padding: 1.5rem !important;
+    box-shadow:
+      0 1px 0 color-mix(in oklab, var(--tts-surface) 82%, white 18%) inset,
+      0 14px 34px rgba(28, 24, 18, 0.045);
+  }
+
+  .tts-op-page :is(header, section)[class*='border-b'] + * {
+    margin-top: 1rem;
+  }
+
+  .tts-op-page :is(section, article, aside, header)[class*='bg-tts-deep'],
+  .tts-op-page :is(section, article, aside, header)[class*='bg-black'],
+  .tts-op-page :is(section, article, aside, header)[class*='bg-white'] {
+    background-color: var(--tts-surface) !important;
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page :is(section, article, aside, header)[class*='bg-tts-gold'],
+  .tts-op-page :is(section, article, aside, header)[class*='bg-tts-confirm'] {
+    background-color: var(--tts-surface) !important;
+    color: var(--tts-deep) !important;
+  }
+
   .tts-op-page input,
   .tts-op-page textarea,
   .tts-op-page select {
     border-radius: var(--radius);
+    border-color: var(--tts-border) !important;
+    background-color: var(--tts-bg) !important;
+    color: var(--tts-deep) !important;
+    min-height: 2.75rem;
   }
 
-  .tts-op-page .bg-black,
-  .tts-op-page .bg-white {
-    background-color: var(--tts-surface) !important;
+  .tts-op-page input:focus,
+  .tts-op-page textarea:focus,
+  .tts-op-page select:focus {
+    border-color: var(--tts-gold) !important;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--tts-gold) 18%, transparent) !important;
+    outline: none !important;
   }
 
-  .tts-op-page .bg-black.text-tts-surface,
-  .tts-op-page .bg-white.text-tts-surface,
+  .tts-op-page button,
+  .tts-op-page a[role='button'],
+  .tts-op-page a[class*='rounded'] {
+    border-radius: var(--radius) !important;
+  }
+
   .tts-op-page .bg-tts-surface.text-tts-surface,
-  .tts-op-page .bg-black .text-tts-surface,
-  .tts-op-page .bg-white .text-tts-surface,
   .tts-op-page .bg-tts-surface .text-tts-surface {
     color: var(--tts-deep) !important;
   }
@@ -385,6 +446,10 @@
   }
 
   .tts-op-page .rounded-2xl {
+    border-radius: 1rem;
+  }
+
+  .tts-op-page .rounded-xl {
     border-radius: 0.75rem;
   }
 }

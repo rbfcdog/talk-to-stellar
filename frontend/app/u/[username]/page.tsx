@@ -66,7 +66,7 @@ export default function PublicProfilePage() {
   if (status === "error") {
     return (
       <main className="tts-op-page flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
-        <section className="w-full max-w-md rounded-lg border border-tts-border bg-tts-surface p-6">
+        <section className="w-full max-w-md rounded-xl border border-tts-border bg-tts-surface p-6">
           <h1 className="text-2xl font-semibold text-tts-deep">Perfil não encontrado</h1>
           <p className="mt-3 text-sm text-tts-deep">Confira o endereço ou peça um novo link público.</p>
         </section>
@@ -78,7 +78,7 @@ export default function PublicProfilePage() {
     <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:py-10">
       <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 md:grid-cols-[1.12fr_0.88fr]">
         <section className="space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-tts-gold">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-[11px] font-semibold uppercase tracking-normal text-tts-gold">
             <UserCircle2 className="h-4 w-4" />
             Perfil global
           </div>
@@ -89,7 +89,7 @@ export default function PublicProfilePage() {
                 {displayInitial}
               </div>
               <div className="min-w-0 flex-1">
-                <h1 className="text-3xl font-semibold leading-tight text-tts-deep md:text-5xl">{name}</h1>
+                <h1 className="text-2xl font-semibold leading-tight text-tts-deep md:text-2xl">{name}</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-deep md:text-base">
                   Conta pública para receber, acompanhar saldos e acessar ações rápidas sem abrir a tela de pagamento.
                 </p>
@@ -98,15 +98,15 @@ export default function PublicProfilePage() {
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Link público</p>
+                <p className="text-[11px] uppercase tracking-normal text-tts-muted">Link público</p>
                 <p className="mt-2 text-sm font-semibold text-tts-deep">{publicLink ? "Ativo" : "Indisponível"}</p>
               </div>
               <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Identificador</p>
+                <p className="text-[11px] uppercase tracking-normal text-tts-muted">Identificador</p>
                 <p className="mt-2 break-all text-sm font-semibold text-tts-deep">{accountId || "indisponível"}</p>
               </div>
               <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Recebimento</p>
+                <p className="text-[11px] uppercase tracking-normal text-tts-muted">Recebimento</p>
                 <p className="mt-2 text-sm font-semibold text-tts-deep">{publicKey ? "Pronto" : "Indisponível"}</p>
               </div>
             </div>
@@ -116,7 +116,7 @@ export default function PublicProfilePage() {
                 <button
                   type="button"
                   onClick={copyLink}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-bg px-4 py-2 text-sm font-semibold text-tts-deep transition hover:bg-tts-surface"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-tts-border bg-tts-bg px-4 py-2 text-sm font-semibold text-tts-deep transition hover:bg-tts-surface"
                 >
                   <Copy className="h-4 w-4" />
                   {copied ? "Link copiado" : "Copiar link"}
@@ -124,14 +124,14 @@ export default function PublicProfilePage() {
               )}
               <Link
                 href="/transactions"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-tts-deep px-4 py-2 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep/90"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-tts-deep px-4 py-2 text-sm font-semibold text-tts-surface transition hover:bg-tts-deep/90"
               >
                 <History className="h-4 w-4" />
                 Ver histórico
               </Link>
               <Link
                 href={`/pay-anyone?mode=receive&recipient=${encodeURIComponent(name)}`}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-tts-confirm bg-tts-confirm/10 px-4 py-2 text-sm font-semibold text-tts-confirm transition hover:bg-tts-confirm/20"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-tts-confirm bg-tts-confirm/10 px-4 py-2 text-sm font-semibold text-tts-confirm transition hover:bg-tts-confirm/20"
               >
                 <ArrowUpRight className="h-4 w-4" />
                 Criar link de recebimento
@@ -141,7 +141,7 @@ export default function PublicProfilePage() {
         </section>
 
         <section className="rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm md:p-6">
-          <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
+          <p className="text-[11px] uppercase tracking-normal text-tts-muted">Chave pública</p>
           <p className="mt-3 break-all font-mono-financial text-sm font-semibold leading-6 text-tts-deep">
             {publicKey || "indisponível"}
           </p>

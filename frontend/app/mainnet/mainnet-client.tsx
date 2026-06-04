@@ -444,11 +444,11 @@ export default function MainnetClient() {
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-5 border-b border-tts-border pb-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-tts-gold">
+            <div className="mb-4 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-gold">
               <ShieldCheck className="h-4 w-4" />
               Ambiente da conta
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-tts-deep md:text-5xl">
+            <h1 className="text-xl font-bold tracking-normal text-tts-deep md:text-2xl">
               Carteira e saldo
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
@@ -557,7 +557,7 @@ export default function MainnetClient() {
                   Attach only a public key. Secret keys, seed phrases and signing credentials must never be pasted here.
                 </p>
               </div>
-              <span className="border border-tts-border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] text-tts-deep">
+              <span className="border border-tts-border px-2 py-1 text-xs font-black uppercase tracking-normal text-tts-deep">
                 Read only
               </span>
             </div>
@@ -574,7 +574,7 @@ export default function MainnetClient() {
             ) : (
               <>
                 <div className="mt-5 space-y-3">
-                  <label className="block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
+                  <label className="block text-xs font-black uppercase tracking-normal text-tts-muted">
                     Public Mainnet key
                   </label>
                   <input
@@ -583,7 +583,7 @@ export default function MainnetClient() {
                     placeholder="G..."
                     className="min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 font-mono text-sm text-tts-deep outline-none focus:border-tts-gold"
                   />
-                  <label className="block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
+                  <label className="block text-xs font-black uppercase tracking-normal text-tts-muted">
                     Wallet label
                   </label>
                   <input
@@ -608,7 +608,7 @@ export default function MainnetClient() {
                 </div>
 
                 <div className="mt-6 border border-tts-border bg-tts-bg/60 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Attached wallet</p>
+                  <p className="text-xs font-black uppercase tracking-normal text-tts-muted">Attached wallet</p>
                   {hasWallet ? (
                     <div className="mt-3 space-y-3">
                       <p className="text-lg font-black text-tts-deep">{wallet?.label || "Mainnet wallet"}</p>
@@ -659,7 +659,7 @@ export default function MainnetClient() {
                 <div key={`${item.asset_code}-${item.asset_issuer || "native"}`} className="border border-tts-border bg-tts-bg/60 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{item.asset_code}</p>
+                      <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{item.asset_code}</p>
                       <p className="mt-2 text-2xl font-black text-tts-deep">{formatAmount(item.balance)}</p>
                     </div>
                     <span className="border border-tts-border px-2 py-1 text-xs font-bold text-tts-deep">
@@ -678,7 +678,7 @@ export default function MainnetClient() {
             </div>
 
             <div className="mt-5 border border-tts-border bg-tts-bg/60 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Account status</p>
+              <p className="text-xs font-black uppercase tracking-normal text-tts-muted">Account status</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <MiniStat label="Funded" value={balance?.funded === false ? "No" : balance?.funded ? "Yes" : "-"} />
                 <MiniStat label="Sequence" value={balance?.sequence ? compactKey(balance.sequence) : "-"} />
@@ -730,7 +730,7 @@ export default function MainnetClient() {
             </div>
             {preview ? (
               <div className="mt-5 border border-tts-border bg-tts-bg/60 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Preview result</p>
+                <p className="text-xs font-black uppercase tracking-normal text-tts-muted">Preview result</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <MiniStat label="Mode" value={preview.preview?.mode || preview.mode || "-"} />
                   <MiniStat label="Can submit" value={preview.preview?.can_submit ? "Yes" : "No"} />
@@ -817,7 +817,7 @@ function TestnetRailPanel({
               Este é o ambiente usado para PIX, cotações, pagamentos por chat e conferência de saldo antes de operações reais.
             </p>
           </div>
-          <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${etherfuseAvailable ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
+          <span className={`border px-2 py-1 text-xs font-black uppercase tracking-normal ${etherfuseAvailable ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
             {etherfuseAvailable ? "Ready" : "Check env"}
           </span>
         </div>
@@ -946,13 +946,13 @@ function DefindexYieldPanel({
             Advanced confirmation
           </h2>
           <div className="mt-3 flex flex-wrap gap-2">
-            <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${configured ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
+            <span className={`border px-2 py-1 text-xs font-black uppercase tracking-normal ${configured ? "border-tts-confirm text-tts-confirm" : "border-tts-gold text-tts-gold"}`}>
               {configured ? "Configured" : "Needs vault"}
             </span>
-            <span className={`border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] ${executionEnabled ? "border-tts-confirm text-tts-confirm" : "border-tts-border text-tts-muted"}`}>
+            <span className={`border px-2 py-1 text-xs font-black uppercase tracking-normal ${executionEnabled ? "border-tts-confirm text-tts-confirm" : "border-tts-border text-tts-muted"}`}>
               {executionEnabled ? "Execution on" : "Prepare only"}
             </span>
-            <span className="border border-tts-border px-2 py-1 text-xs font-black uppercase tracking-[0.16em] text-tts-muted">
+            <span className="border border-tts-border px-2 py-1 text-xs font-black uppercase tracking-normal text-tts-muted">
               {status?.runtime?.network || "testnet"}
             </span>
           </div>
@@ -969,7 +969,7 @@ function DefindexYieldPanel({
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         {vaults.length ? vaults.slice(0, 3).map((vault) => (
           <div key={`${vault.asset_code}-${vault.vault_address}`} className="border border-tts-border bg-tts-bg/60 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{vault.display_asset_code || vault.asset_code}</p>
+            <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{vault.display_asset_code || vault.asset_code}</p>
             <p className="mt-2 text-lg font-black text-tts-deep">{formatYieldApy(vault.apy_percent || vault.apy?.apyPercent || vault.apy?.apy)}</p>
             <p className="mt-1 truncate text-xs text-tts-muted" title={vault.vault_address}>{vault.label || compactKey(vault.vault_address)}</p>
           </div>
@@ -1000,7 +1000,7 @@ function DefindexYieldPanel({
               </button>
             </div>
 
-            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Asset</label>
+            <label className="mt-4 block text-xs font-black uppercase tracking-normal text-tts-muted">Asset</label>
             <select
               value={assetCode}
               onChange={(event) => setAssetCode(event.target.value)}
@@ -1013,7 +1013,7 @@ function DefindexYieldPanel({
               ))}
             </select>
 
-            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Amount</label>
+            <label className="mt-4 block text-xs font-black uppercase tracking-normal text-tts-muted">Amount</label>
             <input
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -1021,7 +1021,7 @@ function DefindexYieldPanel({
               className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
             />
 
-            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Slippage bps</label>
+            <label className="mt-4 block text-xs font-black uppercase tracking-normal text-tts-muted">Slippage bps</label>
             <input
               value={slippageBps}
               onChange={(event) => setSlippageBps(event.target.value.replace(/\D/g, "").slice(0, 5))}
@@ -1029,7 +1029,7 @@ function DefindexYieldPanel({
               className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
             />
 
-            <label className="mt-4 block text-xs font-black uppercase tracking-[0.16em] text-tts-muted">PIN</label>
+            <label className="mt-4 block text-xs font-black uppercase tracking-normal text-tts-muted">PIN</label>
             <input
               value={pin}
               onChange={(event) => setPin(event.target.value)}
@@ -1073,11 +1073,11 @@ function DefindexYieldPanel({
               <MiniStat label="Asset" value={selectedVault?.display_asset_code || selectedVault?.asset_code || "-"} />
             </div>
             <div className="mt-4 border border-tts-border bg-tts-surface p-3">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Balance</p>
+              <p className="text-xs font-black uppercase tracking-normal text-tts-muted">Balance</p>
               <p className="mt-2 break-all font-mono text-xs text-tts-deep">{compactJson(balance?.balance || balance)}</p>
             </div>
             <div className="mt-4 border border-tts-border bg-tts-surface p-3">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">Result</p>
+              <p className="text-xs font-black uppercase tracking-normal text-tts-muted">Result</p>
               <p className="mt-2 break-all font-mono text-xs text-tts-deep">
                 {result?.hash ? `hash=${result.hash}` : result?.xdr ? `xdr=${compactKey(result.xdr)}` : compactJson(result)}
               </p>
@@ -1092,7 +1092,7 @@ function DefindexYieldPanel({
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{label}</p>
+      <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-2 text-xl font-black text-tts-deep">{value}</p>
       <p className="mt-1 text-sm text-tts-muted">{detail}</p>
     </div>
@@ -1102,7 +1102,7 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-3">
-      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-tts-deep" title={value}>{value}</p>
     </div>
   );

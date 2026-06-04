@@ -320,13 +320,13 @@ export default function PasskeyTestClient() {
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="border-b border-tts-border pb-5">
-          <div className="mb-3 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-gold">
+          <div className="mb-3 inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-gold">
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             Teste de biometria
           </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="max-w-3xl text-3xl font-black tracking-tight md:text-4xl">
+              <h1 className="max-w-3xl text-3xl font-black tracking-normal md:text-4xl">
                 Entrar com biometria
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-tts-muted md:text-base">
@@ -539,7 +539,7 @@ function Feedback({ label, state }: { label: string; state: StepState }) {
 function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-tts-border bg-tts-bg p-3">
-      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-1 font-mono-financial text-sm font-black text-tts-deep">{value}</p>
     </div>
   );

@@ -14,7 +14,7 @@ export function WelcomeScreen() {
         <Logo size={96} />
       </div>
 
-      <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-tts-deep sm:text-3xl">
+      <h1 className="mb-4 text-2xl font-extrabold tracking-normal text-tts-deep sm:text-3xl">
         TalkToStellar
       </h1>
 
