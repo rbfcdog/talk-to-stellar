@@ -62,6 +62,27 @@ function redirectUrlWithSessionSource(rawUrl: string, source: string): string {
   }
 }
 
+function redirectUrlWithShortLinkCode(rawUrl: string, code: string): string {
+  try {
+    const url = new URL(rawUrl);
+    if (!url.searchParams.get("short_link_code")) url.searchParams.set("short_link_code", code);
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function linkUsedRedirect(req: NextRequest) {
+  const url = new URL("/link-used", req.url);
+  url.searchParams.set(
+    "message",
+    "Este link expirou ou ja foi usado. Por seguranca, os detalhes da operacao nao ficam mais disponiveis.",
+  );
+  const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  return response;
+}
+
 function isAccountAccessUrl(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl);
@@ -104,11 +125,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
   const payload = await resolveShortLinkPayload(req, encodedCode);
 
   if (!payload?.url) {
-    return NextResponse.redirect(new URL("/chat", req.url));
+    return linkUsedRedirect(req);
   }
 
   const sessionSource = sourceFromPayload(payload);
-  const redirect = NextResponse.redirect(redirectUrlWithSessionSource(String(payload.url), sessionSource));
+  const targetUrl = redirectUrlWithShortLinkCode(redirectUrlWithSessionSource(String(payload.url), sessionSource), code);
+  const redirect = NextResponse.redirect(targetUrl);
   const sessionId = String(payload.session_id || payload.sessionId || "").trim();
   const sessionToken = String(payload.session_token || payload.sessionToken || "").trim();
   if (sessionId || sessionToken) {
