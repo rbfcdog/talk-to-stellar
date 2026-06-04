@@ -3054,8 +3054,8 @@ export default function PixRampClient({
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg px-3 py-5 text-tts-deep sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:p-10">
-          <section className="min-w-0 space-y-6 overflow-hidden">
+        <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:p-10">
+          <section className="min-w-0 space-y-2 overflow-hidden md:space-y-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className={`inline-flex w-fit rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-normal ${
                 rampMode === "onramp"
@@ -3066,7 +3066,7 @@ export default function PixRampClient({
               </div>
             </div>
             <div className="space-y-4">
-                <h1 className="max-w-xl text-xl font-bold tracking-normal text-tts-deep md:text-3xl">
+                <h1 className="max-w-xl text-lg font-bold tracking-normal text-tts-deep md:text-3xl">
                   {rampMode === "onramp"
                     ? transferFlow && safeTransferRecipientLabel
                       ? L(`Pagar ${safeTransferRecipientLabel} com PIX`, `Pay ${safeTransferRecipientLabel} with PIX`)
@@ -3075,7 +3075,7 @@ export default function PixRampClient({
                       : t("pix_add_title")
                     : t("pix_send_title")}
                 </h1>
-                <p className="max-w-2xl text-sm leading-6 text-tts-muted md:text-lg md:leading-7">
+                <p className="hidden max-w-2xl text-sm leading-6 text-tts-muted md:block md:text-lg md:leading-7">
                   {rampMode === "onramp"
                     ? transferFlow && safeTransferRecipientLabel
                       ? t("pix_transfer_subtitle", { recipient: safeTransferRecipientLabel })

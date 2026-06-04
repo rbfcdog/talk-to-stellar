@@ -741,7 +741,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
       </div>
 
       {activeStep === "plan" && (
-        <div className="tts-stage-panel p-4 space-y-5 sm:p-5">
+        <div className="tts-mobile-flow-card tts-stage-panel p-4 space-y-5 sm:p-5">
           <div className="flex border border-tts-border p-0.5">
             <button onClick={() => onActionChange("deposit")}
               className={`flex-1 py-2.5 text-sm font-bold text-center transition ${action === "deposit" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}>
@@ -779,7 +779,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
       )}
 
       {activeStep === "review" && (
-        <div className="tts-stage-panel p-4 space-y-5 sm:p-5">
+        <div className="tts-mobile-flow-card tts-stage-panel p-4 space-y-5 sm:p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold">{L("Confirmação", "Confirmation")}</h3>

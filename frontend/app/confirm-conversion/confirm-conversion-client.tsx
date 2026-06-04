@@ -346,17 +346,17 @@ export default function ConfirmConversionClient({
 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      <div className="mx-auto flex min-h-screen w-full max-w-4xl items-start px-4 py-4 sm:px-6 sm:py-10">
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl items-start px-4 py-3 sm:px-6 sm:py-10">
         <div className="grid min-w-0 w-full gap-4 overflow-hidden border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] md:gap-6 md:p-8">
-          <section className="min-w-0 space-y-5 overflow-hidden">
+          <section className="min-w-0 space-y-3 overflow-hidden md:space-y-5">
             <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
             </div>
-            <div className="space-y-4">
+            <div className="space-y-2 md:space-y-4">
               <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
                 {T(feedbackLanguage, "Confirme a troca de moeda", "Confirm this conversion")}
               </h1>
-              <p className="max-w-2xl text-sm leading-6 text-tts-muted">
+              <p className="tts-mobile-soft-hide max-w-2xl text-sm leading-6 text-tts-muted md:block">
                 {T(feedbackLanguage, "Confira os valores e digite seu PIN para concluir na sua conta.", "Check the details and enter your PIN to complete it in your account.")}
               </p>
             </div>
@@ -373,7 +373,7 @@ export default function ConfirmConversionClient({
               ))}
             </div>
 
-            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="hidden min-w-0 gap-4 md:grid sm:grid-cols-2">
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm font-black uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Origem", "Source")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
@@ -387,7 +387,7 @@ export default function ConfirmConversionClient({
                 </p>
               </div>
             </div>
-            <p className="text-xs leading-5 text-tts-muted">
+            <p className="tts-mobile-soft-hide text-xs leading-5 text-tts-muted md:block">
               {T(feedbackLanguage, "Testnet: valores de conversão são estimados e podem variar.", "Testnet: conversion values are estimated and may vary.")}
             </p>
 
@@ -403,8 +403,8 @@ export default function ConfirmConversionClient({
             </div>
           </section>
 
-          <section className="tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
-            <form className="space-y-4" onSubmit={handleSubmit}>
+          <section className="tts-mobile-flow-card tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
+            <form className={`${status === "submitting" || status === "done" ? "hidden md:block" : "block"} space-y-4`} onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
                 <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
                 <p className="mt-2 text-tts-deep">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
