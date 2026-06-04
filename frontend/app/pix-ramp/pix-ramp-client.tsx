@@ -78,6 +78,17 @@ type DebugLogEntry = {
   error?: string;
 };
 
+type PostConversionState = {
+  required: boolean;
+  pending: boolean;
+  failed: boolean;
+  completed: boolean;
+  sourceAmount: string;
+  sourceAsset: string;
+  destinationAmount: string;
+  destinationAsset: string;
+};
+
 const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
 const ETHERFUSE_TESTNET_FEE_BPS = 20;
 const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
@@ -123,6 +134,33 @@ function parseConfiguredAssetList(value: unknown): TargetAsset[] {
 
 function uniqueAssets(values: TargetAsset[]) {
   return Array.from(new Set(values.map((asset) => canonicalAssetCode(asset)).filter(Boolean)));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function getPostConversionState(transaction?: RampResponse | null, fallbackAsset = ""): PostConversionState {
+  const postConversion = transaction?.post_conversion || null;
+  const status = String(postConversion?.status || "").toLowerCase();
+  const required = Boolean(postConversion?.required);
+  const destinationAmount = String(postConversion?.destination_amount || "");
+  const sourceAmount = String(postConversion?.source_amount || "");
+  const sourceAsset = canonicalAssetCode(postConversion?.source_asset_code || fallbackAsset, fallbackAsset);
+  const destinationAsset = canonicalAssetCode(postConversion?.destination_asset_code || fallbackAsset, fallbackAsset);
+  const completed = required && status === "completed" && Boolean(destinationAmount);
+  const failed = required && status === "failed";
+
+  return {
+    required,
+    pending: required && !completed && !failed,
+    failed,
+    completed,
+    sourceAmount,
+    sourceAsset,
+    destinationAmount,
+    destinationAsset,
+  };
 }
 
 function buildAppPath(path: string, params: Record<string, unknown>) {
@@ -2372,18 +2410,14 @@ export default function PixRampClient({
       return;
     }
 
-    const postConversion = input.completedTransaction?.post_conversion || null;
-    const postConversionPending = Boolean(
-      postConversion?.required &&
-      String(postConversion?.status || "").toLowerCase() !== "completed" &&
-      !postConversion?.destination_amount
-    );
-    const postConversionSourceAsset = userFacingAssetCode(postConversion?.source_asset_code || targetAsset, targetAsset);
-    const postConversionDestinationAsset = userFacingAssetCode(postConversion?.destination_asset_code || targetAsset, targetAsset);
+    const postConversionState = getPostConversionState(input.completedTransaction, targetAsset);
+    const postConversionPending = postConversionState.pending;
+    const postConversionSourceAsset = userFacingAssetCode(postConversionState.sourceAsset || targetAsset, targetAsset);
+    const postConversionDestinationAsset = userFacingAssetCode(postConversionState.destinationAsset || targetAsset, targetAsset);
     const finalAsset = postConversionPending
-      ? postConversionSourceAsset
+      ? postConversionDestinationAsset
       : userFacingAssetCode(
-          postConversion?.destination_asset_code ||
+          postConversionState.destinationAsset ||
           input.completedTransaction?.finalAssetCode ||
           input.completedTransaction?.auto_conversion?.destination_asset_code ||
           input.completedTransaction?.toCurrency ||
@@ -2392,19 +2426,19 @@ export default function PixRampClient({
           targetAsset
         );
     const finalAmount = postConversionPending
-      ? String(postConversion?.source_amount || input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || finalReceivedAmount || "")
+      ? ""
       : finalAsset === "BRL"
         ? String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || order?.toAmount || quote?.toAmount || amountBrl)
-        : String(postConversion?.destination_amount || input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
-    const intermediateConversionLine = postConversion?.source_amount &&
-      postConversion?.source_asset_code
+        : String(postConversionState.destinationAmount || input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
+    const intermediateConversionLine = postConversionState.sourceAmount &&
+      postConversionState.sourceAsset
       ? L(
           postConversionPending
-            ? `Conversão em andamento: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)} para ${postConversionDestinationAsset}`
-            : `Recebido primeiro: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)}`,
+            ? `Conversão final em andamento: ${formatRampAsset(postConversionState.sourceAmount, postConversionSourceAsset)} para ${friendlyAssetName(postConversionDestinationAsset, language)}`
+            : `Recebido primeiro: ${formatRampAsset(postConversionState.sourceAmount, postConversionSourceAsset)}`,
           postConversionPending
-            ? `Conversion in progress: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)} to ${postConversionDestinationAsset}`
-            : `Received first: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)}`
+            ? `Final conversion in progress: ${formatRampAsset(postConversionState.sourceAmount, postConversionSourceAsset)} to ${friendlyAssetName(postConversionDestinationAsset, language)}`
+            : `Received first: ${formatRampAsset(postConversionState.sourceAmount, postConversionSourceAsset)}`
         )
       : "";
     const paidAmount = input.completedTransaction?.fromAmount
@@ -2430,10 +2464,12 @@ export default function PixRampClient({
       L("PIX confirmado com sucesso.", "PIX confirmed successfully."),
       L(`Valor pago: ${paidAmount}`, `Paid amount: ${paidAmount}`),
       intermediateConversionLine,
-      L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
+      postConversionPending
+        ? L(`Valor final: ${receivedAmount}`, `Final amount: ${receivedAmount}`)
+        : L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
       L("Destino: sua conta TalkToStellar", "Destination: your TalkToStellar account"),
       postConversionPending
-        ? L("Status: conversão em andamento", "Status: conversion in progress")
+        ? L(`Status: conversão para ${friendlyAssetName(finalAsset, language)} em andamento`, `Status: conversion to ${friendlyAssetName(finalAsset, language)} in progress`)
         : L("Status: concluído", "Status: completed"),
       L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
       receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
@@ -2454,6 +2490,20 @@ export default function PixRampClient({
     const pin = next.replace(/\D/g, "").slice(0, 8);
     setWalletPin(pin);
     if (/pin/i.test(error)) setError("");
+  }
+
+  async function waitForPostConversion(transaction?: RampResponse | null) {
+    let current = transaction || null;
+    if (!getPostConversionState(current, targetAsset).pending) return current;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await sleep(900);
+      const refreshed = await refreshOrder(false).catch(() => null);
+      current = refreshed?.transaction || current;
+      if (!getPostConversionState(current, targetAsset).pending) return current;
+    }
+
+    return current;
   }
 
   function clearResolvedRampWallet(nextEmail = rampEmail) {
@@ -2732,7 +2782,8 @@ export default function PixRampClient({
       if (payload?.transaction) setStatusPayload(payload);
       setPolling(true);
       const refreshed = await refreshOrder(false);
-      const completedTransaction = refreshed?.transaction || payload?.transaction;
+      let completedTransaction = refreshed?.transaction || payload?.transaction;
+      completedTransaction = await waitForPostConversion(completedTransaction);
       let transferPayload: RampResponse | null = null;
       if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
         setPixFundedTransferError("");
@@ -3206,7 +3257,7 @@ export default function PixRampClient({
         </div>
 
         {!lockedMode && (
-        <section className="mt-5 grid gap-3 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur sm:grid-cols-2">
+        <section className="mt-5 hidden gap-3 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:grid sm:grid-cols-2">
           <button
             className={`rounded-xl px-5 py-4 text-left transition ${rampMode === "onramp" ? "bg-tts-confirm text-tts-deep shadow-sm" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
             onClick={() => {
@@ -3232,7 +3283,7 @@ export default function PixRampClient({
 
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className={`${mobileStage === "receipt" ? "hidden" : "block"} rounded-xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+            <div className={`${mobileStage === "receipt" ? "hidden" : "block"} tts-mobile-flow-card rounded-xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-gold">PIX</p>
                 <h2 className="mt-1 text-2xl font-bold text-tts-deep">{L("Enviar para PIX", "Send to PIX")}</h2>
 
@@ -3354,7 +3405,7 @@ export default function PixRampClient({
                   walletPinInputRef.current = node;
                 }}
               />
-              <div className="mt-5 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4">
+              <div className="tts-mobile-soft-hide mt-5 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 md:block">
                 <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Confirmação final", "Final confirmation")}</p>
                 <p className="mt-2 text-sm font-bold leading-6 text-tts-gold">
                   {L("Este botão confirma a retirada e envia o valor para sua chave PIX.", "This button confirms the withdrawal and sends the amount to your PIX key.")}
@@ -3373,7 +3424,7 @@ export default function PixRampClient({
               </div>
             </div>
 
-            <div className={`${mobileStage === "receipt" ? "block" : "hidden"} rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+            <div className={`${mobileStage === "receipt" ? "block" : "hidden"} tts-mobile-flow-card rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
               <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Seu PIX", "Your PIX")}</p>
               <h2 className="mt-1 text-2xl font-black">{L("Envio para PIX", "Send to PIX")}</h2>
               {!temporaryOffRampTestResult ? (
@@ -3412,7 +3463,7 @@ export default function PixRampClient({
 
         {rampMode === "onramp" && (
         <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className={`${needsBrowserLoginForPix ? "hidden" : mobileStage === "details" ? "block" : "hidden"} rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+          <div className={`${needsBrowserLoginForPix ? "hidden" : mobileStage === "details" ? "block" : "hidden"} tts-mobile-flow-card rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">PIX</p>
@@ -3593,7 +3644,7 @@ export default function PixRampClient({
             )}
 
             {quote && (
-              <div className="mt-6 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-5">
+              <div className="tts-mobile-soft-hide mt-6 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-5 md:block">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pronto", "Ready")}</p>
@@ -3643,7 +3694,7 @@ export default function PixRampClient({
             )}
           </div>
 
-          <div className={`${mobileStage === "payment" ? "block" : "hidden"} rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+          <div className={`${mobileStage === "payment" ? "block" : "hidden"} tts-mobile-flow-card rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
             <button
               type="button"
               className="mb-4 rounded-full border border-tts-border px-4 py-2 text-xs font-black text-tts-muted md:hidden"
@@ -3670,8 +3721,8 @@ export default function PixRampClient({
               </div>
             ) : (
               <>
-                    <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
-                      <div className="mx-auto w-full max-w-[260px] rounded-2xl p-3 sm:max-w-none sm:p-4" style={{ backgroundColor: "#ffffff", color: "#111827" }}>
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[220px_1fr] md:mt-6 md:gap-4">
+                      <div className="tts-mobile-qr mx-auto w-full max-w-[260px] rounded-2xl p-2 sm:max-w-none sm:p-4" style={{ backgroundColor: "#ffffff", color: "#111827" }}>
                         {qrDataUrl ? (
                           <img
                             src={qrDataUrl}
@@ -3682,18 +3733,18 @@ export default function PixRampClient({
                           <div className="grid aspect-square place-items-center rounded-2xl bg-tts-surface text-center text-xs font-bold text-tts-muted">{L("QR indisponível", "QR unavailable")}</div>
                         )}
                       </div>
-                  <div className="space-y-3">
-                    <div className="rounded-2xl bg-tts-bg/60 p-4">
+                  <div className="grid grid-cols-2 gap-2 md:block md:space-y-3">
+                    <div className="tts-mobile-soft-hide rounded-2xl bg-tts-bg/60 p-4 md:block">
                       <p className="text-xs font-bold uppercase tracking-normal text-tts-confirm">{L("Recebedor", "Receiver")}</p>
                       <p className="mt-1 text-lg font-black">TalkToStellar</p>
                     </div>
-                    <div className="rounded-2xl bg-tts-bg/60 p-4">
+                    <div className="rounded-2xl bg-tts-bg/60 p-3 md:p-4">
                       <p className="text-xs font-bold uppercase tracking-normal text-tts-confirm">{L("Valor", "Amount")}</p>
-                      <p className="mt-1 text-lg font-black">{effectiveOnRampPixPayDisplay}</p>
+                      <p className="mt-1 text-base font-black md:text-lg">{effectiveOnRampPixPayDisplay}</p>
                     </div>
-                    <div className="rounded-2xl bg-tts-bg/60 p-4">
+                    <div className="rounded-2xl bg-tts-bg/60 p-3 md:p-4">
                       <p className="text-xs font-bold uppercase tracking-normal text-tts-confirm">{L("Expira em", "Expires in")}</p>
-                      <p className="mt-1 text-lg font-black">{quoteCountdown}</p>
+                      <p className="mt-1 text-base font-black md:text-lg">{quoteCountdown}</p>
                     </div>
                   </div>
                 </div>
@@ -3706,14 +3757,14 @@ export default function PixRampClient({
                       </p>
                     </div>
                   ) : demoPixMode ? (
-                    <div className="mt-5 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-sm font-bold text-tts-gold">
+                    <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-sm font-bold text-tts-gold md:mt-5 md:p-4">
                       <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Confirmação do PIX", "PIX confirmation")}</p>
                       <p className="mt-2">
                         {isSandboxMockOrder
                           ? L("Depois de pagar, confirme aqui para concluir a operação.", "After paying, confirm here to complete the operation.")
                           : L("Depois de pagar no app do seu banco, confirme aqui para continuar.", "After paying in your bank app, confirm here to continue.")}
                       </p>
-                      <p className="mt-2 text-tts-gold">
+                      <p className="tts-mobile-soft-hide mt-2 text-tts-gold md:block">
                         {L("Você verá o valor final e o status da operação nesta mesma tela.", "You will see the final amount and operation status on this same page.")}
                       </p>
                     </div>
@@ -3747,7 +3798,7 @@ export default function PixRampClient({
                   )}
 
                   {config?.available && !orderFailed && !(isSandboxMockOrder && !localMockFallbackAllowed) && (
-                    <div className="mt-5 rounded-2xl border-2 border-tts-gold bg-tts-gold-bg p-4 text-tts-gold shadow-sm shadow-amber-950/20">
+                    <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-gold shadow-sm shadow-amber-950/20 md:mt-5 md:p-4">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
                             {L("PIX confirmado.", "PIX confirmed.")} {transferFlow ? pixFundedTransferResult?.transaction_hash ? L("A transferência foi enviada.", "The transfer was sent.") : L("A transferência automática ainda está finalizando.", "The automatic transfer is still finishing.") : L(`${onRampReceivedDisplay} entrou na conta.`, `${onRampReceivedDisplay} arrived in the account.`)}
