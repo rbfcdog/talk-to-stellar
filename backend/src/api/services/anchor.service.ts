@@ -292,6 +292,7 @@ interface SandboxMockOnRampOrder {
   upstreamError?: string;
   operationContext?: Record<string, unknown>;
   receiptUrl?: string;
+  postConversionReceiptUrl?: string;
 }
 
 interface SandboxMockOffRampOrder {
@@ -1698,9 +1699,18 @@ export class AnchorService {
         ? coalesceString(record.finalAmount, record.destinationAmount)
         : coalesceString(record.finalAmount, pendingNonBrlFinalSettlement ? desiredFinalAmount : '');
       if (!destinationAmount) return '';
+      const postAsset = this.resolveSandboxPostConversionAsset(record);
+      const postConversion = (record.transaction as OnRampTransaction & { post_conversion?: Record<string, unknown> }).post_conversion || {};
+      const postConversionStatus = coalesceString(postConversion.status, record.operationContext?.post_conversion_status).toLowerCase();
+      const pendingPostConversion = Boolean(
+        postAsset &&
+        !record.postConversionHash &&
+        !coalesceString(record.operationContext?.post_conversion_hash) &&
+        postConversionStatus !== 'completed'
+      );
       const settlementFinalAsset = settlementAssetCode(record.finalAssetCode || userFacingFinalAsset);
       let balanceContext = '';
-      if (!pendingNonBrlFinalSettlement) {
+      if (!pendingNonBrlFinalSettlement && !pendingPostConversion) {
         try {
           const balances = normalizeBalances(await StellarService.getAccountBalance(record.publicKey));
           const updated = balances.find((balance) => (
@@ -1719,16 +1729,26 @@ export class AnchorService {
         record.sourceAmountBrl,
         destinationAmount,
       );
-      const externalDeliveryText = pendingNonBrlFinalSettlement
+      const externalDeliveryText = pendingPostConversion
+        ? [
+            'PIX confirmado com sucesso.',
+            `Valor pago: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
+            `Valor recebido agora: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
+            `Conversão em andamento: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} para ${postAsset?.code || 'a moeda final'}`,
+            'Quando a conversão finalizar, vou mandar outro comprovante aqui.',
+          ].join('\n')
+        : pendingNonBrlFinalSettlement
         ? [
             'PIX confirmado com sucesso.',
             `Valor pago: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
             `Valor alvo: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
             'Destino: sua conta TalkToStellar',
-            `Status: Conversão para ${userFacingFinalAsset} em processamento`,
+            `Status: conversão para ${userFacingFinalAsset} em andamento`,
           ].join('\n')
         : null;
-      const contextMessage = pendingNonBrlFinalSettlement
+      const contextMessage = pendingPostConversion
+        ? `PIX confirmado. Recebemos ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} e a conversão para ${postAsset?.code || 'a moeda final'} está em andamento.`
+        : pendingNonBrlFinalSettlement
         ? `PIX confirmado. Conversão para ${userFacingFinalAsset} em processamento para entregar ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} na sua conta.`
         : `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`;
       return await PaymentReceiptService.sendReceipt({
@@ -1746,7 +1766,7 @@ export class AnchorService {
         feeDisplay: fee.feeDisplay || null,
         feeBrl: fee.feeBrl || null,
         quote: record.operationContext || null,
-        status: pendingNonBrlFinalSettlement ? 'processing' : 'completed',
+        status: pendingNonBrlFinalSettlement || pendingPostConversion ? 'processing' : 'completed',
         contextMessage,
         externalDeliveryText,
       });
@@ -2263,6 +2283,60 @@ export class AnchorService {
     return receiptUrl;
   }
 
+  private static async sendCompletedPostOnRampConversionReceiptForOperation(input: {
+    operation: Record<string, unknown>;
+    context: Record<string, unknown>;
+    sourceAsset: { code: string; issuer?: string };
+    sourceAmount?: string;
+    destinationAsset: { code: string; issuer?: string };
+    destinationAmount?: string;
+    hash?: string;
+  }): Promise<string> {
+    const existingReceiptUrl = coalesceString(input.context.post_conversion_receipt_url);
+    if (existingReceiptUrl) return existingReceiptUrl;
+
+    const sourceAmount = coalesceString(input.sourceAmount, input.context.post_conversion_source_amount);
+    const destinationAmount = coalesceString(input.destinationAmount, input.context.post_conversion_amount, input.context.final_amount);
+    const hash = coalesceString(input.hash, input.context.post_conversion_hash);
+    if (!sourceAmount || !destinationAmount || !hash) return '';
+
+    const receiptUrl = await PaymentReceiptService.sendReceipt({
+      type: 'conversion',
+      sessionId: coalesceString(input.operation.source_session_id, input.context.session_id),
+      userId: coalesceString(input.operation.user_id, input.context.user_id),
+      provider: coalesceString(input.context.external_provider) || undefined,
+      providerUserId: coalesceString(input.context.external_provider_user_id) || undefined,
+      counterpartyLabel: 'sua conta TalkToStellar',
+      sourceAmount,
+      sourceAssetCode: input.sourceAsset.code,
+      destinationAmount,
+      destinationAssetCode: input.destinationAsset.code,
+      hash,
+      status: 'completed',
+      contextMessage: 'Conversão automática depois do PIX concluída.',
+      externalDeliveryText: [
+        'Conversão concluída.',
+        `Convertido: ${formatDisplayAmount(sourceAmount, input.sourceAsset.code)}`,
+        `Recebido: ${formatDisplayAmount(destinationAmount, input.destinationAsset.code)}`,
+        'Status: concluído',
+      ].join('\n'),
+    });
+
+    const operationId = coalesceString(input.operation.id);
+    if (receiptUrl && operationId) {
+      await OperationRepository.update(operationId, {
+        context: JSON.stringify({
+          ...input.context,
+          post_conversion_receipt_url: receiptUrl,
+        }),
+      } as any).catch((error) => {
+        console.warn('[ramp] Could not persist completed post-PIX conversion receipt URL:', debugErrorMessage(error));
+      });
+    }
+
+    return receiptUrl;
+  }
+
   private static async failSandboxOnRamp(record: SandboxMockOnRampOrder, message: string): Promise<SandboxMockOnRampOrder> {
     record.transaction.status = 'failed' as any;
     record.transaction.updatedAt = new Date().toISOString();
@@ -2283,6 +2357,138 @@ export class AnchorService {
     return sameIssuedAsset(asset, currentFinalAsset) ? null : asset;
   }
 
+  private static setSandboxPostConversionPending(input: {
+    record: SandboxMockOnRampOrder;
+    sourceAsset: { code: string; issuer?: string };
+    sourceAmount: string;
+  }): void {
+    const postAsset = this.resolveSandboxPostConversionAsset(input.record);
+    if (!postAsset) return;
+
+    const sourceAmount = toStellarAmount(input.sourceAmount);
+    (input.record.transaction as any).post_conversion = {
+      required: true,
+      status: 'pending',
+      source_asset_code: input.sourceAsset.code,
+      source_asset_issuer: input.sourceAsset.issuer,
+      source_amount: sourceAmount,
+      destination_asset_code: postAsset.code,
+      destination_asset_issuer: postAsset.issuer,
+    };
+  }
+
+  private static scheduleSandboxPostOnRampConversion(input: {
+    record: SandboxMockOnRampOrder;
+    sourceAsset: { code: string; issuer?: string };
+    sourceAmount: string;
+  }): void {
+    const postAsset = this.resolveSandboxPostConversionAsset(input.record);
+    if (!postAsset) return;
+
+    const run = async () => {
+      const converted = await this.applySandboxPostOnRampConversion(input);
+      if (converted.transaction.status === 'failed') return;
+      await this.sendSandboxPostConversionReceipt(converted);
+    };
+
+    setTimeout(() => {
+      run().catch((error) => {
+        console.warn('[ramp] Could not finish sandbox post-PIX conversion in background:', debugErrorMessage(error));
+      });
+    }, 0);
+  }
+
+  private static async sendSandboxPostConversionReceipt(record: SandboxMockOnRampOrder): Promise<string> {
+    const existing = coalesceString(record.postConversionReceiptUrl, record.operationContext?.post_conversion_receipt_url);
+    if (existing) return existing;
+
+    const postConversion = (record.transaction as OnRampTransaction & { post_conversion?: Record<string, unknown> }).post_conversion || {};
+    const sourceAssetCode = normalizeAssetCode(coalesceString(
+      postConversion.source_asset_code,
+      record.operationContext?.post_conversion_source_asset_code,
+    ));
+    const sourceAmount = coalesceString(
+      postConversion.source_amount,
+      record.postConversionSourceAmount,
+      record.operationContext?.post_conversion_source_amount,
+    );
+    const destinationAssetCode = normalizeAssetCode(coalesceString(
+      postConversion.destination_asset_code,
+      record.postConversionAssetCode,
+      record.operationContext?.post_conversion_asset_code,
+      record.finalAssetCode,
+    ));
+    const destinationAmount = coalesceString(
+      postConversion.destination_amount,
+      record.postConversionAmount,
+      record.operationContext?.post_conversion_amount,
+      record.finalAmount,
+    );
+    const hash = coalesceString(
+      postConversion.hash,
+      record.postConversionHash,
+      record.operationContext?.post_conversion_hash,
+    );
+
+    if (!sourceAssetCode || !sourceAmount || !destinationAssetCode || !destinationAmount || !hash) return '';
+
+    const receiptUrl = await PaymentReceiptService.sendReceipt({
+      type: 'conversion',
+      sessionId: record.sessionId,
+      userId: record.userId,
+      provider: coalesceString(record.operationContext?.external_provider) || undefined,
+      providerUserId: coalesceString(record.operationContext?.external_provider_user_id) || undefined,
+      counterpartyLabel: 'sua conta TalkToStellar',
+      sourceAmount,
+      sourceAssetCode,
+      destinationAmount,
+      destinationAssetCode,
+      hash,
+      status: 'completed',
+      contextMessage: `Conversão automática depois do PIX concluída.`,
+      externalDeliveryText: [
+        'Conversão concluída.',
+        `Convertido: ${formatDisplayAmount(sourceAmount, sourceAssetCode)}`,
+        `Recebido: ${formatDisplayAmount(destinationAmount, destinationAssetCode)}`,
+        'Status: concluído',
+      ].join('\n'),
+    });
+
+    if (receiptUrl) {
+      record.postConversionReceiptUrl = receiptUrl;
+      await this.persistSandboxOnRampContext(record, {
+        post_conversion_receipt_url: receiptUrl,
+      });
+    }
+
+    return receiptUrl;
+  }
+
+  private static async markSandboxPostConversionFailed(
+    record: SandboxMockOnRampOrder,
+    message: string,
+    sourceAsset?: { code: string; issuer?: string },
+    sourceAmount?: string,
+  ): Promise<SandboxMockOnRampOrder> {
+    const postAsset = this.resolveSandboxPostConversionAsset(record);
+    record.postConversionError = message;
+    (record.transaction as any).post_conversion = {
+      required: true,
+      status: 'failed',
+      source_asset_code: sourceAsset?.code,
+      source_asset_issuer: sourceAsset?.issuer,
+      source_amount: sourceAmount,
+      destination_asset_code: postAsset?.code,
+      destination_asset_issuer: postAsset?.issuer,
+      error: message,
+    };
+    await this.persistSandboxOnRampContext(record, {
+      post_conversion_status: 'failed',
+      post_conversion_error: message,
+    });
+    return record;
+  }
+
   private static async applySandboxPostOnRampConversion(input: {
     record: SandboxMockOnRampOrder;
     sourceAsset: { code: string; issuer?: string };
@@ -2294,7 +2500,12 @@ export class AnchorService {
     if (!postAsset) return record;
 
     if (!record.vaultSecretId) {
-      return this.failSandboxOnRamp(record, 'Não consegui converter o saldo depois do PIX porque a chave da conta não está disponível. Entre novamente e tente gerar um novo PIX.');
+      return this.markSandboxPostConversionFailed(
+        record,
+        'Não consegui converter o saldo depois do PIX porque a chave da conta não está disponível. Entre novamente e tente gerar um novo PIX.',
+        sourceAsset,
+        sourceAmount,
+      );
     }
 
     const postTrustline = await this.ensureIssuedAssetTrustline({
@@ -2305,7 +2516,12 @@ export class AnchorService {
       vaultSecretId: record.vaultSecretId,
     }, postAsset);
     if (!postTrustline.success) {
-      return this.failSandboxOnRamp(record, postTrustline.error || `Não consegui preparar ${postAsset.code} para a conversão depois do PIX.`);
+      return this.markSandboxPostConversionFailed(
+        record,
+        postTrustline.error || `Não consegui preparar ${postAsset.code} para a conversão depois do PIX.`,
+        sourceAsset,
+        sourceAmount,
+      );
     }
 
     const secret = await new VaultService(supabase).getSecret(record.vaultSecretId);
@@ -2319,18 +2535,12 @@ export class AnchorService {
     });
 
     if (!converted.success) {
-      record.postConversionError = converted.error || `Não consegui converter ${sourceAsset.code} para ${postAsset.code} depois do PIX.`;
-      (record.transaction as any).post_conversion = {
-        required: true,
-        status: 'failed',
-        source_asset_code: sourceAsset.code,
-        source_asset_issuer: sourceAsset.issuer,
-        source_amount: sourceAmount,
-        destination_asset_code: postAsset.code,
-        destination_asset_issuer: postAsset.issuer,
-        error: record.postConversionError,
-      };
-      return this.failSandboxOnRamp(record, record.postConversionError);
+      return this.markSandboxPostConversionFailed(
+        record,
+        converted.error || `Não consegui converter ${sourceAsset.code} para ${postAsset.code} depois do PIX.`,
+        sourceAsset,
+        sourceAmount,
+      );
     }
 
     const destinationAmount = toStellarAmount(converted.destinationAmount || '0');
@@ -2401,15 +2611,22 @@ export class AnchorService {
         (record.transaction as any).toCurrency = this.getTesouroIdentifier();
         (record.transaction as any).finalAmount = destinationAmountTesouro;
         (record.transaction as any).auto_conversion = { required: false };
-        const afterPostConversion = await this.applySandboxPostOnRampConversion({
+        const postConversionInput = {
           record,
           sourceAsset: tesouroAsset,
           sourceAmount: destinationAmountTesouro,
-        });
-        if (afterPostConversion.transaction.status === 'failed') return afterPostConversion;
-        return this.completeSandboxOnRamp(record, record.postConversionHash || directTesouroResult.hash, {
+        };
+        this.setSandboxPostConversionPending(postConversionInput);
+        const postAsset = this.resolveSandboxPostConversionAsset(record);
+        const completed = await this.completeSandboxOnRamp(record, directTesouroResult.hash, {
           delivery_source_amount: record.sourceAmountBrl,
+          post_conversion_status: postAsset ? 'pending' : undefined,
+          post_conversion_source_asset_code: postAsset ? tesouroAsset.code : undefined,
+          post_conversion_source_asset_issuer: postAsset ? tesouroAsset.issuer : undefined,
+          post_conversion_source_amount: postAsset ? destinationAmountTesouro : undefined,
         });
+        this.scheduleSandboxPostOnRampConversion(postConversionInput);
+        return completed;
       }
 
       const treasuryTesouroBalance = await this.getSandboxTesouroTreasuryBalance();
@@ -2467,21 +2684,28 @@ export class AnchorService {
           destination_asset_issuer: finalAsset.issuer,
           destination_amount: desiredFinalAmount,
           hash: exactFinalConversion.hash,
-            mode: 'strict_receive_exact_final_asset',
+          mode: 'strict_receive_exact_final_asset',
         };
-        const afterPostConversion = await this.applySandboxPostOnRampConversion({
+        const postConversionInput = {
           record,
           sourceAsset: finalAsset,
           sourceAmount: desiredFinalAmount,
-        });
-        if (afterPostConversion.transaction.status === 'failed') return afterPostConversion;
-        return this.completeSandboxOnRamp(record, record.postConversionHash || exactFinalConversion.hash, {
+        };
+        this.setSandboxPostConversionPending(postConversionInput);
+        const postAsset = this.resolveSandboxPostConversionAsset(record);
+        const completed = await this.completeSandboxOnRamp(record, exactFinalConversion.hash, {
           final_conversion_status: 'completed',
           final_conversion_hash: exactFinalConversion.hash,
           final_conversion_source_amount: record.finalConversionSourceAmount,
           final_conversion_mode: 'strict_receive_exact_final_asset',
-          final_amount: record.postConversionHash ? record.finalAmount : desiredFinalAmount,
+          final_amount: desiredFinalAmount,
+          post_conversion_status: postAsset ? 'pending' : undefined,
+          post_conversion_source_asset_code: postAsset ? finalAsset.code : undefined,
+          post_conversion_source_asset_issuer: postAsset ? finalAsset.issuer : undefined,
+          post_conversion_source_amount: postAsset ? desiredFinalAmount : undefined,
         });
+        this.scheduleSandboxPostOnRampConversion(postConversionInput);
+        return completed;
       }
 
       record.finalConversionError = `Exact ${finalAsset.code} delivery failed: ${exactFinalConversion.error || 'unknown error'}`;
@@ -2513,17 +2737,24 @@ export class AnchorService {
         destination_amount: record.finalAmount,
         hash: converted.hash,
       };
-      const afterPostConversion = await this.applySandboxPostOnRampConversion({
+      const postConversionInput = {
         record,
         sourceAsset: finalAsset,
         sourceAmount: record.finalAmount,
-      });
-      if (afterPostConversion.transaction.status === 'failed') return afterPostConversion;
-      return this.completeSandboxOnRamp(record, record.postConversionHash || converted.hash, {
+      };
+      this.setSandboxPostConversionPending(postConversionInput);
+      const postAsset = this.resolveSandboxPostConversionAsset(record);
+      const completed = await this.completeSandboxOnRamp(record, converted.hash, {
         final_conversion_status: 'completed',
         final_conversion_hash: converted.hash,
         final_conversion_source_amount: destinationAmountTesouro,
+        post_conversion_status: postAsset ? 'pending' : undefined,
+        post_conversion_source_asset_code: postAsset ? finalAsset.code : undefined,
+        post_conversion_source_asset_issuer: postAsset ? finalAsset.issuer : undefined,
+        post_conversion_source_amount: postAsset ? record.finalAmount : undefined,
       });
+      this.scheduleSandboxPostOnRampConversion(postConversionInput);
+      return completed;
     }
 
     record.finalConversionError = converted.error || `Could not convert TESOURO to ${finalAsset.code}.`;
@@ -4054,11 +4285,13 @@ export class AnchorService {
     const existingHash = coalesceString(input.context.post_conversion_hash);
     if (existingHash) {
       const existingAmount = coalesceString(input.context.post_conversion_amount, input.context.final_amount);
-      const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
-        transaction: input.transaction,
+      const sourceAmount = coalesceString(input.context.post_conversion_source_amount, input.currentAmount);
+      const receiptUrl = await this.sendCompletedPostOnRampConversionReceiptForOperation({
         operation: input.operation,
         context: input.context,
-        finalAsset: postAsset,
+        sourceAsset: input.currentAsset,
+        sourceAmount,
+        destinationAsset: postAsset,
         destinationAmount: existingAmount,
         hash: existingHash,
       });
@@ -4076,7 +4309,7 @@ export class AnchorService {
           status: 'completed',
           source_asset_code: input.currentAsset.code,
           source_asset_issuer: input.currentAsset.issuer,
-          source_amount: coalesceString(input.context.post_conversion_source_amount, input.currentAmount),
+          source_amount: sourceAmount,
           destination_asset_code: postAsset.code,
           destination_asset_issuer: postAsset.issuer,
           destination_amount: existingAmount || undefined,
@@ -4160,11 +4393,12 @@ export class AnchorService {
         final_amount: postAmount,
       };
       await OperationRepository.update(input.operationId, { context: JSON.stringify(updatedContext) } as any);
-      const receiptUrl = await this.sendCompletedOnRampReceiptForOperation({
-        transaction: input.transaction,
+      const receiptUrl = await this.sendCompletedPostOnRampConversionReceiptForOperation({
         operation: input.operation,
         context: updatedContext,
-        finalAsset: postAsset,
+        sourceAsset: input.currentAsset,
+        sourceAmount,
+        destinationAsset: postAsset,
         destinationAmount: postAmount,
         hash: result.hash,
       });

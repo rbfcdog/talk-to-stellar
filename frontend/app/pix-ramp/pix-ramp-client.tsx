@@ -2292,23 +2292,39 @@ export default function PixRampClient({
       return;
     }
 
-    const finalAsset = userFacingAssetCode(
-      input.completedTransaction?.post_conversion?.destination_asset_code ||
-      input.completedTransaction?.finalAssetCode ||
-      input.completedTransaction?.auto_conversion?.destination_asset_code ||
-      input.completedTransaction?.toCurrency ||
-      receivedCode ||
-      targetAsset,
-      targetAsset
+    const postConversion = input.completedTransaction?.post_conversion || null;
+    const postConversionPending = Boolean(
+      postConversion?.required &&
+      String(postConversion?.status || "").toLowerCase() !== "completed" &&
+      !postConversion?.destination_amount
     );
-    const finalAmount = finalAsset === "BRL"
-      ? String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || order?.toAmount || quote?.toAmount || amountBrl)
-      : String(input.completedTransaction?.post_conversion?.destination_amount || input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
-    const intermediateConversionLine = input.completedTransaction?.post_conversion?.source_amount &&
-      input.completedTransaction?.post_conversion?.source_asset_code
+    const postConversionSourceAsset = userFacingAssetCode(postConversion?.source_asset_code || targetAsset, targetAsset);
+    const postConversionDestinationAsset = userFacingAssetCode(postConversion?.destination_asset_code || targetAsset, targetAsset);
+    const finalAsset = postConversionPending
+      ? postConversionSourceAsset
+      : userFacingAssetCode(
+          postConversion?.destination_asset_code ||
+          input.completedTransaction?.finalAssetCode ||
+          input.completedTransaction?.auto_conversion?.destination_asset_code ||
+          input.completedTransaction?.toCurrency ||
+          receivedCode ||
+          targetAsset,
+          targetAsset
+        );
+    const finalAmount = postConversionPending
+      ? String(postConversion?.source_amount || input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || finalReceivedAmount || "")
+      : finalAsset === "BRL"
+        ? String(input.completedTransaction?.finalAmount || input.completedTransaction?.toAmount || order?.toAmount || quote?.toAmount || amountBrl)
+        : String(postConversion?.destination_amount || input.completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || "");
+    const intermediateConversionLine = postConversion?.source_amount &&
+      postConversion?.source_asset_code
       ? L(
-          `Recebido primeiro: ${formatRampAsset(input.completedTransaction.post_conversion.source_amount, userFacingAssetCode(input.completedTransaction.post_conversion.source_asset_code, targetAsset))}`,
-          `Received first: ${formatRampAsset(input.completedTransaction.post_conversion.source_amount, userFacingAssetCode(input.completedTransaction.post_conversion.source_asset_code, targetAsset))}`
+          postConversionPending
+            ? `Conversão em andamento: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)} para ${postConversionDestinationAsset}`
+            : `Recebido primeiro: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)}`,
+          postConversionPending
+            ? `Conversion in progress: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)} to ${postConversionDestinationAsset}`
+            : `Received first: ${formatRampAsset(postConversion.source_amount, postConversionSourceAsset)}`
         )
       : "";
     const paidAmount = input.completedTransaction?.fromAmount
@@ -2336,7 +2352,9 @@ export default function PixRampClient({
       intermediateConversionLine,
       L(`Valor recebido: ${receivedAmount}`, `Received amount: ${receivedAmount}`),
       L("Destino: sua conta TalkToStellar", "Destination: your TalkToStellar account"),
-      L("Status: concluído", "Status: completed"),
+      postConversionPending
+        ? L("Status: conversão em andamento", "Status: conversion in progress")
+        : L("Status: concluído", "Status: completed"),
       L(`Horário: ${new Date().toLocaleString("en-US")}`, `Time: ${new Date().toLocaleString("en-US")}`),
       receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : "",
     ].filter(Boolean).join("\n"));

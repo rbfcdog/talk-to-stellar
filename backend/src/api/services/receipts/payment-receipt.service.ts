@@ -694,6 +694,7 @@ export class PaymentReceiptService {
   }
 
   private static shouldUseSavingsFirstExternalReceipt(input: PaymentReceiptInput): boolean {
+    if (String(input.externalDeliveryText || '').trim()) return false;
     const type = String(input.type || '').trim();
     if (this.isPixOnRampReceipt(input)) return true;
     return type === 'conversion' || type === 'claim_redeemed';

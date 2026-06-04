@@ -345,6 +345,47 @@ describe('PaymentReceiptService', () => {
     notifySpy.mockRestore();
   });
 
+  it('preserves explicit conversion callback text and appends the receipt link', async () => {
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'conversion',
+      sessionId: 'session-conversion-callback',
+      userId: 'user-conversion-callback',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'sua conta TalkToStellar',
+      sourceAmount: '100',
+      sourceAssetCode: 'XLM',
+      destinationAmount: '65',
+      destinationAssetCode: 'USDC',
+      hash: 'conversion-callback-hash',
+      externalDeliveryText: 'Conversão concluída.\nConvertido: 100 XLM\nRecebido: US$ 65.00',
+    });
+
+    expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      buttonText: 'Abrir comprovante',
+      text: expect.stringContaining('Conversão concluída.'),
+    }));
+    expect(notifySpy.mock.calls[0][0].text).toContain('Convertido: 100 XLM');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Recebido: US$ 65.00');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Você economizou');
+    expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
+
+    notifySpy.mockRestore();
+  });
+
   it('does not use the savings-first WhatsApp receipt for XLM payments', async () => {
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
