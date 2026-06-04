@@ -261,12 +261,18 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     const params = new URLSearchParams(initialQuery || (typeof window !== "undefined" ? window.location.search : ""));
     const nextLanguage = params.get("lang") || params.get("language");
     if (nextLanguage) setLanguage(normalizeLanguage(nextLanguage));
-    const queryAmount = params.get("amount") || params.get("source_amount") || "";
+    const queryAmountMode = String(params.get("amount_mode") || params.get("amountMode") || params.get("mode") || "").trim().toLowerCase();
+    const queryDestAmount = params.get("dest_amount") || params.get("destAmount") || params.get("receive_amount") || params.get("receiveAmount") || "";
+    const querySourceAmount = params.get("source_amount") || params.get("sourceAmount") || "";
+    const queryAmount = queryAmountMode === "receive"
+      ? (queryDestAmount || params.get("amount") || "")
+      : (querySourceAmount || params.get("amount") || "");
     const querySource = params.get("source_asset") || params.get("source_asset_code") || params.get("from_asset") || "";
     const queryDest = params.get("dest_asset") || params.get("dest_asset_code") || params.get("to_asset") || "";
     const queryReturnSource = params.get("from") || params.get("origin") || params.get("source") || "";
     const queryReturnTo = params.get("return_to") || params.get("returnTo") || "";
     const pickerMode = ["1", "true", "yes"].includes(String(params.get("picker") || params.get("choose") || "").trim().toLowerCase());
+    if (queryAmountMode === "receive" || queryDestAmount) setAmountMode("receive");
     if (pickerMode && !queryAmount) setAmount("");
     if (parseAmount(queryAmount) > 0) setAmount(queryAmount);
     if (querySource) setSourceCode(normalizeAssetCode(querySource));
@@ -361,7 +367,15 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const routeDescription = L("Cotação, taxas e PIN aparecem aqui.", "Quote, fees, and PIN appear here.");
   const destinationValue = L("Calculado na confirmação", "Calculated on confirmation");
   const selectedRateCell = rateMatrix?.matrix?.[sourceCode]?.[destCode];
-  const hasBlockingBalanceIssue = session.authenticated && Boolean(sourceBalance) && !enoughBalance;
+  const sourceSummaryValue = amountMode === "receive"
+    ? L("Calculado pela rota", "Calculated by route")
+    : formatAssetAmount(numericAmount, sourceAsset, language);
+  const destinationSummaryValue = amountMode === "receive"
+    ? formatAssetAmount(numericAmount, destAsset, language)
+    : selectedRateCell?.rate && numericAmount > 0
+      ? formatAssetAmount(numericAmount * selectedRateCell.rate, destAsset, language)
+      : destinationValue;
+  const hasBlockingBalanceIssue = amountMode === "send" && session.authenticated && Boolean(sourceBalance) && !enoughBalance;
   const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
   const securityValue = sameAsset
     ? L("Escolha moedas diferentes", "Choose different currencies")
@@ -451,10 +465,10 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         </header>
 
         <section className="grid gap-3 lg:grid-cols-3" aria-label={L("Resumo da conversão", "Conversion summary")}>
-          <Metric label={L("Sai da conta", "Leaves account")} value={formatAssetAmount(numericAmount, sourceAsset, language)} detail={sourceBalanceDisplay} />
+          <Metric label={L("Sai da conta", "Leaves account")} value={sourceSummaryValue} detail={sourceBalanceDisplay} />
           <Metric
             label={L("Destino", "Destination")}
-            value={selectedRateCell?.rate && numericAmount > 0 ? formatAssetAmount(numericAmount * selectedRateCell.rate, destAsset, language) : destinationValue}
+            value={destinationSummaryValue}
             detail={`${destAsset.short} · ${assetName(destAsset, language)}`}
           />
           <Metric
@@ -581,18 +595,26 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             </div>
 
             <div className="mt-5">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <label className="block text-sm font-black text-tts-deep" htmlFor="convert-amount">
                   {amountMode === "receive" ? L("Valor que chega", "Amount receiving") : L("Valor que sai", "Amount leaving")}
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setAmountMode(amountMode === "send" ? "receive" : "send")}
-                  className="inline-flex items-center gap-1.5 border border-tts-border px-3 py-1.5 text-xs font-bold text-tts-deep transition hover:border-tts-border2"
-                >
-                  <ArrowRightLeft className="h-3.5 w-3.5" />
-                  {amountMode === "send" ? L("Receber", "Receive") : L("Enviar", "Send")}
-                </button>
+                <div className="grid grid-cols-2 rounded-full border border-tts-border bg-tts-bg p-1 text-xs font-black text-tts-muted">
+                  <button
+                    type="button"
+                    onClick={() => setAmountMode("send")}
+                    className={`rounded-full px-3 py-2 transition ${amountMode === "send" ? "bg-tts-deep text-tts-surface" : "hover:text-tts-deep"}`}
+                  >
+                    {L("Enviar", "Send")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmountMode("receive")}
+                    className={`rounded-full px-3 py-2 transition ${amountMode === "receive" ? "bg-tts-deep text-tts-surface" : "hover:text-tts-deep"}`}
+                  >
+                    {L("Receber", "Receive")}
+                  </button>
+                </div>
               </div>
               <input
                 id="convert-amount"
@@ -619,7 +641,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">{routeDescription}</p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <Step title={L("1. Valor", "1. Amount")} body={formatAssetAmount(numericAmount, sourceAsset, language)} />
+                <Step title={L("1. Valor", "1. Amount")} body={amountMode === "receive" ? formatAssetAmount(numericAmount, destAsset, language) : formatAssetAmount(numericAmount, sourceAsset, language)} />
                 <Step title={L("2. Confirmação", "2. Confirmation")} body={L("Mostra valores e taxas aqui", "Shows amounts and fees here")} />
                 <Step title={L("3. PIN", "3. PIN")} body={L("Última etapa", "Final step")} />
               </div>
@@ -627,7 +649,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             <div className="border border-tts-border bg-tts-surface p-4">
               <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Próximo passo", "Next step")}</p>
               <p className="mt-2 text-lg font-black text-tts-deep">
-                {formatAssetAmount(numericAmount, sourceAsset, language)} → {assetName(destAsset, language)}
+                {amountMode === "receive"
+                  ? `${sourceAsset.short} → ${formatAssetAmount(numericAmount, destAsset, language)}`
+                  : `${formatAssetAmount(numericAmount, sourceAsset, language)} → ${assetName(destAsset, language)}`}
               </p>
               {sameAsset ? (
                 <p className="mt-3 text-sm leading-6 text-tts-muted">

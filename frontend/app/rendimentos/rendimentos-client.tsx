@@ -240,7 +240,18 @@ export default function RendimentosClient({
   const smartConvertDestCode = selectedBalanceInsufficient ? actionableOptionCode || safeSelectedCode || bestOptionCode || "USDC" : bestOptionCode || actionableOptionCode || "USDC";
   const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
   const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
-  const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", { amount, source_asset: smartConvertSourceCode, dest_asset: smartConvertDestCode, from: "review", next: "review", lang: language }), [amount, smartConvertDestCode, smartConvertSourceCode, language]);
+  const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", {
+    amount,
+    dest_amount: amount,
+    amount_mode: "receive",
+    source_asset: smartConvertSourceCode,
+    dest_asset: smartConvertDestCode,
+    from: "rendimentos",
+    return_source: "rendimentos",
+    return_to: newApplicationUrl,
+    next: newApplicationUrl,
+    lang: language,
+  }), [amount, smartConvertDestCode, smartConvertSourceCode, language, newApplicationUrl]);
   const pixTopUpTargetAsset = safeSelectedCode === "TESOURO" ? "BRL" : safeSelectedCode || "BRL";
   const pixTopUpUsesExactReceive = pixTopUpTargetAsset === "BRL" || pixTopUpTargetAsset === "USDC";
   const pixTopUpUrl = useMemo(() => buildMoneyUrl("/pix-on", {

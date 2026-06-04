@@ -741,6 +741,30 @@ describe('Agent tool execution', () => {
     expect(JSON.stringify(parsed)).not.toMatch(/Defindex|vault|issuer|trustline|XDR/i);
   });
 
+  it('opens the conversion interface in receive mode for destination target amounts', async () => {
+    const output = await executeTool('open_conversion_interface', {
+      amount: '10',
+      amount_mode: 'receive',
+      source_asset_code: 'USDC',
+      dest_asset_code: 'BRL',
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.action).toBe('conversion_confirmation_prefill');
+    expect(parsed.amount_mode).toBe('receive');
+    expect(parsed.source_amount).toBeNull();
+    expect(parsed.dest_amount).toBe('10');
+    expect(parsed.frontend_url).toContain('/convert?');
+    expect(parsed.frontend_url).toContain('amount=10');
+    expect(parsed.frontend_url).toContain('dest_amount=10');
+    expect(parsed.frontend_url).toContain('amount_mode=receive');
+    expect(parsed.frontend_url).toContain('source_asset=USDC');
+    expect(parsed.frontend_url).toContain('dest_asset=BRL');
+    expect(parsed.message).toContain('receber 10 BRL');
+  });
+
   it('opens the conversion picker when amount or assets are missing', async () => {
     const output = await executeTool('open_conversion_interface', {
       language: 'pt-BR',

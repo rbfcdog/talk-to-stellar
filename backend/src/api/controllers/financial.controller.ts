@@ -413,7 +413,9 @@ export class FinancialController {
         .replace(',', '.')
         .trim();
       const sourceAmountNumber = toPositiveNumber(sourceAmount, 0);
-      if (sourceAmountNumber <= 0) {
+      const destAmountRaw = String(req.body?.dest_amount || req.body?.destAmount || '').replace(',', '.').trim();
+      const destAmountNumber = toPositiveNumber(destAmountRaw, 0);
+      if (sourceAmountNumber <= 0 && destAmountNumber <= 0) {
         return res.status(400).json({ success: false, message: 'Informe um valor válido para converter.' });
       }
 
@@ -431,8 +433,6 @@ export class FinancialController {
 
       const sourceAsset = resolveConfiguredAsset(sourceAssetCode, req.body?.source_asset_issuer || req.body?.sourceAssetIssuer);
       const destAsset = resolveConfiguredAsset(destAssetCode, req.body?.dest_asset_issuer || req.body?.destAssetIssuer || req.body?.destination_asset_issuer);
-      const destAmountRaw = String(req.body?.dest_amount || req.body?.destAmount || '').replace(',', '.').trim();
-      const destAmountNumber = toPositiveNumber(destAmountRaw, 0);
       const useStrictReceive = destAmountNumber > 0 && sourceAmountNumber <= 0;
 
       const quote = useStrictReceive
@@ -492,7 +492,9 @@ export class FinancialController {
         estimated_platform_fee: null,
         estimated_spread_fee: null,
         route_chain: routeChain || null,
-        optimization_criteria: 'melhor cotação disponível para o valor de envio informado',
+        optimization_criteria: useStrictReceive
+          ? 'melhor cotação disponível para o valor final informado'
+          : 'melhor cotação disponível para o valor de envio informado',
         quote_issued_at: quoteWithExpiry.quote_issued_at || null,
         quote_expires_at: quoteWithExpiry.quote_expires_at || null,
         quote_ttl_seconds: quoteWithExpiry.quote_ttl_seconds || quoteTtlSeconds(),
@@ -504,7 +506,7 @@ export class FinancialController {
         token,
         url,
         quote: quoteWithExpiry,
-        source_amount: sourceAmount,
+        source_amount: effectiveSourceAmount,
         source_asset_code: sourceAsset.code,
         dest_amount: String(quote.destinationAmount || ''),
         dest_asset_code: destAsset.code,
