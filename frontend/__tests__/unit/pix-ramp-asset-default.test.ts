@@ -14,8 +14,7 @@ describe("PIX asset defaults", () => {
 
     expect(text).toContain('normalizeTargetAsset(asset, "BRL")');
     expect(text).toContain("resolveOnRampTargetAssetFromQuery");
-    expect(text).toContain('const BASIC_TARGET_ASSETS: TargetAsset[] = ["BRL"]');
-    expect(text).toContain('const DEFAULT_ADVANCED_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"]');
+    expect(text).toContain('const DEFAULT_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"]');
     expect(text).toContain('amountCurrency === "BRL") return "BRL"');
     expect(text).toContain("const headerCurrencyAsset = rampMode === \"onramp\"");
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
@@ -68,6 +67,19 @@ describe("PIX asset defaults", () => {
     expect(text).not.toContain("formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)");
     expect(text).not.toContain('receiveAmount && (normalizedReceiveAsset === "USDC" || normalizedReceiveAsset === "BRL")');
     expect(text).not.toContain("Alvo: mandar ${formatMoney(amountBrl)}");
+  });
+
+  it("keeps the visible BRL receive field stable while PIX fees are estimated", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain('const editingOnRampReceiveTarget = Boolean(rampMode === "onramp" && (targetAsset === "BRL" || exactOnRampReceiveTarget));');
+    expect(text).toContain('const targetReceiveInputAmount = editingOnRampReceiveTarget');
+    expect(text).toContain('desiredReceiveAmount || (targetAsset === "BRL" ? amountBrl : desiredFinalAmount)');
+    expect(text).toContain('if (targetAsset === "BRL" || exactOnRampReceiveTarget) {');
+    expect(text).toContain("setDesiredReceiveAmount(nextAmount)");
+    expect(text).toContain("if (!desiredReceiveAsset) setDesiredReceiveAsset(targetAsset)");
+    expect(text).toContain("setAmountBrl(estimatedBrl.toFixed(2))");
+    expect(text).not.toContain('const targetReceiveInputAmount = exactOnRampReceiveTarget ? desiredReceiveAmount : (targetAsset === "BRL" ? amountBrl : desiredFinalAmount);');
   });
 
   it("keeps WhatsApp/Telegram session scope on PIX GET and POST ramp calls", () => {
