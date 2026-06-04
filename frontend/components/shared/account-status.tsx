@@ -77,11 +77,11 @@ export function AccountStatusCard({
   return (
     <div className={cn("rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm", compact && "p-3", className)}>
       <div className="flex items-start gap-3">
-        <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-lg border", copy.tone)}>
+        <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl border", copy.tone)}>
           {copy.icon}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">
+          <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">
             {L("Sua conta", "Your account")}
           </p>
           <p className="mt-1 text-base font-black text-tts-deep">{title || copy.title}</p>
@@ -94,7 +94,7 @@ export function AccountStatusCard({
           {ctaHref && state !== "connected" ? (
             <a
               href={ctaHref}
-              className="mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-tts-deep px-3 py-2 text-xs font-black text-tts-surface transition hover:bg-tts-deep2"
+              className="mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-tts-deep px-3 py-2 text-xs font-black text-tts-surface transition hover:bg-tts-deep2"
             >
               <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
               {ctaLabel || L("Entrar", "Sign in")}

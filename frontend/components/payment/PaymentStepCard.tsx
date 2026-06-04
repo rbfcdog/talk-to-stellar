@@ -44,7 +44,7 @@ export function PaymentStepCard({
         {(eyebrow || badge) && (
           <div className="flex items-center justify-between gap-3">
             {eyebrow ? (
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-muted">
+              <div className="text-[10px] font-bold uppercase tracking-normal text-tts-muted">
                 {eyebrow}
               </div>
             ) : <span aria-hidden />}
@@ -53,7 +53,7 @@ export function PaymentStepCard({
         )}
 
         {title && (
-          <h2 className="text-lg font-bold tracking-tight text-tts-deep">
+          <h2 className="text-lg font-bold tracking-normal text-tts-deep">
             {title}
           </h2>
         )}

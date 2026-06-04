@@ -210,13 +210,13 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-5 text-tts-deep sm:px-6">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-        <header className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+        <header className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-tts-muted">
+              <p className="text-xs font-semibold uppercase tracking-normal text-tts-muted">
                 {T(language, "Envio externo", "External transfer")}
               </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-tts-deep">
+              <h1 className="mt-1 text-2xl font-bold tracking-normal text-tts-deep">
                 {T(language, "Enviar para carteira externa", "Send to external wallet")}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
@@ -227,18 +227,18 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                 )}
               </p>
             </div>
-            <div className="rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-sm font-semibold text-tts-deep">
+            <div className="rounded-xl border border-tts-border bg-tts-bg px-3 py-2 text-sm font-semibold text-tts-deep">
               {statusLabel}
             </div>
           </div>
         </header>
 
         {error && (
-          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
             <p className="font-bold">{T(language, "Precisa de atenção", "Needs attention")}</p>
             <p className="mt-1">{error}</p>
             {error.toLowerCase().includes("sess") || error.toLowerCase().includes("login") ? (
-              <Link href="/login" className="mt-3 inline-flex h-10 items-center rounded-lg bg-tts-deep px-4 text-sm font-bold text-tts-surface">
+              <Link href="/login" className="mt-3 inline-flex h-10 items-center rounded-xl bg-tts-deep px-4 text-sm font-bold text-tts-surface">
                 {T(language, "Entrar na conta", "Sign in")}
               </Link>
             ) : null}
@@ -246,7 +246,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
         )}
 
         {result?.success && (
-          <section className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
+          <section className="rounded-xl border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
             <p className="font-bold">{T(language, "Envio concluído", "Transfer sent")}</p>
             <p className="mt-1">
               {formatAmount(result.amount || amount, result.asset || asset, language)} {" -> "} {compactKey(result.destination || destination)}
@@ -254,14 +254,14 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
             {result.tx_hash && <p className="mt-2 break-all font-mono text-xs">{result.tx_hash}</p>}
             <p className="mt-2 font-semibold">{T(language, INTERMEDIATE_PAGE_CLOSE_COPY, "This screen closes automatically.")}</p>
             {result.receipt_url && (
-              <a href={result.receipt_url} className="mt-3 inline-flex h-10 items-center rounded-lg bg-tts-deep px-4 text-sm font-bold text-tts-surface">
+              <a href={result.receipt_url} className="mt-3 inline-flex h-10 items-center rounded-xl bg-tts-deep px-4 text-sm font-bold text-tts-surface">
                 {T(language, "Abrir comprovante", "Open receipt")}
               </a>
             )}
             <button
               type="button"
               onClick={() => closeIntermediatePage(0)}
-              className="mt-3 inline-flex h-10 items-center rounded-lg border border-tts-deep px-4 text-sm font-bold text-tts-deep"
+              className="mt-3 inline-flex h-10 items-center rounded-xl border border-tts-deep px-4 text-sm font-bold text-tts-deep"
             >
               {T(language, "Fechar", "Close")}
             </button>
@@ -269,7 +269,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
         )}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <h2 className="text-base font-bold text-tts-deep">{T(language, "Dados do envio", "Transfer details")}</h2>
             <div className="mt-4 grid gap-4">
               <label className="grid gap-2 text-sm font-semibold text-tts-deep">
@@ -278,7 +278,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                   value={destination}
                   onChange={(event) => setDestination(event.target.value.trim())}
                   rows={3}
-                  className="w-full resize-none rounded-lg border border-tts-border bg-tts-bg px-3 py-3 font-mono text-sm text-tts-deep outline-none transition focus:border-tts-gold"
+                  className="w-full resize-none rounded-xl border border-tts-border bg-tts-bg px-3 py-3 font-mono text-sm text-tts-deep outline-none transition focus:border-tts-gold"
                   placeholder="G..."
                 />
               </label>
@@ -290,7 +290,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                     value={amount}
                     onChange={(event) => setAmount(event.target.value.replace(",", "."))}
                     inputMode="decimal"
-                    className="h-12 rounded-lg border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none transition focus:border-tts-gold"
+                    className="h-12 rounded-xl border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none transition focus:border-tts-gold"
                     placeholder="10"
                   />
                 </label>
@@ -299,7 +299,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                   <select
                     value={asset}
                     onChange={(event) => setAsset(normalizeAsset(event.target.value))}
-                    className="h-12 rounded-lg border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none transition focus:border-tts-gold"
+                    className="h-12 rounded-xl border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none transition focus:border-tts-gold"
                   >
                     <option value="USDC">{T(language, "Dólares", "Dollars")} · USDC</option>
                     <option value="BRL">{T(language, "Reais", "Brazilian reais")} · BRL</option>
@@ -317,7 +317,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                   type="password"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  className="h-12 rounded-lg border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none transition focus:border-tts-gold"
+                  className="h-12 rounded-xl border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none transition focus:border-tts-gold"
                   placeholder={T(language, "Digite na confirmação", "Enter at confirmation")}
                 />
               </label>
@@ -326,35 +326,35 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                 type="button"
                 onClick={submit}
                 disabled={!canSubmit}
-                className="inline-flex h-12 items-center justify-center rounded-lg bg-tts-deep px-4 text-sm font-bold text-tts-surface transition hover:bg-tts-deep disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-12 items-center justify-center rounded-xl bg-tts-deep px-4 text-sm font-bold text-tts-surface transition hover:bg-tts-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? T(language, "Enviando...", "Sending...") : T(language, "Confirmar envio", "Confirm transfer")}
               </button>
             </div>
           </section>
 
-          <aside className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm">
+          <aside className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <h2 className="text-base font-bold text-tts-deep">{T(language, "Confirmação", "Confirmation")}</h2>
             <dl className="mt-4 grid gap-3 text-sm">
-              <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
-                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-tts-muted">{T(language, "Origem", "Source")}</dt>
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-3">
+                <dt className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{T(language, "Origem", "Source")}</dt>
                 <dd className="mt-1 break-all font-mono text-xs text-tts-deep">{compactKey(preview?.source_public_key)}</dd>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
-                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-tts-muted">{T(language, "Destino", "Destination")}</dt>
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-3">
+                <dt className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{T(language, "Destino", "Destination")}</dt>
                 <dd className="mt-1 break-all font-mono text-xs text-tts-deep">{compactKey(destination)}</dd>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
-                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-tts-muted">{T(language, "Saldo disponível", "Available balance")}</dt>
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-3">
+                <dt className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{T(language, "Saldo disponível", "Available balance")}</dt>
                 <dd className="mt-1 text-lg font-bold text-tts-deep">{formatAmount(preview?.available_balance, asset, language)}</dd>
               </div>
-              <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
-                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-tts-muted">{T(language, "Taxa de rede", "Network fee")}</dt>
+              <div className="rounded-xl border border-tts-border bg-tts-bg p-3">
+                <dt className="text-xs font-semibold uppercase tracking-normal text-tts-muted">{T(language, "Taxa de rede", "Network fee")}</dt>
                 <dd className="mt-1 text-sm font-bold text-tts-deep">{preview?.estimated_fee_display || "-"}</dd>
               </div>
             </dl>
 
-            <div className="mt-4 rounded-lg border border-tts-border bg-tts-bg p-3 text-sm leading-6 text-tts-muted">
+            <div className="mt-4 rounded-xl border border-tts-border bg-tts-bg p-3 text-sm leading-6 text-tts-muted">
               {previewStatus === "loading" && <p>{T(language, "Consultando saldo e destino...", "Checking balance and destination...")}</p>}
               {previewStatus === "idle" && <p>{T(language, "Informe uma public key válida para consultar a conta.", "Enter a valid public key to check the account.")}</p>}
               {previewStatus === "ready" && (
@@ -379,7 +379,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
             </div>
 
             <div className="mt-4 grid gap-2">
-              <Link href={`/pix-off?asset=${encodeURIComponent(asset)}&lang=${encodeURIComponent(language)}`} className="inline-flex h-10 items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep">
+              <Link href={`/pix-off?asset=${encodeURIComponent(asset)}&lang=${encodeURIComponent(language)}`} className="inline-flex h-10 items-center justify-center rounded-xl border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep">
                 {T(language, "Enviar por PIX", "Send by PIX")}
               </Link>
             </div>

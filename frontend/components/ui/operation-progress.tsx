@@ -69,7 +69,7 @@ export function OperationProgressPanel({
     }`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{title}</p>
+          <p className="text-xs font-black uppercase tracking-normal opacity-70">{title}</p>
           <p className="mt-1 font-semibold">{message}</p>
         </div>
       </div>
@@ -97,7 +97,7 @@ export function OperationProgressPanel({
                     : stepState === "active"
                       ? "bg-tts-gold text-tts-deep"
                       : stepState === "error"
-                        ? "bg-tts-error text-white"
+                        ? "bg-tts-error text-tts-surface"
                         : "bg-tts-surface text-tts-muted"
                 }`}>
                   {stepState === "done" ? "✓" : index + 1}

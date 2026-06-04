@@ -334,11 +334,11 @@ export default function TransactionsClient() {
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-tts-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-tts-gold">
+            <p className="inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-1 text-[11px] font-black uppercase tracking-normal text-tts-gold">
               <Wallet2 className="h-4 w-4" aria-hidden="true" />
               Histórico
             </p>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-tts-deep md:text-4xl">
+            <h1 className="mt-3 text-2xl font-black tracking-normal text-tts-deep md:text-4xl">
               Todas as transações
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
@@ -362,7 +362,7 @@ export default function TransactionsClient() {
           <div className="border border-tts-border bg-tts-surface p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">Período</p>
+                <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">Período</p>
                 <p className="mt-1 text-lg font-black capitalize text-tts-deep">{pageTitle}</p>
               </div>
               <div className="no-print flex flex-wrap gap-2">
@@ -522,7 +522,7 @@ function SummaryCard({ label, value, detail, tone = "default" }: { label: string
   const valueClass = tone === "confirm" ? "text-tts-confirm" : tone === "gold" ? "text-tts-gold" : "text-tts-deep"
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
-      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className={`mt-2 text-2xl font-black ${valueClass}`}>{value}</p>
       <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p>
     </div>

@@ -807,7 +807,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 href={part}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="my-2 flex max-w-full items-center gap-3 rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-tts-deep no-underline shadow-sm transition hover:bg-tts-surface"
+                className="my-2 flex max-w-full items-center gap-3 rounded-xl border border-tts-border bg-tts-bg px-3 py-2 text-tts-deep no-underline shadow-sm transition hover:bg-tts-surface"
                 title={part}
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tts-gold-bg text-tts-gold">
@@ -843,7 +843,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
             <AvatarFallback className="bg-tts-gold-bg text-tts-gold">●</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1 overflow-hidden">
-            <h2 className="truncate text-sm font-bold tracking-tight text-tts-deep">{selectedMeta.title}</h2>
+            <h2 className="truncate text-sm font-bold tracking-normal text-tts-deep">{selectedMeta.title}</h2>
             <p className="truncate font-mono text-[10px] text-tts-muted">
               {isLoading
                 ? <TypingDots className="text-tts-muted" />

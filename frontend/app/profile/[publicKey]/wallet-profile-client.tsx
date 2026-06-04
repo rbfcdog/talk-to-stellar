@@ -151,11 +151,11 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
         <header className="border-b border-tts-border pb-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-tts-gold">
+              <p className="inline-flex items-center gap-2 border border-tts-gold bg-tts-gold-bg px-3 py-1 text-[11px] font-black uppercase tracking-normal text-tts-gold">
                 <UserCircle2 className="h-4 w-4" aria-hidden="true" />
                 Perfil global
               </p>
-              <h1 className="mt-3 text-2xl font-black tracking-tight text-tts-deep md:text-4xl">
+              <h1 className="mt-3 text-2xl font-black tracking-normal text-tts-deep md:text-4xl">
                 {displayName}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
@@ -213,7 +213,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                     {initials}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">Identificador</p>
+                    <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">Identificador</p>
                     <p className="mt-1 break-all text-base font-black text-tts-deep">{identifier}</p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <InfoLine label="Chave pública" value={compactKey(publicKey)} icon={<KeyRound className="h-4 w-4" aria-hidden="true" />} />
@@ -254,7 +254,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
               <div className="border border-tts-border bg-tts-surface p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">Distribuição da carteira</p>
+                    <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">Distribuição da carteira</p>
                     <h2 className="mt-1 text-xl font-black text-tts-deep">Saldos por asset</h2>
                   </div>
                   <Wallet className="h-5 w-5 text-tts-gold" aria-hidden="true" />
@@ -305,7 +305,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
               <div className="border border-tts-border bg-tts-surface p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">Ações rápidas</p>
+                    <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">Ações rápidas</p>
                     <h2 className="mt-1 text-xl font-black text-tts-deep">Operar a conta</h2>
                   </div>
                   <BarChart3 className="h-5 w-5 text-tts-gold" aria-hidden="true" />
@@ -335,7 +335,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
 function StatBox({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
-      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-2 text-xl font-black text-tts-deep">{value}</p>
       {sub && <p className="mt-1 text-xs text-tts-muted">{sub}</p>}
     </div>
@@ -347,7 +347,7 @@ function InfoLine({ label, value, icon }: { label: string; value: string; icon: 
     <div className="flex items-center gap-3 border border-tts-border bg-tts-bg p-3">
       <span className="grid h-9 w-9 shrink-0 place-items-center border border-tts-border bg-tts-surface text-tts-muted">{icon}</span>
       <div>
-        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+        <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
         <p className="mt-1 text-sm font-black text-tts-deep">{value}</p>
       </div>
     </div>
@@ -370,7 +370,7 @@ function ActionLink({ href, icon, title, detail }: { href: string; icon: ReactNo
 function InfoPanel({ title, value, detail, href }: { title: string; value: string | number; detail: string; href?: string }) {
   const content = (
     <div className="border border-tts-border bg-tts-surface p-4">
-      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-tts-muted">{title}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{title}</p>
       <p className="mt-2 text-lg font-black text-tts-deep">{value}</p>
       <p className="mt-1 break-all text-xs leading-5 text-tts-muted">{detail}</p>
     </div>

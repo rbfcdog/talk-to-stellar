@@ -165,20 +165,20 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
     <div className="flex h-full min-h-0 w-full flex-col border-r border-tts-border bg-tts-surface/95 shadow-sm backdrop-blur">
       <header className="flex items-center gap-2 border-b border-tts-border px-4 py-3 text-tts-deep">
         <Logo size={20} />
-        <span className="text-sm font-bold tracking-tight">
+        <span className="text-sm font-bold tracking-normal">
           TalkToStellar
         </span>
       </header>
 
       <div className="border-b border-tts-border bg-tts-bg/60 px-4 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-muted">
+        <p className="text-[10px] font-bold uppercase tracking-normal text-tts-muted">
           {L("Saldo disponível", "Available balance")}
         </p>
         <p className="mt-1 flex items-baseline gap-1.5 font-mono-financial">
           <span className="text-xl font-bold text-tts-deep">184.27</span>
           <span className="text-sm font-bold text-tts-gold">USD</span>
         </p>
-        <p className="mt-1 font-mono text-[10px] tracking-tight text-tts-muted">
+        <p className="mt-1 font-mono text-[10px] tracking-normal text-tts-muted">
           {L("Conta global", "Global account")}
         </p>
       </div>
@@ -209,7 +209,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
                   }}
                   disabled={!isInteractive}
                   className={cn(
-                    "w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                    "w-full rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
                     isActive
                       ? "border-tts-gold-br bg-tts-gold-bg font-medium text-tts-deep"
                       : isInteractive

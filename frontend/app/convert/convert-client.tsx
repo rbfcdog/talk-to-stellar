@@ -427,11 +427,11 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 border-b border-tts-border pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-tts-confirm">
+            <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-confirm">
               <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
               {L("Conversão", "Conversion")}
             </div>
-            <h1 className="max-w-2xl text-3xl font-black tracking-tight text-tts-deep md:text-4xl">
+            <h1 className="max-w-2xl text-3xl font-black tracking-normal text-tts-deep md:text-4xl">
               {L("Converter", "Convert")}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
@@ -513,7 +513,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
 
           <div className="mt-4 overflow-x-auto">
             <div className="min-w-[640px]">
-              <div className="grid grid-cols-5 border-b border-tts-border text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">
+              <div className="grid grid-cols-5 border-b border-tts-border text-[11px] font-black uppercase tracking-normal text-tts-muted">
                 <div className="p-2">{L("De / Para", "From / To")}</div>
                 {ASSETS.map((asset) => (
                   <div key={`head-${asset.code}`} className="p-2 text-right">{asset.code}</div>
@@ -528,7 +528,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                     return (
                       <div key={`${source.code}-${destination.code}`} className={`p-2 text-right ${selected ? "bg-tts-confirm/10 font-black text-tts-deep" : "text-tts-muted"}`}>
                         <span className="block">{formatRateValue(cell, language)}</span>
-                        <span className="block text-[10px] uppercase tracking-[0.1em]">{rateStatusLabel(cell, language)}</span>
+                        <span className="block text-[10px] uppercase tracking-normal">{rateStatusLabel(cell, language)}</span>
                       </div>
                     );
                   })}
@@ -625,7 +625,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
               </div>
             </div>
             <div className="border border-tts-border bg-tts-surface p-4">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{L("Próximo passo", "Next step")}</p>
+              <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Próximo passo", "Next step")}</p>
               <p className="mt-2 text-lg font-black text-tts-deep">
                 {formatAssetAmount(numericAmount, sourceAsset, language)} → {assetName(destAsset, language)}
               </p>
@@ -691,7 +691,7 @@ function AssetPicker({
               onClick={() => onSelect(asset.code)}
               className={`min-h-[96px] border p-3 text-left transition ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
-              <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${asset.tone}`}>
+              <span className={`inline-flex border px-2 py-1 text-[11px] font-black uppercase tracking-normal ${asset.tone}`}>
                 {asset.short}
               </span>
               <span className="mt-3 block text-sm font-black text-tts-deep">{assetName(asset, language)}</span>
@@ -707,7 +707,7 @@ function AssetPicker({
 function Step({ title, body }: { title: string; body: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-3">
-      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{title}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{title}</p>
       <p className="mt-1 text-sm font-black text-tts-deep">{body}</p>
     </div>
   );
@@ -716,7 +716,7 @@ function Step({ title, body }: { title: string; body: string }) {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-tts-border bg-tts-bg p-3">
-      <p className="text-[11px] font-black uppercase tracking-[0.12em] text-tts-muted">{label}</p>
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-1 break-words text-sm font-black text-tts-deep">{value}</p>
     </div>
   );
@@ -725,7 +725,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 function Metric({ label, value, detail }: { label: string; value: string; detail: ReactNode }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
-      <p className="text-xs font-black uppercase tracking-[0.14em] text-tts-muted">{label}</p>
+      <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-2 break-words text-xl font-black text-tts-deep">{value}</p>
       <p className="mt-1 text-sm leading-5 text-tts-muted">{detail}</p>
     </div>

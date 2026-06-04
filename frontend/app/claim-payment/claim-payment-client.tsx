@@ -268,12 +268,12 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-10 sm:px-6">
         <section className="min-w-0 w-full overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm sm:p-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.22em] text-tts-confirm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-normal text-tts-confirm">
             <ShieldCheck className="h-4 w-4" />
             {T(language, "Receber pagamento", "Receive Payment")}
           </div>
 
-          <h1 className="mt-5 text-3xl font-semibold text-tts-deep md:text-5xl">
+          <h1 className="mt-5 text-2xl font-semibold text-tts-deep md:text-2xl">
             {T(
               language,
               `${senderName} criou um link de ${sourceAmountLabel} para ${recipientName}`,
@@ -294,7 +294,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
               : ""}
           </p>
 
-          <div className="mt-6 rounded-lg border border-tts-border bg-tts-surface p-4 text-sm">
+          <div className="mt-6 rounded-xl border border-tts-border bg-tts-surface p-4 text-sm">
             <p className="text-tts-muted">{T(language, "Status do link", "Link status")}</p>
             {validation.valid === false ? (
               <p className="mt-1 text-tts-error">
@@ -312,17 +312,17 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           {(!loggedIn || isSenderSession) && !isExpiredLink && (
             <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
               {hasSessionCredentials && sessionReady === "checking" && (
-                <p className="sm:col-span-2 rounded-lg border border-tts-border bg-tts-surface p-3 text-sm text-tts-deep">
+                <p className="sm:col-span-2 rounded-xl border border-tts-border bg-tts-surface p-3 text-sm text-tts-deep">
                   {T(language, "Validando sua conta para recebimento...", "Validating your account for receipt...")}
                 </p>
               )}
               {loginNotice && (
-                <p className="sm:col-span-2 rounded-lg border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
+                <p className="sm:col-span-2 rounded-xl border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
                   {loginNotice}
                 </p>
               )}
               {isSenderSession && (
-                <p className="sm:col-span-2 rounded-lg border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
+                <p className="sm:col-span-2 rounded-xl border border-tts-gold bg-tts-gold-bg p-3 text-sm text-tts-gold">
                   {T(language, "Este navegador está conectado na conta que criou o link. Para receber, entre ou crie a conta de destino.", "This browser is signed in to the account that created the link. To receive it, sign in or create the recipient account.")}
                 </p>
               )}
@@ -330,21 +330,21 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                 <button
                   type="button"
                   onClick={leaveSenderSession}
-                  className="sm:col-span-2 inline-flex items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
+                  className="sm:col-span-2 inline-flex items-center justify-center rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
                 >
                   {T(language, "Usar outra conta para receber", "Use another account to receive")}
                 </button>
               )}
               <Link
                 href={`/login?next=${encodeURIComponent(localizedNextPath)}&lang=${encodeURIComponent(language)}`}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-gold"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-gold"
               >
                 <LogIn className="h-4 w-4" />
                 {T(language, "1) Entrar para receber", "1) Sign in to receive")}
               </Link>
               <Link
                 href={createAccountPath}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
               >
                 <UserPlus className="h-4 w-4" />
                 {T(language, "2) Criar conta para receber", "2) Create account to receive")}
@@ -354,13 +354,13 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
 
           {loggedIn && !isSenderSession && !isExpiredLink && (
             <div className="mt-5 space-y-3">
-              <div className="rounded-lg border border-tts-confirm bg-tts-confirm/10 p-3 text-sm text-tts-confirm">
+              <div className="rounded-xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm text-tts-confirm">
                 {T(language, `Conta validada. Processando recebimento automático de ${receiveLabel}.`, `Account validated. Processing automatic receipt of ${receiveLabel}.`)}
               </div>
               <button
                 type="button"
                 onClick={leaveSenderSession}
-                className="inline-flex w-full items-center justify-center rounded-lg border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-bg"
               >
                 {T(language, "Usar outra conta para receber", "Use another account to receive")}
               </button>
@@ -375,9 +375,9 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
           )}
           <AnimatePresence mode="wait">
           {status === "done" && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-lg border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-3 rounded-xl border border-tts-confirm bg-tts-confirm/10 p-4 text-sm text-tts-confirm">
               <p className="text-base font-semibold text-tts-confirm">{T(language, "Pagamento recebido com sucesso", "Payment received successfully")}</p>
-              <div className="space-y-2 rounded-lg border border-tts-confirm bg-tts-bg p-4">
+              <div className="space-y-2 rounded-xl border border-tts-confirm bg-tts-bg p-4">
                 <p><span className="text-tts-deep">{T(language, "Valor", "Amount")}: </span>{formatAmount(successAmount, successAsset)}</p>
                 <p><span className="text-tts-deep">{T(language, "Destino", "Destination")}: </span>{T(language, "Sua conta", "Your account")}</p>
                 <p><span className="text-tts-deep">{T(language, "Horário", "Time")}: </span>{formatTimestamp(result?.completed_at, language)}</p>
@@ -387,7 +387,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
                   href={successReceiptUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
+                  className="inline-flex w-full items-center justify-center rounded-xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm"
                 >
                   {T(language, "Ver comprovante", "View receipt")}
                 </a>
@@ -399,7 +399,7 @@ export default function ClaimPaymentClient({ initialToken }: { initialToken?: st
             </motion.div>
           )}
           {status === "error" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-lg border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 rounded-xl border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
               {result?.error || result?.message || T(language, "Não foi possível receber este pagamento.", "Could not receive this payment.")}
             </motion.div>
           )}

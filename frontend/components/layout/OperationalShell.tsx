@@ -7,13 +7,14 @@ type OperationalPageProps = {
   className?: string
   frameClassName?: string
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  centered?: boolean
 }
 
 const frameSize = {
-  sm: 'max-w-3xl',
-  md: 'max-w-5xl',
-  lg: 'max-w-6xl',
-  xl: 'max-w-7xl',
+  sm: 'max-w-xl',
+  md: 'max-w-3xl',
+  lg: 'max-w-5xl',
+  xl: 'max-w-6xl',
 }
 
 export function OperationalPage({
@@ -21,10 +22,23 @@ export function OperationalPage({
   className,
   frameClassName,
   size = 'lg',
+  centered = false,
 }: OperationalPageProps) {
   return (
-    <main className={cn('tts-op-page min-h-screen bg-tts-bg text-tts-deep', className)}>
-      <div className={cn('tts-op-frame mx-auto w-full px-4 py-6 sm:px-6 lg:px-8', frameSize[size], frameClassName)}>
+    <main
+      className={cn(
+        'tts-op-page relative min-h-screen overflow-hidden bg-tts-bg px-4 py-8 text-tts-deep sm:py-10',
+        centered && 'flex items-center justify-center',
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          'tts-op-frame relative mx-auto flex w-full flex-col gap-5',
+          frameSize[size],
+          frameClassName,
+        )}
+      >
         {children}
       </div>
     </main>
@@ -49,22 +63,25 @@ export function OperationalHeader({
   className,
 }: OperationalHeaderProps) {
   return (
-    <header className={cn('tts-op-header rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm sm:p-6', className)}>
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+    <header
+      className={cn(
+        'tts-op-header rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm sm:p-8',
+        className,
+      )}
+    >
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <div className="mb-4 flex items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-tts-border bg-tts-bg text-tts-gold">
-              <Logo size={22} />
-            </span>
+          <div className="mb-6 flex items-center gap-3">
+            <Logo size={34} />
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-tts-muted">TalkToStellar</p>
-              {eyebrow ? <p className="mt-1 text-xs font-bold text-tts-gold">{eyebrow}</p> : null}
+              <p className="text-sm font-extrabold text-tts-deep">TalkToStellar</p>
+              {eyebrow ? <p className="mt-0.5 text-xs font-semibold text-tts-muted">{eyebrow}</p> : null}
             </div>
           </div>
-          <h1 className="max-w-3xl text-2xl font-black tracking-tight text-tts-deep sm:text-4xl">{title}</h1>
-          {description ? <div className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-tts-muted">{description}</div> : null}
+          <h1 className="max-w-3xl text-xl font-bold text-tts-deep sm:text-2xl">{title}</h1>
+          {description ? <div className="mt-2 max-w-3xl text-sm leading-relaxed text-tts-muted">{description}</div> : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">{actions}</div> : null}
       </div>
       {children ? <div className="mt-5">{children}</div> : null}
     </header>
@@ -84,7 +101,7 @@ export function OperationalCard({
   const Comp = as
   return (
     <Comp
-      className={cn('tts-op-card rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm sm:p-5', className)}
+      className={cn('tts-op-card rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm sm:p-6', className)}
       {...props}
     >
       {children}
@@ -115,10 +132,10 @@ export function OperationalStat({
   }[tone]
 
   return (
-    <div className={cn('tts-op-stat rounded-xl border border-tts-border bg-tts-bg/60 p-4', className)}>
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-tts-muted">{label}</p>
-      <p className={cn('mt-2 text-xl font-black tracking-tight', toneClass)}>{value}</p>
-      {detail ? <p className="mt-1 text-xs font-semibold leading-5 text-tts-muted">{detail}</p> : null}
+    <div className={cn('tts-op-stat rounded-xl border border-tts-border bg-tts-bg/55 p-4', className)}>
+      <p className="text-xs font-semibold text-tts-muted">{label}</p>
+      <p className={cn('mt-2 text-lg font-bold', toneClass)}>{value}</p>
+      {detail ? <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p> : null}
     </div>
   )
 }
@@ -138,7 +155,7 @@ export function StatusPill({ children, tone = 'default', className }: StatusPill
   }[tone]
 
   return (
-    <span className={cn('inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', toneClass, className)}>
+    <span className={cn('inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-bold', toneClass, className)}>
       {children}
     </span>
   )
