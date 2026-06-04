@@ -864,20 +864,20 @@ export default function ConfirmPaymentClient({
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de pagamento", "Payment Confirmation")}
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-tts-deep md:text-6xl">
+              <h1 className="max-w-xl text-2xl font-bold tracking-tight text-tts-deep md:text-3xl">
                 {T(feedbackLanguage, "Confirme este pagamento", "Confirm this payment")}
               </h1>
-              <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
+              <p className="max-w-2xl text-sm leading-6 text-tts-muted">
                 {T(feedbackLanguage, "Confira os dados abaixo e digite seu PIN para autorizar a transferência.", "Check the details below and enter your PIN to authorize the transfer.")}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-tts-border bg-tts-deep/20 p-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-tts-border bg-tts-bg p-2 text-xs">
               {[
                 T(feedbackLanguage, "Conferir", "Check"),
                 T(feedbackLanguage, "Autorizar", "Authorize"),
@@ -897,13 +897,13 @@ export default function ConfirmPaymentClient({
             </div>
 
             <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{T(feedbackLanguage, "Pagamento", "Payment")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {isCrossCurrency ? sourceAmountLabel : amountLabel}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm uppercase tracking-[0.24em] text-tts-muted">{T(feedbackLanguage, "Destinatário", "Recipient")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {destinationLabel}
@@ -917,9 +917,9 @@ export default function ConfirmPaymentClient({
             )}
           </section>
 
-          <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
                 <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
                 <p className="mt-2 text-tts-deep">
                   {isCrossCurrency ? `${T(feedbackLanguage, "Você envia", "You send")}: ${sourceAmountLabel}` : `${T(feedbackLanguage, "Valor", "Amount")}: ${amountLabel}`}
@@ -1004,7 +1004,7 @@ export default function ConfirmPaymentClient({
 	            </div>
 
 	            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
-              <div className="mt-5 rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
+              <div className="mt-5 rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
                 <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Confirmar com Passkey", "Confirm with Passkey")}</p>
                 <p className="mt-1 text-tts-deep">{T(feedbackLanguage, "Abra esta confirmação no aparelho onde sua Passkey está cadastrada.", "Open this confirmation on the device where your Passkey is registered.")}</p>
                 <div className="mt-3 flex justify-center">
@@ -1017,7 +1017,7 @@ export default function ConfirmPaymentClient({
               </div>
             )}
 
-            <div className="mt-5 rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
+            <div className="mt-5 rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
               <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && (
@@ -1054,7 +1054,7 @@ export default function ConfirmPaymentClient({
                     {returnTarget.label}
                   </a>
                   {result.receiptImageDataUrl && (
-                    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20">
+                    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.08 }} className="mt-4 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg">
                       <motion.img
                         src={result.receiptImageDataUrl}
                         alt={T(feedbackLanguage, "Comprovante TalkToStellar", "TalkToStellar receipt")}

@@ -326,16 +326,16 @@ export default function ConfirmConversionClient({
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+        <div className="grid min-w-0 w-full gap-8 overflow-hidden border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-[0.2em] text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-4xl font-black tracking-tight text-tts-deep md:text-6xl">
+              <h1 className="max-w-xl text-2xl font-bold tracking-tight text-tts-deep md:text-3xl">
                 {T(feedbackLanguage, "Confirme a troca de moeda", "Confirm this conversion")}
               </h1>
-              <p className="max-w-2xl text-base leading-7 text-tts-deep md:text-lg">
+              <p className="max-w-2xl text-sm leading-6 text-tts-muted">
                 {T(feedbackLanguage, "Confira os valores e digite seu PIN para concluir na sua conta.", "Check the details and enter your PIN to complete it in your account.")}
               </p>
             </div>
@@ -383,7 +383,7 @@ export default function ConfirmConversionClient({
             </div>
           </section>
 
-          <section className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-5 shadow-xl md:p-6">
+          <section className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-5 shadow-sm md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
                 <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>

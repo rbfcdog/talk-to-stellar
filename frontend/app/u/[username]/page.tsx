@@ -83,7 +83,7 @@ export default function PublicProfilePage() {
             Perfil global
           </div>
 
-          <div className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-6 shadow-2xl md:p-8">
+          <div className="rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm md:p-8">
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-tts-border bg-tts-bg text-lg font-bold text-tts-gold">
                 {displayInitial}
@@ -140,7 +140,7 @@ export default function PublicProfilePage() {
           </div>
         </section>
 
-        <section className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-5 shadow-2xl md:p-6">
+        <section className="rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm md:p-6">
           <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
           <p className="mt-3 break-all font-mono-financial text-sm font-semibold leading-6 text-tts-deep">
             {publicKey || "indisponível"}

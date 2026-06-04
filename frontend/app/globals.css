@@ -257,7 +257,7 @@
     pointer-events: none;
     background-image: radial-gradient(circle, var(--tts-gold) 1px, transparent 1px);
     background-size: 28px 28px;
-    opacity: 0.055;
+    opacity: 0.06;
   }
 
   .tts-op-page::after {
@@ -267,8 +267,8 @@
     z-index: -1;
     pointer-events: none;
     background:
-      linear-gradient(180deg, color-mix(in oklab, var(--tts-surface) 48%, transparent), transparent 36%),
-      linear-gradient(135deg, color-mix(in oklab, var(--tts-gold) 9%, transparent), transparent 42%);
+      linear-gradient(180deg, color-mix(in oklab, var(--tts-surface) 54%, transparent), transparent 40%),
+      linear-gradient(135deg, color-mix(in oklab, var(--tts-gold) 6%, transparent), transparent 44%);
   }
 
   .tts-op-page > * {
@@ -291,6 +291,42 @@
     box-shadow:
       0 1px 0 color-mix(in oklab, var(--tts-surface) 80%, white 20%) inset,
       0 18px 55px rgba(28, 24, 18, 0.06);
+  }
+
+  .tts-op-page .shadow-sm,
+  .tts-op-page .shadow,
+  .tts-op-page .shadow-md,
+  .tts-op-page .shadow-lg,
+  .tts-op-page .shadow-xl,
+  .tts-op-page .shadow-2xl {
+    box-shadow:
+      0 1px 0 color-mix(in oklab, var(--tts-surface) 82%, white 18%) inset,
+      0 18px 48px rgba(28, 24, 18, 0.055) !important;
+  }
+
+  .tts-op-page .bg-tts-deep\/20,
+  .tts-op-page .bg-tts-deep\/30,
+  .tts-op-page .bg-tts-deep\/40,
+  .tts-op-page .bg-tts-deep\/60 {
+    background-color: color-mix(in oklab, var(--tts-bg) 72%, var(--tts-surface) 28%) !important;
+  }
+
+  .tts-op-page .text-4xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+
+  @media (min-width: 768px) {
+    .tts-op-page .md\:text-5xl,
+    .tts-op-page .md\:text-6xl {
+      font-size: 1.875rem !important;
+      line-height: 2.25rem !important;
+    }
+  }
+
+  .tts-op-page :is(section, article, aside, header, div)[class*='border'][class*='bg-tts-surface'],
+  .tts-op-page :is(section, article, aside, header, div)[class*='border'][class*='bg-tts-bg'] {
+    border-color: var(--tts-border);
   }
 
   .tts-op-page input,
