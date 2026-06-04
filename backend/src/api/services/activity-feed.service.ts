@@ -61,7 +61,7 @@ function userFacingAsset(code: unknown): string {
   const normalized = String(code || '').trim().toUpperCase();
   if (!normalized || normalized === 'TESOURO') return 'BRL';
   if (normalized === 'USD') return 'USDC';
-  if (normalized === 'EURC') return 'EUR';
+  if (normalized === 'EURC' || normalized === 'EUR') return 'CETES';
   return normalized;
 }
 
@@ -69,7 +69,6 @@ function formatAmountForFeed(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return `0 ${currency}`;
   if (currency === 'BRL') return `R$ ${amount.toFixed(2).replace('.', ',')}`;
   if (currency === 'USDC') return `US$ ${amount.toFixed(2)}`;
-  if (currency === 'EUR') return `€ ${amount.toFixed(2)}`;
   return `${amount.toFixed(2)} ${currency}`;
 }
 

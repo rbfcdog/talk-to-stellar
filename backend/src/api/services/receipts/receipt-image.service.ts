@@ -53,7 +53,7 @@ function displaySymbol(assetCode: string): string {
   const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
   if (code === 'USDC') return 'US$';
   if (code === 'BRL' || code === 'TESOURO') return 'R$';
-  if (code === 'EURC' || code === 'EUR') return '€';
+  if (code === 'EURC' || code === 'EUR') return 'CETES';
   return `${code} `;
 }
 

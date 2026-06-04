@@ -254,6 +254,10 @@ describe('Defindex yield transaction flows', () => {
   ] as const)('prepares deposit and withdraw transactions for %s', async (assetCode, vaultAddress) => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    jest.spyOn(StellarService, 'loadAccount').mockResolvedValue({
+      subentry_count: 0,
+      balances: [{ asset_type: 'native', balance: '25' }],
+    } as any);
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockImplementation(async (input) => ({
       xdr: `${input.action}-${assetCode}-xdr`,
       raw: { action: input.action, assetCode },
@@ -297,6 +301,75 @@ describe('Defindex yield transaction flows', () => {
       network: 'testnet',
       slippageBps: 75,
     }));
+  });
+
+  it('keeps XLM yield confirmation available when spendable XLM covers the deposit', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    jest.spyOn(StellarService, 'loadAccount').mockResolvedValue({
+      subentry_count: 1,
+      balances: [{ asset_type: 'native', balance: '5' }],
+    } as any);
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
+      xdr: 'deposit-xlm-xdr',
+      raw: { action: 'deposit', assetCode: 'XLM' },
+    });
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '1',
+      asset_code: 'XLM',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      execution_ready: true,
+      xdr: 'deposit-xlm-xdr',
+      vault: expect.objectContaining({ asset_code: 'XLM', vault_address: YIELD_VAULTS.XLM }),
+    });
+    expect(result.execution_blocked_code).toBeUndefined();
+    expect(buildSpy).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'deposit',
+      vaultAddress: YIELD_VAULTS.XLM,
+      amountUnits: 10000000,
+    }));
+  });
+
+  it('explains XLM reserve when total balance is not spendable for yield deposit', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    jest.spyOn(StellarService, 'loadAccount').mockResolvedValue({
+      subentry_count: 4,
+      balances: [{ asset_type: 'native', balance: '3.04999' }],
+    } as any);
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '1',
+      asset_code: 'XLM',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      execution_blocked_code: 'insufficient_balance',
+      setup_required: false,
+      asset_conversion: expect.objectContaining({
+        conversion_mode: 'direct_deposit_balance_check',
+        source_asset: { code: 'XLM' },
+        requested_amount: '1',
+      }),
+    });
+    expect(String(result.execution_blocked_reason)).toContain('reserva de rede');
+    expect(buildSpy).not.toHaveBeenCalled();
   });
 
   it('normalizes testnet EURC yield requests to CETES', async () => {
@@ -869,6 +942,10 @@ describe('Defindex yield transaction flows', () => {
     process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
     const signingSecret = `S${'A'.repeat(55)}`;
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue('1234');
+    jest.spyOn(StellarService, 'loadAccount').mockResolvedValue({
+      subentry_count: 0,
+      balances: [{ asset_type: 'native', balance: '25' }],
+    } as any);
     jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue(signingSecret);
     const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction').mockResolvedValue({
       xdr: `server-prepared-${assetCode}-xdr`,

@@ -2285,7 +2285,6 @@ export class AgentGraph {
     const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
     if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
-    if (upper === 'EUR') return `€ ${n.toFixed(2)}`;
     if (upper === 'XLM') return `${n.toFixed(7).replace(/0+$/, '').replace(/\.$/, '')} XLM`;
     return `${n.toFixed(2)} ${upper || 'saldo'}`;
   }
@@ -2294,21 +2293,20 @@ export class AgentGraph {
     const upper = this.toUserFacingAssetCode(assetCode);
     if (upper === 'USDC' || upper === 'USD') return 'US$';
     if (upper === 'BRL') return 'R$';
-    if (upper === 'EUR') return '€';
     return upper || this.text(language, 'saldo', 'balance');
   }
 
   private toUserFacingAssetCode(assetCode: unknown): string {
     const upper = String(assetCode || '').trim().toUpperCase();
     if (upper === 'TESOURO') return 'BRL';
-    if (upper === 'EURC') return 'EUR';
+    if (upper === 'EURC' || upper === 'EUR' || upper === 'EURO' || upper === 'EUROS') return 'CETES';
     return upper;
   }
 
   private maskInternalAssetNames(value: unknown): string {
     const raw = String(value || '')
       .replace(/TESOURO:[A-Z2-7]{56}/g, 'BRL')
-      .replace(/EURC:[A-Z2-7]{56}/g, 'EUR')
+      .replace(/EURC:[A-Z2-7]{56}/g, 'CETES')
       .replace(/\bTESOURO\b/g, 'BRL');
 
     const parts = raw
@@ -2319,7 +2317,7 @@ export class AgentGraph {
         if (part === 'XLM' || part === 'NATIVE') return '';
         if (part === 'USDC' || part === 'USD') return 'US$';
         if (part === 'BRL') return 'R$';
-        if (part === 'EURC' || part === 'EUR') return '€';
+        if (part === 'EURC' || part === 'EUR') return 'CETES';
         return part;
       })
       .filter(Boolean)
@@ -2330,7 +2328,7 @@ export class AgentGraph {
 
     return raw
       .replace(/\bXLM\b/g, '')
-      .replace(/\bEURC\b/g, 'EUR')
+      .replace(/\bEURC\b/g, 'CETES')
       .replace(/\s*->\s*->\s*/g, ' -> ')
       .replace(/^\s*->\s*|\s*->\s*$/g, '')
       .trim();
@@ -2442,7 +2440,7 @@ export class AgentGraph {
     ).toUpperCase().replace(/^USD$/, 'USDC');
     const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
       ? ['BRL', 'USDC', 'CETES', 'XLM']
-      : ['BRL', 'USDC', 'EUR', 'XLM'];
+      : ['BRL', 'USDC', 'CETES', 'XLM'];
     const safeDestAssetCode = allowedRouteAssets.includes(destAssetCode) ? destAssetCode : 'BRL';
     const sourceAssetCode = safeDestAssetCode === 'BRL' ? 'USDC' : 'BRL';
 
@@ -2474,7 +2472,7 @@ export class AgentGraph {
 
     const allowedRouteAssets = getStellarNetworkName() === 'TESTNET'
       ? ['BRL', 'USDC', 'CETES', 'XLM']
-      : ['BRL', 'USDC', 'EUR', 'XLM'];
+      : ['BRL', 'USDC', 'CETES', 'XLM'];
     if (!allowedRouteAssets.includes(sourceAssetCode) || !allowedRouteAssets.includes(destAssetCode)) {
       return null;
     }
@@ -3095,7 +3093,7 @@ export class AgentGraph {
         '- Se a mensagem pedir para criar/gerar link de pagamento/transação sem destinatário explícito, use recipient_query vazio e needs_clarification false.',
         '- Link de pagamento/transação sem destinatário é Pay Anyone: não peça contato nem identificador técnico.',
         '- amount deve conter apenas o valor numérico, sem moeda.',
-        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL ou CETES em testnet; EUR só em public/mainnet) quando houver moeda explícita; se o usuário disser USD, normalize para USDC; se disser euro/EUR/EURC em testnet, normalize para CETES.',
+        '- asset_code deve ser o ativo de ORIGEM que o usuário quer gastar/enviar (USDC, BRL, CETES ou XLM) quando houver moeda explícita; se o usuário disser USD ou dólares, normalize para USDC.',
         '- receive_asset_code deve ser o ativo de DESTINO que o destinatário deve receber quando a mensagem disser "receber em BRL/USDC/CETES". Isso também vale para links de pagamento.',
         '- Quando a mensagem disser "X em Y pra fora" sem PIX/banco próprio, trate como transferência externa em duas camadas: asset_code é X (origem/gasto) e receive_asset_code é Y (ativo final transferido). "pra fora" sozinho não é destinatário; se não houver contato, e-mail, telefone, CPF, public key ou chave, deixe recipient_query vazio e needs_clarification=true.',
         '- Nunca deixe o ativo de destino sobrescrever o ativo de origem. Ex.: "transferir 200 BRL para Carlos receber em USDC" => amount="200", asset_code="BRL", receive_asset_code="USDC".',
@@ -3293,7 +3291,7 @@ export class AgentGraph {
         '- sourceAssetCode deve ser o ativo de origem (USDC, BRL, CETES, XLM ou outro código configurado quando citado explicitamente).',
         '- destAssetCode deve ser o ativo de destino.',
         '- Se o usuário usar USD, normalize para USDC.',
-        '- Se o usuário usar euro/EUR/EURC em testnet, normalize para CETES. EUR/EURC fica apenas para public/mainnet.',
+        '- Se aparecer moeda legada fora da lista pública, normalize internamente para CETES em testnet, mas responda com o ativo normalizado.',
         '- Se o usuário usar XLM, lumen ou lumens, normalize para XLM.',
         '- needs_clarification deve ser true só se faltar o ativo de origem, destino ou valor.',
         '- clarification_question deve ser curta e em pt-BR quando needs_clarification for true.',
@@ -3346,7 +3344,7 @@ export class AgentGraph {
   }
 
   private inferConversionAssetsFromText(message: string): { sourceAssetCode?: string; destAssetCode?: string } {
-    const euroReplacement = getStellarNetworkName() === 'TESTNET' ? 'cetes' : 'eur';
+    const legacyCurrencyReplacement = 'cetes';
     const normalized = String(message || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -3354,16 +3352,16 @@ export class AgentGraph {
       .replace(/\busd\b/g, 'usdc')
       .replace(/\bdolares?\b/g, 'usdc')
       .replace(/\bdollars?\b/g, 'usdc')
-      .replace(/\beuros?\b/g, euroReplacement)
-      .replace(/\beur\b/g, euroReplacement)
-      .replace(/\beurc\b/g, euroReplacement)
+      .replace(/\beuros?\b/g, legacyCurrencyReplacement)
+      .replace(/\beur\b/g, legacyCurrencyReplacement)
+      .replace(/\beurc\b/g, legacyCurrencyReplacement)
       .replace(/\breais?\b/g, 'brl')
       .replace(/\breal\b/g, 'brl')
       .replace(/\blumens?\b/g, 'xlm');
 
     const assets = getStellarNetworkName() === 'TESTNET'
       ? ['USDC', 'BRL', 'CETES', 'XLM']
-      : ['USDC', 'BRL', 'EUR', 'XLM'];
+      : ['USDC', 'BRL', 'CETES', 'XLM'];
     const found = assets.filter((asset) => new RegExp(`\\b${asset.toLowerCase()}\\b`).test(normalized));
     const sourceMatch = normalized.match(/\b(?:de|do|da|dos|das)\s+(usdc|brl|cetes|eur|xlm)\b/);
     const destMatch = normalized.match(/\b(?:para|pra|por|em)\s+(usdc|brl|cetes|eur|xlm)\b/);
@@ -4853,7 +4851,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
   private formatAssetLine(balance: any, index: number): string {
     const asset = this.toUserFacingAssetCode(balance.asset || balance.asset_code || 'UNKNOWN');
-    const label = asset === 'BRL' ? 'R$' : asset === 'USDC' ? 'US$' : asset === 'EUR' ? '€' : asset;
+    const label = asset === 'BRL' ? 'R$' : asset === 'USDC' ? 'US$' : asset;
     const amount = balance.balance || '0';
     return `${index + 1}. ${label}: ${amount}`;
   }
@@ -4908,7 +4906,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             byAsset.set(asset, { ...balance, asset });
           }
         }
-        const balanceAssets = getStellarNetworkName() === 'TESTNET' ? ['BRL', 'USDC', 'CETES', 'XLM'] : ['BRL', 'USDC', 'EUR', 'XLM'];
+        const balanceAssets = ['BRL', 'USDC', 'CETES', 'XLM'];
         const exactBalances = balanceAssets.map((asset) => byAsset.get(asset) || { asset, balance: '0.0000000' });
         const formattedBalances = exactBalances.map((balance: any, index: number) => this.formatAssetLine(balance, index)).join('\n');
         const monthlySavingsMessage = String(toolResult.monthly_savings?.message || '').trim();

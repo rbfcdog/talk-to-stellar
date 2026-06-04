@@ -26,7 +26,7 @@ const FAQS: FaqItem[] = [
   {
     question: 'Quais moedas aparecem para o usuário?',
     answer:
-      'A experiência mostra reais, dólares, euros e as moedas extras configuradas no ambiente. Reais são tratados como reais na UX.',
+      'A experiência mostra reais, dólares, XLM e as moedas extras configuradas no ambiente. Reais são tratados como reais na UX.',
   },
   {
     question: 'Como funciona a confirmação?',
