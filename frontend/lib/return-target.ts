@@ -71,7 +71,23 @@ function targetForSource(source: string, language?: string): ReturnTarget | null
     };
   }
 
-  if (match(["pix", "pix-ramp", "pix-on", "pix-off", "onramp", "offramp"])) {
+  if (match(["pix-off", "offramp"])) {
+    return {
+      href: withLanguage("/pix-off", language),
+      label: copy(language, "Voltar ao PIX", "Back to PIX"),
+      source: normalized,
+    };
+  }
+
+  if (match(["pix-on", "onramp"])) {
+    return {
+      href: withLanguage("/pix-on", language),
+      label: copy(language, "Voltar ao PIX", "Back to PIX"),
+      source: normalized,
+    };
+  }
+
+  if (match(["pix", "pix-ramp"])) {
     return {
       href: withLanguage("/pix-ramp", language),
       label: copy(language, "Voltar ao PIX", "Back to PIX"),
