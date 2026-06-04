@@ -73,6 +73,11 @@ describe("UX copy guardrails", () => {
     expect(text).toContain('const [destCode, setDestCode] = useState("USDC")');
     expect(text).not.toContain('const [sourceCode, setSourceCode] = useState("USDC")');
     expect(text).not.toContain('const [destCode, setDestCode] = useState("BRL")');
+    expect(text).toContain("min-h-[100dvh]");
+    expect(text).toContain("flex min-h-0 flex-1 flex-col overflow-hidden md:hidden");
+    expect(text).toContain('compact ? "grid-cols-2" : ""');
+    expect(text).toContain("showBalanceNotice && (hasBlockingBalanceIssue || hasZeroSourceBalance)");
+    expect(text).not.toContain('<MobileSummaryLine label={L("PIN", "PIN")}');
     expect(text).toContain('buildUrl("/pix-on"');
     expect(text).toContain("receive_amount: formatQueryDecimal");
     expect(text).toContain("return_to: conversionReturnHref");
