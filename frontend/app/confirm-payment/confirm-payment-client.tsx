@@ -962,7 +962,7 @@ export default function ConfirmPaymentClient({
 	              )}
 	            </form>
 
-	            <div className="mt-5">
+	            <div className={`mt-5 ${status === "ready" ? "hidden md:block" : "block"}`}>
 	              <OperationProgressPanel
 	                status={progressStatus}
 	                elapsedSeconds={progressElapsedSeconds}
@@ -976,7 +976,7 @@ export default function ConfirmPaymentClient({
 	            </div>
 
 	            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
-              <div className="mt-5 rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
+              <div className="mt-5 hidden rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep md:block">
                 <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Confirmar com Passkey", "Confirm with Passkey")}</p>
                 <p className="mt-1 text-tts-deep">{T(feedbackLanguage, "Abra esta confirmação no aparelho onde sua Passkey está cadastrada.", "Open this confirmation on the device where your Passkey is registered.")}</p>
                 <div className="mt-3 flex justify-center">
@@ -989,7 +989,7 @@ export default function ConfirmPaymentClient({
               </div>
             )}
 
-            <div className="mt-5 rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
+            <div className={`mt-5 rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep ${status === "ready" ? "hidden md:block" : "block"}`}>
               <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && (

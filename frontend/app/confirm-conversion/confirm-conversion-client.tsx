@@ -386,7 +386,7 @@ export default function ConfirmConversionClient({
               {T(feedbackLanguage, "Testnet: valores de conversão são estimados e podem variar.", "Testnet: conversion values are estimated and may vary.")}
             </p>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="hidden gap-3 md:grid md:grid-cols-2">
               <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Aplicar destino", "Apply destination")}</p>
                 <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão em uma aplicação.", "Use this conversion destination in an application.")}</p>
@@ -443,16 +443,18 @@ export default function ConfirmConversionClient({
                 />
               </div>
 
-	              <button
-	                type="submit"
-	                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
-                className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-3 text-sm font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
-              >
-	                {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
-	              </button>
+	              <div className={status === "ready" || status === "submitting" ? "tts-mobile-action" : ""}>
+	                <button
+	                  type="submit"
+	                  disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
+                  className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-3 text-sm font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+	                  {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
+	                </button>
+	              </div>
 	            </form>
 
-	            <div className="mt-5">
+	            <div className={`mt-5 ${status === "ready" ? "hidden md:block" : "block"}`}>
 	              <OperationProgressPanel
 	                status={progressStatus}
 	                elapsedSeconds={progressElapsedSeconds}
@@ -465,7 +467,7 @@ export default function ConfirmConversionClient({
 	              />
 	            </div>
 
-	            <div className="mt-5 border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
+	            <div className={`mt-5 border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep ${status === "ready" ? "hidden md:block" : "block"}`}>
               <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Executando conversão com a cotação confirmada...", "Executing conversion with the confirmed quote...")}</div>}

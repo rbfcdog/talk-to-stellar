@@ -12,6 +12,7 @@ import { trackUserResearchEvent } from "@/lib/user-research";
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = string;
 type RampMode = "onramp" | "offramp";
+type MobilePixStage = "details" | "payment" | "receipt";
 
 type RampConfig = {
   sandbox?: boolean;
@@ -923,6 +924,7 @@ export default function PixRampClient({
   const [config, setConfig] = useState<RampConfig | null>(null);
   const [rampMode, setRampMode] = useState<RampMode>("onramp");
   const [step, setStep] = useState<Step>("quote");
+  const [mobileStage, setMobileStage] = useState<MobilePixStage>("details");
   const [amountBrl, setAmountBrl] = useState("100");
   const [targetAsset, setTargetAsset] = useState<TargetAsset>("BRL");
   const [desiredReceiveAmount, setDesiredReceiveAmount] = useState("");
@@ -1319,6 +1321,16 @@ export default function PixRampClient({
   const pixLoginRequiredMessage = needsBrowserLoginForChatLink
     ? L("Não consegui carregar a sessão do chat neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link.", "I could not load the chat session in this browser. Return to WhatsApp and open the link again, or request a new link.")
     : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.");
+  const pixLoginNotice = needsBrowserLoginForPix
+    ? needsBrowserLoginForChatLink
+      ? L("Este PIX veio do chat, mas a sessão não foi carregada neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link. O PIN será pedido somente na confirmação final.", "This PIX came from chat, but the session was not loaded in this browser. Return to WhatsApp and open the link again, or request a new link. The PIN will be requested only at final confirmation.")
+      : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
+    : t("pix_need_email");
+  const mobilePixLoginNotice = needsBrowserLoginForChatLink
+    ? L("Sessão do chat não carregada. Reabra pelo WhatsApp ou peça um novo link.", "Chat session not loaded. Reopen from WhatsApp or request a new link.")
+    : needsBrowserLoginForPix
+      ? L("Entre com PIN para continuar.", "Sign in with PIN to continue.")
+      : t("pix_need_email");
   const transferRecipientBlocker = transferFlow && !transferRecipientVerified
     ? needsBrowserLoginForPix
       ? pixLoginRequiredMessage
@@ -1526,6 +1538,29 @@ export default function PixRampClient({
     L,
     language,
   ]);
+
+  useEffect(() => {
+    setMobileStage("details");
+  }, [rampMode]);
+
+  useEffect(() => {
+    if (step === "success" || temporaryOffRampTestResult) {
+      setMobileStage("receipt");
+      return;
+    }
+    if (rampMode === "onramp" && onRampPixCheckoutAvailable) {
+      setMobileStage("payment");
+      return;
+    }
+    if (rampMode === "offramp" && offRampQuote) {
+      setMobileStage("payment");
+    }
+  }, [offRampQuote, onRampPixCheckoutAvailable, rampMode, step, temporaryOffRampTestResult]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [mobileStage]);
 
   useEffect(() => {
     const stored = getStoredSession();
@@ -2999,7 +3034,7 @@ export default function PixRampClient({
                     : t("pix_off_subtitle")}
                 </p>
             </div>
-            <div className="tts-mobile-scroll flex min-w-0 gap-4 sm:grid sm:grid-cols-3">
+            <div className="hidden min-w-0 gap-4 md:grid md:grid-cols-3">
               <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                 <p className="text-sm uppercase tracking-normal text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
@@ -3041,25 +3076,22 @@ export default function PixRampClient({
                       )}
                     </div>
                   )}
-                </div>
+              </div>
             </div>
             <AccountStatusCard
               state={!sessionReady ? "loading" : hasSession ? "connected" : "signed-out"}
               ctaHref={loginHref || "/login"}
               detail={hasSession ? L("Sua conta está pronta para confirmar este PIX.", "Your account is ready to confirm this PIX.") : undefined}
               compact
-              className="bg-tts-bg/70"
+              className="hidden bg-tts-bg/70 md:block"
             />
           </section>
         </header>
 
         {!hasSession && rampMode === "onramp" && (
           <section className="mt-5 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-sm text-tts-gold">
-            {needsBrowserLoginForPix
-              ? needsBrowserLoginForChatLink
-                ? L("Este PIX veio do chat, mas a sessão não foi carregada neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link. O PIN será pedido somente na confirmação final.", "This PIX came from chat, but the session was not loaded in this browser. Return to WhatsApp and open the link again, or request a new link. The PIN will be requested only at final confirmation.")
-                : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.")
-              : t("pix_need_email")}
+            <span className="md:hidden">{mobilePixLoginNotice}</span>
+            <span className="hidden md:inline">{pixLoginNotice}</span>
             {loginHref && (
               <a
                 className="mt-3 inline-flex rounded-full bg-tts-gold px-4 py-2 text-xs font-black uppercase tracking-normal text-tts-deep transition hover:bg-tts-gold/90"
@@ -3149,15 +3181,29 @@ export default function PixRampClient({
           </section>
         )}
 
-        <LiveRampPanel
+        <MobilePixStepper
           mode={rampMode}
+          stage={mobileStage}
+          onStageChange={setMobileStage}
           steps={liveSteps}
+          language={language}
           loading={loading}
           status={statusLabel(status, language)}
-          launchedFromChat={launchedFromChat}
-          language={language}
-          feeSummary={onRampConversionFeeSummary}
+          hasPaymentStep={rampMode === "onramp" ? onRampPixCheckoutAvailable : Boolean(offRampQuote)}
+          hasReceiptStep={step === "success" || Boolean(temporaryOffRampTestResult)}
         />
+
+        <div className="hidden md:block">
+          <LiveRampPanel
+            mode={rampMode}
+            steps={liveSteps}
+            loading={loading}
+            status={statusLabel(status, language)}
+            launchedFromChat={launchedFromChat}
+            language={language}
+            feeSummary={onRampConversionFeeSummary}
+          />
+        </div>
 
         {!lockedMode && (
         <section className="mt-5 grid gap-3 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur sm:grid-cols-2">
@@ -3186,65 +3232,88 @@ export default function PixRampClient({
 
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="rounded-xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm sm:p-6">
+            <div className={`${mobileStage === "receipt" ? "hidden" : "block"} rounded-xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-gold">PIX</p>
                 <h2 className="mt-1 text-2xl font-bold text-tts-deep">{L("Enviar para PIX", "Send to PIX")}</h2>
 
-              <label className="mt-6 block text-sm font-bold text-tts-deep">
-                {L("Valor", "Amount")}
-              </label>
-              <div className="mt-2 flex overflow-hidden rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
-                <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputPrefix}</span>
-                <input
-                  className="min-w-0 w-full bg-transparent px-4 py-4 text-2xl font-bold text-tts-deep outline-none disabled:text-tts-deep disabled:opacity-100"
-                  value={offRampInputValue}
-                  inputMode="decimal"
-                  placeholder="100"
-                  disabled={offRampAmountLocked}
-                  title={offRampAmountLocked ? L("Valor definido pelo chat", "Amount set by chat") : undefined}
-                  aria-label={offRampExactReceiveBrl
-                    ? L("Valor em reais para receber via PIX", "Amount in BRL to receive through PIX")
-                    : L(`Valor em ${offRampInputAsset} para retirar via PIX`, `Amount in ${offRampInputAsset} to withdraw through PIX`)}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    setOffRampPreviewPayload(null);
-                    setTemporaryOffRampTestResult(null);
-                    if (offRampExactReceiveBrl) {
-                      setOffRampFiatAmount(next);
-                    } else if (offRampInputAsset === "BRL") {
-                      setOffRampFiatAmount(next);
-                      setOffRampAmount(next);
-                    } else {
-                      setOffRampAmount(next);
-                    }
-                  }}
-                />
-                <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputUnit}</span>
+              <div className={`${mobileStage === "details" ? "block" : "hidden"} md:block`}>
+                <label className="mt-6 block text-sm font-bold text-tts-deep">
+                  {L("Valor", "Amount")}
+                </label>
+                <div className="mt-2 flex overflow-hidden rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputPrefix}</span>
+                  <input
+                    className="min-w-0 w-full bg-transparent px-4 py-4 text-2xl font-bold text-tts-deep outline-none disabled:text-tts-deep disabled:opacity-100"
+                    value={offRampInputValue}
+                    inputMode="decimal"
+                    placeholder="100"
+                    disabled={offRampAmountLocked}
+                    title={offRampAmountLocked ? L("Valor definido pelo chat", "Amount set by chat") : undefined}
+                    aria-label={offRampExactReceiveBrl
+                      ? L("Valor em reais para receber via PIX", "Amount in BRL to receive through PIX")
+                      : L(`Valor em ${offRampInputAsset} para retirar via PIX`, `Amount in ${offRampInputAsset} to withdraw through PIX`)}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setOffRampPreviewPayload(null);
+                      setTemporaryOffRampTestResult(null);
+                      if (offRampExactReceiveBrl) {
+                        setOffRampFiatAmount(next);
+                      } else if (offRampInputAsset === "BRL") {
+                        setOffRampFiatAmount(next);
+                        setOffRampAmount(next);
+                      } else {
+                        setOffRampAmount(next);
+                      }
+                    }}
+                  />
+                  <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputUnit}</span>
+                </div>
+                {offRampAmountLocked && (
+                  <p className="mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
+                )}
+                <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Chave PIX", "PIX key")}</label>
+                <div className="mt-2 overflow-hidden rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
+                  <input
+                    className="w-full bg-transparent px-4 py-4 text-base font-black text-tts-deep outline-none placeholder:text-tts-muted"
+                    value={offRampPixKey}
+                    inputMode="text"
+                    autoComplete="off"
+                    placeholder={L("Email, CPF, telefone ou chave aleatória", "Email, CPF, phone, or random key")}
+                    aria-label={L("Chave PIX de destino", "Destination PIX key")}
+                    onChange={(event) => {
+                      setOffRampPixKey(event.target.value);
+                      setTemporaryOffRampTestResult(null);
+                    }}
+                  />
+                </div>
+                <p className="mt-2 text-xs font-bold text-tts-gold">
+                  {normalizedOffRampPixKey
+                    ? L(`Destino: PIX ${normalizedOffRampPixKey}`, `Destination: PIX ${normalizedOffRampPixKey}`)
+                    : L("Digite a chave PIX que receberá a retirada.", "Enter the PIX key that will receive the withdrawal.")}
+                </p>
+                <div className="tts-mobile-action mt-5 md:hidden">
+                  <button
+                    className="w-full rounded-2xl bg-tts-gold px-5 py-4 text-base font-black text-tts-deep transition disabled:opacity-50"
+                    disabled={!canResolveWallet || Boolean(loading) || !normalizedOffRampPixKey || operationLocked}
+                    onClick={() => {
+                      setMobileStage("payment");
+                      if (!offRampQuote) void run("Previewing PIX withdrawal", previewOffRampFees);
+                    }}
+                  >
+                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Continuar", "Continue")}
+                  </button>
+                </div>
               </div>
-              {offRampAmountLocked && (
-                <p className="mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
-              )}
-              <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Chave PIX", "PIX key")}</label>
-              <div className="mt-2 overflow-hidden rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
-                <input
-                  className="w-full bg-transparent px-4 py-4 text-base font-black text-tts-deep outline-none placeholder:text-tts-muted"
-                  value={offRampPixKey}
-                  inputMode="text"
-                  autoComplete="off"
-                  placeholder={L("Email, CPF, telefone ou chave aleatória", "Email, CPF, phone, or random key")}
-                  aria-label={L("Chave PIX de destino", "Destination PIX key")}
-                  onChange={(event) => {
-                    setOffRampPixKey(event.target.value);
-                    setTemporaryOffRampTestResult(null);
-                  }}
-                />
-              </div>
-              <p className="mt-2 text-xs font-bold text-tts-gold">
-                {normalizedOffRampPixKey
-                  ? L(`Destino: PIX ${normalizedOffRampPixKey}`, `Destination: PIX ${normalizedOffRampPixKey}`)
-                  : L("Digite a chave PIX que receberá a retirada.", "Enter the PIX key that will receive the withdrawal.")}
-              </p>
-              <div className="mt-5 rounded-xl border border-tts-gold bg-tts-gold-bg p-4">
+
+              <div className={`${mobileStage === "payment" ? "block" : "hidden"} md:block`}>
+                <button
+                  type="button"
+                  className="mb-4 rounded-full border border-tts-border px-4 py-2 text-xs font-black text-tts-muted md:hidden"
+                  onClick={() => setMobileStage("details")}
+                >
+                  {L("Voltar", "Back")}
+                </button>
+                <div className="rounded-xl border border-tts-gold bg-tts-gold-bg p-4 md:mt-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Antes do PIN", "Before PIN")}</p>
@@ -3301,9 +3370,10 @@ export default function PixRampClient({
                   {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
                 </button>
               </div>
+              </div>
             </div>
 
-            <div className="rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm sm:p-6">
+            <div className={`${mobileStage === "receipt" ? "block" : "hidden"} rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
               <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Seu PIX", "Your PIX")}</p>
               <h2 className="mt-1 text-2xl font-black">{L("Envio para PIX", "Send to PIX")}</h2>
               {!temporaryOffRampTestResult ? (
@@ -3342,7 +3412,7 @@ export default function PixRampClient({
 
         {rampMode === "onramp" && (
         <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm sm:p-6">
+          <div className={`${needsBrowserLoginForPix ? "hidden" : mobileStage === "details" ? "block" : "hidden"} rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">PIX</p>
@@ -3573,7 +3643,14 @@ export default function PixRampClient({
             )}
           </div>
 
-          <div className="rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm sm:p-6">
+          <div className={`${mobileStage === "payment" ? "block" : "hidden"} rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+            <button
+              type="button"
+              className="mb-4 rounded-full border border-tts-border px-4 py-2 text-xs font-black text-tts-muted md:hidden"
+              onClick={() => setMobileStage("details")}
+            >
+              {L("Voltar", "Back")}
+            </button>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento", "Payment")}</p>
@@ -3771,7 +3848,7 @@ export default function PixRampClient({
         )}
 
         {step === "success" && successTransaction && (
-          <section className="mt-5 overflow-hidden rounded-2xl border border-tts-confirm bg-tts-surface text-tts-deep shadow-sm shadow-emerald-950/25">
+          <section className={`${mobileStage === "receipt" ? "block" : "hidden"} mt-5 overflow-hidden rounded-2xl border border-tts-confirm bg-tts-surface text-tts-deep shadow-sm shadow-emerald-950/25 md:block`}>
             <div className="relative p-6 sm:p-8">
               {returnToPath && (
                 <div className="relative mb-5 flex items-center justify-start receipt-top-return-cta">
@@ -3881,6 +3958,86 @@ export default function PixRampClient({
         )}
       </div>
     </main>
+  );
+}
+
+function MobilePixStepper({
+  mode,
+  stage,
+  onStageChange,
+  steps,
+  language,
+  loading,
+  status,
+  hasPaymentStep,
+  hasReceiptStep,
+}: {
+  mode: RampMode;
+  stage: MobilePixStage;
+  onStageChange: (stage: MobilePixStage) => void;
+  steps: LiveStep[];
+  language: "pt-BR" | "en";
+  loading: string;
+  status: string;
+  hasPaymentStep: boolean;
+  hasReceiptStep: boolean;
+}) {
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  const activeStep = steps.find((step) => step.state === "active") || steps.find((step) => step.state === "warning");
+  const stageItems: Array<{ key: MobilePixStage; label: string; enabled: boolean; done: boolean }> = [
+    { key: "details", label: L("Dados", "Details"), enabled: true, done: hasPaymentStep || hasReceiptStep },
+    { key: "payment", label: L("Confirmar", "Confirm"), enabled: hasPaymentStep || stage === "payment" || hasReceiptStep, done: hasReceiptStep },
+    { key: "receipt", label: L("Recibo", "Receipt"), enabled: hasReceiptStep, done: hasReceiptStep },
+  ];
+  const stageIndex = Math.max(0, stageItems.findIndex((item) => item.key === stage));
+  const currentLabel = mode === "onramp" ? L("PIX para saldo", "PIX to balance") : L("Saldo para PIX", "Balance to PIX");
+
+  return (
+    <section className="sticky top-2 z-40 mt-4 rounded-2xl border border-tts-border bg-tts-surface/95 p-2 shadow-lg backdrop-blur md:hidden">
+      <div className="flex items-center justify-between gap-3 px-2 py-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">PIX</p>
+          <p className="truncate text-sm font-black text-tts-deep">{currentLabel}</p>
+        </div>
+        <p className="shrink-0 text-[11px] font-black text-tts-muted">
+          {loading ? publicLoadingLabel(loading, language) : status}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1">
+        {stageItems.map((item, index) => {
+          const active = item.key === stage;
+          const reached = index <= stageIndex || item.done;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              disabled={!item.enabled}
+              className={`min-h-11 rounded-xl px-2 text-center text-[11px] font-black transition ${
+                active
+                  ? "bg-tts-deep text-tts-bg"
+                  : item.done
+                    ? "bg-tts-bg text-tts-deep"
+                    : reached
+                      ? "border border-tts-border text-tts-deep"
+                      : "border border-tts-border text-tts-muted"
+              } disabled:opacity-40`}
+              onClick={() => onStageChange(item.key)}
+            >
+              <span className="block text-[10px] opacity-70">{index + 1}</span>
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeStep && (
+        <div className="mt-2 rounded-xl border border-tts-border bg-tts-bg/60 px-3 py-2">
+          <p className="truncate text-xs font-black text-tts-deep">{activeStep.label}</p>
+          <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-4 text-tts-muted">{activeStep.detail}</p>
+        </div>
+      )}
+    </section>
   );
 }
 
