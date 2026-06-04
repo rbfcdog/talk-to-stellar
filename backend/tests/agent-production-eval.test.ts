@@ -190,6 +190,9 @@ describe('Agent production evals', () => {
   it('uses LLM route tools to route typo balance requests instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'real-openai-key', 'production prompt') as any;
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
     const routerInvoke = jest.fn().mockResolvedValue({
       tool_calls: [{
         id: 'intent-call-1',
@@ -208,15 +211,6 @@ describe('Agent production evals', () => {
       invoke: jest.fn(),
     };
 
-    executeToolMock.mockResolvedValue(JSON.stringify({
-      success: true,
-      balances: [
-        { asset: 'BRL', balance: '12.3400000' },
-        { asset: 'USDC', balance: '8.9000000' },
-        { asset: 'XLM', balance: '3.0000000' },
-      ],
-    }));
-
     const result = await graph.processInput(createState('quero ver meu sald9'));
 
     expect(graph.llm.bindTools).toHaveBeenCalled();
@@ -227,14 +221,12 @@ describe('Agent production evals', () => {
     expect(balanceRouteTool.function.parameters.properties.needs_clarification).toBeDefined();
     expect(balanceRouteTool.function.parameters.properties.risk.enum).toEqual(['low', 'medium', 'high']);
     expect(balanceRouteTool.function.parameters.properties.language.enum).toEqual(['pt-BR', 'en']);
-    expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
-      session_id: 'eval-session',
-      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_balance', expect.anything());
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Saldo da sua conta TalkToStellar');
-    expect(result.response_message).toContain('R$: 12.3400000');
-    expect(result.response_message).toContain('XLM: 3.0000000');
+    expect(result.response_message).toContain('/balance?');
+    expect(result.response_message).toContain('PIN');
+    expect(result.response_message).not.toContain('R$: 12.3400000');
+    expect(result.response_message).not.toContain('XLM: 3.0000000');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
@@ -242,23 +234,16 @@ describe('Agent production evals', () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     mockRouteIntent(graph, 'route_balance_intent');
-
-    executeToolMock.mockResolvedValue(JSON.stringify({
-      success: true,
-      balances: [
-        { asset: 'BRL', balance: '25.0000000' },
-        { asset: 'USDC', balance: '12.5000000' },
-      ],
-    }));
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
 
     const result = await graph.processInput(createState('quanto eu tenho na conta?'));
 
-    expect(executeToolMock).toHaveBeenCalledWith('get_balance', {
-      session_id: 'eval-session',
-      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_balance', expect.anything());
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Saldo da sua conta');
+    expect(result.response_message).toContain('/balance?');
+    expect(result.response_message).toContain('PIN');
     expect(result.response_message).not.toContain('Diga o que quer fazer');
   });
 
@@ -375,32 +360,17 @@ describe('Agent production evals', () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     mockRouteIntent(graph, 'route_history_intent');
-
-    executeToolMock.mockResolvedValue(JSON.stringify({
-      success: true,
-      transactions: [
-        {
-          direction: 'received',
-          amount: '10.00',
-          asset: 'USDC',
-          counterparty: 'Ana Silva',
-          date: '2026-05-28T12:00:00.000Z',
-        },
-      ],
-    }));
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
 
     const result = await graph.processInput(createState('quero ver meu historicp'));
 
-    expect(executeToolMock).toHaveBeenCalledWith('get_transaction_history', {
-      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      user_id: 'eval-user',
-      limit: 5,
-    });
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_transaction_history', expect.anything());
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Ver histórico completo');
-    expect(result.response_message).toContain('Últimas 5 transações');
-    expect(result.response_message).toContain('Ana Silva');
-    expect(result.response_message.indexOf('Ver histórico completo')).toBeLessThan(result.response_message.indexOf('Últimas 5 transações'));
+    expect(result.response_message).toContain('/transactions?');
+    expect(result.response_message).toContain('PIN');
+    expect(result.response_message).not.toContain('Ana Silva');
   });
 
   it('opens the user profile page for direct profile requests', async () => {

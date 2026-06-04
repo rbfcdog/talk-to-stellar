@@ -19,6 +19,7 @@ import {
   Wallet2,
 } from "lucide-react"
 import { AccountStatusCard } from "@/components/shared/account-status"
+import { SecurePinGate } from "@/components/shared/secure-pin-gate"
 import { getClientSession } from "@/lib/session"
 
 type TransactionItem = {
@@ -217,12 +218,13 @@ export default function TransactionsClient() {
   const [sessionId, setSessionId] = useState("")
   const [sessionSource, setSessionSource] = useState("")
   const [authenticated, setAuthenticated] = useState(false)
+  const [pinVerified, setPinVerified] = useState(false)
   const [period, setPeriod] = useState<PeriodMode>("all")
   const [month, setMonth] = useState(String(today.getMonth() + 1))
   const [year, setYear] = useState(String(today.getFullYear()))
   const [kindFilter, setKindFilter] = useState<KindFilter>("all")
   const [search, setSearch] = useState("")
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [status, setStatus] = useState<"checking" | "locked" | "loading" | "ready" | "error">("checking")
   const [message, setMessage] = useState("")
   const [transactions, setTransactions] = useState<TransactionItem[]>([])
   const [page, setPage] = useState(1)
@@ -243,14 +245,16 @@ export default function TransactionsClient() {
       if (!sid || !isAuthenticated) {
         setStatus("error")
         setMessage("Entre na conta para ver seu histórico.")
+      } else {
+        setStatus("locked")
       }
     })
   }, [])
 
   useEffect(() => {
-    if (!sessionId || !authenticated) return
+    if (!sessionId || !authenticated || !pinVerified) return
     void loadTransactions(sessionId, period, month, year, sessionSource)
-  }, [authenticated, month, period, sessionId, sessionSource, year])
+  }, [authenticated, month, period, pinVerified, sessionId, sessionSource, year])
 
   useEffect(() => { setPage(1) }, [kindFilter, pageSize, search, period])
 
@@ -417,46 +421,61 @@ export default function TransactionsClient() {
           </div>
 
           <AccountStatusCard
-            state={status === "loading" ? "loading" : authenticated ? "connected" : "signed-out"}
-            detail={authenticated ? "Histórico pronto para consulta." : "Entre para carregar as movimentações da conta."}
+            state={status === "checking" || status === "loading" ? "loading" : authenticated ? "connected" : "signed-out"}
+            detail={authenticated ? "PIN obrigatório antes de mostrar movimentações." : "Entre para carregar as movimentações da conta."}
             ctaHref="/login?next=/transactions"
             ctaLabel="Entrar"
           />
         </section>
 
-        <section className="tts-mobile-scroll flex gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Movimentações" value={summary.total} detail={status === "ready" ? `${visibleTransactions.length} visíveis` : "carregando"} />
-          <SummaryCard label="Entradas" value={summary.in} detail="recebimentos e depósitos" tone="confirm" />
-          <SummaryCard label="Saídas" value={summary.out} detail="envios e retiradas" />
-          <SummaryCard label="Conversões" value={summary.conversion} detail="trocas e ajustes" tone="gold" />
-        </section>
+        {authenticated && !pinVerified ? (
+          <SecurePinGate
+            sessionSource={sessionSource}
+            title="Desbloquear histórico"
+            detail="Use seu PIN para ver as últimas transações. Nada sensível aparece no chat."
+            disabled={!sessionId}
+            onVerified={() => setPinVerified(true)}
+          />
+        ) : null}
 
-        <section className="no-print grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tts-muted" aria-hidden="true" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="min-h-12 w-full border border-tts-border bg-tts-surface px-10 py-2 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
-              placeholder="Buscar por contato, valor, moeda, PIX ou hash"
-            />
-          </label>
-          <label className="relative block">
-            <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tts-muted" aria-hidden="true" />
-            <select
-              value={kindFilter}
-              onChange={(event) => setKindFilter(event.target.value as KindFilter)}
-              className="min-h-12 w-full appearance-none border border-tts-border bg-tts-surface px-10 py-2 text-sm font-black text-tts-deep outline-none focus:border-tts-gold"
-            >
-              <option value="all">Todas</option>
-              <option value="in">Entradas</option>
-              <option value="out">Saídas</option>
-              <option value="conversion">Conversões</option>
-              <option value="pending">Pendentes</option>
-            </select>
-          </label>
-        </section>
+        {pinVerified ? (
+          <>
+            <section className="tts-mobile-scroll flex gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryCard label="Movimentações" value={summary.total} detail={status === "ready" ? `${visibleTransactions.length} visíveis` : "carregando"} />
+              <SummaryCard label="Entradas" value={summary.in} detail="recebimentos e depósitos" tone="confirm" />
+              <SummaryCard label="Saídas" value={summary.out} detail="envios e retiradas" />
+              <SummaryCard label="Conversões" value={summary.conversion} detail="trocas e ajustes" tone="gold" />
+            </section>
 
+            <section className="no-print grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tts-muted" aria-hidden="true" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="min-h-12 w-full border border-tts-border bg-tts-surface px-10 py-2 text-sm font-bold text-tts-deep outline-none focus:border-tts-gold"
+                  placeholder="Buscar por contato, valor, moeda, PIX ou hash"
+                />
+              </label>
+              <label className="relative block">
+                <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tts-muted" aria-hidden="true" />
+                <select
+                  value={kindFilter}
+                  onChange={(event) => setKindFilter(event.target.value as KindFilter)}
+                  className="min-h-12 w-full appearance-none border border-tts-border bg-tts-surface px-10 py-2 text-sm font-black text-tts-deep outline-none focus:border-tts-gold"
+                >
+                  <option value="all">Todas</option>
+                  <option value="in">Entradas</option>
+                  <option value="out">Saídas</option>
+                  <option value="conversion">Conversões</option>
+                  <option value="pending">Pendentes</option>
+                </select>
+              </label>
+            </section>
+          </>
+        ) : null}
+
+        {pinVerified ? (
         <section className="border border-tts-border bg-tts-surface">
           {status === "loading" ? (
             <StatePanel icon={<Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />} title="Carregando histórico" detail="Buscando as operações da sua conta." />
@@ -513,6 +532,7 @@ export default function TransactionsClient() {
             </div>
           ) : null}
         </section>
+        ) : null}
       </section>
     </main>
   )
