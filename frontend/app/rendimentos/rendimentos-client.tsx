@@ -705,11 +705,11 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
       </div>
 
       {selectedBalanceInsufficient && (
-        <div className="border border-tts-gold bg-tts-gold-bg p-4 text-sm">
+        <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-sm">
           <p className="font-bold text-tts-gold mb-2">{L("Saldo insuficiente", "Insufficient balance")}</p>
-          <div className="flex gap-2">
-            <a href={convertAssetsUrl} className="flex items-center gap-1.5 bg-tts-gold text-tts-deep px-3 py-2 text-xs font-bold"><ArrowRightLeft className="h-3.5 w-3.5" /> {L("Converter ativos", "Convert assets")}</a>
-            <a href={pixTopUpUrl} className="flex items-center gap-1.5 border border-tts-gold text-tts-gold px-3 py-2 text-xs font-bold"><ArrowDownToLine className="h-3.5 w-3.5" /> PIX</a>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <a href={convertAssetsUrl} className="inline-flex min-h-11 items-center justify-center gap-1.5 bg-tts-gold px-3 py-2 text-xs font-bold text-tts-deep"><ArrowRightLeft className="h-3.5 w-3.5" /> {L("Converter ativos", "Convert assets")}</a>
+            <a href={pixTopUpUrl} className="inline-flex min-h-11 items-center justify-center gap-1.5 border border-tts-gold px-3 py-2 text-xs font-bold text-tts-gold"><ArrowDownToLine className="h-3.5 w-3.5" /> PIX</a>
           </div>
         </div>
       )}
@@ -742,11 +742,13 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             </div>
           </div>
 
-          <button onClick={onPrepare} disabled={!canPrepare}
-            className="w-full py-3.5 bg-tts-deep text-tts-surface font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition">
-            {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
-            {action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")}
-          </button>
+          <div className="tts-mobile-action">
+            <button onClick={onPrepare} disabled={!canPrepare}
+              className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3.5 text-sm font-bold text-tts-surface transition disabled:opacity-40">
+              {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
+              {action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")}
+            </button>
+          </div>
         </div>
       )}
 
@@ -807,7 +809,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="tts-mobile-action grid grid-cols-[0.8fr_1.2fr] gap-2">
             <button onClick={() => { setActiveStep("plan"); onPinChange(""); }}
               className="flex-1 py-3 border border-tts-border text-sm font-bold hover:bg-tts-bg transition">
               {L("Voltar", "Back")}

@@ -2964,9 +2964,9 @@ export default function PixRampClient({
   const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload);
 
   return (
-    <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:px-6 lg:px-8">
+    <main className="tts-op-page min-h-screen bg-tts-bg px-3 py-5 text-tts-deep sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:p-10">
+        <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className={`inline-flex w-fit rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-normal ${
@@ -2987,7 +2987,7 @@ export default function PixRampClient({
                       : t("pix_add_title")
                     : t("pix_send_title")}
                 </h1>
-                <p className="max-w-2xl text-base leading-7 text-tts-muted md:text-lg">
+                <p className="max-w-2xl text-sm leading-6 text-tts-muted md:text-lg md:leading-7">
                   {rampMode === "onramp"
                     ? transferFlow && safeTransferRecipientLabel
                       ? t("pix_transfer_subtitle", { recipient: safeTransferRecipientLabel })
@@ -2997,18 +2997,18 @@ export default function PixRampClient({
                     : t("pix_off_subtitle")}
                 </p>
             </div>
-            <div className="grid min-w-0 gap-4 sm:grid-cols-3">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
+            <div className="tts-mobile-scroll flex min-w-0 gap-4 sm:grid sm:grid-cols-3">
+              <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                 <p className="text-sm uppercase tracking-normal text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {rampMode === "onramp" ? onRampHeaderValueDisplay : offRampDisplayAmount}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
+              <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                 <p className="text-sm uppercase tracking-normal text-tts-muted">{L("Moeda", "Currency")}</p>
                 <p className="mt-2 text-sm font-black text-tts-deep">{headerCurrencyDisplay}</p>
               </div>
-                <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4">
+                <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                   <p className="text-sm uppercase tracking-normal text-tts-muted">{t("pix_destination")}</p>
                   <p className="mt-2 text-sm text-tts-deep">{transferFlow && transferRecipientLabel ? transferRecipientLabel : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
                   {transferFlow && transferRecipientDisplayKey && (
@@ -3290,13 +3290,15 @@ export default function PixRampClient({
                 </p>
               </div>
 
-              <button
-                className="mt-4 w-full rounded-2xl bg-tts-gold px-5 py-5 text-base font-black text-tts-deep shadow-sm shadow-cyan-950/30 transition hover:bg-tts-gold disabled:opacity-50"
-                disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || !normalizedOffRampPixKey || operationLocked}
-                onClick={() => run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest)}
-              >
-                {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
-              </button>
+              <div className="tts-mobile-action mt-4">
+                <button
+                  className="w-full rounded-2xl bg-tts-gold px-5 py-5 text-base font-black text-tts-deep shadow-sm shadow-cyan-950/30 transition hover:bg-tts-gold disabled:opacity-50"
+                  disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || !normalizedOffRampPixKey || operationLocked}
+                  onClick={() => run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest)}
+                >
+                  {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
+                </button>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm sm:p-6">
@@ -3497,21 +3499,23 @@ export default function PixRampClient({
               </div>
             )}
 
-            <button className="mt-6 w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-sm shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canPrepareOnRampPix || onRampPixGenerationBlocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
-              {operationLocked
-                ? L("PIX concluído", "PIX complete")
-                : loading === "Preparing PIX checkout"
-                  ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Gerando PIX...", "Generating PIX...")}</span>
-                : quoteExpired
-                  ? L("Continuar", "Continue")
-                : onRampPixAlreadyGenerated
-                  ? L("PIX gerado para este valor", "PIX created for this amount")
-                  : waitingForReceiveEstimate
-                    ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
-                    : receiveEstimateMissing
-                      ? L("Aguardando cotação atual", "Waiting for current quote")
-                      : L("Gerar PIX", "Generate PIX")}
-            </button>
+            <div className={`${hasSession && !order && !onRampPixAlreadyGenerated && !operationLocked ? "tts-mobile-action mt-6" : "mt-6"}`}>
+              <button className="w-full rounded-2xl bg-tts-confirm px-5 py-4 text-base font-bold text-tts-deep shadow-sm shadow-tts-confirm/15 transition hover:bg-tts-confirm/90 disabled:opacity-50" disabled={!canPrepareOnRampPix || onRampPixGenerationBlocked} onClick={() => run("Preparing PIX checkout", confirmQuoteAndCreatePix)}>
+                {operationLocked
+                  ? L("PIX concluído", "PIX complete")
+                  : loading === "Preparing PIX checkout"
+                    ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Gerando PIX...", "Generating PIX...")}</span>
+                  : quoteExpired
+                    ? L("Continuar", "Continue")
+                  : onRampPixAlreadyGenerated
+                    ? L("PIX gerado para este valor", "PIX created for this amount")
+                    : waitingForReceiveEstimate
+                      ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
+                      : receiveEstimateMissing
+                        ? L("Aguardando cotação atual", "Waiting for current quote")
+                        : L("Gerar PIX", "Generate PIX")}
+              </button>
+            </div>
             {transferRecipientBlocker && (
               <p className="mt-3 text-sm font-bold text-tts-error">{transferRecipientBlocker}</p>
             )}
@@ -3588,7 +3592,7 @@ export default function PixRampClient({
             ) : (
               <>
                     <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
-                      <div className="rounded-2xl p-4" style={{ backgroundColor: "#ffffff", color: "#111827" }}>
+                      <div className="mx-auto w-full max-w-[260px] rounded-2xl p-3 sm:max-w-none sm:p-4" style={{ backgroundColor: "#ffffff", color: "#111827" }}>
                         {qrDataUrl ? (
                           <img
                             src={qrDataUrl}

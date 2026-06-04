@@ -833,8 +833,8 @@ export default function ConfirmPaymentClient({
     : T(feedbackLanguage, "Não consegui confirmar esse pagamento agora. Tente novamente em alguns segundos.", "I could not confirm this payment right now. Try again in a few seconds.")
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
-        <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-3 py-5 sm:px-6 sm:py-12">
+        <div className="grid min-w-0 w-full gap-5 overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-8 md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="inline-flex rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-medium uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de pagamento", "Payment Confirmation")}
@@ -918,15 +918,17 @@ export default function ConfirmPaymentClient({
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {status === "submitting"
-                  ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando pagamento...", "Confirming payment...")}</span>
-                  : T(feedbackLanguage, "Confirmar pagamento", "Confirm payment")}
-              </button>
+              <div className={status === "ready" || status === "submitting" ? "tts-mobile-action" : ""}>
+                <button
+                  type="submit"
+                  disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {status === "submitting"
+                    ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando pagamento...", "Confirming payment...")}</span>
+                    : T(feedbackLanguage, "Confirmar pagamento", "Confirm payment")}
+                </button>
+              </div>
               {PASSKEY_CONFIRMATION_ENABLED && (
                 <button
                   type="button"

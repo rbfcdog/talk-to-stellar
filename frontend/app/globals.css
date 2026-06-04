@@ -452,6 +452,76 @@
   .tts-op-page .rounded-xl {
     border-radius: 0.75rem;
   }
+
+  @media (max-width: 639px) {
+    .tts-op-page {
+      padding-top: 4.25rem;
+      padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+
+    .tts-op-page :is(header, section)[class*='border-b'] {
+      padding: 1rem !important;
+    }
+
+    .tts-op-page :is(section, article, aside, header, div)[class*='p-6'],
+    .tts-op-page :is(section, article, aside, header, div)[class*='p-5'] {
+      padding: 1rem !important;
+    }
+
+    .tts-op-page :is(h1, h2, h3) {
+      overflow-wrap: anywhere;
+    }
+
+    .tts-op-page input,
+    .tts-op-page textarea,
+    .tts-op-page select,
+    .tts-op-page button,
+    .tts-op-page a[role='button'] {
+      min-height: 3rem;
+    }
+
+    .tts-op-page .tts-mobile-action {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      margin: 0 !important;
+      padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--tts-border);
+      background:
+        linear-gradient(180deg, color-mix(in oklab, var(--tts-bg) 0%, transparent) 0%, var(--tts-bg) 24%),
+        color-mix(in oklab, var(--tts-surface) 92%, var(--tts-bg) 8%);
+      box-shadow: 0 -18px 36px rgba(28, 24, 18, 0.08);
+      backdrop-filter: blur(16px);
+    }
+
+    .tts-op-page:has(.tts-mobile-action) {
+      padding-bottom: calc(6.25rem + env(safe-area-inset-bottom));
+    }
+
+    .tts-op-page .tts-mobile-action > * {
+      margin-top: 0 !important;
+      width: 100% !important;
+      min-height: 3.25rem;
+      border-radius: 0.875rem !important;
+    }
+
+    .tts-op-page .tts-mobile-scroll {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: -1rem;
+      margin-right: -1rem;
+      overflow-x: auto;
+      padding: 0 1rem 0.35rem;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tts-op-page .tts-mobile-scroll > * {
+      scroll-snap-align: start;
+    }
+  }
 }
 
 /* Conditional dark operational theme.

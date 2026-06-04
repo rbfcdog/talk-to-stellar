@@ -424,7 +424,7 @@ export default function TransactionsClient() {
           />
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="tts-mobile-scroll flex gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Movimentações" value={summary.total} detail={status === "ready" ? `${visibleTransactions.length} visíveis` : "carregando"} />
           <SummaryCard label="Entradas" value={summary.in} detail="recebimentos e depósitos" tone="confirm" />
           <SummaryCard label="Saídas" value={summary.out} detail="envios e retiradas" />
@@ -521,7 +521,7 @@ export default function TransactionsClient() {
 function SummaryCard({ label, value, detail, tone = "default" }: { label: string; value: number; detail: string; tone?: "default" | "confirm" | "gold" }) {
   const valueClass = tone === "confirm" ? "text-tts-confirm" : tone === "gold" ? "text-tts-gold" : "text-tts-deep"
   return (
-    <div className="border border-tts-border bg-tts-surface p-4">
+    <div className="min-w-[68vw] border border-tts-border bg-tts-surface p-4 sm:min-w-0">
       <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className={`mt-2 text-2xl font-black ${valueClass}`}>{value}</p>
       <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p>
@@ -572,7 +572,7 @@ function PaginationControls({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
         {!compact ? (
           <label className="flex min-h-10 items-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-muted">
             Itens por página
@@ -661,11 +661,11 @@ function TransactionRow({ item }: { item: TransactionItem }) {
             </p>
           ) : null}
         </div>
-        <div className="no-print flex flex-wrap gap-2 md:justify-end">
+        <div className="no-print grid gap-2 sm:flex sm:flex-wrap md:justify-end">
           {receiptUrl ? (
             <a
               href={receiptUrl}
-              className="inline-flex min-h-9 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-deep transition hover:border-tts-border2"
+              className="inline-flex min-h-10 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-deep transition hover:border-tts-border2"
             >
               Comprovante
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -674,7 +674,7 @@ function TransactionRow({ item }: { item: TransactionItem }) {
           {profileUrl ? (
             <a
               href={profileUrl}
-              className="inline-flex min-h-9 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-deep transition hover:border-tts-border2"
+              className="inline-flex min-h-10 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-deep transition hover:border-tts-border2"
             >
               Perfil
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
