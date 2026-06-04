@@ -244,8 +244,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const appliedInitialQueryRef = useRef(false);
   const [amount, setAmount] = useState("10");
-  const [sourceCode, setSourceCode] = useState("USDC");
-  const [destCode, setDestCode] = useState("BRL");
+  const [sourceCode, setSourceCode] = useState("BRL");
+  const [destCode, setDestCode] = useState("USDC");
   const [session, setSession] = useState<SessionState>({ authenticated: false });
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [accountStatus, setAccountStatus] = useState<"loading" | "ready" | "signed-out">("loading");

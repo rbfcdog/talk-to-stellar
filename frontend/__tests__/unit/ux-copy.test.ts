@@ -69,6 +69,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Saldo insuficiente para converter");
     expect(text).toContain("Falta ${missingSourceDisplay}");
     expect(text).toContain("Adicionar saldo");
+    expect(text).toContain('const [sourceCode, setSourceCode] = useState("BRL")');
+    expect(text).toContain('const [destCode, setDestCode] = useState("USDC")');
+    expect(text).not.toContain('const [sourceCode, setSourceCode] = useState("USDC")');
+    expect(text).not.toContain('const [destCode, setDestCode] = useState("BRL")');
     expect(text).toContain('buildUrl("/pix-on"');
     expect(text).toContain("receive_amount: formatQueryDecimal");
     expect(text).toContain("return_to: conversionReturnHref");
