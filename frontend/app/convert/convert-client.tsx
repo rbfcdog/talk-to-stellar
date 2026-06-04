@@ -518,6 +518,18 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             />
           </div>
 
+          <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg p-4 sm:hidden">
+            <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">
+              {L("Cotação do par", "Pair quote")}
+            </p>
+            <p className="mt-2 text-lg font-black text-tts-deep">
+              {selectedRateCell?.rate ? `1 ${sourceCode} = ${formatRateValue(selectedRateCell, language)} ${destCode}` : L("Carregando", "Loading")}
+            </p>
+            <p className="mt-1 text-xs font-bold text-tts-muted">
+              {L("A tabela completa fica disponível em telas maiores.", "The full table is available on larger screens.")}
+            </p>
+          </div>
+
           {rateMatrixStatus === "error" ? (
             <div className="mt-4 flex gap-2 border border-tts-error bg-tts-error/10 p-3 text-sm leading-6 text-tts-error">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -525,7 +537,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             </div>
           ) : null}
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 hidden overflow-x-auto sm:block">
             <div className="min-w-[640px]">
               <div className="grid grid-cols-5 border-b border-tts-border text-[11px] font-black uppercase tracking-normal text-tts-muted">
                 <div className="p-2">{L("De / Para", "From / To")}</div>
@@ -672,15 +684,17 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   <span>{reviewError}</span>
                 </div>
               ) : null}
-              <button
-                type="button"
-                onClick={prepareConversionReview}
-                disabled={!canProceed || reviewStatus === "loading"}
-                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"} disabled:cursor-not-allowed disabled:opacity-70`}
-              >
-                {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                {reviewStatus === "loading" ? L("Preparando confirmação...", "Preparing confirmation...") : primaryLabel}
-              </button>
+              <div className="tts-mobile-action mt-4">
+                <button
+                  type="button"
+                  onClick={prepareConversionReview}
+                  disabled={!canProceed || reviewStatus === "loading"}
+                  className={`inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"} disabled:cursor-not-allowed disabled:opacity-70`}
+                >
+                  {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                  {reviewStatus === "loading" ? L("Preparando confirmação...", "Preparing confirmation...") : primaryLabel}
+                </button>
+              </div>
             </div>
           </div>
         </section>
