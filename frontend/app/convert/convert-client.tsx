@@ -458,7 +458,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="hidden flex-col gap-4 border-b border-tts-border pb-5 md:flex md:flex-row md:items-end md:justify-between">
+        <header className="hidden flex-col gap-4 border-b border-tts-border pb-5 pr-24 md:flex">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-confirm">
               <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
@@ -470,16 +470,6 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L("Escolha origem, destino e valor. O PIN vem só no final.", "Choose source, destination, and amount. PIN comes only at the end.")}
             </p>
-          </div>
-          <div className="md:min-w-[180px]">
-            <button
-              type="button"
-              onClick={() => setLanguage(language === "en" ? "pt-BR" : "en")}
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              {language === "en" ? "Português" : "English"}
-            </button>
           </div>
         </header>
 
