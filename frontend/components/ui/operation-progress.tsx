@@ -58,13 +58,13 @@ export function OperationProgressPanel({
         : readyMessage
 
   return (
-    <div className={`rounded-2xl border p-4 text-sm ${
+    <div className={`rounded-2xl border p-4 text-sm shadow-sm ${
       status === "error"
         ? "border-tts-error bg-tts-error/10 text-tts-error"
-        : status === "done"
+      : status === "done"
           ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
           : status === "submitting"
-            ? "border-tts-confirm bg-tts-confirm/10 text-tts-deep"
+            ? "border-tts-border bg-tts-surface text-tts-deep"
             : "border-tts-border bg-tts-surface text-tts-muted"
     }`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -82,12 +82,12 @@ export function OperationProgressPanel({
               key={`${step.label}-${index}`}
               className={`rounded-xl border px-3 py-2 ${
                 stepState === "done"
-                  ? "border-tts-confirm bg-tts-confirm/10"
+                    ? "border-tts-confirm/25 bg-tts-confirm/10"
                   : stepState === "active"
-                    ? "border-tts-confirm bg-tts-confirm/10"
+                    ? "border-tts-gold/30 bg-tts-gold-bg"
                     : stepState === "error"
                       ? "border-tts-error bg-tts-error/10"
-                      : "border-tts-border bg-tts-deep/20 opacity-70"
+                      : "border-tts-border bg-tts-bg/60 opacity-80"
               }`}
             >
               <div className="flex items-start gap-3">
@@ -95,10 +95,10 @@ export function OperationProgressPanel({
                   stepState === "done"
                     ? "bg-tts-confirm text-tts-deep"
                     : stepState === "active"
-                      ? "bg-tts-confirm text-tts-deep"
+                      ? "bg-tts-gold text-tts-deep"
                       : stepState === "error"
-                        ? "bg-tts-error text-tts-error"
-                        : "bg-tts-surface text-tts-surface/60"
+                        ? "bg-tts-error text-white"
+                        : "bg-tts-surface text-tts-muted"
                 }`}>
                   {stepState === "done" ? "✓" : index + 1}
                 </span>

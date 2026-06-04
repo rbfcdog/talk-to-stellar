@@ -9,8 +9,8 @@ import { Logo } from "@/components/shared/logo";
 export function WelcomeScreen() {
   const { t } = useLanguage();
   return (
-    <div className="flex min-h-full flex-1 flex-col items-center justify-center border-b-4 border-tts-gold bg-tts-bg px-6 py-10 text-center sm:px-8">
-      <div className="mb-8 flex h-40 w-40 items-center justify-center rounded-2xl border border-tts-border bg-tts-surface text-tts-deep sm:h-48 sm:w-48">
+    <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-tts-bg px-6 py-10 text-center sm:px-8">
+      <div className="mb-8 flex h-36 w-36 items-center justify-center rounded-2xl border border-tts-border bg-tts-surface text-tts-gold shadow-sm sm:h-44 sm:w-44">
         <Logo size={96} />
       </div>
 

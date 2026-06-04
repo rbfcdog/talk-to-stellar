@@ -13,9 +13,9 @@ function inferFileName(imageUrl: string) {
 
 function ReceiptFallback() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+    <main className="tts-op-page flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
       <section className="max-w-lg rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur">
-        <h1 className="text-2xl font-semibold text-tts-surface">Receipt not found</h1>
+        <h1 className="text-2xl font-semibold text-tts-deep">Receipt not found</h1>
         <p className="mt-3 text-sm leading-6 text-tts-deep">
           This link may have expired. Open the receipt from your transaction history.
         </p>
@@ -62,7 +62,7 @@ export default function ReceiptByCodePage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+    <main className="tts-op-page flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
         <p className="text-sm text-tts-deep">Loading receipt...</p>
       </main>
     )
@@ -71,13 +71,13 @@ export default function ReceiptByCodePage() {
   if (!imageUrl) return <ReceiptFallback />
 
   return (
-    <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-8 text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center">
         <section className="w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-4 shadow-2xl backdrop-blur md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-tts-confirm">Receipt</p>
-              <h1 className="mt-2 text-3xl font-semibold text-tts-surface">View and download receipt</h1>
+              <h1 className="mt-2 text-3xl font-semibold text-tts-deep">View and download receipt</h1>
             </div>
             <div className="flex flex-wrap gap-3">
               <a

@@ -162,7 +162,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
   );
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col border-r border-tts-border bg-tts-surface">
+    <div className="flex h-full min-h-0 w-full flex-col border-r border-tts-border bg-tts-surface/95 shadow-sm backdrop-blur">
       <header className="flex items-center gap-2 border-b border-tts-border px-4 py-3 text-tts-deep">
         <Logo size={20} />
         <span className="text-sm font-bold tracking-tight">
@@ -170,7 +170,7 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
         </span>
       </header>
 
-      <div className="border-b border-tts-border bg-tts-bg px-4 py-3">
+      <div className="border-b border-tts-border bg-tts-bg/60 px-4 py-3">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-tts-muted">
           {L("Saldo disponível", "Available balance")}
         </p>
@@ -209,12 +209,12 @@ export function ChatSidebar({ selectedChat, onSelectChat }: ChatSidebarProps) {
                   }}
                   disabled={!isInteractive}
                   className={cn(
-                    "w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                    "w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
                     isActive
-                      ? "border-l-2 border-tts-gold bg-tts-bg font-medium text-tts-deep"
+                      ? "border-tts-gold-br bg-tts-gold-bg font-medium text-tts-deep"
                       : isInteractive
-                        ? "text-tts-muted hover:bg-tts-bg hover:text-tts-deep"
-                        : "cursor-default text-tts-muted/70",
+                        ? "border-transparent text-tts-muted hover:border-tts-border hover:bg-tts-bg hover:text-tts-deep"
+                        : "cursor-default border-transparent text-tts-muted/70",
                   )}
                 >
                   <div className="flex items-baseline justify-between gap-3">

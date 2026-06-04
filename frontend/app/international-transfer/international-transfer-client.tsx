@@ -841,7 +841,7 @@ export default function InternationalTransferClient() {
       const settled = await settleStellar(funded);
       const payout = await createPayoutInstruction(settled);
       await loadReconciliation(payout);
-	      pushEvent("Ops route complete", "The ops-only confirmation path completed. Keep this out of user-facing demos.", "ok");
+	      pushEvent("Ops route complete", "The ops-only confirmation path completed. Keep this out of user-facing sessions.", "ok");
 	    } catch (flowError: any) {
 	      pushEvent("Payment-backed route stopped", flowError?.message || String(flowError), "error");
 	    }
@@ -886,15 +886,15 @@ export default function InternationalTransferClient() {
   ];
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep transition-colors">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep transition-colors">
       <header className="border-b border-tts-border bg-tts-surface backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-white px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
+            <Link href="/" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Home
             </Link>
-            <Link href="/global-transfer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-white px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
+            <Link href="/global-transfer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-tts-border bg-tts-surface px-3 text-sm font-semibold text-tts-muted transition hover:border-tts-border">
               <Route className="h-4 w-4" aria-hidden="true" />
               Cost lab
             </Link>
@@ -907,7 +907,7 @@ export default function InternationalTransferClient() {
       </header>
 
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <section className="rounded-lg border border-tts-border bg-white p-4 shadow-sm xl:sticky xl:top-5 xl:self-start">
+        <section className="rounded-lg border border-tts-border bg-tts-surface p-4 shadow-sm xl:sticky xl:top-5 xl:self-start">
           <div className="mb-4 flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-tts-confirm text-tts-confirm">
               <Building2 className="h-5 w-5" aria-hidden="true" />
@@ -918,7 +918,7 @@ export default function InternationalTransferClient() {
             </div>
           </div>
 
-          <div className="mb-4 grid gap-2 rounded-lg border border-tts-confirm bg-black p-3">
+          <div className="mb-4 grid gap-2 rounded-lg border border-tts-confirm/25 bg-tts-confirm/10 p-3">
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-bold uppercase tracking-[0.12em] text-tts-confirm">Empirical route fee</span>
               <span className="rounded-md border border-tts-confirm px-2 py-1 text-xs font-bold text-tts-confirm">
@@ -1009,7 +1009,7 @@ export default function InternationalTransferClient() {
                 Advanced execution credentials
               </summary>
               <p className="mt-2 text-xs font-semibold leading-5 text-tts-muted">
-                Keep this closed for normal demos. Open only when you intentionally want to execute advanced internal helpers.
+                Keep this closed for normal review sessions. Open only when you intentionally want to execute advanced internal helpers.
               </p>
               <div className="mt-3 grid gap-3">
                 {payoutProvider === "etherfuse" ? (
@@ -1183,7 +1183,7 @@ export default function InternationalTransferClient() {
                 </div>
               </div>
               <div className="rounded-lg border border-tts-border bg-tts-surface p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.1em] text-tts-muted">Demo explanation</p>
+                <p className="text-xs font-bold uppercase tracking-[0.1em] text-tts-muted">Route explanation</p>
                 <p className="mt-3 text-sm leading-6 text-tts-deep">
                   Use this panel to explain that the app does not hide charged fees inside a final number. The reviewer sees the value before fees, on-ramp fee, TalkToStellar fee, off-ramp fee and the final destination amount before the payout instruction is created.
                 </p>

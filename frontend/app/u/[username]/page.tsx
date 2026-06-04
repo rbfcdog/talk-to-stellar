@@ -57,7 +57,7 @@ export default function PublicProfilePage() {
 
   if (status === "loading") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+      <main className="tts-op-page flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
         <p className="text-sm text-tts-deep">Carregando perfil...</p>
       </main>
     )
@@ -65,9 +65,9 @@ export default function PublicProfilePage() {
 
   if (status === "error") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
+      <main className="tts-op-page flex min-h-screen items-center justify-center bg-tts-bg px-4 text-tts-deep">
         <section className="w-full max-w-md rounded-lg border border-tts-border bg-tts-surface p-6">
-          <h1 className="text-2xl font-semibold text-tts-surface">Perfil não encontrado</h1>
+          <h1 className="text-2xl font-semibold text-tts-deep">Perfil não encontrado</h1>
           <p className="mt-3 text-sm text-tts-deep">Confira o endereço ou peça um novo link público.</p>
         </section>
       </main>
@@ -75,7 +75,7 @@ export default function PublicProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:py-10">
+    <main className="tts-op-page min-h-screen bg-tts-bg px-4 py-8 text-tts-deep sm:py-10">
       <div className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-6 md:grid-cols-[1.12fr_0.88fr]">
         <section className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-tts-gold bg-tts-gold-bg px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-tts-gold">
@@ -85,11 +85,11 @@ export default function PublicProfilePage() {
 
           <div className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-6 shadow-2xl md:p-8">
             <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-tts-border bg-tts-bg text-lg font-bold text-tts-surface">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-tts-border bg-tts-bg text-lg font-bold text-tts-gold">
                 {displayInitial}
               </div>
               <div className="min-w-0 flex-1">
-                <h1 className="text-3xl font-semibold leading-tight text-tts-surface md:text-5xl">{name}</h1>
+                <h1 className="text-3xl font-semibold leading-tight text-tts-deep md:text-5xl">{name}</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-deep md:text-base">
                   Conta pública para receber, acompanhar saldos e acessar ações rápidas sem abrir a tela de pagamento.
                 </p>
@@ -99,15 +99,15 @@ export default function PublicProfilePage() {
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Link público</p>
-                <p className="mt-2 text-sm font-semibold text-tts-surface">{publicLink ? "Ativo" : "Indisponível"}</p>
+                <p className="mt-2 text-sm font-semibold text-tts-deep">{publicLink ? "Ativo" : "Indisponível"}</p>
               </div>
               <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Identificador</p>
-                <p className="mt-2 break-all text-sm font-semibold text-tts-surface">{accountId || "indisponível"}</p>
+                <p className="mt-2 break-all text-sm font-semibold text-tts-deep">{accountId || "indisponível"}</p>
               </div>
               <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-tts-muted">Recebimento</p>
-                <p className="mt-2 text-sm font-semibold text-tts-surface">{publicKey ? "Pronto" : "Indisponível"}</p>
+                <p className="mt-2 text-sm font-semibold text-tts-deep">{publicKey ? "Pronto" : "Indisponível"}</p>
               </div>
             </div>
 
@@ -142,7 +142,7 @@ export default function PublicProfilePage() {
 
         <section className="rounded-[1.5rem] border border-tts-border bg-tts-surface p-5 shadow-2xl md:p-6">
           <p className="text-[11px] uppercase tracking-[0.16em] text-tts-muted">Chave pública</p>
-          <p className="mt-3 break-all font-mono-financial text-sm font-semibold leading-6 text-tts-surface">
+          <p className="mt-3 break-all font-mono-financial text-sm font-semibold leading-6 text-tts-deep">
             {publicKey || "indisponível"}
           </p>
         </section>

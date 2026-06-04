@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { normalizeClientSessionSource, scopedClientStorageKey } from "@/lib/session"
+import { OperationalCard, OperationalPage, StatusPill } from "@/components/layout/OperationalShell"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -135,11 +136,13 @@ export default function LogoutClient() {
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
-      <div className="mx-auto flex min-h-screen w-full max-w-xl items-center px-4 py-12 sm:px-6">
-        <div className="min-w-0 w-full overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-8 shadow-2xl backdrop-blur">
-          <h1 className="text-3xl font-semibold text-tts-surface">Sign out</h1>
-          <p className="mt-3 text-tts-deep">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
+    <OperationalPage size="sm" frameClassName="flex min-h-screen items-center">
+        <OperationalCard className="min-w-0 w-full overflow-hidden p-8">
+          <StatusPill tone={status === "done" ? "confirm" : status === "error" ? "error" : "gold"}>
+            {status === "done" ? "Done" : status === "error" ? "Needs attention" : "Account"}
+          </StatusPill>
+          <h1 className="text-3xl font-semibold text-tts-deep">Sign out</h1>
+          <p className="mt-3 text-tts-muted">{status === "loading" ? "Ending your session..." : message || "Confirm to end your current session."}</p>
           {status === "done" && (
             <p className="mt-2 text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
           )}
@@ -155,8 +158,7 @@ export default function LogoutClient() {
               </button>
             )}
           </div>
-        </div>
-      </div>
-    </main>
+        </OperationalCard>
+    </OperationalPage>
   )
 }

@@ -862,7 +862,7 @@ export default function ConfirmPaymentClient({
     ? publicPaymentErrorMessage(result?.error || result?.message, feedbackLanguage)
     : T(feedbackLanguage, "Não consegui confirmar esse pagamento agora. Tente novamente em alguns segundos.", "I could not confirm this payment right now. Try again in a few seconds.")
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
         <div className="grid min-w-0 w-full gap-8 overflow-hidden rounded-[2rem] border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">
@@ -920,7 +920,7 @@ export default function ConfirmPaymentClient({
           <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-tts-border bg-tts-deep/40 p-5 shadow-xl md:p-6">
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
-                <p className="font-medium text-tts-surface">{T(feedbackLanguage, "Resumo", "Summary")}</p>
+                <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
                 <p className="mt-2 text-tts-deep">
                   {isCrossCurrency ? `${T(feedbackLanguage, "Você envia", "You send")}: ${sourceAmountLabel}` : `${T(feedbackLanguage, "Valor", "Amount")}: ${amountLabel}`}
                 </p>
@@ -975,7 +975,7 @@ export default function ConfirmPaymentClient({
                     type="button"
                     onClick={() => { void handlePasskeyConfirm(); }}
                     disabled={status === "submitting" || status === "done" || !token.trim() || validation?.valid === false}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-surface transition hover:bg-tts-gold disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-gold px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-gold disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {passkeyStatus === "starting" || passkeyStatus === "authenticating" || passkeyStatus === "submitting"
                       ? T(feedbackLanguage, "Confirmando com Passkey...", "Confirming with Passkey...")
@@ -1005,7 +1005,7 @@ export default function ConfirmPaymentClient({
 
 	            {PASSKEY_CONFIRMATION_ENABLED && showPasskeyOptions && qrImageUrl && status !== "done" && (
               <div className="mt-5 rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
-                <p className="font-medium text-tts-surface">{T(feedbackLanguage, "Confirmar com Passkey", "Confirm with Passkey")}</p>
+                <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Confirmar com Passkey", "Confirm with Passkey")}</p>
                 <p className="mt-1 text-tts-deep">{T(feedbackLanguage, "Abra esta confirmação no aparelho onde sua Passkey está cadastrada.", "Open this confirmation on the device where your Passkey is registered.")}</p>
                 <div className="mt-3 flex justify-center">
                   <img
@@ -1018,7 +1018,7 @@ export default function ConfirmPaymentClient({
             )}
 
             <div className="mt-5 rounded-2xl border border-tts-border bg-tts-deep/20 p-4 text-sm text-tts-deep">
-              <p className="font-medium text-tts-surface">{T(feedbackLanguage, "Resultado", "Result")}</p>
+              <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resultado", "Result")}</p>
               {status === "ready" && <p className="mt-2 text-tts-muted">{T(feedbackLanguage, "Aguardando confirmação.", "Waiting for confirmation.")}</p>}
               {status === "submitting" && (
                 <div className="mt-3 inline-flex items-center gap-2 text-tts-deep"><TypingDots />{T(feedbackLanguage, "Confirmando pagamento...", "Confirming payment...")}</div>

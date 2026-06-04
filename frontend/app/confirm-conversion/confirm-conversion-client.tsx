@@ -324,7 +324,7 @@ export default function ConfirmConversionClient({
   const visibleSupportCode = String(result?.support_code || result?.request_id || "").trim()
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6">
         <div className="grid min-w-0 w-full gap-8 overflow-hidden border border-tts-border bg-tts-surface p-6 shadow-2xl backdrop-blur md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-10">
           <section className="min-w-0 space-y-6 overflow-hidden">

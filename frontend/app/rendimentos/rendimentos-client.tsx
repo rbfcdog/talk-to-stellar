@@ -384,7 +384,7 @@ export default function RendimentosClient({
     `flex-1 py-3 text-sm font-bold text-center transition cursor-pointer ${tab === t ? "text-tts-deep border-b-2 border-tts-deep" : "text-tts-muted hover:text-tts-deep"}`;
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); /* refresh */ }} />}
 
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">

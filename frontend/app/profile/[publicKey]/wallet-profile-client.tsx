@@ -146,7 +146,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
   }
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <header className="border-b border-tts-border pb-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
