@@ -31,7 +31,7 @@ function normalizeAssetCode(value?: string, type?: string) {
   if (String(type || "").toLowerCase() === "native") return "XLM"
   const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
   if (code === "TESOURO" || code === "BRL") return "TESOURO"
-  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES"
+  if (code === "EUR" || code === "EURC") return "CETES"
   return code
 }
 

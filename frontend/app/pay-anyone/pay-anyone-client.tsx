@@ -21,7 +21,7 @@ type LinkMode = "send" | "receive"
 function normalizeAssetCode(value: string) {
   const code = String(value || "").toUpperCase().replace(/^USD$/, "USDC")
   if (code === "TESOURO") return "BRL"
-  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES"
+  if (code === "EUR" || code === "EURC") return "CETES"
   return code
 }
 

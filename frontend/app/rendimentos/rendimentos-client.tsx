@@ -95,7 +95,7 @@ function normalizeUiAssetCode(value: unknown) {
   const code = String(value || "").trim().toUpperCase().split(":")[0];
   if (!code) return "";
   if (["USD", "DOLLAR", "DOLLARS"].includes(code)) return "USDC";
-  if (["EUR", "EURC", "EURO", "EUROS"].includes(code)) return "CETES";
+  if (["EUR", "EURC"].includes(code)) return "CETES";
   if (["TESOURO", "REAL", "REAIS", "R$", "BRL"].includes(code)) return "TESOURO";
   return code;
 }

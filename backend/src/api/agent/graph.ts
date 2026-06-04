@@ -970,9 +970,7 @@ export class AgentGraph {
     if (!token) return '';
     if (token === 'r$' || token === 'brl' || token === 'real' || token === 'reais') return 'BRL';
     if (token === 'cetes') return 'CETES';
-    if (token === 'eur' || token === 'eurc' || token === 'euro' || token === 'euros' || token === '€') {
-      return getStellarNetworkName() === 'TESTNET' ? 'CETES' : 'EUR';
-    }
+    if (token === 'eur' || token === 'eurc') return 'CETES';
     if (token === 'xlm' || token === 'lumen' || token === 'lumens') return 'XLM';
     if (token === 'usd' || token === 'usdc' || token === 'dolar' || token === 'dolares' || token === 'dollar' || token === 'dollars') return 'USDC';
     return '';
@@ -982,9 +980,7 @@ export class AgentGraph {
     const code = String(value || '').trim().toUpperCase();
     if (!code) return '';
     if (code === 'USD') return 'USDC';
-    if (code === 'EUR' || code === 'EURO' || code === 'EUROS' || code === 'EURC') {
-      return getStellarNetworkName() === 'TESTNET' ? 'CETES' : 'EUR';
-    }
+    if (code === 'EUR' || code === 'EURC') return 'CETES';
     if (code === 'REAL' || code === 'REAIS' || code === 'R$') return 'BRL';
     if (code === 'DOLAR' || code === 'DOLARES' || code === 'DOLLAR' || code === 'DOLLARS') return 'USDC';
     return code;
@@ -1006,18 +1002,18 @@ export class AgentGraph {
       }
 
       const afterAmount = normalized.slice(amountIndex + matchedText.length);
-      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+      const afterToken = afterAmount.match(/^\s*(brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
       const assetAfterAmount = this.assetCodeFromTextToken(afterToken?.[1]);
       if (assetAfterAmount) return assetAfterAmount;
 
       const beforeAmount = normalized.slice(Math.max(0, amountIndex - 12), amountIndex);
-      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
+      const beforeToken = beforeAmount.match(/\b(brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?|r\$)\s*$/);
       const assetBeforeAmount = this.assetCodeFromTextToken(beforeToken?.[1]);
       if (assetBeforeAmount) return assetBeforeAmount;
     }
 
-    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
-    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
+    const withoutReceiveClause = normalized.replace(/\breceber\s+em\s+(brl|reais|real|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/g, '');
+    const firstAsset = withoutReceiveClause.match(/\b(brl|real|reais|r\$|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumens?)\b/);
     return this.assetCodeFromTextToken(firstAsset?.[1]) || 'USDC';
   }
 
@@ -1103,7 +1099,7 @@ export class AgentGraph {
 
     const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|xlm|lumens?)/);
+    const receiveMatch = normalized.match(/receber\s+em\s+(brl|reais|real|eur|eurc|cetes|usd|usdc|dolar|dolares|xlm|lumens?)/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       receiveAssetCode = this.assetCodeFromTextToken(receive);
@@ -1143,7 +1139,7 @@ export class AgentGraph {
     const assetCode = this.inferPaymentAssetFromText(normalized, amountMatch);
 
     let receiveAssetCode = '';
-    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
+    const receiveMatch = normalized.match(/\breceber\s+em\s+(brl|reais|real|eur|eurc|cetes|usd|usdc|dolar|dolares|xlm|lumens?)\b/);
     if (receiveMatch?.[1]) {
       const receive = receiveMatch[1];
       receiveAssetCode = this.assetCodeFromTextToken(receive);
@@ -2299,7 +2295,7 @@ export class AgentGraph {
   private toUserFacingAssetCode(assetCode: unknown): string {
     const upper = String(assetCode || '').trim().toUpperCase();
     if (upper === 'TESOURO') return 'BRL';
-    if (upper === 'EURC' || upper === 'EUR' || upper === 'EURO' || upper === 'EUROS') return 'CETES';
+    if (upper === 'EURC' || upper === 'EUR') return 'CETES';
     return upper;
   }
 
@@ -2427,7 +2423,7 @@ export class AgentGraph {
     if (!/\b(enviar|mandar|transferir|pagar|chegar|receber)\b/.test(normalized)) return null;
 
     const amountPattern = '((?:\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,8})?|\\d+(?:[.,]\\d{1,8})?))';
-    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|eur|eurc|euro|euros|cetes|usd|usdc|dolar|dolares)?\\b`));
+    const receiveMatch = normalized.match(new RegExp(`\\b(?:chegar|receber|receba|entrar|cair)\\s+(?:r\\$\\s*)?${amountPattern}\\s*(brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares)?\\b`));
     const genericRecipient = this.isGenericRecipientReference(parsed?.recipient_query || text);
     if (!receiveMatch && !genericRecipient) return null;
 
@@ -3352,7 +3348,6 @@ export class AgentGraph {
       .replace(/\busd\b/g, 'usdc')
       .replace(/\bdolares?\b/g, 'usdc')
       .replace(/\bdollars?\b/g, 'usdc')
-      .replace(/\beuros?\b/g, legacyCurrencyReplacement)
       .replace(/\beur\b/g, legacyCurrencyReplacement)
       .replace(/\beurc\b/g, legacyCurrencyReplacement)
       .replace(/\breais?\b/g, 'brl')
@@ -5142,7 +5137,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     const rawWithoutPin = raw.replace(/\bpin\b\D{0,12}\d{4,8}\b/ig, ' ');
     const amountNumber = parseHumanAmountNumber(rawWithoutPin);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|cetes|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
     const pinMatch = raw.match(/\bpin\b\D{0,12}(\d{4,8})\b/i);
     const confirms =
@@ -5293,7 +5288,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     const amountNumber = parseHumanAmountNumber(raw);
     const amount = Number.isFinite(amountNumber) && amountNumber > 0 ? String(amountNumber) : '';
-    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|euro|euros|cetes|€|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
+    const assetMatch = normalized.match(/\b(r\$|brl|real|reais|eur|eurc|cetes|usd|usdc|dolar|dolares|dollar|dollars|xlm|lumen|lumens)\b/);
     const destinationPixKey = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ||
       raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)?.[0] ||
       '';

@@ -122,7 +122,7 @@ function localCopy(language: AppLanguage, pt: string, en: string) {
 function normalizeAssetCode(value: unknown) {
   const code = String(value || "").trim().toUpperCase().split(":")[0];
   if (!code || code === "USD" || code === "DOLLAR" || code === "DOLLARS") return "USDC";
-  if (code === "EUR" || code === "EURC" || code === "EURO" || code === "EUROS") return "CETES";
+  if (code === "EUR" || code === "EURC") return "CETES";
   if (code === "TESOURO" || code === "REAL" || code === "REAIS" || code === "R$") return "BRL";
   return ASSETS.some((asset) => asset.code === code) ? code : "USDC";
 }
