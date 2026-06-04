@@ -508,15 +508,20 @@ function buildMoneyInterfaceUrl(input: {
   action?: unknown;
   amount?: unknown;
   assetCode?: unknown;
+  postConversionAssetCode?: unknown;
   destinationPixKey?: unknown;
   language?: 'pt-BR' | 'en';
   sessionScope?: unknown;
 }): string {
   const action = normalizeMoneyInterfaceAction(input.action);
   const asset = frontendAssetCode(input.assetCode || 'BRL');
+  const rawPostConversionAsset = String(input.postConversionAssetCode || '').trim();
+  const postConversionAsset = rawPostConversionAsset ? frontendAssetCode(rawPostConversionAsset) : '';
   const amount = String(input.amount || '').trim();
   const language = input.language || 'pt-BR';
   const sessionScope = normalizeToolSessionScope(input.sessionScope);
+  const hasPostConversion = Boolean(action === 'bring' && postConversionAsset && postConversionAsset !== asset);
+  const hasExactReceiveAsset = Boolean(action === 'bring' && amount && asset !== 'BRL');
 
   if (action === 'keep') {
     return buildYieldFrontendUrl({ action: 'deposit', amount, assetCode: asset, language, sessionScope });
@@ -546,7 +551,12 @@ function buildMoneyInterfaceUrl(input: {
       mode: 'onramp',
       asset: 'BRL',
       target_asset: asset !== 'BRL' ? asset : '',
-      amount,
+      amount: hasExactReceiveAsset ? '' : amount,
+      receive_amount: hasExactReceiveAsset ? amount : '',
+      receive_asset: hasExactReceiveAsset ? asset : '',
+      flow: hasPostConversion ? 'fund_and_convert' : '',
+      post_conversion_asset: hasPostConversion ? postConversionAsset : '',
+      convert_to_asset: hasPostConversion ? postConversionAsset : '',
       currency: 'BRL',
       from: 'chat',
       session_scope: sessionScope,
@@ -1034,7 +1044,11 @@ export const toolDefinitions = [
         },
         asset_code: {
           type: "string",
-          description: "User-facing currency. Use BRL, USDC/USD, CETES on testnet, or EURC only on public/mainnet.",
+          description: "User-facing currency. For PIX bring, this is the exact first asset to receive through the PIX flow. Use BRL, USDC/USD, CETES on testnet, or EURC only on public/mainnet.",
+        },
+        post_conversion_asset_code: {
+          type: "string",
+          description: "Optional asset to convert into after the PIX bring flow receives asset_code. Example: receive 100 XLM first, then convert to USDC.",
         },
         destination_pix_key: {
           type: "string",
@@ -2923,6 +2937,7 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       action,
       amount: input.amount,
       assetCode,
+      postConversionAssetCode: input.post_conversion_asset_code || input.postConversionAssetCode || input.dest_asset_code || input.destAssetCode || input.destination_asset_code || input.destinationAssetCode,
       destinationPixKey: input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey,
       language,
       sessionScope,
@@ -2930,6 +2945,8 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
     const purpose = action === 'keep' ? 'rendimentos' : action === 'send_out' ? 'pix_offramp' : 'pix_onramp';
     const frontendUrl = await shortenYieldUrl(rawUrl, purpose, sessionId);
     const displayAsset = frontendAssetCode(assetCode);
+    const rawPostConversionAsset = String(input.post_conversion_asset_code || input.postConversionAssetCode || input.dest_asset_code || input.destAssetCode || input.destination_asset_code || input.destinationAssetCode || '').trim();
+    const postConversionAsset = rawPostConversionAsset ? frontendAssetCode(rawPostConversionAsset) : '';
 	    const actionLabel = language === 'en'
 	      ? action === 'bring'
 	        ? 'Add money'
@@ -2947,10 +2964,15 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       action,
       asset_code: displayAsset,
       amount: String(input.amount || '').trim() || null,
+      post_conversion_asset_code: postConversionAsset && postConversionAsset !== displayAsset ? postConversionAsset : null,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
-        : `${actionLabel} para ${displayAsset}.\n\nAbrir:\n${frontendUrl}`,
+        ? postConversionAsset && postConversionAsset !== displayAsset
+          ? `${actionLabel} is ready: receive ${displayAsset} first, then convert to ${postConversionAsset}.\n\nOpen:\n${frontendUrl}`
+          : `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
+        : postConversionAsset && postConversionAsset !== displayAsset
+          ? `${actionLabel}: receber ${displayAsset} primeiro e depois converter para ${postConversionAsset}.\n\nAbrir:\n${frontendUrl}`
+          : `${actionLabel} para ${displayAsset}.\n\nAbrir:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({

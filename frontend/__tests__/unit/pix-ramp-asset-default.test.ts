@@ -33,9 +33,11 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("setAmountBrl(\"\")");
     expect(text).toContain("requestedOnRampTargetDisplay");
     expect(text).toContain('desiredReceiveAsset === "BRL" || desiredReceiveAsset === "USDC"');
-    expect(text).toContain("/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM");
-    expect(text).toContain("PIX amount estimated from conversion matrix");
-    expect(text).toContain("const requiredNetBrl = receiveTarget / rate");
+    expect(text).toContain("Exact non-BRL PIX target will be quoted by backend");
+    expect(text).toContain('contract: "backend_strict_receive_quote"');
+    expect(text).not.toContain("/api/financial/conversion-matrix?assets=BRL,USDC,CETES,XLM");
+    expect(text).not.toContain("PIX amount estimated from conversion matrix");
+    expect(text).not.toContain("const requiredNetBrl = receiveTarget / rate");
     expect(text).toContain("const quotedOnRampPixPayAmount = String(");
     expect(text).toContain("const hasExecutableOnRampPixPayAmount = Boolean(normalizeHumanAmount(quotedOnRampPixPayAmount));");
     expect(text).toContain("const onRampHeaderValueDisplay = exactOnRampValueContract");
