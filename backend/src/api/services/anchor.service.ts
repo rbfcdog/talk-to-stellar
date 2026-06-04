@@ -5450,52 +5450,108 @@ export class AnchorService {
     checked?: boolean;
     sufficient?: boolean;
   }> {
-    if (input.action !== 'deposit' || normalizeAssetCode(input.sourceAsset.code) !== 'XLM') {
+    if (input.action !== 'deposit') {
       return {};
     }
 
-    const account = await StellarService.loadAccount(input.context.publicKey);
-    const xlm = accountSpendableXlmAmount(account);
+    const sourceCode = normalizeAssetCode(input.sourceAsset.code);
     const requested = parseHumanAmountNumber(input.amount);
-    const sufficient = xlm.spendable + 0.0000001 >= requested;
 
-    logDefindex(sufficient ? 'info' : 'warn', 'prepare_direct_xlm_balance_checked', {
-      request_id: input.requestId,
-      session_id: maskLogValue(input.context.sessionId),
-      user_id: maskLogValue(input.context.userId),
-      public_key: maskLogValue(input.context.publicKey),
-      asset_code: input.vault.asset_code,
-      vault_address: maskLogValue(input.vault.vault_address),
-      requested_amount: input.amount,
-      xlm_total: formatDecimalAmount(xlm.total),
-      xlm_reserved: formatDecimalAmount(xlm.reserve),
-      xlm_spendable: formatDecimalAmount(xlm.spendable),
-      sufficient,
-    });
+    if (sourceCode === 'XLM') {
+      const account = await StellarService.loadAccount(input.context.publicKey);
+      const xlm = accountSpendableXlmAmount(account);
+      const sufficient = xlm.spendable + 0.0000001 >= requested;
 
-    if (!sufficient) {
+      logDefindex(sufficient ? 'info' : 'warn', 'prepare_direct_xlm_balance_checked', {
+        request_id: input.requestId,
+        session_id: maskLogValue(input.context.sessionId),
+        user_id: maskLogValue(input.context.userId),
+        public_key: maskLogValue(input.context.publicKey),
+        asset_code: input.vault.asset_code,
+        vault_address: maskLogValue(input.vault.vault_address),
+        requested_amount: input.amount,
+        xlm_total: formatDecimalAmount(xlm.total),
+        xlm_reserved: formatDecimalAmount(xlm.reserve),
+        xlm_spendable: formatDecimalAmount(xlm.spendable),
+        sufficient,
+      });
+
+      if (!sufficient) {
+        return {
+          checked: true,
+          sufficient: false,
+          executionBlockedCode: 'insufficient_balance',
+          executionBlockedReason:
+            `Aplicacao preparada, mas XLM precisa manter reserva de rede. ` +
+            `Disponivel para aplicar: ${formatDisplayAmount(formatDecimalAmount(xlm.spendable), 'XLM')}. ` +
+            `Saldo total: ${formatDisplayAmount(formatDecimalAmount(xlm.total), 'XLM')}. ` +
+            `Reserva estimada: ${formatDisplayAmount(formatDecimalAmount(xlm.reserve), 'XLM')}.`,
+          sourceAvailable: formatDecimalAmount(xlm.spendable),
+          sourceTotal: formatDecimalAmount(xlm.total),
+          reserved: formatDecimalAmount(xlm.reserve),
+        };
+      }
+
       return {
         checked: true,
-        sufficient: false,
-        executionBlockedCode: 'insufficient_balance',
-        executionBlockedReason:
-          `Aplicacao preparada, mas XLM precisa manter reserva de rede. ` +
-          `Disponivel para aplicar: ${formatDisplayAmount(formatDecimalAmount(xlm.spendable), 'XLM')}. ` +
-          `Saldo total: ${formatDisplayAmount(formatDecimalAmount(xlm.total), 'XLM')}. ` +
-          `Reserva estimada: ${formatDisplayAmount(formatDecimalAmount(xlm.reserve), 'XLM')}.`,
+        sufficient: true,
         sourceAvailable: formatDecimalAmount(xlm.spendable),
         sourceTotal: formatDecimalAmount(xlm.total),
         reserved: formatDecimalAmount(xlm.reserve),
       };
     }
 
-    return {
-      checked: true,
-      sufficient: true,
-      sourceAvailable: formatDecimalAmount(xlm.spendable),
-      sourceTotal: formatDecimalAmount(xlm.total),
-      reserved: formatDecimalAmount(xlm.reserve),
-    };
+    try {
+      const balances = await StellarService.getAccountBalance(input.context.publicKey);
+      const available = rawIssuedBalanceAmount(balances, input.sourceAsset);
+      const sufficient = available + 0.0000001 >= requested;
+
+      logDefindex(sufficient ? 'info' : 'warn', 'prepare_direct_asset_balance_checked', {
+        request_id: input.requestId,
+        session_id: maskLogValue(input.context.sessionId),
+        user_id: maskLogValue(input.context.userId),
+        public_key: maskLogValue(input.context.publicKey),
+        asset_code: input.vault.asset_code,
+        source_asset_code: input.sourceAsset.code,
+        source_asset_issuer: maskLogValue(input.sourceAsset.issuer),
+        vault_address: maskLogValue(input.vault.vault_address),
+        requested_amount: input.amount,
+        source_available: formatDecimalAmount(available),
+        sufficient,
+      });
+
+      if (!sufficient) {
+        return {
+          checked: true,
+          sufficient: false,
+          executionBlockedCode: 'insufficient_balance',
+          executionBlockedReason:
+            `Aplicacao preparada, mas o saldo disponivel em ${userFacingAssetCode(sourceCode)} nao cobre este valor. ` +
+            `Disponivel: ${formatDisplayAmount(formatDecimalAmount(available), userFacingAssetCode(sourceCode))}. ` +
+            `Solicitado: ${formatDisplayAmount(formatDecimalAmount(requested), userFacingAssetCode(sourceCode))}.`,
+          sourceAvailable: formatDecimalAmount(available),
+        };
+      }
+
+      return {
+        checked: true,
+        sufficient: true,
+        sourceAvailable: formatDecimalAmount(available),
+      };
+    } catch (error) {
+      logDefindex('warn', 'prepare_direct_asset_balance_check_unavailable', {
+        request_id: input.requestId,
+        session_id: maskLogValue(input.context.sessionId),
+        user_id: maskLogValue(input.context.userId),
+        public_key: maskLogValue(input.context.publicKey),
+        asset_code: input.vault.asset_code,
+        source_asset_code: input.sourceAsset.code,
+        source_asset_issuer: maskLogValue(input.sourceAsset.issuer),
+        vault_address: maskLogValue(input.vault.vault_address),
+        ...defindexErrorFields(error),
+      });
+      return { checked: false };
+    }
   }
 
   static async prepareDefindexYieldForSession(input: RampSessionInput & {
@@ -5737,7 +5793,11 @@ export class AnchorService {
       prepared = built.prepared;
     } catch (error) {
       const classified = classifyDefindexBuildFailure(error);
-      const block = classified.code === 'insufficient_balance' && directDepositReadiness.sufficient
+      const hasVerifiedInsufficientBalance =
+        classified.code === 'insufficient_balance' &&
+        directDepositReadiness.checked &&
+        directDepositReadiness.sufficient === false;
+      const block = classified.code === 'insufficient_balance' && !hasVerifiedInsufficientBalance
         ? {
             code: 'yield_execution_unavailable' as const,
             reason: 'Aplicacao preparada, mas a confirmacao de investimento esta indisponivel agora. Tente novamente em alguns segundos.',

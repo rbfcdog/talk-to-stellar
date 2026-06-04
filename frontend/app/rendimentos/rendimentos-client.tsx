@@ -678,6 +678,11 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
     apiState.message ||
     ""
   ).trim();
+  const blockedTitle = blockedCode === "yield_account_setup_required"
+    ? L("Ative a moeda antes de confirmar.", "Activate the currency before confirming.")
+    : blockedCode === "insufficient_balance"
+      ? L("Saldo aplicável insuficiente.", "Insufficient usable balance.")
+      : L("Confirmação de investimento indisponível agora.", "Investment confirmation is unavailable right now.");
   const profileShort = selectedProfile.short;
 
   if (!session.authenticated && !sessionLoading) return (
@@ -821,7 +826,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
               </button>
             ) : (
               <div className="flex-1 border border-tts-gold bg-tts-gold-bg px-4 py-3 text-sm font-bold text-tts-gold">
-                <p>{blockedCode === "yield_account_setup_required" ? L("Ative a moeda antes de confirmar.", "Activate the currency before confirming.") : L("Confirmação de investimento indisponível agora.", "Investment confirmation is unavailable right now.")}</p>
+                <p>{blockedTitle}</p>
                 {blockedReason && <p className="mt-1 text-xs leading-5 text-tts-gold">{blockedReason}</p>}
               </div>
             )}
