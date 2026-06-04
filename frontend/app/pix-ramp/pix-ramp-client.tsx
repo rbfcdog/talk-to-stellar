@@ -1004,6 +1004,9 @@ export default function PixRampClient({
   const [recipientVerificationError, setRecipientVerificationError] = useState("");
   const [autoPayAmount, setAutoPayAmount] = useState("");
   const [autoPayAsset, setAutoPayAsset] = useState<TargetAsset | "">("");
+  const [autoPaySourceAmount, setAutoPaySourceAmount] = useState("");
+  const [autoPaySourceAsset, setAutoPaySourceAsset] = useState<TargetAsset | "">("");
+  const [autoPayDestinationAsset, setAutoPayDestinationAsset] = useState<TargetAsset | "">("");
   const [pixFundedTransferResult, setPixFundedTransferResult] = useState<RampResponse | null>(null);
   const [pixFundedTransferError, setPixFundedTransferError] = useState("");
   const normalizedOffRampPixKey = normalizePixKeyInput(offRampPixKey);
@@ -1032,6 +1035,9 @@ export default function PixRampClient({
     transferRecipientPublicKey,
     autoPayAmount,
     autoPayAsset,
+    autoPaySourceAmount,
+    autoPaySourceAsset,
+    autoPayDestinationAsset,
   ].join(":"))}`;
   const currentOnRampIntentId = activeOnRampIntentId || atomicIntentKey;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
@@ -1076,8 +1082,12 @@ export default function PixRampClient({
   const targetReceiveInputAsset = exactOnRampReceiveTarget ? desiredReceiveAsset : (desiredFinalAsset || targetAsset);
   const autoPayDisplayAmount = autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
+    : autoPaySourceAmount && autoPayDestinationAsset
+      ? `${formatRampAsset(autoPaySourceAmount, autoPaySourceAsset || targetAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
     : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
-  const requestedOnRampTargetDisplay = transferFlow && autoPayAmount && autoPayAsset
+  const requestedOnRampTargetDisplay = transferFlow && autoPaySourceAmount && autoPayDestinationAsset
+    ? `${formatRampAsset(autoPaySourceAmount, autoPaySourceAsset || autoPayAsset || targetAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
+    : transferFlow && autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : desiredFinalAmount && desiredFinalAsset
       ? formatRampAsset(desiredFinalAmount, desiredFinalAsset)
@@ -1193,6 +1203,7 @@ export default function PixRampClient({
   }, [L, amountBrl, desiredFinalAmount, exactOnRampValueContract, onRampFeeEstimate, rampMode]);
   const feeAdjustedAutoPayAmount = transferFlow &&
     !autoPayAmount &&
+    !autoPaySourceAmount &&
     onRampFeeEstimate?.destinationCurrency === (autoPayAsset || targetAsset) &&
     Number.isFinite(onRampFeeEstimate.netDestinationAmount)
       ? formatApiAmount(onRampFeeEstimate.netDestinationAmount)
@@ -1263,6 +1274,9 @@ export default function PixRampClient({
     transferFlow ? transferRecipientDisplayKey : "",
     transferFlow ? feeAdjustedAutoPayAmount || autoPayAmount : "",
     transferFlow ? feeAdjustedAutoPayAsset || autoPayAsset : "",
+    transferFlow ? autoPaySourceAmount : "",
+    transferFlow ? autoPaySourceAsset : "",
+    transferFlow ? autoPayDestinationAsset : "",
   ]));
   const paymentInstructions = order?.paymentInstructions || {};
   const pixCode = String(paymentInstructions?.pixCode || "");
@@ -1654,6 +1668,9 @@ export default function PixRampClient({
     );
     const payAmount = normalizeHumanAmount(params.get("pay_amount") || "");
     const payAsset = String(params.get("pay_asset") || "").trim().toUpperCase();
+    const paySourceAmount = normalizeHumanAmount(params.get("pay_source_amount") || "");
+    const paySourceAsset = String(params.get("pay_source_asset") || "").trim().toUpperCase();
+    const payDestinationAsset = String(params.get("pay_destination_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
     const offRampBrlAmount = mode === "offramp" && (
       fiatAmount ||
@@ -1724,6 +1741,9 @@ export default function PixRampClient({
       const normalizedPayAsset = normalizeTargetAsset(payAsset, "USDC");
       setAutoPayAsset(normalizedPayAsset);
     }
+    if (paySourceAmount) setAutoPaySourceAmount(paySourceAmount);
+    if (paySourceAsset) setAutoPaySourceAsset(normalizeTargetAsset(paySourceAsset, "BRL"));
+    if (payDestinationAsset) setAutoPayDestinationAsset(normalizeTargetAsset(payDestinationAsset, "USDC"));
     setQueryReady(true);
   }, [lockedMode, queryString]);
 
@@ -2599,8 +2619,8 @@ export default function PixRampClient({
     setWalletPin("");
 
     const auth = await resolveWalletFromEmail();
-    const transferFinalAsset = transferFlow ? normalizeTargetAsset(autoPayAsset || targetAsset, targetAsset) : "";
-    const requestedFinalAmount = transferFlow ? normalizeHumanAmount(autoPayAmount || "") : desiredFinalAmount;
+    const transferFinalAsset = transferFlow ? normalizeTargetAsset(autoPaySourceAsset || autoPayAsset || targetAsset, targetAsset) : "";
+    const requestedFinalAmount = transferFlow ? normalizeHumanAmount(autoPaySourceAmount || autoPayAmount || "") : desiredFinalAmount;
     const requestedFinalAsset = requestedFinalAmount ? settlementAssetCode(transferFlow ? transferFinalAsset : desiredFinalAsset) : "";
     const customerResult = getRampCustomerId(customerPayload) && getRampBankAccountId(customerPayload) ? customerPayload : await callRamp("/api/ramp/etherfuse/customer", {
       country: "BR",
@@ -2685,8 +2705,8 @@ export default function PixRampClient({
       const before = await fetchBalances(authForOrder);
       setOnRampBalancesBefore(before);
       setOnRampBalancesAfter([]);
-      const transferFinalAsset = transferFlow ? normalizeTargetAsset(autoPayAsset || targetAsset, targetAsset) : "";
-      const requestedFinalAmount = transferFlow ? normalizeHumanAmount(autoPayAmount || "") : desiredFinalAmount;
+      const transferFinalAsset = transferFlow ? normalizeTargetAsset(autoPaySourceAsset || autoPayAsset || targetAsset, targetAsset) : "";
+      const requestedFinalAmount = transferFlow ? normalizeHumanAmount(autoPaySourceAmount || autoPayAmount || "") : desiredFinalAmount;
       const requestedFinalAsset = requestedFinalAmount ? optionalSettlementAssetCode(transferFlow ? transferFinalAsset : desiredFinalAsset) : "";
       const quotedOrderAmountBrl = normalizeHumanAmount(quoteForOrder?.fromAmount || "");
       const orderAmountBrl = quotedOrderAmountBrl || (
@@ -2710,8 +2730,9 @@ export default function PixRampClient({
         post_conversion_asset: hasPostOnRampConversion ? settlementAssetCode(postConversionAsset) : undefined,
         auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
         auto_pay_recipient: transferRecipient || undefined,
-        auto_pay_amount: feeAdjustedAutoPayAmount || autoPayAmount || undefined,
-        auto_pay_asset_code: settlementAssetCode(autoPayAsset || targetAsset),
+        auto_pay_amount: feeAdjustedAutoPayAmount || autoPaySourceAmount || autoPayAmount || undefined,
+        auto_pay_asset_code: settlementAssetCode(autoPaySourceAsset || autoPayAsset || targetAsset),
+        auto_pay_destination_asset_code: autoPayDestinationAsset ? settlementAssetCode(autoPayDestinationAsset) : undefined,
       }, "POST", authForOrder, createOnRampIdempotencyKey);
       if (payload?.quote) {
         setQuotePayload(payload);
@@ -2844,8 +2865,9 @@ export default function PixRampClient({
     if (!transferRecipientVerified || !verifiedRecipientPublicKey) {
       throw new Error(transferRecipientBlocker || L("Escolha um contato salvo real antes de enviar.", "Choose a real saved contact before sending."));
     }
-    const requestedAutoPayAmount = feeAdjustedAutoPayAmount || (autoPayAmount && autoPayAsset ? autoPayAmount : "");
-    const requestedAutoPayAsset = settlementAssetCode(feeAdjustedAutoPayAsset || autoPayAsset || targetAsset);
+    const requestedAutoPayAmount = feeAdjustedAutoPayAmount || autoPaySourceAmount || (autoPayAmount && autoPayAsset ? autoPayAmount : "");
+    const requestedAutoPayAsset = settlementAssetCode(feeAdjustedAutoPayAsset || autoPaySourceAsset || autoPayAsset || targetAsset);
+    const requestedDestinationAsset = settlementAssetCode(autoPayDestinationAsset || autoPayAsset || targetAsset);
     const transferAmount = requestedAutoPayAmount || (targetAsset === "BRL"
       ? String(completedTransaction?.finalAmount || completedTransaction?.toAmount || amountBrl)
       : String(completedTransaction?.auto_conversion?.destination_amount || finalReceivedAmount || ""));
@@ -2861,6 +2883,8 @@ export default function PixRampClient({
       recipient_public_key: verifiedRecipientPublicKey,
       amount: transferAmount,
       asset_code: requestedAutoPayAsset,
+      source_asset_code: requestedAutoPayAsset,
+      destination_asset_code: requestedDestinationAsset,
       order_id: orderId,
       operation_id: operationId,
       pin,

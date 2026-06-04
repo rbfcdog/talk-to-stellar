@@ -454,6 +454,53 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('builds PIX fund-and-pay URL with separate source and destination assets', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const url = await (graph as any).buildPixRampUrl({
+        session_id: 'session-1',
+        session_data: { email: 'rodrigo@example.com', user_id: 'user-1' },
+      }, {
+        direction: 'onramp',
+        flow: 'fund_and_pay',
+        amount: '100',
+        amount_currency: 'BRL',
+        asset_code: 'BRL',
+        recipient_query: 'Marina Costa',
+        pay_amount: '100',
+        pay_asset_code: 'BRL',
+        pay_source_amount: '100',
+        pay_source_asset_code: 'BRL',
+        pay_destination_asset_code: 'USDC',
+      });
+      const parsed = new URL(url);
+
+      expect(parsed.pathname).toBe('/pix-on');
+      expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+      expect(parsed.searchParams.get('amount')).toBe('100');
+      expect(parsed.searchParams.get('currency')).toBe('BRL');
+      expect(parsed.searchParams.get('asset')).toBe('BRL');
+      expect(parsed.searchParams.get('target_asset')).toBeNull();
+      expect(parsed.searchParams.get('receive_amount')).toBeNull();
+      expect(parsed.searchParams.get('receive_asset')).toBeNull();
+      expect(parsed.searchParams.get('recipient')).toBe('Marina Costa');
+      expect(parsed.searchParams.get('pay_amount')).toBe('100');
+      expect(parsed.searchParams.get('pay_asset')).toBe('BRL');
+      expect(parsed.searchParams.get('pay_source_amount')).toBe('100');
+      expect(parsed.searchParams.get('pay_source_asset')).toBe('BRL');
+      expect(parsed.searchParams.get('pay_destination_asset')).toBe('USDC');
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('extracts PIX-funded contact transfer from direct-to-recipient wording', () => {
     const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt');
 
