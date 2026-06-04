@@ -202,6 +202,23 @@
   body {
     @apply bg-background text-foreground;
   }
+  body:has(.tts-op-page) {
+    --tts-bg: #06070a;
+    --tts-surface: #0d1117;
+    --tts-deep: #f4f6f8;
+    --tts-deep2: #d9dee7;
+    --tts-muted: #8b949e;
+    --tts-gold: #c8aa68;
+    --tts-gold-lt: #dcc78d;
+    --tts-gold-bg: rgba(200, 170, 104, 0.08);
+    --tts-gold-br: rgba(200, 170, 104, 0.2);
+    --tts-border: rgba(255, 255, 255, 0.1);
+    --tts-border2: rgba(255, 255, 255, 0.16);
+    --tts-confirm: #c8aa68;
+    --tts-error: #ef7777;
+    background-color: var(--tts-bg);
+    color: var(--tts-deep);
+  }
   p,
   h1,
   h2,
@@ -248,6 +265,24 @@
     isolation: isolate;
     overflow-x: hidden;
     padding-top: 4.75rem;
+    --tts-bg: #06070a;
+    --tts-surface: #0d1117;
+    --tts-deep: #f4f6f8;
+    --tts-deep2: #d9dee7;
+    --tts-muted: #8b949e;
+    --tts-gold: #c8aa68;
+    --tts-gold-lt: #dcc78d;
+    --tts-gold-bg: rgba(200, 170, 104, 0.08);
+    --tts-gold-br: rgba(200, 170, 104, 0.2);
+    --tts-border: rgba(255, 255, 255, 0.1);
+    --tts-border2: rgba(255, 255, 255, 0.16);
+    --tts-confirm: #c8aa68;
+    --tts-error: #ef7777;
+    background:
+      radial-gradient(circle at 50% -16rem, rgba(200, 170, 104, 0.14), transparent 33rem),
+      linear-gradient(180deg, #090b0f 0%, var(--tts-bg) 22rem),
+      var(--tts-bg) !important;
+    color: var(--tts-deep);
   }
 
   @media (min-width: 640px) {
@@ -266,9 +301,10 @@
     inset: 0;
     z-index: -2;
     pointer-events: none;
-    background-image: radial-gradient(circle, var(--tts-gold) 1px, transparent 1px);
-    background-size: 28px 28px;
-    opacity: 0.06;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 16rem),
+      var(--tts-bg);
+    opacity: 1;
   }
 
   .tts-op-page::after {
@@ -293,8 +329,8 @@
   .tts-op-card,
   .tts-op-header {
     box-shadow:
-      0 1px 0 color-mix(in oklab, var(--tts-surface) 80%, white 20%) inset,
-      0 14px 34px rgba(28, 24, 18, 0.045);
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 18px 48px rgba(0, 0, 0, 0.22);
   }
 
   .tts-op-page .shadow-sm,
@@ -304,8 +340,8 @@
   .tts-op-page .shadow-xl,
   .tts-op-page .shadow-2xl {
     box-shadow:
-      0 1px 0 color-mix(in oklab, var(--tts-surface) 82%, white 18%) inset,
-      0 14px 34px rgba(28, 24, 18, 0.045) !important;
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 18px 48px rgba(0, 0, 0, 0.22) !important;
   }
 
   .tts-op-page .bg-tts-deep\/20,
@@ -357,11 +393,11 @@
   .tts-op-page :is(header, section)[class*='border-b'] {
     border: 1px solid var(--tts-border) !important;
     border-radius: 1rem;
-    background-color: var(--tts-surface) !important;
+    background-color: color-mix(in oklab, var(--tts-surface) 94%, white 6%) !important;
     padding: 1.5rem !important;
     box-shadow:
-      0 1px 0 color-mix(in oklab, var(--tts-surface) 82%, white 18%) inset,
-      0 14px 34px rgba(28, 24, 18, 0.045);
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 18px 48px rgba(0, 0, 0, 0.22);
   }
 
   .tts-op-page :is(header, section)[class*='border-b'] + * {
@@ -371,13 +407,13 @@
   .tts-op-page :is(section, article, aside, header)[class*='bg-tts-deep'],
   .tts-op-page :is(section, article, aside, header)[class*='bg-black'],
   .tts-op-page :is(section, article, aside, header)[class*='bg-white'] {
-    background-color: var(--tts-surface) !important;
+    background-color: color-mix(in oklab, var(--tts-surface) 94%, white 6%) !important;
     color: var(--tts-deep) !important;
   }
 
   .tts-op-page :is(section, article, aside, header)[class*='bg-tts-gold'],
   .tts-op-page :is(section, article, aside, header)[class*='bg-tts-confirm'] {
-    background-color: var(--tts-surface) !important;
+    background-color: color-mix(in oklab, var(--tts-surface) 94%, white 6%) !important;
     color: var(--tts-deep) !important;
   }
 
@@ -386,7 +422,7 @@
   .tts-op-page select {
     border-radius: var(--radius);
     border-color: var(--tts-border) !important;
-    background-color: var(--tts-bg) !important;
+    background-color: color-mix(in oklab, var(--tts-bg) 88%, white 12%) !important;
     color: var(--tts-deep) !important;
     min-height: 2.75rem;
   }
@@ -453,6 +489,163 @@
     border-radius: 0.75rem;
   }
 
+  .tts-op-page .bg-tts-bg,
+  .tts-op-page .bg-background {
+    background-color: var(--tts-bg) !important;
+  }
+
+  .tts-op-page .bg-tts-surface,
+  .tts-op-page .bg-card,
+  .tts-op-page .bg-popover,
+  .tts-op-page .bg-secondary,
+  .tts-op-page .bg-muted,
+  .tts-op-page .bg-accent,
+  .tts-op-page .bg-white,
+  .tts-op-page .bg-gray-50,
+  .tts-op-page .bg-gray-100,
+  .tts-op-page .bg-slate-50,
+  .tts-op-page .bg-slate-100,
+  .tts-op-page .bg-zinc-50,
+  .tts-op-page .bg-zinc-100,
+  .tts-op-page .bg-neutral-50,
+  .tts-op-page .bg-neutral-100,
+  .tts-op-page [class*='bg-white/'],
+  .tts-op-page [class*='bg-[#f'],
+  .tts-op-page [class*='bg-[#F'] {
+    background-color: color-mix(in oklab, var(--tts-surface) 94%, white 6%) !important;
+  }
+
+  .tts-op-page .bg-tts-surface\/95,
+  .tts-op-page .bg-tts-surface\/90,
+  .tts-op-page .bg-tts-surface\/80,
+  .tts-op-page .bg-tts-surface\/70,
+  .tts-op-page .bg-tts-surface\/60 {
+    background-color: color-mix(in oklab, var(--tts-surface) 90%, transparent) !important;
+  }
+
+  .tts-op-page .bg-tts-surface\/30,
+  .tts-op-page .bg-tts-surface\/40,
+  .tts-op-page .bg-tts-surface\/\[0\.03\],
+  .tts-op-page .bg-tts-bg\/40,
+  .tts-op-page .bg-tts-bg\/60,
+  .tts-op-page .bg-tts-gold-bg,
+  .tts-op-page .bg-tts-gold\/10,
+  .tts-op-page .bg-tts-confirm\/10,
+  .tts-op-page .bg-tts-error\/10 {
+    background-color: rgba(255, 255, 255, 0.045) !important;
+  }
+
+  .tts-op-page :is(section, article, aside, header, div)[class*='border'][class*='bg-tts-gold'],
+  .tts-op-page :is(section, article, aside, header, div)[class*='border'][class*='bg-tts-confirm'],
+  .tts-op-page :is(section, article, aside, header, div)[class*='border'][class*='bg-tts-error'] {
+    border-color: var(--tts-border) !important;
+    background-color: rgba(255, 255, 255, 0.045) !important;
+  }
+
+  .tts-op-page :is(button, a)[class*='bg-tts-gold'],
+  .tts-op-page :is(button, a)[class*='bg-tts-confirm'],
+  .tts-op-page :is(button, a)[class*='bg-primary'] {
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    background-color: var(--tts-deep) !important;
+    color: var(--tts-bg) !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24) !important;
+  }
+
+  .tts-op-page :is(button, a)[class*='bg-tts-gold']:hover,
+  .tts-op-page :is(button, a)[class*='bg-tts-confirm']:hover,
+  .tts-op-page :is(button, a)[class*='bg-primary']:hover {
+    background-color: var(--tts-gold-lt) !important;
+    color: var(--tts-bg) !important;
+  }
+
+  .tts-op-page :is(button, a)[class*='bg-tts-deep'],
+  .tts-op-page :is(button, a)[class*='bg-black'] {
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    background-color: var(--tts-deep) !important;
+    color: var(--tts-bg) !important;
+  }
+
+  .tts-op-page :is(button, a)[class*='border'] {
+    border-color: var(--tts-border) !important;
+  }
+
+  .tts-op-page :is(button, a)[disabled],
+  .tts-op-page :is(button, a).disabled,
+  .tts-op-page :is(button, a)[aria-disabled='true'] {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(244, 246, 248, 0.38) !important;
+    box-shadow: none !important;
+  }
+
+  .tts-op-page .text-foreground,
+  .tts-op-page .text-card-foreground,
+  .tts-op-page .text-popover-foreground,
+  .tts-op-page .text-tts-deep,
+  .tts-op-page .text-tts-deep2,
+  .tts-op-page .text-black,
+  .tts-op-page .text-gray-900,
+  .tts-op-page .text-slate-900,
+  .tts-op-page .text-zinc-900,
+  .tts-op-page .text-neutral-900,
+  .tts-op-page [class*='text-[#0'],
+  .tts-op-page [class*='text-[#1'],
+  .tts-op-page [class*='text-[#2'] {
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page .text-muted-foreground,
+  .tts-op-page .text-tts-muted,
+  .tts-op-page .text-tts-deep\/80,
+  .tts-op-page .text-tts-deep\/70,
+  .tts-op-page .text-tts-deep\/60,
+  .tts-op-page .text-tts-surface\/80,
+  .tts-op-page .text-tts-surface\/75,
+  .tts-op-page .text-tts-surface\/70,
+  .tts-op-page .text-tts-surface\/65,
+  .tts-op-page .text-tts-surface\/60,
+  .tts-op-page .text-gray-500,
+  .tts-op-page .text-gray-600,
+  .tts-op-page .text-gray-700,
+  .tts-op-page .text-slate-500,
+  .tts-op-page .text-slate-600,
+  .tts-op-page .text-slate-700,
+  .tts-op-page .text-zinc-500,
+  .tts-op-page .text-zinc-600,
+  .tts-op-page .text-zinc-700 {
+    color: var(--tts-muted) !important;
+  }
+
+  .tts-op-page .text-tts-gold,
+  .tts-op-page .text-tts-confirm,
+  .tts-op-page .text-primary {
+    color: var(--tts-gold) !important;
+  }
+
+  .tts-op-page .text-tts-error,
+  .tts-op-page .text-destructive {
+    color: var(--tts-error) !important;
+  }
+
+  .tts-op-page .border-tts-gold,
+  .tts-op-page .border-tts-gold-br,
+  .tts-op-page .border-tts-confirm,
+  .tts-op-page .border-tts-confirm\/25,
+  .tts-op-page .border-tts-error,
+  .tts-op-page .border-tts-error\/25 {
+    border-color: var(--tts-border) !important;
+  }
+
+  .tts-op-page :is(p, span, div)[class*='uppercase'] {
+    letter-spacing: 0 !important;
+  }
+
+  .tts-op-page pre,
+  .tts-op-page code {
+    background-color: color-mix(in oklab, var(--tts-bg) 86%, white 14%) !important;
+    color: var(--tts-deep) !important;
+    border-color: var(--tts-border) !important;
+  }
+
   @media (max-width: 639px) {
     .tts-op-page {
       padding-top: 4.25rem;
@@ -490,9 +683,9 @@
       padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
       border-top: 1px solid var(--tts-border);
       background:
-        linear-gradient(180deg, color-mix(in oklab, var(--tts-bg) 0%, transparent) 0%, var(--tts-bg) 24%),
+        linear-gradient(180deg, rgba(6, 7, 10, 0), var(--tts-bg) 24%),
         color-mix(in oklab, var(--tts-surface) 92%, var(--tts-bg) 8%);
-      box-shadow: 0 -18px 36px rgba(28, 24, 18, 0.08);
+      box-shadow: 0 -18px 36px rgba(0, 0, 0, 0.32);
       backdrop-filter: blur(16px);
     }
 
@@ -519,6 +712,7 @@
     }
 
     .tts-op-page .tts-mobile-scroll > * {
+      min-width: 100% !important;
       scroll-snap-align: start;
     }
   }
