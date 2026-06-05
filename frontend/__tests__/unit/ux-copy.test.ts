@@ -88,9 +88,13 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("return_to: conversionReturnHref");
     expect(text).toContain("payload?.token");
     expect(text).toContain("currentPageSessionSource");
+    expect(text).toContain("normalizeClientSessionSource");
+    expect(text).toContain("function sessionSourceFromQueryString");
     expect(text).toContain("scopedRampApiPath");
     expect(text).toContain("scopedFinancialApiPath");
     expect(text).toContain('params.set("session_scope", source)');
+    expect(text).toContain("const externalLinkContext = externalSessionScope ? { source: externalSessionScope, session_scope: externalSessionScope, provider: externalSessionScope } : {}");
+    expect(text).toContain("...externalLinkContext");
     expect(text).toContain("fetch(`/api/ramp/${scopedRampApiPath(path)}`");
     expect(text).toContain("{ source: sessionScope, session_scope: sessionScope }");
     expect(text).not.toContain("ReturnToChat");

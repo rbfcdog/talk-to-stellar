@@ -15,7 +15,7 @@ import {
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { SecurePinGate } from "@/components/shared/secure-pin-gate";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
-import { currentPageSessionSource, getClientSession } from "@/lib/session";
+import { currentPageSessionSource, getClientSession, normalizeClientSessionSource } from "@/lib/session";
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target";
 import ConfirmConversionClient from "../confirm-conversion/confirm-conversion-client";
 
@@ -243,6 +243,26 @@ function scopedFinancialApiPath(path: string) {
   return query ? `${pathname}?${query}` : pathname;
 }
 
+function sessionSourceFromQueryString(rawQuery: string) {
+  const params = new URLSearchParams(rawQuery || "");
+  const candidates = [
+    params.get("external_provider"),
+    params.get("externalProvider"),
+    params.get("provider"),
+    params.get("channel"),
+    params.get("session_source"),
+    params.get("sessionSource"),
+    params.get("external_source"),
+    params.get("externalSource"),
+    params.get("source"),
+    params.get("session_scope"),
+    params.get("from"),
+    params.get("origin"),
+  ];
+  const normalized = candidates.map(normalizeClientSessionSource).filter(Boolean);
+  return normalized.find((source) => source === "whatsapp" || source === "telegram") || normalized[0] || "";
+}
+
 async function accountApi(path: string) {
   const response = await fetch(`/api/ramp/${scopedRampApiPath(path)}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
@@ -418,11 +438,15 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const hasBlockingBalanceIssue = balanceCheckReady && numericAmount > 0 && normalizedSourceBalanceAmount < numericAmount;
   const missingSourceAmount = hasBlockingBalanceIssue ? Math.max(0, numericAmount - normalizedSourceBalanceAmount) : 0;
   const missingSourceDisplay = missingSourceAmount > 0 ? formatAssetAmount(missingSourceAmount, sourceAsset, language) : "";
+  const pageSessionSource = sessionSourceFromQueryString(initialQuery);
+  const externalSessionScope = pageSessionSource === "whatsapp" || pageSessionSource === "telegram" ? pageSessionSource : "";
+  const externalLinkContext = externalSessionScope ? { source: externalSessionScope, session_scope: externalSessionScope, provider: externalSessionScope } : {};
   const conversionReturnHref = buildUrl("/convert", {
     amount,
     amount_mode: amountMode,
     source_asset: sourceCode,
     dest_asset: destCode,
+    ...externalLinkContext,
     lang: language,
   });
   const sourceTopUpHref = buildUrl("/pix-on", {
@@ -430,6 +454,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     receive_amount: formatQueryDecimal(missingSourceAmount || numericAmount),
     receive_asset: sourceCode,
     target_asset: sourceCode,
+    ...externalLinkContext,
     return_to: conversionReturnHref,
     lang: language,
   });
