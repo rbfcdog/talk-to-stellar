@@ -55,6 +55,8 @@ type FeeBreakdown = {
 
 export class PaymentReceiptService {
   private static agentRepo = new AgentRepository(supabase);
+  private static externalDeliveryDedupe = new Set<string>();
+  private static readonly EXTERNAL_DELIVERY_DEDUPE_LIMIT = 5000;
 
   private static isUniqueViolation(error: any): boolean {
     const code = String(error?.code || '').trim();
@@ -247,6 +249,22 @@ export class PaymentReceiptService {
     return true;
   }
 
+  private static hasExternalDeliveryDedupe(dedupeKey: string): boolean {
+    return this.externalDeliveryDedupe.has(dedupeKey);
+  }
+
+  private static markExternalDeliveryDedupe(dedupeKey: string): void {
+    if (!dedupeKey) return;
+    this.externalDeliveryDedupe.add(dedupeKey);
+    if (this.externalDeliveryDedupe.size <= this.EXTERNAL_DELIVERY_DEDUPE_LIMIT) return;
+    const first = this.externalDeliveryDedupe.values().next().value;
+    if (first) this.externalDeliveryDedupe.delete(first);
+  }
+
+  private static clearExternalDeliveryDedupeForTests(): void {
+    this.externalDeliveryDedupe.clear();
+  }
+
   static toPublicOperationId(settlementReference?: string | null): string {
     const reference = String(settlementReference || '').trim();
     if (!reference) return '';
@@ -329,8 +347,7 @@ export class PaymentReceiptService {
         dedupeKey: `${receiptDedupeKey}:text`,
       });
       if (!savedPrimaryReceipt) {
-        logger.info(`[receipt] skipped duplicate receipt delivery dedupe_key=${receiptDedupeKey}`);
-        return receiptUrl || '';
+        logger.info(`[receipt] primary receipt already saved dedupe_key=${receiptDedupeKey}; external callback will still be checked`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -350,6 +367,12 @@ export class PaymentReceiptService {
       }
     }
 
+    const externalDeliveryDedupeKey = `${receiptDedupeKey}:external`;
+    if (this.hasExternalDeliveryDedupe(externalDeliveryDedupeKey)) {
+      logger.info(`[receipt] skipped duplicate external receipt delivery dedupe_key=${receiptDedupeKey}`);
+      return receiptUrl || '';
+    }
+
     try {
       logger.info(
         `[receipt] attempting external delivery provider=${input.provider || 'none'} provider_user_tail=${String(input.providerUserId || '').replace(/\D+/g, '').slice(-4) || 'none'} session=${input.sessionId || 'none'} user=${input.userId || 'none'} text_len=${externalDeliveryText.length}`
@@ -364,6 +387,9 @@ export class PaymentReceiptService {
         buttonUrl: null,
       });
       this.logExternalDelivery('receipt', delivery);
+      if ((delivery?.whatsapp?.delivered || 0) > 0 || (delivery?.whatsapp?.attempted && (delivery?.whatsapp?.recipients || 0) > 0)) {
+        this.markExternalDeliveryDedupe(externalDeliveryDedupeKey);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to deliver receipt: ${message}`);
