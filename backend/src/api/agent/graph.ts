@@ -331,7 +331,11 @@ export class AgentGraph {
   }
 
   private getLanguage(state?: Partial<AgentState> | null): 'pt-BR' | 'en' {
-    return this.normalizeLanguage((state?.action_params as any)?.language || (state as any)?.language);
+    return this.normalizeLanguage(
+      (state?.action_params as any)?.language ||
+      (state?.action_params as any)?.llm_route?.language ||
+      (state as any)?.language
+    );
   }
 
   private text(language: 'pt-BR' | 'en', pt: string, en: string): string {

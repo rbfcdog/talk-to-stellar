@@ -1716,6 +1716,69 @@ describe('Agent production evals', () => {
     expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
   });
 
+  it('keeps the requested receive asset for English PIX-funded contact payments', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const contactPublicKey = 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC';
+    mockRouteIntent(graph, 'route_pix_intent', {
+      amount: '100',
+      asset_code: 'USDC',
+      dest_asset_code: 'CETES',
+      recipient_query: 'Ana Silva',
+      language: 'en',
+    });
+    graph.externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }: { url: string }) => url),
+    };
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'get_intent_help') {
+        throw new Error('generic menu should not be used for PIX-funded cross-asset payment');
+      }
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Ana Silva',
+              stellar_public_key: contactPublicKey,
+              phone: '5575496918127',
+            },
+          ],
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const result = await graph.processInput(createState('want to send 100 usdc pix to ana silva so they recieve in CETES'));
+    const link = result.response_message.match(/https?:\/\/\S+/)?.[0] || '';
+    const parsed = new URL(link);
+
+    expect(result.detected_intent).toBe(IntentType.PIX);
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('Ana Silva');
+    expect(result.response_message).toContain('US$ 100.00');
+    expect(result.response_message).toContain('to deliver in CETES');
+    expect(parsed.pathname).toBe('/pix-on');
+    expect(parsed.searchParams.get('flow')).toBe('fund_and_pay');
+    expect(parsed.searchParams.get('amount')).toBe('100');
+    expect(parsed.searchParams.get('currency')).toBe('USDC');
+    expect(parsed.searchParams.get('asset')).toBe('USDC');
+    expect(parsed.searchParams.get('target_asset')).toBe('USDC');
+    expect(parsed.searchParams.get('lang')).toBe('en');
+    expect(parsed.searchParams.get('receive_amount')).toBeNull();
+    expect(parsed.searchParams.get('receive_asset')).toBeNull();
+    expect(parsed.searchParams.get('recipient')).toBe('Ana Silva');
+    expect(parsed.searchParams.get('recipient_public_key')).toBe(contactPublicKey);
+    expect(parsed.searchParams.get('pay_amount')).toBe('100');
+    expect(parsed.searchParams.get('pay_asset')).toBe('USDC');
+    expect(parsed.searchParams.get('pay_source_amount')).toBe('100');
+    expect(parsed.searchParams.get('pay_source_asset')).toBe('USDC');
+    expect(parsed.searchParams.get('pay_destination_asset')).toBe('CETES');
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_intent_help', {});
+  });
+
   it('asks one specific payment clarification instead of showing the generic menu', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;

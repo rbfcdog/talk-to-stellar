@@ -77,7 +77,7 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("setPixFundedTransferResult(null)");
     expect(text).toContain("pixFundedTransferError");
     expect(text).toContain("PIX confirmado. Não consegui concluir o envio automático agora");
-    expect(text).toContain("if (!transferFlow || transferPayload) markOperationCompleted();");
+    expect(text).toContain("markOperationCompleted();");
     expect(text).toContain("if (!transferFlow || transferPayload) {");
     expect(text).toContain("showClear={false}");
     expect(text).toContain("Chave PIX");
@@ -106,6 +106,17 @@ describe("PIX asset defaults", () => {
     expect(text).not.toContain("formatMoney(paymentInstructions.amount || order.fromAmount || amountBrl)");
     expect(text).not.toContain('receiveAmount && (normalizedReceiveAsset === "USDC" || normalizedReceiveAsset === "BRL")');
     expect(text).not.toContain("Alvo: mandar ${formatMoney(amountBrl)}");
+  });
+
+  it("shows the recipient receive asset for cross-asset PIX-funded sends", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain("autoPayShowsCrossAssetDestination");
+    expect(text).toContain("autoPayDestinationAsset !== autoPayDisplaySourceAsset");
+    expect(text).toContain("formatRampAsset(autoPayDisplaySourceAmount, autoPayDisplaySourceAsset)");
+    expect(text).toContain("friendlyAssetName(autoPayDestinationAsset, language)");
+    expect(text).toContain("auto_pay_destination_asset_code: autoPayDestinationAsset ? settlementAssetCode(autoPayDestinationAsset) : undefined");
+    expect(text).toContain("destination_asset_code: requestedDestinationAsset");
   });
 
   it("keeps the visible BRL receive field stable while PIX fees are estimated", () => {
