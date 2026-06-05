@@ -472,7 +472,7 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).not.toHaveBeenCalled();
   });
 
-  it('does not send the failure fallback when the generated agent reply send times out', async () => {
+  it('sends a useful fallback when the generated agent reply send times out', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
       const normalizedUrl = String(url);
@@ -494,7 +494,8 @@ describe('EvolutionService', () => {
     global.fetch = fetchMock as any;
     const sendTextSpy = jest
       .spyOn(EvolutionService, 'sendText')
-      .mockRejectedValueOnce(new Error('This operation was aborted'));
+      .mockRejectedValueOnce(new Error('This operation was aborted'))
+      .mockResolvedValueOnce({ success: true });
 
     const result = await EvolutionService.handleWebhook({
       event: 'MESSAGES_UPSERT',
@@ -520,8 +521,14 @@ describe('EvolutionService', () => {
 
     await flushBackgroundWork();
 
-    expect(sendTextSpy).toHaveBeenCalledTimes(1);
+    expect(sendTextSpy).toHaveBeenCalledTimes(2);
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.', { reliable: true });
+    expect(sendTextSpy).toHaveBeenLastCalledWith(
+      'main',
+      '5519981808102',
+      expect.stringContaining('Posso ajudar com sua conta TalkToStellar:'),
+      { reliable: true }
+    );
   });
 
   it('sends the detailed capability fallback when the agent request fails', async () => {
@@ -636,7 +643,7 @@ describe('EvolutionService', () => {
     expect(sentText).not.toContain('Posso converter entre');
   });
 
-  it('deduplicates repeated Evolution delivery for the same text even when message ids differ', async () => {
+  it('answers repeated WhatsApp texts when Evolution message ids differ', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
       const normalizedUrl = String(url);
@@ -686,58 +693,138 @@ describe('EvolutionService', () => {
     });
 
     expect(first).toEqual(expect.objectContaining({ replied: true }));
-    expect(second).toEqual(expect.objectContaining({
-      replied: false,
-      skipped: 'duplicate_content',
-    }));
+    expect(second).toEqual(expect.objectContaining({ replied: true }));
 
     await flushBackgroundWork();
+
+    const agentCalls = fetchMock.mock.calls.filter(([url]) => String(url) === 'http://backend.local/api/agent/query');
+    expect(agentCalls).toHaveLength(2);
+    expect(sendTextSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('deduplicates only an exact Evolution message id replay after a reply was delivered', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Resposta para replay exato.',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const payload = {
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-exact-replay-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'ola replay',
+        },
+      },
+    };
+
+    const first = await EvolutionService.handleWebhook(payload);
+    const second = await EvolutionService.handleWebhook(payload);
+
+    expect(first).toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+      recipient: '5519981808102',
+      instance: 'main',
+    }));
+    expect(second).toEqual(expect.objectContaining({
+      received: true,
+      replied: false,
+      skipped: 'duplicate',
+      recipient: '5519981808102',
+      instance: 'main',
+    }));
 
     const agentCalls = fetchMock.mock.calls.filter(([url]) => String(url) === 'http://backend.local/api/agent/query');
     expect(agentCalls).toHaveLength(1);
     expect(sendTextSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('skips the agent call when persistent dedupe already reserved the incoming content', async () => {
-    mockSupabaseInsert.mockImplementation(async (row: any) => {
-      const key = String(row?.idempotency_key || '');
-      if (key.startsWith('evolution_incoming_content_')) {
-        return {
-          error: {
-            code: '23505',
-            message: 'duplicate key value violates unique constraint',
-          },
-        };
+  it('does not drop rapid WhatsApp messages from the same user, including repeated text', async () => {
+    const replies = ['reply 1', 'reply 2', 'reply 3', 'reply 4'];
+    let agentQueryCount = 0;
+    const fetchMock = jest.fn(async (...args: any[]): Promise<Response> => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
       }
-      return { error: null };
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        const callIndex = agentQueryCount;
+        agentQueryCount += 1;
+        return new Response(JSON.stringify({
+          success: true,
+          message: replies[callIndex] || 'reply fallback',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
     });
-    const fetchMock = jest.fn();
     global.fetch = fetchMock as any;
     const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
 
-    const result = await EvolutionService.handleWebhook({
-      event: 'MESSAGES_UPSERT',
-      instance: 'main',
-      data: {
-        key: {
-          remoteJid: '5519981808102@s.whatsapp.net',
-          id: 'evolution-persistent-duplicate-test-1',
-          fromMe: false,
-        },
-        message: {
-          conversation: 'ola persistente duplicado',
-        },
-      },
-    });
+    const messages = [
+      'i want to make a pix transfer to 100 dollars into my account',
+      'hello!! i want to make a pix transfer to 100 dollars into my account',
+      'hello!! i want to make a pix transfer to 100 dollars into my account',
+      'helooo',
+    ];
 
-    expect(result).toEqual(expect.objectContaining({
-      received: true,
-      replied: false,
-      skipped: 'duplicate_persistent_content',
-      recipient: '5519981808102',
-      instance: 'main',
-    }));
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(sendTextSpy).not.toHaveBeenCalled();
+    const results = [];
+    for (const [index, text] of messages.entries()) {
+      results.push(await EvolutionService.handleWebhook({
+        event: 'MESSAGES_UPSERT',
+        instance: 'main',
+        data: {
+          key: {
+            remoteJid: '5519981808102@s.whatsapp.net',
+            id: `evolution-rapid-message-${index + 1}`,
+            fromMe: false,
+          },
+          message: {
+            conversation: text,
+          },
+        },
+      }));
+    }
+
+    expect(results).toHaveLength(4);
+    for (const result of results) {
+      expect(result).toEqual(expect.objectContaining({
+        received: true,
+        replied: true,
+        recipient: '5519981808102',
+        instance: 'main',
+      }));
+    }
+
+    const agentCalls = fetchMock.mock.calls.filter((call: any[]) => String(call[0]) === 'http://backend.local/api/agent/query');
+    expect(agentCalls).toHaveLength(4);
+    expect(sendTextSpy).toHaveBeenCalledTimes(4);
+    expect(sendTextSpy.mock.calls.map((call) => call[2])).toEqual(replies);
   });
 });
