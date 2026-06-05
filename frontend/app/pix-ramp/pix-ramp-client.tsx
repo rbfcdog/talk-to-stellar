@@ -1062,6 +1062,7 @@ export default function PixRampClient({
   const [autoRefreshingQuote, setAutoRefreshingQuote] = useState(false);
   const [error, setError] = useState("");
   const [offRampShortageOpen, setOffRampShortageOpen] = useState(false);
+  const [returnPopupOpen, setReturnPopupOpen] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
@@ -3178,6 +3179,10 @@ export default function PixRampClient({
     : order;
   const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload);
 
+  useEffect(() => {
+    setReturnPopupOpen(Boolean(step === "success" && successTransaction && returnToPath));
+  }, [returnToPath, step, successTransaction]);
+
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg px-3 py-5 text-tts-deep sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -4050,17 +4055,6 @@ export default function PixRampClient({
         {step === "success" && successTransaction && (
           <section className={`${mobileStage === "receipt" ? "block" : "hidden"} mt-5 overflow-hidden rounded-2xl border border-tts-confirm bg-tts-surface text-tts-deep shadow-sm shadow-emerald-950/25 md:block`}>
             <div className="relative p-6 sm:p-8">
-              {returnToPath && (
-                <div className="relative mb-5 flex items-center justify-start receipt-top-return-cta">
-                  <a
-                    href={returnToPath}
-                    className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-deep px-5 py-4 text-sm font-black text-tts-surface transition hover:bg-tts-deep/90 sm:w-auto"
-                  >
-                    {returnLabel}
-                  </a>
-                </div>
-              )}
-
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento concluído", "Payment completed")}</p>
@@ -4153,8 +4147,65 @@ export default function PixRampClient({
             </div>
           </section>
         )}
+
+        {returnPopupOpen && returnToPath && (
+          <ReturnAfterSuccessPopup
+            href={returnToPath}
+            label={returnLabel}
+            language={language}
+            onClose={() => setReturnPopupOpen(false)}
+          />
+        )}
       </div>
     </main>
+  );
+}
+
+function ReturnAfterSuccessPopup({
+  href,
+  label,
+  language,
+  onClose,
+}: {
+  href: string;
+  label: string;
+  language: "pt-BR" | "en";
+  onClose: () => void;
+}) {
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 px-3 pb-3 pt-10 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="pix-return-popup-title">
+      <div className="w-full max-w-sm rounded-3xl border border-tts-border bg-tts-surface p-4 text-tts-deep shadow-2xl shadow-black/40 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-normal text-tts-confirm">
+              {L("Concluído", "Completed")}
+            </p>
+            <h2 id="pix-return-popup-title" className="mt-1 text-xl font-black tracking-normal">
+              {L("PIX finalizado", "PIX complete")}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-tts-border bg-tts-bg text-sm font-black text-tts-muted transition hover:text-tts-deep"
+            aria-label={L("Fechar aviso", "Close notice")}
+            onClick={onClose}
+          >
+            x
+          </button>
+        </div>
+        <p className="mt-3 text-sm font-semibold leading-5 text-tts-muted">
+          {L("Sua operação foi concluída. Volte para continuar no fluxo anterior.", "Your operation is complete. Return to continue the previous flow.")}
+        </p>
+        <a
+          href={href}
+          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-5 py-4 text-sm font-black text-tts-deep shadow-sm shadow-tts-confirm/20 transition hover:bg-tts-confirm/90"
+        >
+          {label}
+        </a>
+      </div>
+    </div>
   );
 }
 
