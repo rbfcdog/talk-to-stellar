@@ -1178,6 +1178,13 @@ export default function PixRampClient({
   const externalProvider = String(queryParams.get("provider") || queryParams.get("external_provider") || scopedExternalSource || "").trim().toLowerCase();
   const externalProviderUserId = String(queryParams.get("provider_user_id") || "").trim();
   const externalSource = String(scopedExternalSource || queryParams.get("source") || externalProvider || "chat").trim().toLowerCase();
+  const externalSessionScope = scopedExternalSource || (externalSource === "whatsapp" || externalSource === "telegram" ? externalSource : "");
+  const externalLinkContext = {
+    source: externalSessionScope || (externalSource && externalSource !== "chat" && externalSource !== "web" ? externalSource : ""),
+    session_scope: externalSessionScope,
+    provider: externalProvider || externalSessionScope,
+    provider_user_id: externalProviderUserId,
+  };
   const hasSession = Boolean(sessionReady && sessionId);
   const allowEmailAccountLookup = Boolean(debugEnabled && !launchedFromChat);
   const etherfuseRailUnavailable = Boolean(config && !config.available);
@@ -1249,10 +1256,7 @@ export default function PixRampClient({
     destination_pix_key: normalizedOffRampPixKey,
     from: "pix-off",
     return_source: "pix-off",
-    source: externalSource && externalSource !== "chat" ? externalSource : "",
-    session_scope: queryParams.get("session_scope") || queryParams.get("sessionScope") || "",
-    provider: externalProvider,
-    provider_user_id: externalProviderUserId,
+    ...externalLinkContext,
     stay_open: "1",
     lang: language,
   });
@@ -1267,6 +1271,7 @@ export default function PixRampClient({
     return_to: offRampReturnHref,
     return_source: "pix-off",
     from: "pix-off",
+    ...externalLinkContext,
     lang: language,
   });
   const order = statusPayload?.transaction || orderPayload?.transaction;

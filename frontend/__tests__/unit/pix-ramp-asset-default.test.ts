@@ -110,6 +110,10 @@ describe("PIX asset defaults", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
 
     expect(text).toContain("scopedExternalSource ? { session_scope: scopedExternalSource }");
+    expect(text).toContain('const externalSessionScope = scopedExternalSource || (externalSource === "whatsapp" || externalSource === "telegram" ? externalSource : "");');
+    expect(text).toContain("const externalLinkContext = {");
+    expect(text).toContain("const offRampConversionHref = buildAppPath(\"/convert\", {");
+    expect(text).toContain("...externalLinkContext");
     expect(text).toContain("const externalContext: Record<string, string>");
     expect(text).toContain("const search = new URLSearchParams({ ...auth, language, ...externalContext, ...(params || {}) });");
     expect(text).toContain("body: JSON.stringify({ ...auth, language, ...externalContext })");
