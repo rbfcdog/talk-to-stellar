@@ -321,6 +321,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("return 58 + ratio * 7");
     expect(text).toContain("const remainingFeePercent = Math.max(0, Math.min(100, 100 - savingsPercent));");
     expect(text).not.toContain("(totalEstimatedFee / traditionalFee) * 100");
+    expect(text).toContain("const PIX_SUCCESS_CLOSE_DELAY_MS = 900");
+    expect(text).toContain("closeIntermediatePage(PIX_SUCCESS_CLOSE_DELAY_MS)");
+    expect(text).toContain('String(payload?.auto_pay_status || "").toLowerCase() === "processing"');
+    expect(text).toContain("if (backendConfirmedPix && backendAutoPayStarted)");
     expect(text).toContain("completedTransaction = await waitForPostConversion(completedTransaction, transferFlow ? 3 : 10)");
     expect(text).toContain("markOperationCompleted();");
     expect(text).toContain("const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee");

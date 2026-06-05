@@ -92,6 +92,70 @@ describe('AnchorService sandbox PIX confirmation', () => {
     });
   });
 
+  it('starts PIX-funded auto-pay on the backend after PIX confirmation', async () => {
+    mockSandboxRuntime();
+    mockSessionWallet();
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
+    const submitSpy = jest.spyOn(AnchorService, 'submitPixFundedTransferForSession').mockResolvedValue({
+      success: true,
+      transaction_hash: 'auto-pay-transfer-hash',
+    } as any);
+    jest.spyOn(AnchorService as any, 'deliverSandboxOnRamp').mockResolvedValue({
+      transaction: {
+        id: 'order-auto-pay',
+        status: 'completed',
+        toAmount: '100',
+        toCurrency: 'USDC',
+      },
+      operationId: 'operation-auto-pay',
+      finalAmount: '100',
+      finalAssetCode: 'USDC',
+      operationContext: {
+        auto_pay_after_ramp: true,
+        auto_pay_recipient: 'Ana Silva',
+        auto_pay_amount: '100',
+        auto_pay_asset_code: 'USDC',
+        auto_pay_destination_asset_code: 'CETES',
+        language: 'en',
+        external_provider: 'whatsapp',
+        external_provider_user_id: '5575496918127',
+      },
+      deliveryHash: 'pix-delivery-hash',
+    });
+
+    const result = await AnchorService.simulateFiatReceivedForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      order_id: 'order-auto-pay',
+      operation_id: 'operation-auto-pay',
+      pin: '1234',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      order_id: 'order-auto-pay',
+      auto_pay_status: 'processing',
+      delivery_hash: 'pix-delivery-hash',
+      sandbox_mock: true,
+    });
+    expect(submitSpy).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      pin: '1234',
+      amount: '100',
+      asset_code: 'USDC',
+      source_asset_code: 'USDC',
+      destination_asset_code: 'CETES',
+      recipient: 'Ana Silva',
+      recipient_name: 'Ana Silva',
+      order_id: 'order-auto-pay',
+      operation_id: 'operation-auto-pay',
+      language: 'en',
+      provider: 'whatsapp',
+      provider_user_id: '5575496918127',
+    }));
+  });
+
   it('grosses up BRL PIX funding when the requested BRL delivery amount is exact', () => {
     process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
     process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
