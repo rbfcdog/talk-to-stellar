@@ -222,6 +222,24 @@ describe('Agent tool execution', () => {
     expect(parsed.message).not.toContain('Organização:');
   });
 
+  it('keeps broad explanations to one plain-text topic without Markdown sections', async () => {
+    const output = await executeTool('get_explanations', {
+      topic: 'all',
+      language: 'en',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.requested_topic).toBe('all');
+    expect(parsed.topic).toBe('pix');
+    expect(parsed.message).toContain('PIX lets you add money');
+    expect(parsed.message.length).toBeLessThan(220);
+    expect(parsed.message).not.toContain('##');
+    expect(parsed.message).not.toContain('---');
+    expect(parsed.message).not.toContain('## ASSETS');
+    expect(parsed.message).not.toContain('Assets are the currencies');
+  });
+
   it('executes get_brl_usdc_quote from the configured BRL asset reference', async () => {
     const output = await executeTool('get_brl_usdc_quote', {});
     const parsed = JSON.parse(output);

@@ -1010,13 +1010,13 @@ export const toolDefinitions = [
   },
   {
     name: "get_explanations",
-    description: "Returns detailed explanations about TalkToStellar features, assets, earnings, PIX, and how things work. Call this when the user asks 'explain', 'how does this work', 'what is', or wants to understand a concept. For 'quais sao os assets', 'explique os ativos/moedas', or asset questions, call this with topic='assets' instead of returning the generic help menu.",
+    description: "Returns one concise plain-text explanation about a single TalkToStellar topic. Call this when the user asks 'explain', 'how does this work', 'what is', or wants to understand a concept. Pick exactly one topic. For 'quais sao os assets', 'explique os ativos/moedas', or asset questions, call this with topic='assets' instead of returning the generic help menu. Avoid topic='all' unless no single topic is inferable; topic='all' still returns only one compact topic.",
     parameters: {
       type: "object",
       properties: {
         topic: {
           type: "string",
-          description: "Specific topic to explain: 'all', 'pix', 'assets', 'earnings', 'account', 'conversion', 'payments', 'security'",
+          description: "Specific single topic to explain: 'pix', 'assets', 'earnings', 'account', 'conversion', 'payments', 'security'. Use 'all' only as last resort; it returns one compact overview, never multiple sections.",
         },
         language: {
           type: "string",
@@ -2266,7 +2266,8 @@ export async function executeTool(
 
 async function executeGetExplanations(input: any): Promise<string> {
   const language = normalizeToolLanguage(input.language || input.lang || input.locale);
-  const topic = String(input.topic || 'all').trim().toLowerCase();
+  const requestedTopic = String(input.topic || 'all').trim().toLowerCase();
+  const topic = requestedTopic === 'all' ? 'pix' : requestedTopic;
   const isEn = language === 'en';
 
   const explanations: Record<string, { pt: string; en: string }> = {
@@ -2374,17 +2375,24 @@ The recipient receives it instantly. You can also create payment links to charge
     },
   };
 
-  const allTopics = Object.entries(explanations)
-    .map(([key, value]) => `## ${key.toUpperCase()}\n${isEn ? value.en : value.pt}`)
-    .join('\n\n---\n\n');
+  const compactAllTopic = isEn
+    ? 'PIX lets you add money to your account, withdraw to your bank, or pay a saved contact. Tell me the amount and whether it should arrive in your account or go to someone.'
+    : 'PIX permite colocar dinheiro na sua conta, retirar para sua chave PIX ou pagar um contato salvo. Me diga o valor e se o dinheiro deve entrar na sua conta ou ir para alguém.';
 
-  const msg = topic === 'all'
-    ? allTopics
+  const msg = requestedTopic === 'all'
+    ? compactAllTopic
     : explanations[topic]
       ? (isEn ? explanations[topic].en : explanations[topic].pt)
-      : `Tópico "${topic}" não encontrado. Tópicos disponíveis: ${Object.keys(explanations).join(', ')} ou "all".`;
+    : isEn
+      ? 'I can explain PIX, assets, earnings, conversions, payments, security, or account access. Which one do you want?'
+      : 'Posso explicar PIX, ativos, rendimentos, conversões, pagamentos, segurança ou acesso à conta. Qual deles você quer?';
 
-  return JSON.stringify({ success: true, topic: topic === 'all' ? 'all' : topic, message: msg });
+  return JSON.stringify({
+    success: true,
+    topic: explanations[topic] ? topic : '',
+    requested_topic: requestedTopic,
+    message: msg,
+  });
 }
 
 function executeGetIntentHelp(): string {
