@@ -46,7 +46,7 @@ const stellarService = getStellarService();
 const walletRepo = new WalletRepository(supabase);
 const vaultService = new VaultService(supabase);
 const SAVINGS_TTS_FEE_PCT = 0.003;
-const SAVINGS_TRADITIONAL_BANK_FEE_PCT = 0.035;
+const SAVINGS_TRADITIONAL_BANK_FEE_PCT = 0.0125;
 const SAVINGS_WISE_REFERENCE_FEE_PCT = 0.018;
 
 function getAssetCode(value: any): string {
@@ -3245,7 +3245,7 @@ async function buildMonthlySavingsSummaryForBalance(input: any, ownPublicKey?: s
       total_savings_brl: roundMoney(totalSavings),
       total_sent_brl: roundMoney(totalSent),
       transfer_count: rows.length,
-      comparison: 'traditional_bank_3_5pct',
+      comparison: 'traditional_bank_1_25pct',
       message: `Economia acumulada este mês: ${normalizeCurrencySpacing(formatBrl(totalSavings))} vs banco tradicional.`,
     };
   } catch (error) {
@@ -5586,7 +5586,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
         savings: {
           estimatedSavings: savings,
           savingsPercentage: bankFee > 0 ? (savings / bankFee) * 100 : 0,
-          comparisonMethod: 'traditional_bank_3_5pct',
+          comparisonMethod: 'traditional_bank_1_25pct',
         },
         completedAt,
         status: 'Confirmado',

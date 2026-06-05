@@ -457,7 +457,7 @@ export class PaymentReceiptService {
       : grossBrl * 0.003;
     const traditionalFeeBrl = Number(fee.traditionalFeeBrl || 0) > 0
       ? Number(fee.traditionalFeeBrl)
-      : grossBrl * 0.035;
+      : grossBrl * 0.0125;
     const payloadSavings = this.toPositiveNumber(input.savings?.estimatedSavings);
     const savings = payloadSavings > 0
       ? payloadSavings
