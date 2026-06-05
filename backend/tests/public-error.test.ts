@@ -43,6 +43,13 @@ describe('public-error utility', () => {
     expect(message).not.toContain('customer_id');
   });
 
+  it('uses generic PIX setup wording for sandbox settlement errors', () => {
+    const message = publicErrorMessage('Sandbox PIX settlement is not configured in this test environment.');
+
+    expect(message).toBe('O PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.');
+    expect(message).not.toContain('retirada');
+  });
+
   it('hides database unique constraint names from user-facing messages', () => {
     const message = publicErrorMessage('duplicate key value violates unique constraint "idx_external_accounts_data_phone_unique"');
 

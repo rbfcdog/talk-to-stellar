@@ -129,7 +129,7 @@ export function mapPublicError(error: unknown, language?: string) {
   if (/tesouro_distributor|sandbox pix settlement|sandbox.*settlement/.test(normalized)) {
     return {
       code: "pix_sandbox_settlement_unavailable",
-      message: copy(language, "A retirada PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.", "The testnet PIX withdrawal is still finishing setup. Try again in a few seconds."),
+      message: copy(language, "O PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.", "The testnet PIX flow is still finishing setup. Try again in a few seconds."),
     };
   }
 

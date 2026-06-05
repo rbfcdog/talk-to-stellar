@@ -2955,10 +2955,32 @@ export class AnchorService {
     const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
     const pseudoHash = `sandbox-ledger-${String(record.transaction.id || crypto.randomUUID()).replace(/^sandbox-pix-/, '').slice(0, 18)}`;
     if (sameIssuedAsset(finalAsset, tesouroAsset)) {
-      return this.failSandboxOnRamp(
-        record,
-        `${reason} Configure TESOURO_DISTRIBUTOR_SECRET para creditar reais na wallet; recusando marcar o PIX como concluído sem movimento real de saldo.`,
-      );
+      record.finalAmount = destinationAmountTesouro;
+      record.deliverySourceAmount = record.sourceAmountBrl;
+      (record.transaction as any).toAmount = destinationAmountTesouro;
+      (record.transaction as any).toCurrency = this.getTesouroIdentifier();
+      (record.transaction as any).finalAmount = destinationAmountTesouro;
+      (record.transaction as any).sandbox_ledger_settlement = true;
+      (record.transaction as any).auto_conversion = {
+        required: false,
+        status: 'completed',
+        source_asset_code: 'TESOURO',
+        destination_asset_code: 'TESOURO',
+        destination_asset_issuer: tesouroAsset.issuer,
+        destination_amount: destinationAmountTesouro,
+        mode: 'sandbox_anchor_only',
+        reason,
+      };
+
+      return this.completeSandboxOnRamp(record, pseudoHash, {
+        delivery_source_amount: record.sourceAmountBrl,
+        destination_amount_anchor: destinationAmountTesouro,
+        final_amount: destinationAmountTesouro,
+        final_conversion_status: 'not_required',
+        final_settlement_mode: 'sandbox_anchor_only',
+        sandbox_ledger_settlement: true,
+        settlement_note: `${reason} TESOURO on-ramp was recorded in sandbox mode because no distributor secret is configured for this environment.`,
+      });
     }
 
     record.deliverySourceAmount = record.sourceAmountBrl;
