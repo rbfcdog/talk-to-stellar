@@ -273,7 +273,9 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Taxa de conversão estimada");
     expect(text).toContain("formatFeeParts");
     expect(text).toContain("Base para conversão");
-    expect(text).toContain("TRADITIONAL_METHOD_FEE_PCT");
+    expect(text).toContain("TRADITIONAL_METHOD_ONRAMP_FEE_PCT");
+    expect(text).toContain("TRADITIONAL_METHOD_OFFRAMP_FEE_PCT");
+    expect(text).toContain("function traditionalMethodFeePct(mode: RampMode)");
     expect(text).toContain("estimated_traditional_fee_brl");
     expect(text).toContain("estimated_savings_brl");
     expect(text).toContain("actualOffRampFeeBrl");
