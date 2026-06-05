@@ -384,6 +384,11 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("CurrentInvestmentsPage");
     expect(reviewText).toContain("PortfolioOverview");
     expect(reviewText).toContain("RETURN_PERIODS");
+    expect(reviewText).toContain("ReturnPeriodPanel");
+    expect(reviewText).toContain("ReturnPeriodGrid");
+    expect(reviewText).toContain("const selectedRate = optionRatePercent(selectedOption)");
+    expect(reviewText).toContain("Rentabilidade estimada");
+    expect(reviewText).toContain("Estimated return");
     expect(reviewText).toContain("Rentabilidade por período");
     expect(reviewText).toContain("Returns by period");
     expect(reviewText).toContain("30 dias");
