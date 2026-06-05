@@ -4448,9 +4448,17 @@ function RampFeeBridge({
   const resolvedDestinationCaption = mode === "onramp" && estimate.finalConversionPending
     ? L(`BRL que será convertido para ${finalConversionAsset}.`, `BRL that will be converted to ${finalConversionAsset}.`)
     : destinationCaption || L("depois da taxa", "after the fee");
+  const onRampMobilePercentOnly = mode === "onramp" && showSavingsCard;
 
   return (
-    <div className="mt-5 rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
+    <>
+      {onRampMobilePercentOnly && (
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-tts-confirm/25 bg-tts-confirm/10 px-3 py-2 text-tts-deep md:hidden">
+          <span className="text-2xl font-black leading-none text-tts-confirm">{savingsPercentDisplay}%</span>
+          <span className="text-right text-[11px] font-black leading-4 text-tts-muted">{savingsCaption}</span>
+        </div>
+      )}
+      <div className={`${onRampMobilePercentOnly ? "tts-mobile-soft-hide " : ""}mt-5 rounded-2xl border border-tts-border bg-tts-bg/60 p-4`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Antes de confirmar", "Before confirming")}</p>
@@ -4518,7 +4526,8 @@ function RampFeeBridge({
           "You see everything before the PIN. If you do not agree, just go back without confirming.",
         )}
       </p>
-    </div>
+      </div>
+    </>
   );
 }
 

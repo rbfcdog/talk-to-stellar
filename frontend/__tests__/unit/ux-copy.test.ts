@@ -297,6 +297,8 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("savingsPercentDisplay");
     expect(text).toContain("remainingFeePercentDisplay");
     expect(text).toContain('const savingsCaption = L("menos taxa", "less fee")');
+    expect(text).toContain('const onRampMobilePercentOnly = mode === "onramp" && showSavingsCard');
+    expect(text).toContain('${onRampMobilePercentOnly ? "tts-mobile-soft-hide " : ""}mt-5');
     expect(text).toContain("text-3xl font-black leading-none text-tts-confirm");
     expect(text).toContain("do custo tradicional");
     expect(text).not.toContain("Taxa desta rota:");
