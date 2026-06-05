@@ -85,11 +85,6 @@ function optionRatePercent(option?: YieldOption | null) {
   return Number.isFinite(p) && p > 0 ? p : 0;
 }
 
-function sparklineValues(baseAmount: number, ratePercent: number) {
-  const base = baseAmount > 0 ? baseAmount : 1;
-  const rate = Math.max(0.01, ratePercent / 100);
-  return Array.from({ length: 8 }, (_, i) => base * (1 + rate * (i / 7)));
-}
 const RETURN_PERIODS = [
   { key: "30d", years: 30 / 365, labelPt: "30 dias", labelEn: "30 days" },
   { key: "6m", years: 0.5, labelPt: "6 meses", labelEn: "6 months" },
@@ -106,6 +101,40 @@ function formatReturnPercent(value: number, language: AppLanguage) {
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
   return `+${formatted}%`;
+}
+function ReturnPeriodGrid({ language, rate }: { language: AppLanguage; rate: number }) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {RETURN_PERIODS.map((period) => {
+        const value = periodReturnPercent(rate, period.years);
+        return (
+          <div key={period.key} className="rounded-xl bg-tts-bg px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">
+              {isPortuguese(language) ? period.labelPt : period.labelEn}
+            </p>
+            <p className="mt-1 text-sm font-black text-tts-deep">{formatReturnPercent(value, language)}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function ReturnPeriodPanel({ language, rate, assetLabel }: { language: AppLanguage; rate: number; assetLabel: string }) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  return (
+    <div className="rounded-2xl border border-tts-border bg-tts-bg p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">
+            {L("Rentabilidade estimada", "Estimated return")}
+          </p>
+          <p className="mt-0.5 text-xs font-semibold text-tts-muted">{assetLabel}</p>
+        </div>
+        <p className="text-sm font-black text-tts-confirm">{formatReturnPercent(periodReturnPercent(rate, 1), language)}</p>
+      </div>
+      <ReturnPeriodGrid language={language} rate={rate} />
+    </div>
+  );
 }
 function normalizeUiAssetCode(value: unknown) {
   const code = String(value || "").trim().toUpperCase().split(":")[0];
@@ -568,8 +597,6 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
           <PortfolioOverview language={language} rows={rows} isTestnet={isTestnet} />
 
           {rows.map((row) => {
-            const spv = sparklineValues(row.amount, row.rate);
-            const maxSpv = Math.max(...spv);
             const balanceText = row.loading ? L("Consultando", "Checking") : row.error ? L("Consulta indisponível", "Unavailable") : formatPositionAmount(row.amount, row.profile, language);
             const sourceText = row.source === "operation_history_fallback"
               ? L("Atualizado pelo histórico da conta", "Updated from account history")
@@ -587,16 +614,13 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
                     {!row.loading && !row.error ? <p className="text-xs text-tts-muted">{sourceText}</p> : null}
                   </div>
                 </div>
-                {row.amount > 0 && row.rate > 0 && (
-                  <div className="mb-3">
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-tts-muted">{L("Rentabilidade", "Return")}</p>
-                    <div className="flex h-14 items-end gap-1">
-                      {spv.map((v, i) => (
-                        <div key={i} className="flex-1 rounded-t bg-tts-confirm/70" style={{ height: `${Math.max(8, (v / maxSpv) * 100)}%` }} />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <div className="mb-3">
+                  <ReturnPeriodPanel
+                    language={language}
+                    rate={row.rate}
+                    assetLabel={profileName(row.profile, language)}
+                  />
+                </div>
                 <a href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", ...sessionLinkContext, lang: language })}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-tts-border text-sm font-bold hover:bg-tts-bg transition mt-2">
                   <Plus className="h-4 w-4" /> {L("Aplicar", "Apply")}
@@ -661,18 +685,8 @@ function PortfolioOverview({ language, rows, isTestnet }: {
                   {formatReturnPercent(periodReturnPercent(row.rate, 1), language)}
                 </p>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {RETURN_PERIODS.map((period) => {
-                  const value = periodReturnPercent(row.rate, period.years);
-                  return (
-                    <div key={period.key} className="rounded-xl bg-tts-bg px-3 py-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">
-                        {isPortuguese(language) ? period.labelPt : period.labelEn}
-                      </p>
-                      <p className="mt-1 text-sm font-black text-tts-deep">{formatReturnPercent(value, language)}</p>
-                    </div>
-                  );
-                })}
+              <div className="mt-3">
+                <ReturnPeriodGrid language={language} rate={row.rate} />
               </div>
               {row.amount > 0 && (
                 <div className="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-tts-muted">
@@ -706,6 +720,8 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const selectedAvailableDisplay = formatPositionAmount(balanceForSelected?.balance || "0", selectedProfile, language);
+  const selectedRate = optionRatePercent(selectedOption);
+  const selectedAssetLabel = profileName(selectedProfile, language);
   const [investmentHelpOpen, setInvestmentHelpOpen] = useState(false);
   const hasPrepared = Boolean(yieldResult);
   const submitted = Boolean(yieldResult?.submitted || yieldResult?.hash);
@@ -818,6 +834,8 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             </div>
           </div>
 
+          <ReturnPeriodPanel language={language} rate={selectedRate} assetLabel={selectedAssetLabel} />
+
           <div>
             <label className="text-xs font-bold text-tts-muted uppercase tracking-wide mb-2 block">{L("Valor", "Amount")}</label>
             <div className="flex items-center border border-tts-border bg-tts-bg focus-within:border-tts-deep">
@@ -890,6 +908,8 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             <StatCard label={L("Operação", "Operation")} value={action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")} />
             <StatCard label={L("Valor", "Amount")} value={`${formatAmount(amount, language)} ${profileShort}`} />
           </div>
+
+          <ReturnPeriodPanel language={language} rate={selectedRate} assetLabel={selectedAssetLabel} />
 
           {hasPrepared && !submitted && (
             <div className="border border-tts-border bg-tts-bg p-4">
