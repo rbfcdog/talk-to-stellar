@@ -1788,18 +1788,32 @@ export class AgentGraph {
     }
 
     if (settlementReceiveAssetCode !== settlementAssetCode) {
-      const transparencyLine = this.formatBestRouteTransparency(bestRouteResult);
+      const language = this.getLanguage(state);
+      const transparencyLine = this.formatBestRouteTransparency(bestRouteResult, language);
       const message = [
-        `Estimativa antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
+        this.text(
+          language,
+          `Estimativa antes de confirmar: você envia ${this.formatMoneyByAsset(amount, assetCode)} e ${destinationName} recebe aproximadamente ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`,
+          `Estimate before confirmation: you send ${this.formatMoneyByAsset(amount, assetCode)} and ${destinationName} receives approximately ${this.formatMoneyByAsset(confirmationAmount, confirmationAssetCode)}.`
+        ),
         transparencyLine,
-        `Para confirmar, abra o link:\n\n${prepare.url}`,
+        this.text(
+          language,
+          `Para confirmar, abra o link:\n\n${prepare.url}`,
+          `To confirm, open the link:\n\n${prepare.url}`
+        ),
       ].filter(Boolean).join('\n');
       return { success: true, message };
     }
 
+    const language = this.getLanguage(state);
     return {
       success: true,
-      message: prepare.message || `Gerei o link de confirmação com a cotação atual para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}.\n\nAbra para revisar e confirmar com PIN:\n\n${prepare.url}`,
+      message: prepare.message || this.text(
+        language,
+        `Gerei o link de confirmação com a cotação atual para enviar ${this.formatMoneyByAsset(amount, assetCode)} para ${destinationName}.\n\nAbra para revisar e confirmar com PIN:\n\n${prepare.url}`,
+        `I generated the confirmation link with the current quote to send ${this.formatMoneyByAsset(amount, assetCode)} to ${destinationName}.\n\nOpen it to review and confirm with PIN:\n\n${prepare.url}`
+      ),
     };
   }
 
@@ -1968,7 +1982,7 @@ export class AgentGraph {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  private formatBestRouteTransparency(quoteResult: any): string {
+  private formatBestRouteTransparency(quoteResult: any, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     if (!quoteResult || typeof quoteResult !== 'object') return '';
 
     const totalFeeDisplay = String(quoteResult?.fee_breakdown?.total_fee_display || quoteResult?.quote?.fee_display || '').trim();
@@ -1977,15 +1991,31 @@ export class AgentGraph {
     const ttlSeconds = this.toAmountNumber(quoteResult?.quote_ttl_seconds);
 
     const lines: string[] = [];
-    if (totalFeeDisplay) lines.push(`Taxa estimada: ${totalFeeDisplay}.`);
+    if (totalFeeDisplay) {
+      lines.push(this.text(language, `Taxa estimada: ${totalFeeDisplay}.`, `Estimated fee: ${totalFeeDisplay}.`));
+    }
     if (savingsBrl > 0) {
       const pctLabel = savingsPct > 0 ? `${savingsPct.toFixed(1).replace('.', ',')}%` : '';
-      lines.push(`Economia estimada: aproximadamente R$ ${savingsBrl.toFixed(2).replace('.', ',')} em taxas.`);
+      lines.push(this.text(
+        language,
+        `Economia estimada: aproximadamente R$ ${savingsBrl.toFixed(2).replace('.', ',')} em taxas.`,
+        `Estimated savings: about R$ ${savingsBrl.toFixed(2).replace('.', ',')} in fees.`
+      ));
       if (pctLabel) {
-        lines.push(`Comparativo: cerca de ${pctLabel} mais barato que métodos tradicionais.`);
+        lines.push(this.text(
+          language,
+          `Comparativo: cerca de ${pctLabel} mais barato que métodos tradicionais.`,
+          `Comparison: about ${pctLabel} cheaper than traditional methods.`
+        ));
       }
     }
-    if (ttlSeconds > 0) lines.push(`Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`);
+    if (ttlSeconds > 0) {
+      lines.push(this.text(
+        language,
+        `Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`,
+        `Quote valid for ${Math.trunc(ttlSeconds)} seconds.`
+      ));
+    }
 
     return lines.join(' ');
   }
@@ -4926,15 +4956,28 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
               state.success = true;
               const sourceLabel = this.formatMoneyByAsset(finalSourceAmount, finalSourceAssetCode);
               const destLabel = this.formatMoneyByAsset(conversionDestAmount, finalDestAssetCode);
-              const transparencyLine = this.formatBestRouteTransparency(toolResult);
+              const language = this.getLanguage(state);
+              const transparencyLine = this.formatBestRouteTransparency(toolResult, language);
               const fullBalanceLine = fullBalanceConversion
-                ? `Usei seu saldo disponível em ${this.toUserFacingAssetCode(finalSourceAssetCode)}: ${sourceLabel}.`
+                ? this.text(
+                    language,
+                    `Usei seu saldo disponível em ${this.toUserFacingAssetCode(finalSourceAssetCode)}: ${sourceLabel}.`,
+                    `I used your available ${this.toUserFacingAssetCode(finalSourceAssetCode)} balance: ${sourceLabel}.`
+                  )
                 : '';
               state.response_message = [
                 fullBalanceLine,
-                `Conversão cotada: ${sourceLabel} para aproximadamente ${destLabel}.`,
+                this.text(
+                  language,
+                  `Conversão cotada: ${sourceLabel} para aproximadamente ${destLabel}.`,
+                  `Quoted conversion: ${sourceLabel} to approximately ${destLabel}.`
+                ),
                 transparencyLine || toolResult.message,
-                `Para confirmar a conversão, abra o link:\n\n${conversionPrepare.url}`,
+                this.text(
+                  language,
+                  `Para confirmar a conversão, abra o link:\n\n${conversionPrepare.url}`,
+                  `To confirm the conversion, open the link:\n\n${conversionPrepare.url}`
+                ),
               ].filter(Boolean).join('\n');
             }
           }
