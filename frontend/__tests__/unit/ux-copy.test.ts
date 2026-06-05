@@ -289,6 +289,9 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("showSavingsCard");
     expect(text).toContain("estimatedSavingsBrl");
     expect(text).toContain("const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee");
+    expect(text).toContain('L("Taxa de retirada aprox.", "Est. withdrawal fee")');
+    expect(text).toContain('L("Taxa estimada", "Estimated fee")');
+    expect(text).toContain('L("retirada aproximada", "estimated withdrawal")');
     expect(text).toContain('const showOffRampComparison = mode === "offramp" && traditionalFee > 0 && totalEstimatedFee > 0');
     expect(text).toContain('L("Comparativo", "Comparison")');
     expect(text).toContain('L("do tradicional", "of traditional cost")');

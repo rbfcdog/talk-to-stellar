@@ -4310,7 +4310,7 @@ function EtherfuseMeasuredFeeNotice({
     : L("Antes do PIN", "Before PIN");
   const description = mode === "onramp"
     ? L("Taxas aparecem antes da confirmação.", "Fees appear before confirmation.")
-    : L("Taxas aparecem antes da confirmação.", "Fees appear before confirmation.");
+    : L("Taxa de retirada aproximada; pode variar alguns centavos na liquidação.", "Estimated withdrawal fee; it may vary by a few cents at settlement.");
 
   const comparison = showOffRampComparison ? (
     <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-tts-confirm/35 bg-tts-confirm/10 p-3">
@@ -4341,7 +4341,7 @@ function EtherfuseMeasuredFeeNotice({
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
             <p className="text-[11px] font-black uppercase tracking-normal text-tts-gold">
-              {mode === "onramp" ? L("Taxa PIX", "PIX fee") : L("Taxa de retirada", "Withdrawal fee")}
+              {mode === "onramp" ? L("Taxa PIX", "PIX fee") : L("Taxa de retirada aprox.", "Est. withdrawal fee")}
             </p>
             <p className="mt-1 text-lg font-black">{formatMoney(estimatedProviderFee)}</p>
           </div>
@@ -4449,6 +4449,7 @@ function RampFeeBridge({
       ? L("Base para conversão", "Conversion base")
       : L("Entra na conta", "Arrives in account")
     : L("Chega no PIX", "Arrives in PIX");
+  const feeLabel = mode === "offramp" ? L("Taxa estimada", "Estimated fee") : L("Taxa", "Fee");
   const finalConversionAsset = friendlyAssetName(quote.finalCurrency || quote.userFacingToCurrency || quote.requestedFinalAssetCode || "", language);
   const resolvedDestinationCaption = mode === "onramp" && estimate.finalConversionPending
     ? L(`BRL que será convertido para ${finalConversionAsset}.`, `BRL that will be converted to ${finalConversionAsset}.`)
@@ -4496,14 +4497,14 @@ function RampFeeBridge({
           <p className="mt-1 text-xs font-bold text-tts-muted">{sourceCaption || L("valor inicial", "starting amount")}</p>
         </div>
         <div className="rounded-2xl bg-tts-surface p-3">
-          <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Taxa", "Fee")}</p>
+          <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{feeLabel}</p>
           <p className="mt-2 text-lg font-black text-tts-deep">{totalFeeDisplay}</p>
           <p className="mt-1 text-xs font-bold text-tts-muted">
             {mixedFeeCurrencies && mode === "offramp"
-              ? L("taxa do app; PIX já vem líquido", "app fee; PIX already arrives net")
+              ? L("retirada aproximada; PIX já vem líquido", "estimated withdrawal; PIX already arrives net")
               : mode === "onramp"
                 ? L("cobrada por fora", "charged on top")
-                : L("descontada nesta operação", "deducted in this operation")}
+                : L("retirada aproximada", "estimated withdrawal")}
           </p>
         </div>
         <div className="rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3">
@@ -4516,7 +4517,7 @@ function RampFeeBridge({
       <div className="tts-mobile-soft-hide mt-3 grid gap-2 text-xs font-bold text-tts-deep lg:grid-cols-2">
         <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep">
           <span className="block uppercase tracking-normal text-tts-gold">
-            {mode === "onramp" ? L("PIX", "PIX") : L("Retirada", "Withdrawal")}
+            {mode === "onramp" ? L("PIX", "PIX") : L("Retirada aprox.", "Est. withdrawal")}
           </span>
           <span className="mt-1 block text-sm font-black">{feeValue}</span>
         </div>

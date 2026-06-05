@@ -1475,8 +1475,8 @@ export class AgentGraph {
       const pixFeeNote = intent.direction === 'offramp'
         ? this.text(
             language,
-            'A página mostra o saldo que sai da conta, a taxa do app e quanto chega no seu PIX antes do PIN.',
-            'The page shows the balance leaving the account, the app fee, and how much arrives in your PIX before the PIN.'
+            'A página mostra o saldo que sai da conta, a taxa de retirada aproximada, a taxa do app e quanto chega no seu PIX antes do PIN.',
+            'The page shows the balance leaving the account, the estimated withdrawal fee, the app fee, and how much arrives in your PIX before the PIN.'
           )
         : intent.flow === 'fund_and_pay' && resolvedRecipientLabel
           ? this.text(
@@ -2894,6 +2894,7 @@ export class AgentGraph {
       '- If the user asks to toggle networks, direct them to /mainnet. PIX is separate from Mainnet and must not be presented as a Mainnet feature.',
       '- For PIX to the user own PIX, own bank/account, or money going "fora da minha conta", use off-ramp. For PIX used to fund a transfer to another person, use on-ramp plus transfer.',
       '- In user-facing PIX off-ramp copy, call the destination "seu PIX", not bank account, external account, or banco.',
+      '- In user-facing PIX off-ramp copy before confirmation, describe the external withdrawal fee as approximate/estimated because it can vary by a few cents at settlement. Never mention anchors or provider names.',
       '- PIX off-ramp always arrives as BRL in the user PIX. If the source is USDC, say the screen converts at exit and confirms BRL arriving.',
       '- Before normal payment links, confirm whether balance is sufficient. If balance is missing or the user says they do not have saldo, open PIX on-ramp with automatic payment after confirmation.',
       '- For PIX plus payment, say the route is optimized and fees are shown before confirmation, but never expose internal settlement assets.',
@@ -2917,6 +2918,7 @@ export class AgentGraph {
       '',
       '## FEES AND SAVINGS UX',
       '- Talk about fees as transparent and controlled, using exact tool data when available.',
+      '- For PIX off-ramp, the withdrawal/provider fee shown before settlement is approximate; say "taxa de retirada aproximada" or "taxa estimada" instead of treating it as a fixed exact debit.',
       '- When a quote or payment result has a fee, say it before confirmation in R$, US$, or CETES/opção México according to the asset involved.',
       '- Do not claim savings without data. Prefer concise wording like "taxa baixa" only when backed by tool data.',
       '- For transfers/conversions, show the quote before confirmation without adding generic reassurance text.',
