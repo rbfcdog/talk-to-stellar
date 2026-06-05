@@ -287,12 +287,14 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${executionIntentId}:${quoteForOrder?.id || \"no-quote\"}`)");
     expect(text).toContain('quoteExpired\n                    ? L("Gerar novo PIX", "Create new PIX")');
     expect(text).toContain('disabled={!canPrepareOnRampPix}');
-    expect(text).toContain('L("Economia nesta rota", "Savings on this route")');
+    expect(text).toContain('L("Economia", "Savings")');
     expect(text).toContain('L("Economia estimada", "Estimated savings")');
     expect(text).toContain("savingsPercentDisplay");
     expect(text).toContain("remainingFeePercentDisplay");
-    expect(text).toContain('L("menos taxa", "less fee")');
+    expect(text).toContain('const savingsCaption = L("menos taxa", "less fee")');
+    expect(text).toContain("text-3xl font-black leading-none text-tts-confirm");
     expect(text).toContain("do custo tradicional");
+    expect(text).not.toContain("Taxa desta rota:");
     expect(text).not.toContain("Comparado a métodos tradicionais estimados");
     expect(text).not.toContain("formatMoney(estimatedSavingsBrl)");
     expect(text).not.toContain('L("Taxa da conta", "Account fee")');
