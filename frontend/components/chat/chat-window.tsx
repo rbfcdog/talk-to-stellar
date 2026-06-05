@@ -533,8 +533,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     setSessionId(newSessionId);
   };
 
-  const isLogoutResponse = (message: string, action?: string | null) => {
-    if (String(action || "").toLowerCase() === "logout_wallet") return true;
+  const isCompletedLogoutResponse = (message: string) => {
     const normalized = String(message || "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -720,7 +719,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         touchClientSessionActivity();
       }
 
-      if (isLogoutResponse(botResponse, data.action)) {
+      if (isCompletedLogoutResponse(botResponse)) {
         try {
           await idempotentFetch('/api/logout', {
             method: 'POST',
