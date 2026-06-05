@@ -397,6 +397,9 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("Rentabilidade");
     expect(reviewText).not.toContain("Maior posição");
     expect(reviewText).not.toContain("Largest position");
+    expect(reviewText).not.toContain('L("Posição", "Position")');
+    expect(reviewText).not.toContain("const activeRows");
+    expect(reviewText).not.toContain("visibleRows.map");
     expect(reviewText).not.toContain("Simulação");
     expect(reviewText).not.toContain("Somente consulta");
     expect(reviewText).toContain("Confirmar investimento");

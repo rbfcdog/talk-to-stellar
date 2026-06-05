@@ -646,8 +646,6 @@ function PortfolioOverview({ language, rows, isTestnet }: {
   isTestnet: boolean;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const activeRows = rows.filter((row) => row.amount > 0);
-  const visibleRows = rows.length ? rows : activeRows;
   return (
     <section className="border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -674,7 +672,7 @@ function PortfolioOverview({ language, rows, isTestnet }: {
           </span>
         </div>
         <div className="mt-4 space-y-3">
-          {visibleRows.map((row) => (
+          {rows.map((row) => (
             <div key={row.code} className="rounded-2xl border border-tts-border bg-tts-surface p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -688,12 +686,6 @@ function PortfolioOverview({ language, rows, isTestnet }: {
               <div className="mt-3">
                 <ReturnPeriodGrid language={language} rate={row.rate} />
               </div>
-              {row.amount > 0 && (
-                <div className="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-tts-muted">
-                  <span>{L("Posição", "Position")}</span>
-                  <span>{formatPositionAmount(row.amount, row.profile, language)}</span>
-                </div>
-              )}
             </div>
           ))}
         </div>
