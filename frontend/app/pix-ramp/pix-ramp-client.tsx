@@ -652,20 +652,9 @@ function sumVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
     }, 0);
 }
 
-function formatVisibleBalance(balances: BalanceItem[], assetCode: TargetAsset) {
-  return formatRampAsset(sumVisibleBalance(balances, assetCode).toFixed(7), assetCode);
-}
-
 function visibleBalanceDelta(before: BalanceItem[], after: BalanceItem[], assetCode: TargetAsset) {
   if (!after.length) return 0;
   return sumVisibleBalance(after, assetCode) - sumVisibleBalance(before, assetCode);
-}
-
-function formatVisibleDelta(before: BalanceItem[], after: BalanceItem[], assetCode: TargetAsset, language: "pt-BR" | "en" = "pt-BR") {
-  if (!after.length) return "Updating";
-  const delta = visibleBalanceDelta(before, after, assetCode);
-  const sign = delta > 0 ? "+" : "";
-  return `${sign}${formatRampAsset(delta.toFixed(7), assetCode)}`;
 }
 
 function isInsufficientBalanceText(value: unknown) {
@@ -1527,9 +1516,6 @@ export default function PixRampClient({
     `pix-ramp:${atomicIntentKey}:${action}`
   ), [atomicIntentKey]);
   const offRampAssetDeltas = useMemo(() => offRampBalancesAfter.length > 0 ? calculateDeltas(offRampBalancesBefore, offRampBalancesAfter) : [], [offRampBalancesBefore, offRampBalancesAfter]);
-  const onRampReceiptBefore = formatVisibleBalance(onRampBalancesBefore, targetAsset);
-  const onRampReceiptAfter = onRampBalancesAfter.length > 0 ? formatVisibleBalance(onRampBalancesAfter, targetAsset) : L("Atualizando", "Updating");
-  const onRampReceiptDelta = formatVisibleDelta(onRampBalancesBefore, onRampBalancesAfter, targetAsset, language);
   const liveSteps = useMemo<LiveStep[]>(() => {
     const pixAccountPrepared = Boolean(programmaticOnboarding || customerPayload?.bank_account_id || customerPayload?.customer?.bankAccountId);
     if (rampMode === "offramp") {
@@ -4054,62 +4040,44 @@ export default function PixRampClient({
 
         {step === "success" && successTransaction && (
           <section className={`${mobileStage === "receipt" ? "block" : "hidden"} mt-5 overflow-hidden rounded-2xl border border-tts-confirm bg-tts-surface text-tts-deep shadow-sm shadow-emerald-950/25 md:block`}>
-            <div className="relative p-6 sm:p-8">
-              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento concluído", "Payment completed")}</p>
-                  <div className="mt-5 flex items-center gap-4">
-                    <span className="grid h-14 w-14 place-items-center rounded-2xl bg-tts-confirm text-2xl font-bold text-tts-deep">✓</span>
-                    <div>
-                      <h2 className="text-xl font-bold tracking-normal sm:text-2xl">
-                        {rampMode === "offramp" ? L("Retirada confirmada", "Withdrawal confirmed") : transferFlow ? L("PIX e transferência confirmados", "PIX and transfer confirmed") : L("PIX confirmado", "PIX confirmed")}
-                      </h2>
-                      <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-tts-muted">
-                        {rampMode === "offramp"
-                          ? L("O saldo saiu da sua conta TalkToStellar e entrou no seu PIX.", "The balance left your TalkToStellar account and arrived in your PIX.")
-                          : transferFlow
-                          ? L("O PIX foi confirmado, o saldo foi convertido automaticamente e a transferência foi enviada.", "PIX was confirmed, the balance was automatically converted, and the transfer was sent.")
-                          : L("O PIX foi confirmado e o saldo final entrou na sua conta.", "PIX was confirmed and the final balance arrived in your account.")}
-                      </p>
-                    </div>
+            <div className="relative p-5 sm:p-7">
+              <div className="relative rounded-3xl bg-tts-confirm/10 p-5 sm:p-6">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-tts-confirm text-2xl font-black text-tts-deep">✓</span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento concluído", "Payment completed")}</p>
+                    <h2 className="mt-1 truncate text-lg font-black tracking-normal text-tts-deep sm:text-2xl">
+                      {rampMode === "offramp" ? L("PIX enviado", "PIX sent") : transferFlow ? L("PIX e envio feitos", "PIX and transfer done") : L("PIX confirmado", "PIX confirmed")}
+                    </h2>
                   </div>
                 </div>
-                <div className="flex flex-col items-start gap-3 lg:items-end">
-                  <span className="w-fit rounded-full border border-tts-confirm bg-tts-confirm/10 px-4 py-2 text-xs font-black uppercase tracking-normal text-tts-confirm">
-                    {L("Concluído", "Completed")}
-                  </span>
-                </div>
-              </div>
 
-              <div className="relative mt-8 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-5">
-                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">
-                    {rampMode === "offramp" ? L("Valor retirado", "Amount withdrawn") : L("Valor recebido", "Amount received")}
+                <div className="mt-6">
+                  <p className="text-xs font-black uppercase tracking-normal text-tts-muted">
+                    {rampMode === "offramp" ? L("Enviado", "Sent") : L("Recebido", "Received")}
                   </p>
-                  <p className="mt-3 text-xl font-bold tracking-normal text-tts-deep sm:text-2xl">
+                  <p className="mt-2 break-words text-3xl font-black tracking-normal text-tts-deep sm:text-4xl">
                     {rampMode === "offramp"
                       ? offRampReceiptAmount
                       : onRampReceivedDisplay}
                   </p>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <ReceiptRow
-                      label={rampMode === "offramp" ? L("Recebido no seu PIX", "Received in your PIX") : L("Pago via PIX", "Paid with PIX")}
-                      value={rampMode === "offramp" ? offRampReceiptReceived : effectiveOnRampPixPayDisplay}
-                    />
-                    <ReceiptRow label={L("Status", "Status")} value={L("Concluído", "Completed")} />
-                    {rampMode === "onramp" && <ReceiptRow label={L("Saldo antes", "Balance before")} value={onRampReceiptBefore} />}
-                    {rampMode === "onramp" && <ReceiptRow label={L("Saldo depois", "Balance after")} value={onRampReceiptAfter} />}
-                    {rampMode === "onramp" && <ReceiptRow label={L("Mudança no saldo", "Balance change")} value={onRampReceiptDelta} />}
-                  </div>
                 </div>
 
-                <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-5">
-                  <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Detalhes da operação", "Operation details")}</p>
-                  <dl className="mt-4 grid gap-3 text-sm">
-                    <ReceiptRow label={L("Destino", "Destination")} value={rampMode === "offramp" ? L("Seu PIX", "Your PIX") : L("Minha conta TalkToStellar", "My TalkToStellar account")} />
-                    <ReceiptRow label={L("Ordem", "Order")} value={String(successTransaction?.id || temporaryOffRampTestResult?.submit_result?.order_id || "")} />
-                    <ReceiptRow label={L("Data", "Date")} value={new Date().toLocaleString(language === "en" ? "en-US" : "pt-BR")} />
-                  </dl>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-tts-border bg-tts-surface px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">
+                      {rampMode === "offramp" ? L("Chegou no PIX", "Arrived in PIX") : L("Pago via PIX", "Paid with PIX")}
+                    </p>
+                    <p className="mt-1 text-base font-black text-tts-deep">
+                      {rampMode === "offramp" ? offRampReceiptReceived : effectiveOnRampPixPayDisplay}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-tts-border bg-tts-surface px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{L("Destino", "Destination")}</p>
+                    <p className="mt-1 truncate text-base font-black text-tts-deep">
+                      {rampMode === "offramp" ? L("Sua chave PIX", "Your PIX key") : transferFlow && transferRecipientLabel ? transferRecipientLabel : L("Sua conta", "Your account")}
+                    </p>
+                  </div>
                 </div>
               </div>
 

@@ -355,6 +355,11 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("role=\"dialog\"");
     expect(text).toContain('L("PIX finalizado", "PIX complete")');
     expect(text).not.toContain("receipt-top-return-cta");
+    expect(text).not.toContain('L("Status", "Status")');
+    expect(text).not.toContain('L("Saldo antes", "Balance before")');
+    expect(text).not.toContain('L("Saldo depois", "Balance after")');
+    expect(text).not.toContain('L("Mudança no saldo", "Balance change")');
+    expect(text).not.toContain('L("Detalhes da operação", "Operation details")');
     expect(text).toContain("statusLabel(temporaryOffRampTestResult.final_transaction?.status");
     expect(webFeedbackText).toContain("isExternalChannelPage()");
     expect(webFeedbackText).toContain('source === "whatsapp" || source === "telegram"');
