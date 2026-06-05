@@ -7,6 +7,7 @@ import { WalletRepository } from '../repository/core/wallet.repository';
 import {
   ExternalRepository,
   externalProviderAliases,
+  externalRowMatchesProvider,
   isPhoneProvider,
   normalizeExternalProvider,
   normalizeExternalProviderUserId,
@@ -302,7 +303,7 @@ async function createExternalMappingsWithAliases(payload: {
 }) {
   const normalizedProvider = normalizeExternalProvider(payload.provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, payload.provider_user_id);
-  const providers = externalProviderAliases(normalizedProvider);
+  const providers = isPhoneProvider(normalizedProvider) ? [normalizedProvider] : externalProviderAliases(normalizedProvider);
   const primaryProvider = providers.includes(normalizedProvider) ? normalizedProvider : providers[0];
 
   for (const provider of providers) {
@@ -547,6 +548,7 @@ async function detectIdentityCollision(input: {
   cpf?: string;
   allowedSessionIds?: string[];
   allowedUserIds?: string[];
+  phoneCollisionProviderScope?: string;
 }): Promise<IdentityCollision | null> {
   const normalizedEmail = normalizeEmailForCompare(input.email);
   const normalizedPhone = normalizePhoneForCompare(input.phoneNumber);
@@ -558,6 +560,24 @@ async function detectIdentityCollision(input: {
     const sid = String(sessionId || '').trim();
     const uid = String(userId || '').trim();
     return (sid && allowedSessionIds.has(sid)) || (uid && allowedUserIds.has(uid));
+  };
+
+  const sessionMatchesPhoneProviderScope = async (sessionId: string) => {
+    const scope = normalizeExternalProvider(String(input.phoneCollisionProviderScope || ''));
+    if (!scope || !sessionId) return true;
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('provider, data')
+      .eq('session_id', sessionId)
+      .limit(20);
+    if (error) {
+      const message = String(error.message || '').toLowerCase();
+      if (message.includes('external_accounts') || message.includes('schema cache') || message.includes('does not exist')) {
+        return false;
+      }
+      throw error;
+    }
+    return ((data || []) as any[]).some((row) => externalRowMatchesProvider(row, scope));
   };
 
   if (normalizedEmail) {
@@ -590,7 +610,12 @@ async function detectIdentityCollision(input: {
     const sessionId = String((data as any)?.session_id || '').trim();
     const userId = String((data as any)?.user_id || '').trim();
     if ((sessionId || userId) && !isAllowed(sessionId, userId)) {
-      return { field: 'phone_number', value: normalizedPhone, sessionId, userId };
+      if (input.phoneCollisionProviderScope && sessionId && !(await sessionMatchesPhoneProviderScope(sessionId))) {
+        // A phone number can exist on a web/non-WhatsApp account while the
+        // same person creates a channel-scoped WhatsApp account.
+      } else {
+        return { field: 'phone_number', value: normalizedPhone, sessionId, userId };
+      }
     }
   }
 
@@ -3072,6 +3097,7 @@ export default class ExternalFinalizeController {
           cpf: normalizedCpf || undefined,
           allowedSessionIds: [String(existingAccount.session_id)],
           allowedUserIds: [String(existingAccount.user_id)],
+          phoneCollisionProviderScope: provider === 'whatsapp' ? 'whatsapp' : undefined,
         });
         if (collision) {
           const fieldLabel = collision.field === 'phone_number' ? 'telefone' : collision.field.toUpperCase();
@@ -3378,6 +3404,7 @@ export default class ExternalFinalizeController {
         email: normalizedEmail || undefined,
         phoneNumber: normalizedPhoneNumber || undefined,
         cpf: normalizedCpf || undefined,
+        phoneCollisionProviderScope: provider === 'whatsapp' ? 'whatsapp' : undefined,
       });
       if (newAccountCollision) {
         const fieldLabel = newAccountCollision.field === 'phone_number'

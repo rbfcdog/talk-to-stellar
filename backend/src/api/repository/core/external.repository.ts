@@ -35,6 +35,50 @@ export function externalProviderAliases(provider: string): string[] {
   return ['whatsapp', 'phone'];
 }
 
+function externalRowData(row: Pick<ExternalAccountRow, 'data'>): Record<string, unknown> {
+  return row.data && typeof row.data === 'object' ? row.data : {};
+}
+
+export function externalRowHasWhatsAppOrigin(row: Pick<ExternalAccountRow, 'provider' | 'data'>): boolean {
+  const provider = normalizeExternalProvider(String(row.provider || ''));
+  if (provider === 'whatsapp') return true;
+  const data = externalRowData(row);
+  const sourceCandidates = [
+    data.provider,
+    data.external_provider,
+    data.externalProvider,
+    data.source,
+    data.external_source,
+    data.externalSource,
+    data.channel,
+    data.session_source,
+    data.sessionSource,
+  ]
+    .map((value) => normalizeExternalProvider(String(value || '')))
+    .filter(Boolean);
+
+  if (sourceCandidates.some((value) => value.includes('whatsapp') || value.includes('evolution'))) return true;
+
+  const jid = String(data.remote_jid || data.remoteJid || data.jid || '').trim().toLowerCase();
+  if (jid.includes('whatsapp') || jid.includes('@s.whatsapp.net')) return true;
+
+  return Boolean(
+    String(data.whatsapp_number || data.whatsappNumber || '').trim() ||
+      String(data.evolution_instance || data.evolutionInstance || data.evolution_instance_id || data.evolutionInstanceId || '').trim()
+  );
+}
+
+export function externalRowMatchesProvider(row: Pick<ExternalAccountRow, 'provider' | 'data'>, provider: string): boolean {
+  const requestedProvider = normalizeExternalProvider(provider);
+  const rowProvider = normalizeExternalProvider(String(row.provider || ''));
+  if (!requestedProvider || !rowProvider) return false;
+  if (!isPhoneProvider(requestedProvider)) return rowProvider === requestedProvider;
+  if (requestedProvider === 'whatsapp') {
+    return rowProvider === 'whatsapp' || (rowProvider === 'phone' && externalRowHasWhatsAppOrigin(row));
+  }
+  return rowProvider === 'phone' || rowProvider === 'whatsapp';
+}
+
 function rowHasOwner(row: ExternalAccountRow): boolean {
   return Boolean(String(row.session_id || '').trim() || String(row.user_id || '').trim());
 }
@@ -73,7 +117,7 @@ export class ExternalRepository {
       throw error;
     }
 
-    const rows = (data || []) as ExternalAccountRow[];
+    const rows = ((data || []) as ExternalAccountRow[]).filter((row) => externalRowMatchesProvider(row, normalizedProvider));
     if (rows.length === 0) return null;
 
     const exactRows = rows.filter((row) => String(row.provider || '').toLowerCase() === normalizedProvider);

@@ -65,7 +65,7 @@ async function createExternalMappingWithAliases(payload: {
 }) {
   const normalizedProvider = normalizeExternalProvider(payload.provider);
   const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, payload.provider_user_id);
-  const providers = externalProviderAliases(normalizedProvider);
+  const providers = isPhoneProvider(normalizedProvider) ? [normalizedProvider] : externalProviderAliases(normalizedProvider);
   const primaryProvider = providers.includes(normalizedProvider) ? normalizedProvider : providers[0];
   for (const provider of providers) {
     const keepIdentityFields = provider === primaryProvider;

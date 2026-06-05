@@ -187,7 +187,7 @@ describe('ExternalController', () => {
     );
   });
 
-  it('does not fail login discovery when WhatsApp alias identity data already exists on another alias', async () => {
+  it('does not write a generic phone alias during WhatsApp login discovery', async () => {
     checkExternalAccountMock.mockResolvedValue({
       session_id: 'session-123',
       user_id: 'rodrigo@example.com',
@@ -220,7 +220,7 @@ describe('ExternalController', () => {
 
     await ExternalController.checkAccount(req, res);
 
-    expect(createExternalMappingMock).toHaveBeenCalledTimes(3);
+    expect(createExternalMappingMock).toHaveBeenCalledTimes(2);
     expect(createExternalMappingMock.mock.calls[0][0]).toEqual(expect.objectContaining({
       provider: 'whatsapp',
       data: expect.objectContaining({ phone_number: '5519997621114' }),
@@ -229,10 +229,7 @@ describe('ExternalController', () => {
       provider: 'whatsapp',
       data: expect.not.objectContaining({ phone_number: expect.anything() }),
     }));
-    expect(createExternalMappingMock.mock.calls[2][0]).toEqual(expect.objectContaining({
-      provider: 'phone',
-      data: expect.not.objectContaining({ phone_number: expect.anything() }),
-    }));
+    expect(createExternalMappingMock).not.toHaveBeenCalledWith(expect.objectContaining({ provider: 'phone' }));
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true,

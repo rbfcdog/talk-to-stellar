@@ -183,6 +183,15 @@ jest.mock('../src/api/repository/core/external.repository', () => ({
   normalizeExternalProvider: jest.fn((provider: string) => String(provider || '').trim().toLowerCase()),
   normalizeExternalProviderUserId: jest.fn((_provider: string, providerUserId: string) => String(providerUserId || '').trim()),
   externalProviderAliases: jest.fn((provider: string) => [String(provider || '').trim().toLowerCase()]),
+  externalRowMatchesProvider: jest.fn((row: any, provider: string) => {
+    const requestedProvider = String(provider || '').trim().toLowerCase();
+    const rowProvider = String(row?.provider || '').trim().toLowerCase();
+    if (requestedProvider === 'whatsapp') {
+      const data = row?.data && typeof row.data === 'object' ? row.data : {};
+      return rowProvider === 'whatsapp' || Boolean(String(data.remote_jid || data.jid || '').includes('whatsapp'));
+    }
+    return rowProvider === requestedProvider;
+  }),
   isPhoneProvider: jest.fn((provider: string) => ['whatsapp', 'phone'].includes(String(provider || '').trim().toLowerCase())),
   ExternalRepository: jest.fn().mockImplementation(() => ({
     linkSession: finalizeLinkSessionMock,
@@ -311,10 +320,8 @@ describe('ExternalFinalizeController', () => {
     );
   });
 
-  it('does not duplicate phone identity data across WhatsApp provider aliases', async () => {
+  it('stores WhatsApp account creation only on the WhatsApp provider', async () => {
     const jwt = require('jsonwebtoken');
-    const externalRepository = require('../src/api/repository/core/external.repository');
-    externalRepository.externalProviderAliases.mockImplementationOnce(() => ['whatsapp', 'phone']);
     jwt.verify.mockReturnValueOnce({
       sub: 'external_onboard',
       provider: 'whatsapp',
@@ -339,8 +346,8 @@ describe('ExternalFinalizeController', () => {
 
     await ExternalFinalizeController.finalize(req, res);
 
-    expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(2);
-    expect(finalizeCreateMappingMock.mock.calls.map((call: any[]) => call[0].provider)).toEqual(['whatsapp', 'phone']);
+    expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(1);
+    expect(finalizeCreateMappingMock.mock.calls.map((call: any[]) => call[0].provider)).toEqual(['whatsapp']);
     expect(finalizeCreateMappingMock).not.toHaveBeenCalledWith(expect.objectContaining({
       provider: 'web',
     }));
@@ -353,17 +360,70 @@ describe('ExternalFinalizeController', () => {
         }),
       })
     );
-    expect(finalizeCreateMappingMock.mock.calls[1][0]).toEqual(
-      expect.objectContaining({
-        provider: 'phone',
-        data: expect.not.objectContaining({
-          phone_number: expect.anything(),
-          whatsapp_number: expect.anything(),
-          email: expect.anything(),
-          cpf: expect.anything(),
-        }),
-      })
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('allows WhatsApp account creation when the same phone belongs only to a web account', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_onboard',
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+    });
+
+    let agentSessionMaybeSingleCalls = 0;
+    finalizeSupabaseFromMock.mockImplementation((table: string) => {
+      const chain = createSupabaseChain(table);
+      if (table === 'agent_sessions') {
+        chain.maybeSingle = jest.fn(async () => {
+          agentSessionMaybeSingleCalls += 1;
+          if (agentSessionMaybeSingleCalls === 2) {
+            return {
+              data: {
+                session_id: 'web-session',
+                user_id: 'web@example.com',
+                phone_number: '5511999999999',
+              },
+              error: null,
+            };
+          }
+          return { data: null, error: null };
+        });
+      }
+      if (table === 'external_accounts') {
+        chain.then = (resolve: any, reject: any) =>
+          Promise.resolve({ data: [], error: null }).then(resolve, reject);
+      }
+      return chain;
+    });
+
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
     );
+
+    const req = {
+      body: {
+        token: 'signed-token',
+        name: 'WhatsApp User',
+        email: 'whatsapp-user@example.com',
+        phone_number: '+55 11 99999-9999',
+        pin: '1234',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeSaveSessionMock).toHaveBeenCalledTimes(1);
+    expect(finalizeSaveSessionMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      user_id: 'whatsapp-user@example.com',
+      phone_number: '5511999999999',
+    }));
+    expect(finalizeCreateMappingMock).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      user_id: 'whatsapp-user@example.com',
+    }));
     expect(res.status).toHaveBeenCalledWith(201);
   });
 

@@ -49,6 +49,43 @@ describe('ExternalRepository', () => {
     }));
   });
 
+  it('does not treat a generic phone mapping as a WhatsApp account', async () => {
+    const { supabase } = createSupabaseMock([
+      {
+        provider: 'phone',
+        provider_user_id: '5519997624114',
+        session_id: 'web-session',
+        user_id: 'web@example.com',
+        data: { phone_number: '5519997624114' },
+      },
+    ]);
+    const repo = new ExternalRepository(supabase as any);
+
+    const row = await repo.findByProviderAndId('whatsapp', '5519997624114');
+
+    expect(row).toBeNull();
+  });
+
+  it('keeps legacy WhatsApp-origin phone mappings usable for WhatsApp', async () => {
+    const { supabase } = createSupabaseMock([
+      {
+        provider: 'phone',
+        provider_user_id: '5519997624114',
+        session_id: 'whatsapp-session',
+        user_id: 'whatsapp@example.com',
+        data: { remote_jid: '5519997624114@s.whatsapp.net' },
+      },
+    ]);
+    const repo = new ExternalRepository(supabase as any);
+
+    const row = await repo.findByProviderAndId('whatsapp', '5519997624114');
+
+    expect(row).toEqual(expect.objectContaining({
+      provider: 'phone',
+      session_id: 'whatsapp-session',
+    }));
+  });
+
   it('does not copy identity data from another provider alias into a new alias row', async () => {
     const { supabase, getUpsertPayload } = createSupabaseMock([
       {
