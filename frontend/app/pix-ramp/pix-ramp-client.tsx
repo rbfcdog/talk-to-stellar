@@ -1471,10 +1471,6 @@ export default function PixRampClient({
       : desiredFinalAmount && desiredFinalAsset === targetAsset
         ? formatRampAsset(desiredFinalAmount, targetAsset)
       : onRampReceivedDisplay || L("Calculado na confirmação", "Calculated on confirmation");
-  const quoteGrossLabel = quote ? effectiveOnRampPixPayDisplay : formatMoney(amountBrl);
-  const quoteCostContext = transferFlow && transferRecipientLabel
-    ? L("valor que será enviado", "amount that will be sent")
-    : L("valor que entra na sua conta", "amount added to your account");
   const pixLoginRequiredMessage = needsBrowserLoginForChatLink
     ? L("Não consegui carregar a sessão do chat neste navegador. Volte ao WhatsApp e abra o link novamente, ou peça um novo link.", "I could not load the chat session in this browser. Return to WhatsApp and open the link again, or request a new link.")
     : L("Entre com PIN para continuar este PIX na sua conta.", "Sign in with PIN to continue this PIX in your account.");
@@ -3540,9 +3536,6 @@ export default function PixRampClient({
                     mode="offramp"
                     quote={offRampQuote}
                     language={language}
-                    sourceLabel={offRampDisplayAmount}
-                    sourceCaption={L("valor inicial", "starting amount")}
-                    destinationCaption={L("chega no seu PIX", "arrives in your PIX")}
                   />
                 ) : offRampInputAsset !== "BRL" ? (
                   <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-tts-deep">
@@ -3834,9 +3827,6 @@ export default function PixRampClient({
                   mode="onramp"
                   quote={quote}
                   language={language}
-                  sourceLabel={quoteGrossLabel}
-                  sourceCaption={L("valor inicial", "starting amount")}
-                  destinationCaption={quoteCostContext}
                 />
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm font-bold text-tts-error sm:flex sm:items-center sm:justify-between sm:gap-4">
@@ -4442,16 +4432,10 @@ function RampFeeBridge({
   mode,
   quote,
   language,
-  sourceLabel,
-  sourceCaption,
-  destinationCaption,
 }: {
   mode: RampMode;
   quote: RampResponse | null | undefined;
   language: "pt-BR" | "en";
-  sourceLabel?: string;
-  sourceCaption?: string;
-  destinationCaption?: string;
 }) {
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   if (!quote) return null;
@@ -4466,17 +4450,8 @@ function RampFeeBridge({
   const feeCurrency = estimate.providerFeeCurrency;
   const ttsTransactionFeeAmount = estimate.ttsTransactionFeeAmount;
   const ttsTransactionFeeCurrency = estimate.ttsTransactionFeeCurrency;
-  const sourceValue = sourceLabel || formatQuoteAmount(quote.fromAmount, sourceCurrency);
-  const afterValue = destinationAfterRaw ? formatQuoteAmount(destinationAfterRaw, destinationCurrency) : formatQuoteAmount(quote.toAmount, destinationCurrency);
   const feeValue = formatQuoteAmount(feeAmount.toFixed(7), feeCurrency);
   const ttsFeeValue = formatQuoteAmount(ttsTransactionFeeAmount.toFixed(7), ttsTransactionFeeCurrency);
-  const sameFeeCurrency = feeCurrency === ttsTransactionFeeCurrency;
-  const mixedFeeCurrencies = !sameFeeCurrency && feeAmount > 0 && ttsTransactionFeeAmount > 0;
-  const totalFeeDisplay = sameFeeCurrency
-    ? `${formatQuoteAmount((feeAmount + ttsTransactionFeeAmount).toFixed(7), feeCurrency)}`
-    : mode === "offramp"
-      ? ttsFeeValue
-      : `${feeValue} + ${ttsFeeValue}`;
   const actualOffRampFeeBrl = mode === "offramp"
     ? (feeCurrency === "BRL" ? feeAmount : 0) + (ttsTransactionFeeCurrency === "BRL" ? ttsTransactionFeeAmount : 0)
     : 0;
@@ -4525,43 +4500,11 @@ function RampFeeBridge({
     : L("Economia estimada", "Estimated savings");
   const savingsCaption = L("menos taxa", "less fee");
   const savingsDescription = L(`${remainingFeePercentDisplay}% do custo tradicional`, `${remainingFeePercentDisplay}% of traditional cost`);
-  const feeTitle = mode === "onramp"
-    ? L("Resumo do PIX", "PIX summary")
-    : L("Resumo da retirada", "Withdrawal summary");
-  const feeCaption = mode === "onramp"
-    ? L("Confira antes de pagar.", "Check before paying.")
-    : L("Confira antes do PIN.", "Check before PIN.");
-  const destinationLabel = mode === "onramp"
-    ? estimate.finalConversionPending
-      ? L("Base para conversão", "Conversion base")
-      : L("Entra na conta", "Arrives in account")
-    : L("Chega no PIX", "Arrives in PIX");
-  const feeLabel = mode === "offramp" ? L("Taxa estimada", "Estimated fee") : L("Taxa", "Fee");
-  const finalConversionAsset = friendlyAssetName(quote.finalCurrency || quote.userFacingToCurrency || quote.requestedFinalAssetCode || "", language);
-  const resolvedDestinationCaption = mode === "onramp" && estimate.finalConversionPending
-    ? L(`BRL que será convertido para ${finalConversionAsset}.`, `BRL that will be converted to ${finalConversionAsset}.`)
-    : destinationCaption || L("depois da taxa", "after the fee");
-  const onRampMobilePercentOnly = mode === "onramp" && showSavingsCard;
 
   return (
-    <>
-      {onRampMobilePercentOnly && (
-        <div className="mt-3 flex items-center justify-between rounded-xl border border-tts-confirm/25 bg-tts-confirm/10 px-3 py-2 text-tts-deep md:hidden">
-          <span className="text-2xl font-black leading-none text-tts-confirm">{savingsPercentDisplay}%</span>
-          <span className="text-right text-[11px] font-black leading-4 text-tts-muted">{savingsCaption}</span>
-        </div>
-      )}
-      <div className={`${onRampMobilePercentOnly ? "tts-mobile-soft-hide " : ""}mt-5 rounded-2xl border border-tts-border bg-tts-bg/60 p-4`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Antes de confirmar", "Before confirming")}</p>
-          <h3 className="mt-1 text-xl font-black text-tts-deep">{feeTitle}</h3>
-          <p className="mt-1 text-xs font-semibold leading-5 text-tts-muted">{feeCaption}</p>
-        </div>
-      </div>
-
+    <div className="mt-5 rounded-2xl border border-tts-border bg-tts-bg/60 p-3">
       {showSavingsCard && (
-        <div className="mt-3 rounded-2xl border border-tts-confirm/35 bg-tts-confirm/10 p-3 text-tts-deep">
+        <div className="rounded-2xl border border-tts-confirm/35 bg-tts-confirm/10 p-3 text-tts-deep">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">
@@ -4577,31 +4520,7 @@ function RampFeeBridge({
         </div>
       )}
 
-      <div className="mt-3 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl bg-tts-surface p-3">
-          <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{mode === "onramp" ? L("Você paga", "You pay") : L("Sai da conta", "Leaves account")}</p>
-          <p className="mt-2 text-lg font-black text-tts-deep">{sourceValue}</p>
-          <p className="mt-1 text-xs font-bold text-tts-muted">{sourceCaption || L("valor inicial", "starting amount")}</p>
-        </div>
-        <div className="rounded-2xl bg-tts-surface p-3">
-          <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{feeLabel}</p>
-          <p className="mt-2 text-lg font-black text-tts-deep">{totalFeeDisplay}</p>
-          <p className="mt-1 text-xs font-bold text-tts-muted">
-            {mixedFeeCurrencies && mode === "offramp"
-              ? L("retirada aproximada; PIX já vem líquido", "estimated withdrawal; PIX already arrives net")
-              : mode === "onramp"
-                ? L("cobrada por fora", "charged on top")
-                : L("retirada aproximada", "estimated withdrawal")}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3">
-          <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{destinationLabel}</p>
-          <p className="mt-2 text-lg font-black text-tts-confirm">{afterValue}</p>
-          <p className="mt-1 text-xs font-bold text-tts-confirm">{resolvedDestinationCaption}</p>
-        </div>
-      </div>
-
-      <div className="tts-mobile-soft-hide mt-3 grid gap-2 text-xs font-bold text-tts-deep lg:grid-cols-2">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold text-tts-deep">
         <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep">
           <span className="block uppercase tracking-normal text-tts-gold">
             {mode === "onramp" ? L("PIX", "PIX") : L("Retirada aprox.", "Est. withdrawal")}
@@ -4613,14 +4532,7 @@ function RampFeeBridge({
           <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
         </div>
       </div>
-      <p className="tts-mobile-soft-hide mt-3 text-xs font-semibold leading-5 text-tts-muted">
-        {L(
-          "Você vê tudo antes do PIN. Se não estiver de acordo, basta voltar sem confirmar.",
-          "You see everything before the PIN. If you do not agree, just go back without confirming.",
-        )}
-      </p>
-      </div>
-    </>
+    </div>
   );
 }
 
