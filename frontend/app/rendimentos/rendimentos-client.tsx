@@ -135,6 +135,23 @@ function scopedRampPath(path: string, preferredSource?: unknown) {
   return nextQuery ? `${pathname}?${nextQuery}` : pathname;
 }
 
+function scopedLinkContext(initialQuery?: string): Record<string, string> {
+  const params = new URLSearchParams(initialQuery || "");
+  const candidates = [
+    params.get("session_scope"),
+    params.get("session_source"),
+    params.get("sessionSource"),
+    params.get("external_provider"),
+    params.get("externalProvider"),
+    params.get("provider"),
+    params.get("source"),
+    params.get("from"),
+    params.get("origin"),
+  ];
+  const source = candidates.map(externalSessionSource).find(Boolean) || scopedRampSource();
+  return source ? { source, session_scope: source } : {};
+}
+
 function scopedRampInit(init?: RequestInit, preferredSource?: unknown): RequestInit | undefined {
   const source = scopedRampSource(preferredSource);
   if (!source || !init?.body || typeof init.body !== "string") return init;
@@ -219,6 +236,7 @@ export default function RendimentosClient({
   const isTestnetYield = yieldNetwork === "testnet" || Boolean(yieldStatus?.runtime?.disclosure?.testnet);
 
   const safeSelectedCode = normalizeUiAssetCode(selectedCode) || optionCode(actionableOption) || selectedCode;
+  const sessionLinkContext = useMemo(() => scopedLinkContext(initialQuery), [initialQuery]);
   const selectedProfile = moneyProfile(safeSelectedCode);
   const bestOptionCode = optionCode(bestOption);
   const actionableOptionCode = optionCode(actionableOption);
@@ -238,8 +256,8 @@ export default function RendimentosClient({
   const alternativeConversionCode = normalizeUiAssetCode(alternativeConversionBalance?.asset_code);
   const smartConvertSourceCode = selectedBalanceInsufficient ? alternativeConversionCode || (safeSelectedCode === "TESOURO" ? "USDC" : "TESOURO") : safeSelectedCode;
   const smartConvertDestCode = selectedBalanceInsufficient ? actionableOptionCode || safeSelectedCode || bestOptionCode || "USDC" : bestOptionCode || actionableOptionCode || "USDC";
-  const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
-  const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, lang: language }), [amount, safeSelectedCode, language]);
+  const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, ...sessionLinkContext, lang: language }), [amount, safeSelectedCode, sessionLinkContext, language]);
+  const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, ...sessionLinkContext, lang: language }), [amount, safeSelectedCode, sessionLinkContext, language]);
   const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", {
     amount,
     dest_amount: amount,
@@ -250,8 +268,9 @@ export default function RendimentosClient({
     return_source: "rendimentos",
     return_to: newApplicationUrl,
     next: newApplicationUrl,
+    ...sessionLinkContext,
     lang: language,
-  }), [amount, smartConvertDestCode, smartConvertSourceCode, language, newApplicationUrl]);
+  }), [amount, smartConvertDestCode, smartConvertSourceCode, sessionLinkContext, language, newApplicationUrl]);
   const pixTopUpTargetAsset = safeSelectedCode === "TESOURO" ? "BRL" : safeSelectedCode || "BRL";
   const pixTopUpUsesExactReceive = pixTopUpTargetAsset === "BRL" || pixTopUpTargetAsset === "USDC";
   const pixTopUpUrl = useMemo(() => buildMoneyUrl("/pix-on", {
@@ -267,8 +286,9 @@ export default function RendimentosClient({
     return_to: newApplicationUrl,
     return_label: L("Voltar aos investimentos", "Back to investments"),
     stay_open: "1",
+    ...sessionLinkContext,
     lang: language,
-  }), [amount, language, newApplicationUrl, pixTopUpTargetAsset, pixTopUpUsesExactReceive, L]);
+  }), [amount, language, newApplicationUrl, pixTopUpTargetAsset, pixTopUpUsesExactReceive, sessionLinkContext, L]);
   const amountPresets = useMemo(() => {
     const s = selectedProfile.short;
     if (s === "BRL") return ["50", "100", "500", "1000"];
@@ -432,7 +452,7 @@ export default function RendimentosClient({
               <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
                 positionBalances={positionBalances} isTestnet={isTestnetYield}
-                onRefresh={() => {}} newApplicationUrl={newApplicationUrl}
+                onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
               />
             )}
 
@@ -504,10 +524,10 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, isTestnet, onRefresh, newApplicationUrl }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, isTestnet, onRefresh, sessionLinkContext }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
-  isTestnet: boolean; onRefresh: () => void; newApplicationUrl: string;
+  isTestnet: boolean; onRefresh: () => void; sessionLinkContext: Record<string, string>;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const rows = options.filter((o) => String(o.vault_address || "").trim()).map((o) => {
@@ -568,7 +588,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
                     </div>
                   </div>
                 )}
-                <a href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", lang: language })}
+                <a href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", ...sessionLinkContext, lang: language })}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-tts-border text-sm font-bold hover:bg-tts-bg transition mt-2">
                   <Plus className="h-4 w-4" /> {L("Aplicar", "Apply")}
                 </a>

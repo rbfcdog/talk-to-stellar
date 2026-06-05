@@ -18,9 +18,14 @@ describe("rendimentos channel PIN gate", () => {
     expect(text).toContain("scopedRampSource(preferredSource)");
     expect(text).toContain("scopedRampPath");
     expect(text).toContain("scopedRampInit");
+    expect(text).toContain("function scopedLinkContext(initialQuery?: string)");
+    expect(text).toContain("const sessionLinkContext = useMemo(() => scopedLinkContext(initialQuery), [initialQuery]);");
     expect(text).toContain('params.set("session_scope", source)');
     expect(text).toContain("session_scope: payload.session_scope || source");
     expect(text).toContain("fetch(`/api/ramp/${scopedRampPath(path, preferredSource)}`");
+    expect(text).toContain('buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, ...sessionLinkContext');
+    expect(text).toContain('buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", ...sessionLinkContext');
+    expect(text).toContain("return_to: newApplicationUrl");
     expect(text).toContain('yieldApi("session/verify-pin"');
     expect(text).toContain("session.sessionSource");
     expect(text).toContain('yieldApi("etherfuse/wallet-balances", undefined, 20000, session.sessionSource)');
