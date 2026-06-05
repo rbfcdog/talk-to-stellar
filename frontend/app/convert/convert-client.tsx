@@ -230,6 +230,17 @@ function scopedRampApiPath(path: string) {
   return query ? `${pathname}?${query}` : pathname;
 }
 
+function scopedFinancialApiPath(path: string) {
+  const source = typeof window === "undefined" ? "" : currentPageSessionSource();
+  if (source !== "whatsapp" && source !== "telegram") return path;
+  const [pathname, rawQuery = ""] = path.split("?");
+  const params = new URLSearchParams(rawQuery);
+  if (!params.get("source")) params.set("source", source);
+  if (!params.get("session_scope")) params.set("session_scope", source);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 async function accountApi(path: string) {
   const response = await fetch(`/api/ramp/${scopedRampApiPath(path)}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
@@ -457,7 +468,8 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     setReviewStatus("loading");
     setReviewError("");
     try {
-      const response = await fetch("/api/financial/conversion-confirmation", {
+      const sessionScope = currentPageSessionSource();
+      const response = await fetch(`/api/financial/${scopedFinancialApiPath("conversion-confirmation")}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -470,6 +482,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           from: returnSource || "convert",
           return_source: returnSource || "convert",
           return_to: returnTarget.href,
+          ...(sessionScope === "whatsapp" || sessionScope === "telegram"
+            ? { source: sessionScope, session_scope: sessionScope }
+            : {}),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -722,17 +737,17 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           />
         </section>
 
-        <section className="hidden border border-tts-border bg-tts-surface p-5 md:block" aria-label={L("Taxas dinâmicas", "Dynamic rates")}>
+        <section className="hidden border border-tts-border bg-tts-surface p-5 md:block" aria-label={L("Cotação selecionada", "Selected quote")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
                 <ArrowRightLeft className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
-                {L("Taxas dinâmicas", "Dynamic rates")}
+                {L("Cotação selecionada", "Selected quote")}
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-tts-muted">
                 {L(
-                  "Matriz 4x4 carregada da rota Stellar, referência BRL/USDC e mercado quando a liquidez de teste está fora da faixa segura.",
-                  "4x4 matrix loaded from Stellar routes, BRL/USDC reference, and market data when test liquidity is outside the safe range."
+                  "Mostra só a taxa entre os dois ativos escolhidos. Atualize para buscar a rota mais recente antes de confirmar.",
+                  "Shows only the rate between the two selected assets. Refresh to fetch the latest route before confirming."
                 )}
               </p>
             </div>
@@ -762,50 +777,12 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             />
           </div>
 
-          <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg p-4 sm:hidden">
-            <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">
-              {L("Cotação do par", "Pair quote")}
-            </p>
-            <p className="mt-2 text-lg font-black text-tts-deep">
-              {selectedRateCell?.rate ? `1 ${sourceCode} = ${formatRateValue(selectedRateCell, language)} ${destCode}` : L("Carregando", "Loading")}
-            </p>
-            <p className="mt-1 text-xs font-bold text-tts-muted">
-              {L("A tabela completa fica disponível em telas maiores.", "The full table is available on larger screens.")}
-            </p>
-          </div>
-
           {rateMatrixStatus === "error" ? (
             <div className="mt-4 flex gap-2 border border-tts-error bg-tts-error/10 p-3 text-sm leading-6 text-tts-error">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{rateMatrixError}</span>
             </div>
           ) : null}
-
-          <div className="mt-4 hidden overflow-x-auto sm:block">
-            <div className="min-w-[640px]">
-              <div className="grid grid-cols-5 border-b border-tts-border text-[11px] font-black uppercase tracking-normal text-tts-muted">
-                <div className="p-2">{L("De / Para", "From / To")}</div>
-                {ASSETS.map((asset) => (
-                  <div key={`head-${asset.code}`} className="p-2 text-right">{asset.code}</div>
-                ))}
-              </div>
-              {ASSETS.map((source) => (
-                <div key={`row-${source.code}`} className="grid grid-cols-5 border-b border-tts-border/70 text-sm">
-                  <div className="p-2 font-black text-tts-deep">{source.code}</div>
-                  {ASSETS.map((destination) => {
-                    const cell = rateMatrix?.matrix?.[source.code]?.[destination.code];
-                    const selected = source.code === sourceCode && destination.code === destCode;
-                    return (
-                      <div key={`${source.code}-${destination.code}`} className={`p-2 text-right ${selected ? "bg-tts-confirm/10 font-black text-tts-deep" : "text-tts-muted"}`}>
-                        <span className="block">{formatRateValue(cell, language)}</span>
-                        <span className="block text-[10px] uppercase tracking-normal">{rateStatusLabel(cell, language)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
 
         <section className="hidden gap-5 md:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

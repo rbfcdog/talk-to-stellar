@@ -485,11 +485,13 @@ function buildConversionFrontendUrl(input: {
   sourceAssetCode?: unknown;
   destAssetCode?: unknown;
   language?: 'pt-BR' | 'en';
+  sessionScope?: unknown;
 }): string {
   const rawDestAmount = String(input.destAmount || '').trim();
   const rawSourceAmount = String(input.sourceAmount || '').trim();
   const normalizedMode = String(input.amountMode || '').trim().toLowerCase();
   const receiveMode = Boolean(rawDestAmount && (normalizedMode === 'receive' || !rawSourceAmount));
+  const sessionScope = normalizeToolSessionScope(input.sessionScope);
   return buildFrontendInterfaceUrl({
     path: '/convert',
     params: {
@@ -500,6 +502,7 @@ function buildConversionFrontendUrl(input: {
       source_asset: frontendAssetCode(input.sourceAssetCode || 'BRL'),
       dest_asset: frontendAssetCode(input.destAssetCode || 'USDC'),
       from: 'chat',
+      session_scope: sessionScope,
       lang: input.language || 'pt-BR',
     },
   });
@@ -1106,6 +1109,11 @@ export const toolDefinitions = [
           type: "string",
           enum: ["pt-BR", "en"],
           description: "Response language for the user-facing message.",
+        },
+        session_scope: {
+          type: "string",
+          enum: ["whatsapp", "telegram", ""],
+          description: "Preserve the originating external session scope when opening the web conversion screen from WhatsApp or Telegram.",
         },
       },
       required: [],
@@ -3018,6 +3026,7 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
     const prefillAmount = amountMode === 'receive' ? destAmount : sourceAmount;
     const hasCompletePrefill = Boolean(prefillAmount && hasSourceAsset && hasDestAsset);
     const sessionId = String(input.session_id || '').trim() || undefined;
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
     const rawUrl = buildConversionFrontendUrl({
       sourceAmount,
       destAmount,
@@ -3025,6 +3034,7 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
       sourceAssetCode: sourceAsset,
       destAssetCode: destAsset,
       language,
+      sessionScope,
     });
     const frontendUrl = await shortenYieldUrl(rawUrl, 'convert', sessionId);
     const sourceDisplay = frontendAssetCode(sourceAsset);

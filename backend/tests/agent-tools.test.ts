@@ -765,6 +765,23 @@ describe('Agent tool execution', () => {
     expect(parsed.message).toContain('receber 10 BRL');
   });
 
+  it('preserves WhatsApp session scope when opening the conversion interface', async () => {
+    const output = await executeTool('open_conversion_interface', {
+      source_amount: '10',
+      source_asset_code: 'XLM',
+      dest_asset_code: 'USDC',
+      session_scope: 'whatsapp',
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.frontend_url).toContain('/convert?');
+    expect(parsed.frontend_url).toContain('session_scope=whatsapp');
+    expect(parsed.frontend_url).toContain('source_asset=XLM');
+    expect(parsed.frontend_url).toContain('dest_asset=USDC');
+  });
+
   it('opens the conversion picker when amount or assets are missing', async () => {
     const output = await executeTool('open_conversion_interface', {
       language: 'pt-BR',
