@@ -76,7 +76,7 @@ describe('ReceiptImageService', () => {
       completedAt: '2026-05-14T21:00:13.000Z',
     }));
 
-    expect(svg).toContain('PIX enviado ao seu PIX');
+    expect(svg).toContain('PIX enviado à chave');
     expect(svg).not.toContain('Retirada via PIX conclu');
     expect(svg).not.toContain('…');
   });

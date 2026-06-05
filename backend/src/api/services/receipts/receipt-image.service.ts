@@ -95,7 +95,7 @@ function limitWords(value: string, maxWords: number): string {
 function compactReceiptMessage(value: string): string {
   const normalized = fitText(value, 0);
   if (!normalized) return '';
-  if (/retirada via pix conclu[ií]da|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
+  if (/retirada via pix conclu[ií]da|pix enviado ao seu pix|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
     return 'PIX enviado';
   }
   if (/pix.*recebid|depositad/i.test(normalized)) {
@@ -418,13 +418,13 @@ export class ReceiptImageService {
     const counterpartyKey = String(input.counterpartyKey || '').trim();
     const isPixOffRampReceipt = /pix/i.test(contextMessage) && quoteDestAsset === 'BRL';
     const description = isPixOffRampReceipt
-      ? 'PIX enviado ao seu PIX'
+      ? 'PIX enviado à chave'
       : (contextMessage || (counterpartyKey && !/^G[A-Z2-7]{55}$/i.test(counterpartyKey) ? `Chave ${counterpartyKey}` : 'Transferência otimizada'));
 
     return {
       amount: formatDisplayAmount(input.destinationAmount, 2),
       currency: displaySymbol(quoteDestAsset),
-      subtitle: isPixOffRampReceipt ? 'PIX enviado ao seu PIX' : undefined,
+      subtitle: isPixOffRampReceipt ? 'PIX enviado à chave' : undefined,
       recipientName: String(input.counterpartyLabel || 'Destinatário'),
       description,
       convertedAmount: formatDisplayAmount(quoteSource || input.sourceAmount || '', 2),
