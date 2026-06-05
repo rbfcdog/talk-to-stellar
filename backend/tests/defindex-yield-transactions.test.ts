@@ -216,6 +216,88 @@ describe('Defindex yield transaction flows', () => {
     });
   });
 
+  it('builds yield position history points from completed account operations', async () => {
+    jest.spyOn(OperationRepository, 'findByUserId').mockResolvedValue([
+      {
+        id: 'ignored-pending',
+        user_id: SESSION_CONTEXT.userId,
+        type: 'DEFINDEX_YIELD_DEPOSIT',
+        status: 'PENDING',
+        amount: 999,
+        asset_code: 'USDC',
+        source_public_key: SESSION_CONTEXT.publicKey,
+        context: JSON.stringify({ vault_address: YIELD_VAULTS.USDC }),
+        created_at: '2026-06-01T08:00:00.000Z',
+        updated_at: '2026-06-01T08:00:00.000Z',
+      },
+      {
+        id: 'deposit-1',
+        user_id: SESSION_CONTEXT.userId,
+        type: 'DEFINDEX_YIELD_DEPOSIT',
+        status: 'COMPLETED',
+        amount: 100,
+        asset_code: 'USDC',
+        source_public_key: SESSION_CONTEXT.publicKey,
+        context: JSON.stringify({ vault_address: YIELD_VAULTS.USDC }),
+        created_at: '2026-06-01T10:00:00.000Z',
+        updated_at: '2026-06-01T10:00:00.000Z',
+      },
+      {
+        id: 'ignored-vault',
+        user_id: SESSION_CONTEXT.userId,
+        type: 'DEFINDEX_YIELD_DEPOSIT',
+        status: 'COMPLETED',
+        amount: 75,
+        asset_code: 'USDC',
+        source_public_key: SESSION_CONTEXT.publicKey,
+        context: JSON.stringify({ vault_address: 'COTHERTESTNETVAULT000000000000000000000000000000000000000000' }),
+        created_at: '2026-06-02T10:00:00.000Z',
+        updated_at: '2026-06-02T10:00:00.000Z',
+      },
+      {
+        id: 'withdraw-1',
+        user_id: SESSION_CONTEXT.userId,
+        type: 'DEFINDEX_YIELD_WITHDRAW',
+        status: 'COMPLETED',
+        amount: 25,
+        asset_code: 'USDC',
+        source_public_key: SESSION_CONTEXT.publicKey,
+        context: JSON.stringify({ vault_address: YIELD_VAULTS.USDC }),
+        created_at: '2026-06-03T10:00:00.000Z',
+        updated_at: '2026-06-03T10:00:00.000Z',
+      },
+    ] as any);
+
+    const result = await AnchorService.getDefindexYieldHistoryForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      asset_code: 'USDC',
+      vault_address: YIELD_VAULTS.USDC,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      source: 'operation_history',
+      vault: expect.objectContaining({ asset_code: 'USDC', vault_address: YIELD_VAULTS.USDC }),
+      points: [
+        expect.objectContaining({
+          date: '2026-06-01T10:00:00.000Z',
+          amount: '100',
+          delta: '100',
+          action: 'deposit',
+          operation_id: 'deposit-1',
+        }),
+        expect.objectContaining({
+          date: '2026-06-03T10:00:00.000Z',
+          amount: '75',
+          delta: '-25',
+          action: 'withdraw',
+          operation_id: 'withdraw-1',
+        }),
+      ],
+    });
+  });
+
   it('prepares executable testnet XDR without separate compliance approval', async () => {
     process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
     delete process.env.DEFINDEX_COMPLIANCE_APPROVED;
@@ -405,7 +487,7 @@ describe('Defindex yield transaction flows', () => {
       execution_blocked_code: 'yield_execution_unavailable',
       setup_required: false,
     });
-    expect(String(result.execution_blocked_reason)).toContain('confirmacao de investimento');
+    expect(String(result.execution_blocked_reason)).toContain('confirmação de investimento');
     expect(String(result.execution_blocked_reason)).not.toContain('saldo disponivel nao e suficiente');
   });
 

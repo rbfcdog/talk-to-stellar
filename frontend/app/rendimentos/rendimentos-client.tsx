@@ -16,6 +16,14 @@ import {
   Plus,
   WalletCards,
 } from "lucide-react";
+import {
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
@@ -42,6 +50,25 @@ type YieldStatus = {
   }; vaults?: YieldOption[];
 };
 type PositionState = { loading: boolean; amount: string; error: string; raw?: unknown; source?: string; anomaly?: "testnet_conversion_loss"; };
+type PositionHistoryPoint = {
+  date: string;
+  amount: string;
+  delta?: string;
+  action?: "deposit" | "withdraw";
+  operation_id?: string;
+};
+type PositionHistoryState = { loading: boolean; points: PositionHistoryPoint[]; error: string; source?: string };
+type InvestmentRow = {
+  option: YieldOption;
+  code: string;
+  profile: { namePt: string; nameEn: string; short: string };
+  amount: number;
+  loading: boolean;
+  error: string;
+  source: string;
+  rate: number;
+  history: PositionHistoryState;
+};
 type YieldSuccessNotice = { action: "deposit" | "withdraw"; reviewedAmount: string; reviewedAsset: string; vaultAmount?: string; vaultAsset?: string; hash?: string; };
 
 const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: string }> = {
@@ -133,6 +160,149 @@ function ReturnPeriodPanel({ language, rate, assetLabel }: { language: AppLangua
         <p className="text-sm font-black text-tts-confirm">{formatReturnPercent(periodReturnPercent(rate, 1), language)}</p>
       </div>
       <ReturnPeriodGrid language={language} rate={rate} />
+    </div>
+  );
+}
+
+type ChartPoint = { label: string; date?: string; value: number; action?: string };
+
+function formatChartDate(value: unknown, language: AppLanguage) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return localCopy(language, "Hoje", "Today");
+  return new Intl.DateTimeFormat(isPortuguese(language) ? "pt-BR" : "en-US", {
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+function formatChartAmount(value: unknown, profile: { short: string }, language: AppLanguage) {
+  return `${formatAmount(value, language)} ${profile.short}`;
+}
+
+function shiftDate(daysAgo: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return date.toISOString();
+}
+
+function buildGrowthPathPoints(amount: number, ratePercent: number, language: AppLanguage): ChartPoint[] {
+  const base = Math.max(0, amount);
+  const annualRate = Math.max(0, ratePercent) / 100;
+  const labels = [
+    { days: 0, label: localCopy(language, "Hoje", "Today") },
+    { days: 30, label: "30d" },
+    { days: 90, label: "90d" },
+    { days: 180, label: "6m" },
+    { days: 365, label: "12m" },
+  ];
+  return labels.map((item) => ({
+    label: item.label,
+    value: annualRate > 0 ? base * Math.pow(1 + annualRate, item.days / 365) : base,
+  }));
+}
+
+function buildPositionLinePoints(history: PositionHistoryState | undefined, currentAmount: number, language: AppLanguage): ChartPoint[] {
+  const sorted = [...(history?.points || [])]
+    .filter((point) => Number.isFinite(Date.parse(String(point.date || ""))))
+    .sort((a, b) => Date.parse(String(a.date || "")) - Date.parse(String(b.date || "")));
+
+  const points: ChartPoint[] = sorted.map((point) => ({
+    label: formatChartDate(point.date, language),
+    date: point.date,
+    value: normalizeDecimal(point.amount),
+    action: point.action,
+  }));
+
+  if (points.length) {
+    const last = points[points.length - 1];
+    if (Math.abs(last.value - currentAmount) > 0.0000001) {
+      points.push({ label: localCopy(language, "Agora", "Now"), date: new Date().toISOString(), value: Math.max(0, currentAmount) });
+    }
+    return points;
+  }
+
+  return [30, 14, 7, 0].map((daysAgo) => ({
+    label: daysAgo === 0 ? localCopy(language, "Hoje", "Today") : formatChartDate(shiftDate(daysAgo), language),
+    date: shiftDate(daysAgo),
+    value: Math.max(0, currentAmount),
+  }));
+}
+
+function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
+  data: ChartPoint[];
+  profile: { short: string };
+  language: AppLanguage;
+  tone?: "primary" | "muted";
+}) {
+  const stroke = tone === "primary" ? "var(--tts-deep)" : "var(--tts-confirm)";
+  return (
+    <div className="h-28 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 6, bottom: 0, left: 6 }}>
+          <XAxis dataKey="label" hide />
+          <YAxis hide domain={["auto", "auto"]} />
+          <Tooltip
+            cursor={{ stroke: "rgba(113, 113, 122, 0.25)", strokeWidth: 1 }}
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const value = Number(payload[0]?.value || 0);
+              return (
+                <div className="border border-tts-border bg-tts-surface px-3 py-2 text-xs shadow-sm">
+                  <p className="font-bold text-tts-deep">{String(label || "")}</p>
+                  <p className="mt-0.5 font-semibold text-tts-muted">{formatChartAmount(value, profile, language)}</p>
+                </div>
+              );
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={stroke}
+            strokeWidth={2.25}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 0, fill: stroke }}
+            isAnimationActive
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function InvestmentGraphs({ language, row }: { language: AppLanguage; row: InvestmentRow }) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const growthPoints = buildGrowthPathPoints(row.amount, row.rate, language);
+  const historyPoints = buildPositionLinePoints(row.history, row.amount, language);
+  const growthValue = growthPoints[growthPoints.length - 1]?.value || row.amount;
+  const hasMovements = Boolean(row.history.points.length);
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-2xl border border-tts-border bg-tts-bg p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Caminho estimado", "Growth path")}</p>
+            <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(growthValue, row.profile, language)}</p>
+          </div>
+          <span className="text-xs font-black text-tts-confirm">
+            {formatReturnPercent(periodReturnPercent(row.rate, 1), language)}
+          </span>
+        </div>
+        <InvestmentLineChart data={growthPoints} profile={row.profile} language={language} tone="muted" />
+      </div>
+
+      <div className="rounded-2xl border border-tts-border bg-tts-bg p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha real", "Real balance line")}</p>
+            <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
+          </div>
+          <span className="text-[11px] font-bold text-tts-muted">
+            {row.history.loading ? L("Carregando", "Loading") : hasMovements ? L("Movimentos", "Movements") : L("Atual", "Current")}
+          </span>
+        </div>
+        <InvestmentLineChart data={historyPoints} profile={row.profile} language={language} />
+      </div>
     </div>
   );
 }
@@ -264,6 +434,7 @@ export default function RendimentosClient({
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
   const [positionBalances, setPositionBalances] = useState<Record<string, PositionState>>({});
+  const [positionHistories, setPositionHistories] = useState<Record<string, PositionHistoryState>>({});
   const [yieldResult, setYieldResult] = useState<any | null>(null);
   const [successNotice, setSuccessNotice] = useState<YieldSuccessNotice | null>(null);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
@@ -384,7 +555,9 @@ export default function RendimentosClient({
     if (tab !== "returns" || !session.authenticated || !options.length || !channelPinUnlocked) return;
     let cancelled = false;
     const initial = Object.fromEntries(options.map((o) => [optionCode(o), { loading: true, amount: "0", error: "" }]));
+    const initialHistories = Object.fromEntries(options.map((o) => [optionCode(o), { loading: true, points: [], error: "" }]));
     setPositionBalances(initial);
+    setPositionHistories(initialHistories);
     Promise.all(options.map(async (o) => {
       const code = optionCode(o);
       try {
@@ -394,6 +567,20 @@ export default function RendimentosClient({
         return [code, { loading: false, amount: "0", error: String(error instanceof Error ? error.message : error) }] as const;
       }
     })).then((entries) => { if (!cancelled) setPositionBalances(Object.fromEntries(entries)); });
+    Promise.all(options.map(async (o) => {
+      const code = optionCode(o);
+      try {
+        const payload = await yieldApi(`defindex/yield/history?asset_code=${encodeURIComponent(o.asset_code)}&vault_address=${encodeURIComponent(o.vault_address)}`, undefined, 22000, session.sessionSource);
+        return [code, {
+          loading: false,
+          points: Array.isArray(payload?.points) ? payload.points : [],
+          error: "",
+          source: String(payload?.source || ""),
+        }] as const;
+      } catch (error) {
+        return [code, { loading: false, points: [], error: String(error instanceof Error ? error.message : error) }] as const;
+      }
+    })).then((entries) => { if (!cancelled) setPositionHistories(Object.fromEntries(entries)); });
     return () => { cancelled = true; };
   }, [tab, session.authenticated, session.sessionSource, options, language, channelPinUnlocked]);
 
@@ -489,7 +676,7 @@ export default function RendimentosClient({
             {tab === "returns" && (
               <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
-                positionBalances={positionBalances} isTestnet={isTestnetYield}
+                positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={isTestnetYield}
                 onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
               />
             )}
@@ -562,9 +749,10 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, isTestnet, onRefresh, sessionLinkContext }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, onRefresh, sessionLinkContext }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
+  positionHistories: Record<string, PositionHistoryState>;
   isTestnet: boolean; onRefresh: () => void; sessionLinkContext: Record<string, string>;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
@@ -581,6 +769,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
       error: String(pos?.error || ""),
       source: String(pos?.source || ""),
       rate: optionRatePercent(o),
+      history: positionHistories[code] || { loading: false, points: [], error: "" },
     };
   });
   return (
@@ -615,11 +804,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
                   </div>
                 </div>
                 <div className="mb-3">
-                  <ReturnPeriodPanel
-                    language={language}
-                    rate={row.rate}
-                    assetLabel={profileName(row.profile, language)}
-                  />
+                  <InvestmentGraphs language={language} row={row} />
                 </div>
                 <a href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", ...sessionLinkContext, lang: language })}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-tts-border text-sm font-bold hover:bg-tts-bg transition mt-2">
@@ -642,7 +827,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
 
 function PortfolioOverview({ language, rows, isTestnet }: {
   language: AppLanguage;
-  rows: Array<{ code: string; profile: { namePt: string; nameEn: string; short: string }; amount: number; rate: number; loading: boolean; error: string; source: string }>;
+  rows: InvestmentRow[];
   isTestnet: boolean;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
@@ -662,16 +847,16 @@ function PortfolioOverview({ language, rows, isTestnet }: {
       <div className="mt-5 border border-tts-border bg-tts-bg p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Rentabilidade por período", "Returns by period")}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Linhas da carteira", "Portfolio lines")}</p>
             <p className="mt-1 text-sm font-semibold text-tts-muted">
-              {L("Estimativa anualizada por ativo.", "Annualized estimate by asset.")}
+              {L("Posição real por ativo. Cada cartão mostra também o caminho estimado.", "Real position by asset. Each card also shows the growth path.")}
             </p>
           </div>
           <span className="rounded-full border border-tts-border px-3 py-1 text-[11px] font-bold text-tts-muted">
             {isTestnet ? L("Testnet", "Testnet") : L("Atual", "Live")}
           </span>
         </div>
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
           {rows.map((row) => (
             <div key={row.code} className="rounded-2xl border border-tts-border bg-tts-surface p-3">
               <div className="flex items-center justify-between gap-3">
@@ -679,12 +864,18 @@ function PortfolioOverview({ language, rows, isTestnet }: {
                   <p className="text-sm font-black text-tts-deep">{row.profile.short}</p>
                   <p className="text-xs font-semibold text-tts-muted">{profileName(row.profile, language)}</p>
                 </div>
-                <p className="text-sm font-black text-tts-confirm">
-                  {formatReturnPercent(periodReturnPercent(row.rate, 1), language)}
-                </p>
+                <p className="text-xs font-black text-tts-confirm">{formatReturnPercent(periodReturnPercent(row.rate, 1), language)}</p>
               </div>
-              <div className="mt-3">
-                <ReturnPeriodGrid language={language} rate={row.rate} />
+              <div className="mt-2">
+                <InvestmentLineChart
+                  data={buildPositionLinePoints(row.history, row.amount, language)}
+                  profile={row.profile}
+                  language={language}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-tts-muted">{L("Atual", "Current")}</span>
+                <span className="font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</span>
               </div>
             </div>
           ))}

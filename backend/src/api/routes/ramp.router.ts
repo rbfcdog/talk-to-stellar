@@ -11,6 +11,7 @@ router.get('/etherfuse/kyc-status', RampController.getEtherfuseKycStatus);
 router.get('/etherfuse/assets', RampController.getEtherfuseAssets);
 router.get('/defindex/yield/status', RampController.getDefindexYieldStatus);
 router.get('/defindex/yield/balance', RampController.getDefindexYieldBalance);
+router.get('/defindex/yield/history', RampController.getDefindexYieldHistory);
 router.post('/defindex/yield/prepare', RampController.prepareDefindexYield);
 router.post('/defindex/yield/execute', RampController.executeDefindexYield);
 router.get('/etherfuse/wallet-balances', RampController.getEtherfuseWalletBalances);
