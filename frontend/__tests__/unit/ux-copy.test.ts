@@ -17,7 +17,6 @@ describe("UX copy guardrails", () => {
 
   it("keeps shared account affordances on money screens", () => {
     const screens = [
-      "app/rendimentos/rendimentos-client.tsx",
       "app/transactions/transactions-client.tsx",
       "app/balance/balance-client.tsx",
       "app/passkey-test/passkey-test-client.tsx",
@@ -34,9 +33,11 @@ describe("UX copy guardrails", () => {
     }
 
     const pixRampText = source("app/pix-ramp/pix-ramp-client.tsx");
+    const rendimentosText = source("app/rendimentos/rendimentos-client.tsx");
     expect(pixRampText).toContain("MobilePixStepper");
     expect(pixRampText).toContain("LiveRampPanel");
     expect(pixRampText).not.toContain("AccountStatusCard");
+    expect(rendimentosText).not.toContain("AccountStatusCard");
     expect(pixRampText).not.toContain("ReturnToChat");
   });
 
@@ -360,7 +361,9 @@ describe("UX copy guardrails", () => {
     const returnsPage = source("app/rendimentos/page.tsx");
 
     expect(reviewText).toContain("const actionableOption = selectedOption;");
-    expect(reviewText).toContain("Converter ativos");
+    expect(reviewText).toContain("selectedAvailableDisplay");
+    expect(reviewText).toContain("Disponível:");
+    expect(reviewText).toContain("Insufficient balance");
     expect(reviewText).toContain("href={returnsHref}");
     expect(reviewText).toContain('view: "application"');
     expect(reviewText).toContain('action: "deposit"');

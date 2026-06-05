@@ -601,7 +601,7 @@ describe('Agent tool execution', () => {
     expect(statusSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('formats yield balance from raw contract units before replying in chat', async () => {
+  it('never exposes yield balances in chat and opens the secure PIN screen instead', async () => {
     const { AnchorService } = require('../src/api/services/anchor.service');
     const balanceSpy = jest.spyOn(AnchorService, 'getDefindexYieldBalanceForSession').mockResolvedValueOnce({
       success: true,
@@ -621,13 +621,15 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(true);
-    expect(parsed.amount).toBe('70');
-    expect(parsed.message).toContain('Posição atual: 70 dólares.');
+    expect(parsed.amount).toBeUndefined();
+    expect(parsed.balance).toBeUndefined();
+    expect(parsed.frontend_url).toContain('/r/');
+    expect(parsed.message).toContain('Abra seus rendimentos aqui:');
+    expect(parsed.message).toContain(parsed.frontend_url);
+    expect(parsed.message).toContain('PIN');
+    expect(parsed.message).not.toContain('70');
     expect(parsed.message).not.toContain('700000000');
-    expect(balanceSpy).toHaveBeenCalledWith(expect.objectContaining({
-      session_id: '11111111-1111-4111-8111-111111111111',
-      asset_code: 'USDC',
-    }));
+    expect(balanceSpy).not.toHaveBeenCalled();
   });
 
   it('prepares yield through the tool layer without exposing unsigned operation payloads', async () => {
