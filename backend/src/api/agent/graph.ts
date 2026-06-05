@@ -4729,6 +4729,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       }
 
       if ((!finalSourceAmount && !finalDestAmount) || !finalSourceAssetCode || !finalDestAssetCode) {
+        const externalProvider = String((state.action_params as any)?.external_provider || '').trim().toLowerCase();
+        const externalProviderUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
+        const externalSource = String((state.action_params as any)?.external_source || externalProvider || '').trim().toLowerCase();
+        const externalSessionScope = normalizeExternalSessionScope(externalProvider || externalSource);
         const conversionInterfaceRaw = await executeTool('open_conversion_interface', {
           source_amount: finalSourceAmount,
           dest_amount: finalDestAmount,
@@ -4736,6 +4740,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
           source_asset_code: finalSourceAssetCode || 'BRL',
           dest_asset_code: finalDestAssetCode || 'USDC',
           language: this.getLanguage(state),
+          provider: externalProvider || undefined,
+          provider_user_id: externalProviderUserId || undefined,
+          source: externalSource || undefined,
+          session_scope: externalSessionScope || undefined,
         });
 
         let conversionInterface: any;

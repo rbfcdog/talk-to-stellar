@@ -63,7 +63,7 @@ describe("UX copy guardrails", () => {
     const financialRouter = source("../backend/src/api/routes/financial.router.ts");
 
     expect(text).toContain("AccountStatusCard");
-    expect(text).toContain("/api/financial/conversion-confirmation");
+    expect(text).toContain('fetch(`/api/financial/${scopedFinancialApiPath("conversion-confirmation")}`');
     expect(text).toContain("ConfirmConversionClient");
     expect(text).toContain("Nada passa pelo chat");
     expect(text).toContain("Saldo insuficiente para converter");
@@ -84,11 +84,26 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("payload?.token");
     expect(text).toContain("currentPageSessionSource");
     expect(text).toContain("scopedRampApiPath");
+    expect(text).toContain("scopedFinancialApiPath");
     expect(text).toContain('params.set("session_scope", source)');
     expect(text).toContain("fetch(`/api/ramp/${scopedRampApiPath(path)}`");
+    expect(text).toContain("{ source: sessionScope, session_scope: sessionScope }");
     expect(text).not.toContain("ReturnToChat");
     expect(text).not.toContain('buildUrl("/chat"');
     expect(financialRouter).toContain("conversion-confirmation");
+  });
+
+  it("keeps conversion rates focused on the selected pair", () => {
+    const text = source("app/convert/convert-client.tsx");
+
+    expect(text).toContain('L("Cotação selecionada", "Selected quote")');
+    expect(text).toContain("selectedRateCell");
+    expect(text).toContain('L("Par selecionado", "Selected pair")');
+    expect(text).toContain('L("Taxa", "Rate")');
+    expect(text).not.toContain("Matriz 4x4");
+    expect(text).not.toContain("4x4 matrix");
+    expect(text).not.toContain('L("De / Para", "From / To")');
+    expect(text).not.toContain("min-w-[640px]");
   });
 
   it("keeps conversion confirmation inside the web app with visible errors", () => {
