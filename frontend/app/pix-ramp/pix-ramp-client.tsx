@@ -4394,12 +4394,10 @@ function RampFeeBridge({
   const savingsPercentDisplay = formatPercentValue(savingsPercent, language);
   const remainingFeePercentDisplay = formatPercentValue(remainingFeePercent, language);
   const savingsTitle = mode === "onramp"
-    ? L("Economia nesta rota", "Savings on this route")
+    ? L("Economia", "Savings")
     : L("Economia estimada", "Estimated savings");
-  const savingsDescription = L(
-    `Taxa desta rota: ${remainingFeePercentDisplay}% do custo tradicional, antes do PIN.`,
-    `This route fee: ${remainingFeePercentDisplay}% of the traditional cost before PIN.`,
-  );
+  const savingsCaption = L("menos taxa", "less fee");
+  const savingsDescription = L(`${remainingFeePercentDisplay}% do custo tradicional`, `${remainingFeePercentDisplay}% of traditional cost`);
   const feeTitle = mode === "onramp"
     ? L("Resumo do PIX", "PIX summary")
     : L("Resumo da retirada", "Withdrawal summary");
@@ -4427,17 +4425,18 @@ function RampFeeBridge({
       </div>
 
       {showSavingsCard && (
-        <div className="mt-4 rounded-2xl border border-tts-gold/50 bg-tts-gold-bg/70 p-3 text-tts-deep">
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mt-3 rounded-2xl border border-tts-confirm/35 bg-tts-confirm/10 p-3 text-tts-deep">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-normal text-tts-gold">
+              <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">
                 {savingsTitle}
               </p>
-              <p className="mt-1 text-base font-black">{savingsPercentDisplay}% {L("menos taxa", "less fee")}</p>
+              <p className="mt-1 text-3xl font-black leading-none text-tts-confirm">{savingsPercentDisplay}%</p>
             </div>
-            <p className="max-w-sm text-[10px] font-semibold leading-4 text-tts-muted">
-              {savingsDescription}
-            </p>
+            <div className="text-right">
+              <p className="text-sm font-black text-tts-deep">{savingsCaption}</p>
+              <p className="mt-1 text-[10px] font-semibold leading-4 text-tts-muted">{savingsDescription}</p>
+            </div>
           </div>
         </div>
       )}
