@@ -265,6 +265,56 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Retirada via PIX concluída');
   });
 
+  it('shows the real PIX off-ramp fee from quote fee fields', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-pix-off-fee',
+      userId: 'user-pix-off-fee',
+      counterpartyLabel: 'Seu PIX',
+      sourceAmount: '50.25',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '50',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+      contextMessage: 'PIX enviado ao seu PIX.',
+      quote: {
+        direction: 'offramp',
+        source_amount: '50.25',
+        target_brl: '50',
+        anchor_provider_fee_amount: '0.10',
+        talktostellar_transaction_fee_amount: '0.15',
+        total_fee_amount: '0.25',
+      },
+    });
+
+    expect(receipt).toContain('Resumo: PIX enviado ao seu PIX.');
+    expect(receipt).toContain('Taxa: R$ 0.25');
+    expect(receipt).not.toContain('Taxa: indisponível');
+    expect(receipt).not.toContain('Taxa: indisponivel');
+  });
+
+  it('infers the PIX off-ramp fee from debited and received BRL amounts', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-pix-off-fee-delta',
+      userId: 'user-pix-off-fee-delta',
+      counterpartyLabel: 'Seu PIX',
+      sourceAmount: '50.25',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '50',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+      contextMessage: 'PIX enviado ao seu PIX.',
+      quote: {
+        direction: 'offramp',
+      },
+    });
+
+    expect(receipt).toContain('Taxa: R$ 0.25');
+    expect(receipt).not.toContain('Taxa: indisponível');
+    expect(receipt).not.toContain('Taxa: indisponivel');
+  });
+
   it('uses the concise external callback for normal contact transfers', async () => {
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
