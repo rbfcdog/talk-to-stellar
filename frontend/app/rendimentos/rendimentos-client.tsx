@@ -225,9 +225,9 @@ export default function RendimentosClient({
   const selectedHasYield = Boolean(selectedOption);
   const selectedExecutionBlocked = optionExecutionBlocked(actionableOption);
   const sessionLoading = Boolean(session.loading && !session.checked);
-  const requiresChannelPin = Boolean(session.authenticated && session.externalPriority);
+  const requiresChannelPin = Boolean(session.authenticated);
   const channelPinUnlocked = !requiresChannelPin || returnsPinVerified;
-  const canPrepare = Boolean(!sessionLoading && session.authenticated && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
+  const canPrepare = Boolean(!sessionLoading && session.authenticated && channelPinUnlocked && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
   const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const requestedAmount = normalizeDecimal(amount);
   const selectedBalanceAmount = normalizeDecimal(balanceForSelected?.balance || "0");
@@ -292,21 +292,14 @@ export default function RendimentosClient({
         const sessionPayload = await getClientSession();
         const nextSession = { ...sessionPayload, loading: false, checked: true };
         setSession(nextSession);
-        const accountPromise = nextSession.authenticated && !nextSession.externalPriority ? yieldApi("etherfuse/wallet-balances", undefined, 20000, nextSession.sessionSource) : Promise.resolve(null);
         const statusPayload = await statusPromise;
         setYieldStatus(statusPayload);
         const vaults = Array.isArray(statusPayload?.vaults) ? statusPayload.vaults : [];
         const bestAvailable = vaults[0] || null;
         if (!requestedAssetRef.current && bestAvailable) setSelectedCode((c) => vaults.some((item: YieldOption) => optionCode(item) === c) ? c : optionCode(bestAvailable));
         if (!nextSession.authenticated) { setBalances([]); setApiState({ loading: false, message: L("Entre para ver seus saldos.", "Sign in to see balances."), error: "" }); return; }
-        if (nextSession.externalPriority) {
-          setBalances([]);
-          setApiState({ loading: false, message: L("Confirme seu PIN para ver seus rendimentos.", "Confirm your PIN to see your returns."), error: "" });
-          return;
-        }
-        const accountPayload = await accountPromise;
-        setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
-        setApiState({ loading: false, message: "", error: "" });
+        setBalances([]);
+        setApiState({ loading: false, message: L("Confirme seu PIN para ver seus rendimentos.", "Confirm your PIN to see your returns."), error: "" });
       } catch (error) {
         if (isSessionUiError(error)) setSession({ authenticated: false, loading: false, checked: true });
         else setSession((c) => ({ ...c, loading: false, checked: true }));

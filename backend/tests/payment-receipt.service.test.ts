@@ -103,8 +103,10 @@ describe('PaymentReceiptService', () => {
       contextMessage: 'PIX confirmado. Entregamos BRL na sua conta TalkToStellar.',
     });
 
+    expect(receipt).toContain('Você recebeu R$ 99.50 de PIX.');
     expect(receipt).toContain('Taxa: R$ 0.50');
     expect(receipt).not.toContain('Taxa: indisponivel');
+    expect(receipt).not.toMatch(/Etherfuse|anchor|provedor|provider/i);
   });
 
   it('shows the real PIX on-ramp fee from saved operation context', async () => {
@@ -129,8 +131,10 @@ describe('PaymentReceiptService', () => {
       },
     });
 
+    expect(receipt).toContain('Você recebeu R$ 99.50 de PIX.');
     expect(receipt).toContain('Taxa: R$ 0.50');
     expect(receipt).not.toContain('Taxa: indisponivel');
+    expect(receipt).not.toMatch(/Etherfuse|anchor|provedor|provider/i);
   });
 
   it('infers the PIX on-ramp fee from configured bps when only the net BRL amount is present', async () => {
@@ -150,8 +154,10 @@ describe('PaymentReceiptService', () => {
       contextMessage: 'PIX confirmado. Entregamos BRL na sua conta TalkToStellar.',
     });
 
+    expect(receipt).toContain('Você recebeu R$ 99.50 de PIX.');
     expect(receipt).toContain('Taxa: R$ 0.50');
     expect(receipt).not.toContain('Taxa: indisponivel');
+    expect(receipt).not.toMatch(/Etherfuse|anchor|provedor|provider/i);
   });
 
   it('hides quote line when payment uses the same asset', async () => {
@@ -331,7 +337,7 @@ describe('PaymentReceiptService', () => {
       destinationAmount: '100',
       destinationAssetCode: 'BRL',
       hash: 'sandbox-pix-fallback-1',
-      externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$100.00',
+      externalDeliveryText: 'PIX Etherfuse confirmado com sucesso.\nValor recebido: R$100.00',
     });
 
     const fallbackUrl = 'https://talk-to-stellar-owxg.vercel.app/api/external/receipts/sandbox-pix-fallback-1';
@@ -342,6 +348,44 @@ describe('PaymentReceiptService', () => {
       text: expect.stringContaining('PIX confirmado com sucesso.'),
     }));
     expect(notifySpy.mock.calls[0][0].text).toContain(`Comprovante: ${fallbackUrl}`);
+    expect(notifySpy.mock.calls[0][0].text).not.toMatch(/Etherfuse|anchor|provedor|provider/i);
+
+    createSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
+  it('still appends a usable receipt link when the payment hash is missing', async () => {
+    const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockRejectedValue(new Error('receipt_images unavailable'));
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    const result = await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-pix-no-hash',
+      userId: 'user-pix-no-hash',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX',
+      sourceAmount: '100.50',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '100',
+      destinationAssetCode: 'BRL',
+      hash: '',
+      dedupeKey: 'pix-onramp:operation-no-hash',
+      externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$100.00\nComprovante:',
+    });
+
+    expect(result).toContain('/api/external/receipts/');
+    expect(result).toContain(encodeURIComponent('pix-onramp:operation-no-hash'));
+    expect(notifySpy.mock.calls[0][0].text).toContain(`Comprovante: ${result}`);
+    expect(notifySpy.mock.calls[0][0].text).not.toMatch(/Comprovante:\s*(?:\n|$)/);
 
     createSpy.mockRestore();
     notifySpy.mockRestore();

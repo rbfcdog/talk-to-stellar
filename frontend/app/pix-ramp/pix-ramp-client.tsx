@@ -749,7 +749,7 @@ function WalletPinInput({
       : "focus-within:border-tts-confirm";
 
   return (
-    <div className={`mt-2 rounded-2xl border border-tts-border bg-tts-bg transition ${border}`}>
+    <div className={`tts-fill-field mt-2 rounded-2xl border-2 border-tts-border bg-tts-bg transition ${border}`}>
       <div className="flex items-center gap-3">
         <input
           className="min-w-0 flex-1 bg-transparent px-4 py-4 text-xl font-black tracking-normal text-tts-deep outline-none placeholder:tracking-normal placeholder:text-tts-muted"
@@ -1052,9 +1052,9 @@ export default function PixRampClient({
   ].join(":"))}`;
   const currentOnRampIntentId = activeOnRampIntentId || atomicIntentKey;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
-  const offRampExactReceiveBrl = Boolean(rampMode === "offramp" && offRampInputAsset !== "BRL" && offRampFiatAmount.trim());
+  const offRampExactReceiveBrl = Boolean(rampMode === "offramp" && (offRampFiatAmount.trim() || offRampInputAsset === "BRL"));
   const offRampInputValue = offRampExactReceiveBrl
-    ? offRampFiatAmount
+    ? (offRampFiatAmount || offRampAmount)
     : offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : offRampAmount;
   const offRampDisplayAmount = offRampExactReceiveBrl || offRampInputAsset === "BRL"
     ? formatMoney(offRampInputValue || "0")
@@ -1240,11 +1240,12 @@ export default function PixRampClient({
   const offRampReturnHref = buildAppPath("/pix-off", {
     mode: "offramp",
     amount: offRampInputValue,
-    source_amount: offRampInputValue,
+    source_amount: offRampExactReceiveBrl ? "" : offRampInputValue,
     source_asset: offRampInputAsset,
     asset: offRampInputAsset,
     currency: offRampInputAsset,
-    fiat_amount: offRampExactReceiveBrl ? offRampFiatAmount : "",
+    fiat_amount: offRampExactReceiveBrl ? offRampInputValue : "",
+    target_brl: offRampExactReceiveBrl ? offRampInputValue : "",
     destination_pix_key: normalizedOffRampPixKey,
     from: "pix-off",
     return_source: "pix-off",
@@ -2942,11 +2943,11 @@ export default function PixRampClient({
     }, "POST", auth);
     const previewCustomerId = getRampCustomerId(customerResult);
     setCustomerPayload(customerResult);
-    const targetBrlAmount = normalizeHumanAmount(offRampFiatAmount.trim());
+    const targetBrlAmount = normalizeHumanAmount((offRampFiatAmount || (offRampInputAsset === "BRL" ? offRampAmount : "")).trim());
     const sourceAmount = normalizeHumanAmount(
       offRampExactReceiveBrl
         ? ""
-        : offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim()
+        : offRampInputAsset === "BRL" ? "" : offRampAmount.trim()
     );
     const sourceAssetCode = settlementAssetCode(offRampInputAsset);
     const payload = await callRamp("/api/ramp/etherfuse/offramp-preview", {
@@ -2956,7 +2957,7 @@ export default function PixRampClient({
       source_amount: sourceAmount || undefined,
       source_asset_code: sourceAssetCode,
       amount_currency: sourceAssetCode,
-      fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : targetBrlAmount || undefined,
+      fiat_amount: targetBrlAmount || undefined,
       target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
       target_currency: "BRL",
     }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
@@ -2974,11 +2975,11 @@ export default function PixRampClient({
       }
       const bankAccount = offRampDestinationBankAccount;
       const providerFiatAccountId = getProviderFiatAccountId(bankAccount);
-      const targetBrlAmount = normalizeHumanAmount(offRampFiatAmount.trim());
+      const targetBrlAmount = normalizeHumanAmount((offRampFiatAmount || (offRampInputAsset === "BRL" ? offRampAmount : "")).trim());
       const initialSourceAmount = normalizeHumanAmount(
         offRampExactReceiveBrl
           ? ""
-          : offRampInputAsset === "BRL" ? (offRampFiatAmount.trim() || offRampAmount.trim()) : offRampAmount.trim()
+          : offRampInputAsset === "BRL" ? "" : offRampAmount.trim()
       );
       const sourceAssetCode = settlementAssetCode(offRampInputAsset);
       const balancesBefore = await fetchBalances(auth);
@@ -2994,8 +2995,8 @@ export default function PixRampClient({
           source_amount: initialSourceAmount || undefined,
           source_asset_code: sourceAssetCode,
           amount_currency: sourceAssetCode,
-          fiat_amount: offRampInputAsset === "BRL" ? initialSourceAmount : targetBrlAmount || undefined,
-          target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
+            fiat_amount: targetBrlAmount || undefined,
+            target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
           target_currency: "BRL",
         }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
         setOffRampPreviewPayload(previewPayload);
@@ -3023,7 +3024,7 @@ export default function PixRampClient({
             source_asset_code: sourceAssetCode,
             display_source_asset_code: offRampInputAsset,
             available_balance: formatRampAsset(sumVisibleBalance(balancesBefore, offRampInputAsset).toFixed(7), offRampInputAsset),
-            fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : targetBrlAmount || undefined,
+            fiat_amount: targetBrlAmount || undefined,
             target_brl: offRampExactReceiveBrl ? targetBrlAmount : previewPayload?.target_brl,
             destination_currency: "BRL",
             destination_pix_key: bankAccount.pix_key,
@@ -3042,7 +3043,7 @@ export default function PixRampClient({
           source_asset_code: sourceAssetCode,
           source_asset_issuer: previewPayload?.source_asset_issuer || undefined,
           amount_currency: sourceAssetCode,
-          fiat_amount: offRampInputAsset === "BRL" ? sourceAmount : targetBrlAmount || undefined,
+          fiat_amount: targetBrlAmount || undefined,
           target_brl: previewPayload?.target_brl || undefined,
           target_currency: "BRL",
           destination_pix_key: bankAccount.pix_key,
@@ -3223,8 +3224,8 @@ export default function PixRampClient({
         )}
 
         {error && (
-          <section className="mt-5 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
-            <p>{error}</p>
+          <section className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
+            <p className="font-black">{error}</p>
             {offRampInsufficientBalance && (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <a
@@ -3312,6 +3313,21 @@ export default function PixRampClient({
           hasReceiptStep={step === "success" || Boolean(temporaryOffRampTestResult)}
         />
 
+        <MobileActionGuide
+          mode={rampMode}
+          stage={mobileStage}
+          language={language}
+          hasSession={hasSession}
+          needsLogin={needsBrowserLoginForPix}
+          hasOrder={Boolean(order)}
+          hasPixKey={Boolean(normalizedOffRampPixKey)}
+          hasQuote={Boolean(offRampQuote || quote)}
+          pinReady={walletPin.length >= 4}
+          loading={loading}
+          orderFailed={orderFailed}
+          operationLocked={operationLocked}
+        />
+
         <div className="hidden md:block">
           <LiveRampPanel
             mode={rampMode}
@@ -3356,10 +3372,10 @@ export default function PixRampClient({
                 <h2 className="mt-1 text-2xl font-bold text-tts-deep">{L("Enviar para PIX", "Send to PIX")}</h2>
 
               <div className={`${mobileStage === "details" ? "block" : "hidden"} md:block`}>
-                <label className="mt-6 block text-sm font-bold text-tts-deep">
-                  {L("Valor", "Amount")}
+	                <label className="tts-field-label mt-6 block text-sm font-black text-tts-deep">
+	                  {offRampExactReceiveBrl ? L("Preencha o valor que chega no PIX", "Enter the amount that arrives in PIX") : L("Preencha o valor que sai da conta", "Enter the amount leaving the account")}
                 </label>
-                <div className="mt-2 flex overflow-hidden rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
+                <div className="tts-fill-field mt-2 flex overflow-hidden rounded-xl border-2 border-tts-border bg-tts-bg focus-within:border-tts-gold">
                   <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputPrefix}</span>
                   <input
                     className="min-w-0 w-full bg-transparent px-4 py-4 text-2xl font-bold text-tts-deep outline-none disabled:text-tts-deep disabled:opacity-100"
@@ -3388,10 +3404,10 @@ export default function PixRampClient({
                   <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{offRampInputUnit}</span>
                 </div>
                 {offRampAmountLocked && (
-                  <p className="mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
+                  <p className="tts-mobile-soft-hide mt-2 text-xs font-bold text-tts-gold">{L("Valor definido pelo chat.", "Amount set by chat.")}</p>
                 )}
-                <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Chave PIX", "PIX key")}</label>
-                <div className="mt-2 overflow-hidden rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-gold">
+	                <label className="tts-field-label mt-5 block text-sm font-black text-tts-deep">{L("Preencha a chave PIX", "Enter the PIX key")}</label>
+                <div className="tts-fill-field mt-2 overflow-hidden rounded-xl border-2 border-tts-border bg-tts-bg focus-within:border-tts-gold">
                   <input
                     className="w-full bg-transparent px-4 py-4 text-base font-black text-tts-deep outline-none placeholder:text-tts-muted"
                     value={offRampPixKey}
@@ -3405,10 +3421,10 @@ export default function PixRampClient({
                     }}
                   />
                 </div>
-                <p className="mt-2 text-xs font-bold text-tts-gold">
+	                <p className="tts-field-help tts-mobile-soft-hide mt-2 text-xs font-bold text-tts-muted">
                   {normalizedOffRampPixKey
-                    ? L(`Destino: PIX ${normalizedOffRampPixKey}`, `Destination: PIX ${normalizedOffRampPixKey}`)
-                    : L("Digite a chave PIX que receberá a retirada.", "Enter the PIX key that will receive the withdrawal.")}
+                    ? L(`PIX: ${normalizedOffRampPixKey}`, `PIX: ${normalizedOffRampPixKey}`)
+                    : L("Preencha a chave que vai receber.", "Enter the key that will receive it.")}
                 </p>
                 <div className="tts-mobile-action mt-5 md:hidden">
                   <button
@@ -3419,7 +3435,7 @@ export default function PixRampClient({
                       if (!offRampQuote) void run("Previewing PIX withdrawal", previewOffRampFees);
                     }}
                   >
-                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Continuar", "Continue")}
+	                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Continuar", "Continue")}
                   </button>
                 </div>
               </div>
@@ -3442,7 +3458,7 @@ export default function PixRampClient({
                     disabled={!canResolveWallet || Boolean(loading) || operationLocked}
                     onClick={() => run("Previewing PIX withdrawal", previewOffRampFees)}
                   >
-                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Calcular", "Calculate")}
+                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Atualizar valor", "Update amount")}
                   </button>
                 </div>
                 {offRampQuote ? (
@@ -3462,7 +3478,7 @@ export default function PixRampClient({
                   />
                 )}
               </div>
-              <label className="mt-6 block text-sm font-bold text-tts-deep">{L("PIN da conta", "Account PIN")}</label>
+	              <label className="tts-field-label mt-5 block text-sm font-black text-tts-deep">{L("Digite o PIN", "Enter PIN")}</label>
               <WalletPinInput
                 value={walletPin}
                 onChange={updateWalletPin}
@@ -3486,7 +3502,7 @@ export default function PixRampClient({
                   disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || !normalizedOffRampPixKey || operationLocked}
                   onClick={() => run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest)}
                 >
-                  {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada para meu PIX agora", "Confirm withdrawal to my PIX now")}
+                  {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada", "Confirm withdrawal")}
                 </button>
               </div>
               </div>
@@ -3535,11 +3551,11 @@ export default function PixRampClient({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">PIX</p>
-                <h2 className="mt-1 text-2xl font-black text-tts-deep">
-                  {transferFlow && transferRecipientLabel
-                    ? L(`Quanto você quer mandar para ${transferRecipientLabel}?`, `How much do you want to send to ${transferRecipientLabel}?`)
-                    : L("Quanto você quer colocar?", "How much do you want to add?")}
-                </h2>
+	                <h2 className="mt-1 text-2xl font-black text-tts-deep">
+	                  {transferFlow && transferRecipientLabel
+	                    ? L(`Enviar para ${transferRecipientLabel}`, `Send to ${transferRecipientLabel}`)
+	                    : L("Adicionar saldo", "Add money")}
+	                </h2>
               </div>
             </div>
 
@@ -3577,22 +3593,23 @@ export default function PixRampClient({
 
             {showOnRampReceiveTargetInput ? (
               <>
-                <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Você quer receber", "You want to receive")}</label>
-                <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg focus-within:border-tts-confirm">
+	                <label className="tts-field-label mt-6 block text-sm font-black text-tts-deep">{L("Preencha o valor que entra", "Enter the amount received")}</label>
+                <div className="tts-fill-field mt-2 flex overflow-hidden rounded-2xl border-2 border-tts-border bg-tts-bg focus-within:border-tts-confirm">
                   <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{friendlyAssetName(targetReceiveInputAsset, language)}</span>
                   <input
                     aria-label={L("Valor que você quer receber", "Amount you want to receive")}
                     className="min-w-0 w-full bg-transparent px-4 py-4 text-2xl font-bold text-tts-deep outline-none"
                     value={targetReceiveInputAmount}
                     inputMode="decimal"
+                    placeholder="100"
                     onChange={(event) => updateOnRampReceiveTargetAmount(event.target.value)}
                   />
                   <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-l border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">{targetReceiveInputAsset}</span>
                 </div>
-                <p className="mt-2 text-xs font-semibold text-tts-muted">
-                  {L("Altere o valor para recalcular o PIX antes de gerar o QR.", "Change the amount to recalculate PIX before creating the QR.")}
-                </p>
-                <div className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 px-4 py-3 text-sm font-bold text-tts-confirm">
+	                <p className="tts-field-help tts-mobile-soft-hide mt-2 text-xs font-semibold text-tts-muted">
+	                  {L("Valor final antes do PIN.", "Final amount before PIN.")}
+	                </p>
+                <div className="tts-result-chip mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 px-4 py-3 text-sm font-bold text-tts-confirm">
                   {hasExecutableOnRampPixPayAmount
                     ? L(`PIX final: ${effectiveOnRampPixPayDisplay}`, `Final PIX: ${effectiveOnRampPixPayDisplay}`)
                     : receiveEstimateLoading
@@ -3604,13 +3621,14 @@ export default function PixRampClient({
               </>
             ) : (
               <>
-                <label className="mt-6 block text-sm font-bold text-tts-deep">{L("Valor", "Amount")}</label>
-                <div className="mt-2 flex overflow-hidden rounded-2xl border border-tts-border bg-tts-bg focus-within:border-tts-confirm">
+	                <label className="tts-field-label mt-6 block text-sm font-black text-tts-deep">{L("Preencha o valor em reais", "Enter the BRL amount")}</label>
+                <div className="tts-fill-field mt-2 flex overflow-hidden rounded-2xl border-2 border-tts-border bg-tts-bg focus-within:border-tts-confirm">
                   <span className="flex min-w-[4.5rem] items-center justify-center whitespace-nowrap border-r border-tts-border bg-tts-surface px-4 text-sm font-black text-tts-muted">R$</span>
                   <input
                     className="min-w-0 w-full bg-transparent px-4 py-4 text-2xl font-bold text-tts-deep outline-none"
                     value={amountBrl}
                     inputMode="decimal"
+                    placeholder="100"
                     onChange={(event) => {
                       setAmountBrl(event.target.value);
                       clearQuoteState();
@@ -3622,15 +3640,15 @@ export default function PixRampClient({
             )}
 
             <div className="mt-5">
-              <p id="pix-receive-asset-label" className="mb-2 text-sm font-black tracking-normal text-tts-muted">
-                {L("Receber em:", "Receive in:")}
+	              <p id="pix-receive-asset-label" className="tts-field-label mb-2 text-sm font-black tracking-normal text-tts-deep">
+	                {L("Receber em:", "Receive in:")}
               </p>
-              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-tts-border bg-tts-bg/60 p-2 sm:grid-cols-4" aria-labelledby="pix-receive-asset-label">
+              <div className="tts-choice-grid grid grid-cols-2 gap-2 rounded-2xl border border-tts-border bg-tts-bg/60 p-2 sm:grid-cols-4" aria-labelledby="pix-receive-asset-label">
                 {TARGET_ASSETS.map((asset) => (
                   <button
                     key={asset}
                     type="button"
-                    className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-sm" : "text-tts-muted hover:bg-tts-surface"}`}
+                    className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-sm ring-2 ring-tts-confirm/35" : "text-tts-muted hover:bg-tts-surface"}`}
                     aria-pressed={targetAsset === asset}
                     onClick={() => {
                       if (asset !== targetAsset) {
@@ -3654,11 +3672,11 @@ export default function PixRampClient({
               />
             )}
             {transferFlow && transferRecipientLabel && (
-              <div className="mt-4 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-4 text-sm font-bold text-tts-confirm">
-                {transferRecipientVerified ? (
-                  <p className="text-xs text-tts-confirm">
-                    {L(`Depois que você confirmar o PIX, enviaremos automaticamente ${feeAdjustedAutoPayDisplayAmount}.`, `After you confirm the PIX, we will automatically send ${feeAdjustedAutoPayDisplayAmount}.`)}
-                  </p>
+	              <div className="mt-4 rounded-xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-bold text-tts-confirm">
+	                {transferRecipientVerified ? (
+	                  <p className="text-xs text-tts-confirm">
+	                    {L(`Depois do PIX: envio automático de ${feeAdjustedAutoPayDisplayAmount}.`, `After PIX: automatic send of ${feeAdjustedAutoPayDisplayAmount}.`)}
+	                  </p>
                 ) : (
                   <p className="text-xs text-tts-error">
                     {transferRecipientBlocker}
@@ -3667,14 +3685,14 @@ export default function PixRampClient({
               </div>
             )}
             {hasPostOnRampConversion && postConversionTargetDisplay && (
-              <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/70 p-4 text-sm text-tts-muted">
-                <p className="text-xs font-black uppercase tracking-normal text-tts-deep">{L("Depois do PIX", "After PIX")}</p>
-                <p className="mt-1 font-bold">
-                  {L(
-                    `Sua conta recebe ${requestedOnRampTargetDisplay} primeiro. Em seguida, convertemos esse saldo para ${postConversionTargetDisplay}.`,
-                    `Your account receives ${requestedOnRampTargetDisplay} first. Then we convert that balance to ${postConversionTargetDisplay}.`
-                  )}
-                </p>
+	              <div className="mt-4 rounded-xl border border-tts-border bg-tts-bg/70 p-3 text-sm text-tts-muted">
+	                <p className="text-xs font-black uppercase tracking-normal text-tts-deep">{L("Depois", "After")}</p>
+	                <p className="mt-1 font-bold">
+	                  {L(
+	                    `${requestedOnRampTargetDisplay} entra primeiro e vira ${postConversionTargetDisplay}.`,
+	                    `${requestedOnRampTargetDisplay} arrives first and becomes ${postConversionTargetDisplay}.`
+	                  )}
+	                </p>
               </div>
             )}
 
@@ -3690,19 +3708,19 @@ export default function PixRampClient({
                   void run("Preparing PIX checkout", confirmQuoteAndCreatePix);
                 }}
               >
-                {operationLocked
-                  ? L("PIX concluído", "PIX complete")
+	                    {operationLocked
+	                  ? L("PIX concluído", "PIX complete")
                   : loading === "Preparing PIX checkout"
                     ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Gerando PIX...", "Generating PIX...")}</span>
                   : quoteExpired
-                    ? L("Continuar", "Continue")
+                    ? L("Gerar novo PIX", "Create new PIX")
                   : onRampPixAlreadyGenerated
-                    ? L("Continuar", "Continue")
+                    ? L("Ir para pagar PIX", "Go pay PIX")
                     : waitingForReceiveEstimate
                       ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
                       : receiveEstimateMissing
                         ? L("Aguardando cotação atual", "Waiting for current quote")
-                        : L("Gerar PIX", "Generate PIX")}
+	                    : L("Continuar", "Continue")}
               </button>
             </div>
             {transferRecipientBlocker && (
@@ -3768,10 +3786,10 @@ export default function PixRampClient({
             >
               {L("Voltar", "Back")}
             </button>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento", "Payment")}</p>
-                <h2 className="mt-1 text-2xl font-black">{L("Faça o PIX", "Make the PIX")}</h2>
+	            <div className="flex items-center justify-between gap-3">
+	              <div>
+	                <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">{L("Pagamento", "Payment")}</p>
+	                <h2 className="mt-1 text-2xl font-black">{L("Pague no banco", "Pay in your bank")}</h2>
               </div>
             </div>
 
@@ -3824,7 +3842,7 @@ export default function PixRampClient({
                     </div>
                   ) : payablePixAvailable ? (
                     <div className="mt-5 rounded-2xl bg-tts-bg/60 p-4">
-                      <p className="mb-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
+                      <p className="tts-mobile-soft-hide mb-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
                         {L("PIX bancário integrado. Use o QR ou copie o código para pagar no seu app do banco.", "Bank PIX integrated. Use the QR or copy the code to pay in your bank app.")}
                       </p>
                       <div className="flex items-center justify-between gap-3">
@@ -3859,7 +3877,7 @@ export default function PixRampClient({
                           </p>
                         ) : (
                           <>
-                            <label className="sr-only">{L("PIN", "PIN")}</label>
+	                            <label className="tts-field-label mb-2 block text-sm font-black text-tts-deep">{L("Digite o PIN", "Enter PIN")}</label>
                             <WalletPinInput
                               value={walletPin}
                               onChange={updateWalletPin}
@@ -4140,6 +4158,85 @@ function MobilePixStepper({
   );
 }
 
+function MobileActionGuide({
+  mode,
+  stage,
+  language,
+  hasSession,
+  needsLogin,
+  hasOrder,
+  hasPixKey,
+  hasQuote,
+  pinReady,
+  loading,
+  orderFailed,
+  operationLocked,
+}: {
+  mode: RampMode;
+  stage: MobilePixStage;
+  language: "pt-BR" | "en";
+  hasSession: boolean;
+  needsLogin: boolean;
+  hasOrder: boolean;
+  hasPixKey: boolean;
+  hasQuote: boolean;
+  pinReady: boolean;
+  loading: string;
+  orderFailed: boolean;
+  operationLocked: boolean;
+}) {
+  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  let title = L("Preencha os campos", "Fill in the fields");
+  let detail = mode === "onramp"
+    ? L("Digite o valor, escolha a moeda e toque em Continuar para gerar PIX.", "Enter the amount, choose the asset, and tap Continue to generate PIX.")
+    : L("Digite valor e chave PIX. Depois toque em Continuar para conferir.", "Enter amount and PIX key. Then tap Continue to review.");
+
+  if (!hasSession || needsLogin) {
+    title = L("Entre com PIN", "Sign in with PIN");
+    detail = L("Toque em Entrar com PIN para continuar nesta tela.", "Tap Sign in with PIN to continue on this screen.");
+  } else if (operationLocked) {
+    title = L("Operação concluída", "Operation completed");
+    detail = L("Nada mais precisa ser preenchido nesta tela.", "Nothing else needs to be filled in on this screen.");
+  } else if (orderFailed) {
+    title = L("Gere outro PIX", "Create another PIX");
+    detail = L("Toque em Gerar novo PIX para tentar novamente.", "Tap Create new PIX to try again.");
+  } else if (loading) {
+    title = L("Aguarde", "Wait");
+    detail = publicLoadingLabel(loading, language);
+  } else if (stage === "payment" && mode === "onramp") {
+    title = hasOrder ? L("Pague e confirme", "Pay and confirm") : L("Gere o PIX", "Generate PIX");
+    detail = hasOrder
+      ? L("Pague no banco, digite o PIN e toque em Confirmar PIX.", "Pay in your bank app, enter PIN, and tap Confirm PIX.")
+      : L("Toque em Continuar para criar o QR do PIX.", "Tap Continue to create the PIX QR.");
+  } else if (stage === "payment" && mode === "offramp") {
+    title = pinReady ? L("Confirme a retirada", "Confirm withdrawal") : L("Digite o PIN", "Enter PIN");
+    detail = hasQuote
+      ? L("Confira o valor, digite o PIN e toque em Confirmar retirada.", "Check the amount, enter PIN, and tap Confirm withdrawal.")
+      : L("Toque em Atualizar valor para conferir antes do PIN.", "Tap Update amount to review before PIN.");
+  } else if (stage === "receipt") {
+    title = L("Concluído", "Done");
+    detail = L("A operação finalizada aparece aqui.", "The finished operation appears here.");
+  } else if (mode === "offramp" && !hasPixKey) {
+    title = L("Falta a chave PIX", "PIX key missing");
+    detail = L("Preencha a chave de destino para liberar o botão.", "Enter the destination key to enable the button.");
+  }
+
+  return (
+    <section className="tts-action-guide mt-3 rounded-xl border border-tts-border bg-tts-surface px-4 py-3 text-tts-deep shadow-sm md:hidden" aria-live="polite">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-tts-deep text-[11px] font-black text-tts-bg">
+          {L("Agora", "Now").slice(0, 1)}
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{L("Agora", "Now")}</p>
+          <h3 className="mt-0.5 text-sm font-black leading-5 text-tts-deep">{title}</h3>
+          <p className="mt-0.5 text-xs font-semibold leading-5 text-tts-muted">{detail}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TemporaryEndpointCard({ title, endpoint, description, disabled, hidden, onRun, result }: {
   title: string;
   endpoint: string;
@@ -4195,7 +4292,7 @@ function EtherfuseMeasuredFeeNotice({
     : L("Taxas aparecem antes da confirmação.", "Fees appear before confirmation.");
 
   return (
-    <div className="mt-4 rounded-xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep">
+    <div className="tts-mobile-soft-hide mt-4 rounded-xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep md:block">
       <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{label}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
@@ -4302,8 +4399,8 @@ function RampFeeBridge({
     ? L("Resumo do PIX", "PIX summary")
     : L("Resumo da retirada", "Withdrawal summary");
   const feeCaption = mode === "onramp"
-    ? L("Veja quanto paga no PIX, a taxa por fora e quanto entra na conta.", "See how much you pay by PIX, the fee on top, and how much arrives in the account.")
-    : L("Veja quanto sai da conta, a taxa do app e quanto chega no PIX.", "See how much leaves the account, the app fee, and how much arrives in PIX.");
+    ? L("Confira antes de pagar.", "Check before paying.")
+    : L("Confira antes do PIN.", "Check before PIN.");
   const destinationLabel = mode === "onramp"
     ? estimate.finalConversionPending
       ? L("Base para conversão", "Conversion base")
@@ -4364,7 +4461,7 @@ function RampFeeBridge({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 text-xs font-bold text-tts-deep lg:grid-cols-2">
+      <div className="tts-mobile-soft-hide mt-3 grid gap-2 text-xs font-bold text-tts-deep lg:grid-cols-2">
         <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep">
           <span className="block uppercase tracking-normal text-tts-gold">
             {mode === "onramp" ? L("PIX", "PIX") : L("Retirada", "Withdrawal")}
@@ -4376,7 +4473,7 @@ function RampFeeBridge({
           <span className="mt-1 block text-sm font-black">{ttsFeeValue}</span>
         </div>
       </div>
-      <p className="mt-3 text-xs font-semibold leading-5 text-tts-muted">
+      <p className="tts-mobile-soft-hide mt-3 text-xs font-semibold leading-5 text-tts-muted">
         {L(
           "Você vê tudo antes do PIN. Se não estiver de acordo, basta voltar sem confirmar.",
           "You see everything before the PIN. If you do not agree, just go back without confirming.",

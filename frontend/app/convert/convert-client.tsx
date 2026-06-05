@@ -13,6 +13,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
+import { SecurePinGate } from "@/components/shared/secure-pin-gate";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target";
@@ -33,6 +34,7 @@ type AssetOption = {
 type SessionState = {
   authenticated: boolean;
   sessionId?: string;
+  sessionSource?: string;
 };
 
 type ConvertMobileStage = "source" | "destination" | "review";
@@ -258,8 +260,9 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   const [sourceCode, setSourceCode] = useState("BRL");
   const [destCode, setDestCode] = useState("USDC");
   const [session, setSession] = useState<SessionState>({ authenticated: false });
+  const [pinVerified, setPinVerified] = useState(false);
   const [balances, setBalances] = useState<BalanceLine[]>([]);
-  const [accountStatus, setAccountStatus] = useState<"loading" | "ready" | "signed-out">("loading");
+  const [accountStatus, setAccountStatus] = useState<"loading" | "locked" | "ready" | "signed-out">("loading");
   const [reviewStatus, setReviewStatus] = useState<"idle" | "loading" | "error">("idle");
   const [reviewError, setReviewError] = useState("");
   const [embeddedReviewToken, setEmbeddedReviewToken] = useState("");
@@ -301,20 +304,17 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   useEffect(() => {
     let active = true;
     getClientSession()
-      .then(async (sessionPayload) => {
-        if (!sessionPayload.authenticated) return { sessionPayload, balancesPayload: [] };
-        const accountPayload = await accountApi("etherfuse/wallet-balances").catch(() => ({ balances: [] }));
-        return { sessionPayload, balancesPayload: Array.isArray(accountPayload?.balances) ? accountPayload.balances : [] };
-      })
-      .then((accountPayload) => {
+      .then((sessionPayload) => {
         if (!active) return;
-        setSession(accountPayload.sessionPayload);
-        setBalances(accountPayload.balancesPayload);
-        setAccountStatus(accountPayload.sessionPayload.authenticated ? "ready" : "signed-out");
+        setSession(sessionPayload);
+        setBalances([]);
+        setPinVerified(false);
+        setAccountStatus(sessionPayload.authenticated ? "locked" : "signed-out");
       })
       .catch(() => {
         if (!active) return;
         setSession({ authenticated: false });
+        setPinVerified(false);
         setBalances([]);
         setAccountStatus("signed-out");
       });
@@ -322,6 +322,18 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       active = false;
     };
   }, []);
+
+  async function loadAccountBalances() {
+    setAccountStatus("loading");
+    try {
+      const accountPayload = await accountApi("etherfuse/wallet-balances");
+      setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
+      setAccountStatus("ready");
+    } catch {
+      setBalances([]);
+      setAccountStatus("ready");
+    }
+  }
 
   async function loadRateMatrix() {
     setRateMatrixStatus("loading");
@@ -378,13 +390,18 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     ? formatAssetAmount(normalizedSourceBalanceAmount, sourceAsset, language)
     : accountStatus === "loading"
       ? L("Carregando saldo", "Loading balance")
+      : session.authenticated && !pinVerified
+        ? L("Digite o PIN", "Enter PIN")
       : session.authenticated
         ? formatAssetAmount(0, sourceAsset, language)
         : L("Entre para consultar", "Sign in to check");
   const sameAsset = sourceCode === destCode;
-  const primaryLabel = L("Calcular e confirmar", "Calculate and confirm");
+  const primaryLabel = L("Abrir confirmação", "Open confirmation");
   const routeTitle = L("Confirmar conversão", "Confirm conversion");
-  const routeDescription = L("Cotação, taxas e PIN aparecem aqui.", "Quote, fees, and PIN appear here.");
+  const routeDescription = L(
+    "Confira os valores e abra a confirmação. O PIN vem na próxima tela.",
+    "Check the amounts and open confirmation. PIN comes on the next screen."
+  );
   const destinationValue = L("Calculado na confirmação", "Calculated on confirmation");
   const selectedRateCell = rateMatrix?.matrix?.[sourceCode]?.[destCode];
   const sourceSummaryValue = amountMode === "receive"
@@ -395,7 +412,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
     : selectedRateCell?.rate && numericAmount > 0
       ? formatAssetAmount(numericAmount * selectedRateCell.rate, destAsset, language)
       : destinationValue;
-  const balanceCheckReady = amountMode === "send" && session.authenticated && accountStatus === "ready";
+  const balanceCheckReady = amountMode === "send" && session.authenticated && pinVerified && accountStatus === "ready";
   const hasZeroSourceBalance = balanceCheckReady && normalizedSourceBalanceAmount <= 0;
   const hasAmountAboveSourceBalance = balanceCheckReady && numericAmount > 0 && normalizedSourceBalanceAmount > 0 && normalizedSourceBalanceAmount < numericAmount;
   const hasBlockingBalanceIssue = balanceCheckReady && numericAmount > 0 && normalizedSourceBalanceAmount < numericAmount;
@@ -427,12 +444,14 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
       ? L(`Você tem ${sourceBalanceDisplay}. Falta ${missingSourceDisplay} para liberar esta conversão.`, `You have ${sourceBalanceDisplay}. You need ${missingSourceDisplay} more to unlock this conversion.`)
       : L(`${sourceBalanceDisplay} disponível para conversão.`, `${sourceBalanceDisplay} available for conversion.`);
   const showBalanceNotice = balanceCheckReady;
-  const canProceed = numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
-  const actionLabel = hasBlockingBalanceIssue ? L("Saldo insuficiente", "Insufficient balance") : primaryLabel;
+  const canProceed = pinVerified && numericAmount > 0 && !sameAsset && !hasBlockingBalanceIssue;
+  const actionLabel = !pinVerified ? L("Digite o PIN", "Enter PIN") : hasBlockingBalanceIssue ? L("Saldo insuficiente", "Insufficient balance") : primaryLabel;
   const securityValue = sameAsset
     ? L("Escolha moedas diferentes", "Choose different currencies")
     : !session.authenticated
       ? L("Entre para confirmar", "Sign in to confirm")
+      : !pinVerified
+        ? L("PIN necessário", "PIN required")
       : canProceed
         ? L("Pronto para confirmar", "Ready to confirm")
         : L("Confira o saldo", "Check balance");
@@ -462,6 +481,11 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   async function prepareConversionReview() {
     if (!session.authenticated) {
       window.location.href = buildUrl("/login", { next: "/convert", lang: language });
+      return;
+    }
+    if (!pinVerified) {
+      setReviewStatus("error");
+      setReviewError(L("Digite seu PIN para abrir a conversão.", "Enter your PIN to open conversion."));
       return;
     }
     if (!canProceed || reviewStatus === "loading") return;
@@ -526,6 +550,21 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </div>
         </header>
 
+        {session.authenticated && !pinVerified ? (
+          <SecurePinGate
+            sessionSource={session.sessionSource}
+            title={L("Abrir conversão", "Open conversion")}
+            detail={L("Digite seu PIN para consultar saldo e continuar.", "Enter your PIN to check balance and continue.")}
+            disabled={!session.sessionId}
+            onVerified={() => {
+              setPinVerified(true);
+              void loadAccountBalances();
+            }}
+          />
+        ) : null}
+
+        {!session.authenticated || pinVerified ? (
+        <>
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden" aria-label={L("Conversão em etapas", "Step conversion")}>
           <div className="-mx-4 border-b border-tts-border bg-tts-bg/95 px-4 py-2 backdrop-blur">
             <div className="grid grid-cols-3 gap-2">
@@ -552,16 +591,26 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             </div>
           </div>
 
+          <MobileConversionGuide
+            stage={mobileStage}
+            language={language}
+            amountMode={amountMode}
+            sameAsset={sameAsset}
+            hasBlockingBalanceIssue={hasBlockingBalanceIssue}
+            reviewStatus={reviewStatus}
+            numericAmount={numericAmount}
+          />
+
           {mobileStage === "source" ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
               <div className="shrink-0">
                 <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{L("1 de 3", "1 of 3")}</p>
-                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("O que sai?", "What leaves?")}</h1>
+                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Valor e origem", "Amount and source")}</h1>
               </div>
 
-              <div className="shrink-0 border border-tts-border bg-tts-surface p-3">
+              <div className="shrink-0 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <label className="text-xs font-black text-tts-deep" htmlFor="convert-mobile-amount">
+                  <label className="tts-field-label text-xs font-black text-tts-deep" htmlFor="convert-mobile-amount">
                     {amountMode === "receive" ? L("Quero receber", "I want to receive") : L("Vou converter", "I will convert")}
                   </label>
                   <div className="grid grid-cols-2 border border-tts-border bg-tts-bg p-0.5 text-[11px] font-black text-tts-muted">
@@ -586,7 +635,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   value={amount}
                   onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
                   inputMode="decimal"
-                  className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-2xl font-black text-tts-deep outline-none focus:border-tts-confirm"
+                  className="tts-fill-field mt-2 min-h-12 w-full rounded-xl border-2 border-tts-border bg-tts-bg px-3 text-2xl font-black text-tts-deep outline-none focus:border-tts-confirm"
                 />
               </div>
 
@@ -613,7 +662,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 disabled={numericAmount <= 0}
                 className="mt-auto min-h-12 w-full shrink-0 bg-tts-confirm px-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90 disabled:cursor-not-allowed disabled:bg-tts-border disabled:text-tts-muted"
               >
-                {L("Continuar", "Continue")}
+                {L("Continuar para destino", "Continue to destination")}
               </button>
             </div>
           ) : null}
@@ -622,7 +671,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
               <div className="shrink-0">
                 <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{L("2 de 3", "2 of 3")}</p>
-                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Para onde vai?", "Where to?")}</h1>
+                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Moeda de destino", "Destination asset")}</h1>
                 <p className="mt-1 truncate text-xs font-bold text-tts-muted">{selectedRateLabel}</p>
               </div>
 
@@ -648,7 +697,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   disabled={sameAsset}
                   className="min-h-12 bg-tts-confirm px-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90 disabled:cursor-not-allowed disabled:bg-tts-border disabled:text-tts-muted"
                 >
-                  {L("Continuar", "Continue")}
+                  {L("Continuar para conferir", "Continue to review")}
                 </button>
               </div>
             </div>
@@ -658,7 +707,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
               <div className="shrink-0">
                 <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{L("3 de 3", "3 of 3")}</p>
-                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Conferir", "Review")}</h1>
+                <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Conferir e confirmar", "Review and confirm")}</h1>
               </div>
 
               <div className="shrink-0 divide-y divide-tts-border border border-tts-border bg-tts-surface">
@@ -716,7 +765,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   } disabled:cursor-not-allowed disabled:opacity-70`}
                 >
                   {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                  {reviewStatus === "loading" ? L("Abrindo...", "Opening...") : hasBlockingBalanceIssue ? L("Saldo insuficiente", "Insufficient balance") : L("Confirmar", "Confirm")}
+                  {reviewStatus === "loading" ? L("Abrindo confirmação...", "Opening confirmation...") : hasBlockingBalanceIssue ? L("Saldo insuficiente", "Insufficient balance") : L("Abrir confirmação", "Open confirmation")}
                 </button>
               </div>
             </div>
@@ -844,7 +893,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
 
             <div className="mt-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <label className="block text-sm font-black text-tts-deep" htmlFor="convert-amount">
+                <label className="tts-field-label block text-sm font-black text-tts-deep" htmlFor="convert-amount">
                   {amountMode === "receive" ? L("Valor que chega", "Amount receiving") : L("Valor que sai", "Amount leaving")}
                 </label>
                 <div className="grid grid-cols-2 rounded-full border border-tts-border bg-tts-bg p-1 text-xs font-black text-tts-muted">
@@ -869,7 +918,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 value={amount}
                 onChange={(event) => setAmount(event.target.value.replace(/[^\d,.]/g, ""))}
                 inputMode="decimal"
-                className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none focus:border-tts-gold"
+                className="tts-fill-field mt-2 min-h-12 w-full rounded-xl border-2 border-tts-border bg-tts-bg px-3 text-base font-bold text-tts-deep outline-none focus:border-tts-gold"
               />
             </div>
 
@@ -944,14 +993,70 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                   className={`inline-flex min-h-11 w-full items-center justify-center gap-2 px-4 py-2 text-sm font-black transition ${canProceed ? "bg-tts-confirm text-tts-deep hover:bg-tts-confirm/90" : "bg-tts-border text-tts-muted"} disabled:cursor-not-allowed disabled:opacity-70`}
                 >
                   {reviewStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                  {reviewStatus === "loading" ? L("Preparando confirmação...", "Preparing confirmation...") : actionLabel}
+                  {reviewStatus === "loading" ? L("Abrindo confirmação...", "Opening confirmation...") : actionLabel}
                 </button>
               </div>
             </div>
           </div>
         </section>
+        </>
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function MobileConversionGuide({
+  stage,
+  language,
+  amountMode,
+  sameAsset,
+  hasBlockingBalanceIssue,
+  reviewStatus,
+  numericAmount,
+}: {
+  stage: ConvertMobileStage;
+  language: AppLanguage;
+  amountMode: "send" | "receive";
+  sameAsset: boolean;
+  hasBlockingBalanceIssue: boolean;
+  reviewStatus: "idle" | "loading" | "error";
+  numericAmount: number;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  let title = L("Agora", "Now");
+  let body = L("Preencha o campo em destaque e avance.", "Fill the highlighted field and continue.");
+
+  if (stage === "source") {
+    title = L("Preencha valor e origem", "Fill amount and source");
+    body =
+      amountMode === "receive"
+        ? L("Digite quanto quer receber, escolha a moeda de origem e toque em Continuar para destino.", "Enter how much you want to receive, choose the source asset, then continue to destination.")
+        : L("Digite quanto vai sair da conta, escolha a moeda de origem e toque em Continuar para destino.", "Enter how much leaves the account, choose the source asset, then continue to destination.");
+  } else if (stage === "destination") {
+    title = sameAsset ? L("Escolha outra moeda", "Choose another asset") : L("Escolha o destino", "Choose destination");
+    body = sameAsset
+      ? L("A moeda de destino precisa ser diferente da origem.", "Destination must be different from source.")
+      : L("Toque na moeda que vai receber e depois em Continuar para conferir.", "Tap the asset you will receive, then continue to review.");
+  } else if (reviewStatus === "loading") {
+    title = L("Preparando confirmação", "Preparing confirmation");
+    body = L("Aguarde a tela segura abrir com os valores finais.", "Wait for the secure screen with final amounts.");
+  } else if (hasBlockingBalanceIssue) {
+    title = L("Saldo insuficiente", "Insufficient balance");
+    body = L("Use o botão de adicionar saldo ou volte para ajustar valor e moeda.", "Use the add money button or go back to adjust amount and asset.");
+  } else if (numericAmount <= 0) {
+    title = L("Falta o valor", "Amount needed");
+    body = L("Volte e digite um valor para liberar a confirmação.", "Go back and enter an amount to unlock confirmation.");
+  } else {
+    title = L("Confira e abra", "Review and open");
+    body = L("Revise origem, destino e saldo. Depois toque em Abrir confirmação.", "Review source, destination, and balance. Then tap Open confirmation.");
+  }
+
+  return (
+    <section className="tts-action-guide mt-3 shrink-0 rounded-xl border border-tts-border px-3 py-2 md:hidden" aria-live="polite">
+      <p className="text-[11px] font-black uppercase tracking-normal text-tts-confirm">{title}</p>
+      <p className="mt-1 text-xs font-bold leading-5 text-tts-muted">{body}</p>
+    </section>
   );
 }
 
@@ -972,7 +1077,7 @@ function AssetPicker({
   return (
     <div>
       <h3 className={compact ? "text-xs font-black text-tts-deep" : "text-sm font-black text-tts-deep"}>{title}</h3>
-      <div className={`mt-2 grid gap-2 ${compact ? "grid-cols-2" : ""}`}>
+      <div className={`tts-choice-grid mt-2 grid gap-2 ${compact ? "grid-cols-2" : ""}`}>
         {ASSETS.map((asset) => {
           const selected = asset.code === selectedCode;
           const paired = asset.code === otherCode;
@@ -981,9 +1086,10 @@ function AssetPicker({
               key={`${title}-${asset.code}`}
               type="button"
               onClick={() => onSelect(asset.code)}
-              className={`border text-left transition ${
+              aria-pressed={selected}
+              className={`rounded-xl border text-left transition ${
                 compact ? "flex min-h-[3.35rem] items-center gap-2 px-2 py-2" : "min-h-[96px] p-3"
-              } ${selected ? "border-tts-confirm bg-tts-confirm/10" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
+              } ${selected ? "border-tts-confirm bg-tts-confirm/15 shadow-sm ring-2 ring-tts-confirm/40" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
               <span className={`inline-flex shrink-0 border px-1.5 py-1 text-[10px] font-black uppercase tracking-normal ${asset.tone}`}>
                 {asset.short}

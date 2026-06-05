@@ -160,7 +160,9 @@ describe('Agent PIX off-ramp detection', () => {
       expect(parsed.searchParams.get('amount')).toBe('5');
       expect(parsed.searchParams.get('currency')).toBe('BRL');
       expect(parsed.searchParams.get('fiat_amount')).toBe('5');
+      expect(parsed.searchParams.get('target_brl')).toBe('5');
       expect(parsed.searchParams.get('fiat_currency')).toBe('BRL');
+      expect(parsed.searchParams.get('source_amount')).toBeNull();
       expect(parsed.searchParams.get('email')).toBe('rodrigo@example.com');
     } finally {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
@@ -214,8 +216,9 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);
       expect(result.response_message).toContain('/pix-off?');
       expect(result.response_message).toContain('source_asset=BRL');
-      expect(result.response_message).toContain('source_amount=100');
       expect(result.response_message).toContain('fiat_amount=100');
+      expect(result.response_message).toContain('target_brl=100');
+      expect(result.response_message).not.toContain('source_amount=100');
       expect(result.response_message).not.toContain('Não encontrei');
       expect(result.response_message).not.toContain('contatos');
     } finally {
@@ -242,8 +245,9 @@ describe('Agent PIX off-ramp detection', () => {
       expect(result.action_type).toBe(ActionType.INITIATE_PIX);
       expect(result.response_message).toContain('/pix-off?');
       expect(result.response_message).toContain('source_asset=BRL');
-      expect(result.response_message).toContain('source_amount=50');
       expect(result.response_message).toContain('fiat_amount=50');
+      expect(result.response_message).toContain('target_brl=50');
+      expect(result.response_message).not.toContain('source_amount=50');
       expect(result.response_message).toContain('saldo que sai da conta');
       expect(result.response_message).toContain('chega no seu PIX');
       expect(result.response_message).not.toContain('PIX a pagar');

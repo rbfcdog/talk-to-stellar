@@ -18,6 +18,7 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react"
+import { SecurePinGate } from "@/components/shared/secure-pin-gate"
 import { calculateAssetDistribution } from "@/lib/asset-distribution"
 import { getClientSession } from "@/lib/session"
 
@@ -84,18 +85,19 @@ function assetTone(code: string) {
 }
 
 export default function WalletProfileClient({ publicKey }: { publicKey: string }) {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [status, setStatus] = useState<"checking" | "locked" | "loading" | "ready" | "error">("checking")
+  const [session, setSession] = useState({ authenticated: false, sessionId: "", sessionSource: "" })
+  const [pinVerified, setPinVerified] = useState(false)
   const [message, setMessage] = useState("")
   const [payload, setPayload] = useState<any>(null)
   const [copied, setCopied] = useState<"profile" | "key" | "">("")
 
-  async function loadProfile() {
+  async function loadProfile(currentSessionId = session.sessionId, unlocked = pinVerified) {
     setStatus("loading")
     setMessage("")
     try {
-      const { sessionId, authenticated } = await getClientSession()
-      if (!sessionId || !authenticated) throw new Error("Entre para ver este perfil.")
-      const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""
+      if (!currentSessionId || !session.authenticated || !unlocked) throw new Error("Digite seu PIN para ver este perfil.")
+      const query = `?session_id=${encodeURIComponent(currentSessionId)}`
       const response = await fetch(`/api/financial/wallet-profile/${encodeURIComponent(publicKey)}${query}`, {
         cache: "no-store",
       })
@@ -112,8 +114,23 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
   }
 
   useEffect(() => {
-    void loadProfile()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false
+    getClientSession()
+      .then((payload) => {
+        if (cancelled) return
+        setSession(payload)
+        setStatus(payload.authenticated && payload.sessionId ? "locked" : "error")
+        if (!payload.authenticated || !payload.sessionId) setMessage("Entre para ver este perfil.")
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSession({ authenticated: false, sessionId: "", sessionSource: "" })
+        setStatus("error")
+        setMessage("Entre para ver este perfil.")
+      })
+    return () => {
+      cancelled = true
+    }
   }, [publicKey])
 
   const profile = payload?.profile || {}
@@ -170,6 +187,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
               <button
                 type="button"
                 onClick={() => void loadProfile()}
+                disabled={!pinVerified}
                 className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep transition hover:border-tts-border2"
               >
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -185,6 +203,19 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
             </div>
           </div>
         </header>
+
+        {session.authenticated && !pinVerified ? (
+          <SecurePinGate
+            sessionSource={session.sessionSource}
+            title="Abrir perfil"
+            detail="Digite seu PIN para ver saldo, distribuição e histórico do perfil."
+            disabled={!session.sessionId}
+            onVerified={() => {
+              setPinVerified(true)
+              void loadProfile(session.sessionId, true)
+            }}
+          />
+        ) : null}
 
         {status === "loading" ? (
           <StateBlock icon={<Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />} title="Carregando perfil" detail="Buscando saldos e dados públicos da conta." />

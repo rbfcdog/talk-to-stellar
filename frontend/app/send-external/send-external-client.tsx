@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { SecurePinGate } from "@/components/shared/secure-pin-gate"
 import { idempotentFetch } from "@/lib/idempotency"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
+import { getClientSession } from "@/lib/session"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 
 type InitialParams = {
@@ -107,13 +109,16 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
   const [error, setError] = useState("")
   const [result, setResult] = useState<SendResponse | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [session, setSession] = useState({ authenticated: false, sessionId: "", sessionSource: "" })
+  const [sessionChecked, setSessionChecked] = useState(false)
+  const [pinVerified, setPinVerified] = useState(false)
 
   const validDestination = isValidPublicKey(destination)
   const amountNumber = parseAmount(amount)
   const availableNumber = parseAmount(preview?.available_balance || "0")
   const hasEnoughBalance = amountNumber > 0 && amountNumber <= availableNumber + 0.0000001
   const destinationReady = preview?.destination_exists === false ? asset === "XLM" && amountNumber >= 1 : preview?.destination_accepts_asset !== false
-  const canSubmit = validDestination && amountNumber > 0 && Boolean(pin.trim()) && Boolean(preview?.success) && hasEnoughBalance && destinationReady && !submitting
+  const canSubmit = pinVerified && validDestination && amountNumber > 0 && Boolean(pin.trim()) && Boolean(preview?.success) && hasEnoughBalance && destinationReady && !submitting
 
   const statusLabel = useMemo(() => {
     if (result?.success) return T(language, "Enviado", "Sent")
@@ -124,8 +129,34 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
   }, [language, previewStatus, result?.success, submitting])
 
   useEffect(() => {
+    let cancelled = false
+    getClientSession()
+      .then((payload) => {
+        if (cancelled) return
+        setSession(payload)
+        setSessionChecked(true)
+        if (!payload.authenticated) setPinVerified(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSession({ authenticated: false, sessionId: "", sessionSource: "" })
+        setSessionChecked(true)
+        setPinVerified(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     setResult(null)
     setError("")
+
+    if (!sessionChecked || !session.authenticated || !pinVerified) {
+      setPreview(null)
+      setPreviewStatus("idle")
+      return
+    }
 
     if (!validDestination) {
       setPreview(null)
@@ -166,7 +197,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
     return () => {
       cancelled = true
     }
-  }, [asset, destination, language, validDestination])
+  }, [asset, destination, language, pinVerified, session.authenticated, sessionChecked, validDestination])
 
   async function submit() {
     if (!canSubmit) return
@@ -263,6 +294,27 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
           </section>
         )}
 
+        {sessionChecked && session.authenticated && !pinVerified ? (
+          <SecurePinGate
+            sessionSource={session.sessionSource}
+            title={T(language, "Abrir envio externo", "Open external transfer")}
+            detail={T(language, "Digite seu PIN para consultar saldo e destino.", "Enter your PIN to check balance and destination.")}
+            disabled={!session.sessionId}
+            onVerified={() => setPinVerified(true)}
+          />
+        ) : null}
+
+        {sessionChecked && !session.authenticated ? (
+          <section className="rounded-xl border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
+            <p className="font-bold">{T(language, "Entre para continuar", "Sign in to continue")}</p>
+            <p className="mt-1 text-tts-muted">{T(language, "A conta precisa estar conectada antes de consultar saldo.", "Your account must be connected before checking balance.")}</p>
+            <Link href="/login?next=/send-external" className="mt-3 inline-flex h-10 items-center rounded-xl bg-tts-deep px-4 text-sm font-bold text-tts-surface">
+              {T(language, "Entrar", "Sign in")}
+            </Link>
+          </section>
+        ) : null}
+
+        {sessionChecked && session.authenticated && pinVerified ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm">
             <h2 className="text-base font-bold text-tts-deep">{T(language, "Dados do envio", "Transfer details")}</h2>
@@ -380,6 +432,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
             </div>
           </aside>
         </div>
+        ) : null}
       </div>
     </main>
   )

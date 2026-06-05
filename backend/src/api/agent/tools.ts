@@ -539,6 +539,7 @@ function buildMoneyInterfaceUrl(input: {
   }
 
   if (action === 'send_out') {
+    const isBrlOffRamp = asset === 'BRL';
     return buildFrontendInterfaceUrl({
       path: '/pix-off',
       params: {
@@ -546,7 +547,10 @@ function buildMoneyInterfaceUrl(input: {
         asset,
         source_asset: asset,
         amount,
-        source_amount: amount,
+        source_amount: isBrlOffRamp ? '' : amount,
+        fiat_amount: isBrlOffRamp ? amount : '',
+        target_brl: isBrlOffRamp ? amount : '',
+        fiat_currency: isBrlOffRamp ? 'BRL' : '',
         destination_pix_key: input.destinationPixKey,
         from: 'chat',
         session_scope: sessionScope,

@@ -93,6 +93,28 @@ describe('TransferNotificationService', () => {
     );
   });
 
+  it('converts a receipt button placeholder into a visible receipt URL for WhatsApp', async () => {
+    await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'whatsapp',
+      providerUserId: '+55 19 98180-8102',
+      text: 'PIX confirmado com sucesso.\nComprovante:\nAbrir link',
+      buttonText: 'Abrir link',
+      buttonUrl: 'https://talktostellar.com/receipt/abc123',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    const sentText = String(sendTextMock.mock.calls[0][2] || '');
+    expect(sentText).toContain('PIX confirmado com sucesso.');
+    expect(sentText).toContain('Comprovante: https://talktostellar.com/receipt/abc123');
+    expect(sentText).not.toMatch(/Comprovante:\s*\n\s*Abrir link/i);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      sentText,
+      { reliable: true }
+    );
+  });
+
   it('infers WhatsApp delivery when a chat callback carries a phone provider id', async () => {
     await TransferNotificationService.notifyExternalChannelMessage({
       provider: 'chat',

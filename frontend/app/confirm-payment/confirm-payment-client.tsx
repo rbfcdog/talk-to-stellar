@@ -837,8 +837,8 @@ export default function ConfirmPaymentClient({
               {T(feedbackLanguage, "Confirmação de pagamento", "Payment Confirmation")}
             </div>
             <div className="space-y-2 md:space-y-4">
-              <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
-                {T(feedbackLanguage, "Confirme este pagamento", "Confirm this payment")}
+	              <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
+	                {T(feedbackLanguage, "Confirmar pagamento", "Confirm payment")}
               </h1>
               <p className="tts-mobile-soft-hide max-w-2xl text-sm leading-6 text-tts-muted md:block">
                 {T(feedbackLanguage, "Confira os dados abaixo e digite seu PIN para autorizar a transferência.", "Check the details below and enter your PIN to authorize the transfer.")}
@@ -887,23 +887,29 @@ export default function ConfirmPaymentClient({
 
           <section className="tts-mobile-flow-card tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
             <form className={`${status === "submitting" || status === "done" ? "hidden md:block" : "block"} space-y-4`} onSubmit={handleSubmit}>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 text-sm text-tts-deep">
-                <p className="font-medium text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
-                <p className="mt-2 text-tts-deep">
-                  {isCrossCurrency ? `${T(feedbackLanguage, "Você envia", "You send")}: ${sourceAmountLabel}` : `${T(feedbackLanguage, "Valor", "Amount")}: ${amountLabel}`}
-                </p>
-                {isCrossCurrency && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Destinatário recebe aproximadamente", "Recipient receives approximately")}: {amountLabel}</p>
-                )}
-                <p className="text-tts-deep">{T(feedbackLanguage, "Destino", "Destination")}: {destinationLabel}</p>
-                {destinationKeyLabel && <p className="text-tts-deep">{T(feedbackLanguage, "Chave", "Key")}: {destinationKeyLabel}</p>}
-                {assetCode !== "XLM" && !isCrossCurrency && (
-                  <p className="text-tts-confirm">{T(feedbackLanguage, "Valor garantido no destino", "Guaranteed amount at destination")}: {amountLabel}</p>
-                )}
-              </div>
+	              <div className="min-w-0 overflow-hidden rounded-xl border border-tts-border bg-tts-bg p-3 text-sm text-tts-deep">
+	                <p className="tts-field-label font-black text-tts-deep">{T(feedbackLanguage, "Confira os dados", "Review details")}</p>
+	                <div className="mt-3 grid gap-2">
+	                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Sai da conta", "Leaves account")}</p>
+	                    <p className="mt-1 text-lg font-black text-tts-deep">{isCrossCurrency ? sourceAmountLabel : amountLabel}</p>
+	                  </div>
+	                  {isCrossCurrency && (
+	                    <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                      <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Chega para o destinatário", "Arrives for recipient")}</p>
+	                      <p className="mt-1 text-lg font-black text-tts-deep">{amountLabel}</p>
+	                    </div>
+	                  )}
+	                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Destino", "Destination")}</p>
+	                    <p className="mt-1 text-base font-black text-tts-deep">{destinationLabel}</p>
+	                    {destinationKeyLabel && <p className="tts-mobile-soft-hide mt-1 text-xs font-bold text-tts-muted">{destinationKeyLabel}</p>}
+	                  </div>
+	                </div>
+	              </div>
 
-              <div className="space-y-2">
-                <label htmlFor="pin" className="text-sm font-medium text-tts-deep">PIN</label>
+	              <div className="space-y-2">
+	                <label htmlFor="pin" className="tts-field-label text-sm font-black text-tts-deep">PIN</label>
                 <input
                   id="pin"
                   value={pin}
@@ -912,7 +918,7 @@ export default function ConfirmPaymentClient({
                   inputMode="numeric"
                   maxLength={8}
                   placeholder={T(feedbackLanguage, "Digite seu PIN", "Enter your PIN")}
-                  className="w-full rounded-2xl border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
+	                  className="tts-fill-field w-full rounded-xl border-2 border-tts-border bg-tts-surface px-4 py-4 text-lg font-black text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
                 />
               </div>
 
@@ -920,7 +926,7 @@ export default function ConfirmPaymentClient({
                 <button
                   type="submit"
                   disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
-                  className="inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-3 text-sm font-semibold text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+	                  className="inline-flex w-full items-center justify-center rounded-xl bg-tts-confirm px-4 py-4 text-base font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {status === "submitting"
                     ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando pagamento...", "Confirming payment...")}</span>

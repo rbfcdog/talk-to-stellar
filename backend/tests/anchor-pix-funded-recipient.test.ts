@@ -292,6 +292,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
   });
 
   it('simulates the post-PIX transfer in sandbox ledger mode when no on-chain funding secret is available', async () => {
+    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'true';
     jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({
       sandbox: true,
       provider: 'etherfuse',
@@ -343,6 +344,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
   });
 
   it('allows XLM as the exact asset for a post-PIX transfer', async () => {
+    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'true';
     jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({
       sandbox: true,
       provider: 'etherfuse',

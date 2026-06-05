@@ -17,11 +17,12 @@ import {
   scopedClientStorageKey,
   touchClientSessionActivity,
 } from "@/lib/session";
-import { idempotentFetch } from "@/lib/idempotency";
+import { buildIdempotencyKey, idempotentFetch } from "@/lib/idempotency";
 import { publicErrorPayload } from "@/lib/public-errors";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/shared/feedback";
 import { useLanguage } from "@/lib/i18n";
+import { isDuplicateChatMessage, mergeChatMessages, shouldAppendImmediateAssistantMessage } from "@/lib/chat-message-merge";
 
 type Message = {
   id: string;
@@ -32,6 +33,7 @@ type Message = {
 };
 
 const SERVER_MESSAGE_SYNC_INTERVAL_MS = 1500;
+const CHAT_POST_TIMEOUT_MS = 45000;
 const STELLAR_PUBLIC_KEY_REGEX = /\bG[A-Z2-7]{55}\b/gi;
 
 function sanitizeVisibleChatText(content: string): string {
@@ -40,56 +42,6 @@ function sanitizeVisibleChatText(content: string): string {
     .replace(/public_key\s*=\s*[^\s|]+/gi, "public_key=[oculto]")
     .replace(/stellar:mainnet/gi, "conta global")
     .replace(/\bUSDC\b/g, "USD");
-}
-
-function normalizeMessageContentForDedupe(content: string): string {
-  return String(content || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/[-.,;:!?()[\]{}'"`´]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
-function extractMessageUrls(content: string): string[] {
-  return Array.from(String(content || "").matchAll(/https?:\/\/[^\s)]+/gi))
-    .map((match) => match[0].replace(/[.,;]+$/, ""));
-}
-
-function isLoginStatusDuplicate(a: string, b: string): boolean {
-  const left = normalizeMessageContentForDedupe(a);
-  const right = normalizeMessageContentForDedupe(b);
-  const hasLoginStatus = (value: string) => (
-    value.includes("login concluido") ||
-    value.includes("entrada concluida") ||
-    value.includes("sign in completed") ||
-    value.includes("signin completed") ||
-    value.includes("login complete")
-  );
-  const hasConnectedStatus = (value: string) => (
-    value.includes("conta conectada") ||
-    value.includes("sua conta esta conectada") ||
-    value.includes("connected account") ||
-    value.includes("account is connected") ||
-    value.includes("your account is connected")
-  );
-  return hasLoginStatus(left) && hasLoginStatus(right) && hasConnectedStatus(left) && hasConnectedStatus(right);
-}
-
-function isDuplicateChatMessage(a: Pick<Message, "role" | "content">, b: Pick<Message, "role" | "content">): boolean {
-  if (a.role !== b.role) return false;
-
-  const left = normalizeMessageContentForDedupe(a.content);
-  const right = normalizeMessageContentForDedupe(b.content);
-  if (!left || !right) return false;
-  if (left === right) return true;
-
-  const leftUrls = extractMessageUrls(a.content);
-  const rightUrls = new Set(extractMessageUrls(b.content));
-  if (leftUrls.some((url) => rightUrls.has(url))) return true;
-
-  return isLoginStatusDuplicate(a.content, b.content);
 }
 
 function chatSessionStorageKey(chatId: string, source: string): string {
@@ -159,6 +111,23 @@ function getOrCreateBrowserId(): string {
     localStorage.setItem("talk-to-stellar.browserId", browserId);
   }
   return browserId;
+}
+
+function generateLocalMessageId(prefix: string): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function idempotentFetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await idempotentFetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: string; onBack?: () => void; initialPrompt?: string }) {
@@ -412,52 +381,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   }, [messages, isLoading]);
 
   const mergeServerMessages = useCallback((serverMessages: any[]) => {
-    if (!Array.isArray(serverMessages) || serverMessages.length === 0) return;
-
-    setMessages((prev) => {
-      const backendIds = new Set(prev.map((message) => message.backendId).filter(Boolean));
-      const merged = [...prev.filter((message) => message.id !== "agent-welcome")];
-      let changed = false;
-      const incomingMessages = serverMessages
-        .map((message) => ({
-          id: `server-${message.id}`,
-          backendId: String(message.id),
-          role: message.role === "user" ? "user" : "assistant",
-          content: String(message.content || ""),
-          createdAt: message.created_at ? new Date(message.created_at) : new Date(),
-        } as Message))
-        .filter((message) => message.content && !backendIds.has(message.backendId));
-
-      for (const message of incomingMessages) {
-        const localIndex = merged.findIndex((existing) => !existing.backendId && isDuplicateChatMessage(existing, message));
-        if (localIndex >= 0) {
-          merged[localIndex] = {
-            ...message,
-            createdAt: message.createdAt || merged[localIndex].createdAt,
-          };
-          backendIds.add(message.backendId);
-          changed = true;
-          continue;
-        }
-
-        if (merged.some((existing) => isDuplicateChatMessage(existing, message))) {
-          backendIds.add(message.backendId);
-          continue;
-        }
-
-        merged.push(message);
-        backendIds.add(message.backendId);
-        changed = true;
-      }
-
-      if (!changed) return prev;
-
-      return merged.sort((a, b) => {
-        const aTime = a.createdAt?.getTime() || 0;
-        const bTime = b.createdAt?.getTime() || 0;
-        return aTime - bTime;
-      });
-    });
+    setMessages((prev) => mergeChatMessages(prev, serverMessages, { removeWelcomeId: "agent-welcome" }));
   }, []);
 
   const resetChatAfterLogout = useCallback(() => {
@@ -622,6 +546,43 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     );
   };
 
+  const coerceAssistantResponse = useCallback((data: any) => {
+    const candidates = [
+      data?.content,
+      data?.message,
+      data?.response_message,
+      data?.result?.message,
+      data?.result?.content,
+      data?.result?.response_message,
+    ];
+
+    for (const candidate of candidates) {
+      const text = String(candidate || "").trim();
+      if (text) return text;
+    }
+
+    const creationUrl = String(data?.creationUrl || data?.creation_url || "").trim();
+    if (creationUrl) {
+      return L(
+        `Abra este link para continuar:\n${creationUrl}`,
+        `Open this link to continue:\n${creationUrl}`,
+      );
+    }
+
+    return L(
+      "Não recebi uma resposta completa. Tente novamente em alguns segundos.",
+      "I did not receive a complete response. Try again in a few seconds.",
+    );
+  }, [language]);
+
+  const hasAssistantAfterMessage = (messagesToCheck: Message[], messageId: string) => {
+    const userIndex = messagesToCheck.findIndex((message) => message.id === messageId);
+    if (userIndex < 0) return true;
+    return messagesToCheck
+      .slice(userIndex + 1)
+      .some((message) => message.role === "assistant" && String(message.content || "").trim());
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -661,7 +622,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     }
 
     const userMessage: Message = {
-      id: `user-${Date.now()}`,
+      id: generateLocalMessageId("user"),
       role: 'user',
       content: submittedText,
       createdAt: new Date(),
@@ -689,9 +650,16 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       const browserId = externalPriorityChat ? "" : getOrCreateBrowserId();
 
       // Use the Next.js route handler which handles UUID generation and forwards to backend
-      const response = await idempotentFetch('/api/chat', {
+      const response = await idempotentFetchWithTimeout('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': buildIdempotencyKey('chat.message', {
+            session_id: resolvedSessionId,
+            message_id: userMessage.id,
+            source: clientSessionSource || "web",
+          }),
+        },
         body: JSON.stringify({
           messages: [...messages, userMessage],
           session_id: resolvedSessionId,
@@ -705,7 +673,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
             browser_session_expired: requestBrowserSessionExpired || undefined,
           },
         }),
-      });
+      }, CHAT_POST_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
@@ -730,7 +698,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         throw new Error(data.error);
       }
       
-      const botResponse = data.content || data.message || t("chat_no_response");
+      const botResponse = coerceAssistantResponse(data);
       
       const botMessage: Message = {
         id: `bot-${Date.now()}`,
@@ -739,11 +707,11 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         createdAt: new Date(),
       };
 
-      setMessages(prev => {
-        const alreadyRendered = prev.some((message) =>
-          message.role === botMessage.role && message.content === botMessage.content
-        );
-        return alreadyRendered ? prev : [...prev, botMessage];
+      setMessages((prev) => {
+        if (shouldAppendImmediateAssistantMessage(prev, botMessage, userMessage.createdAt)) {
+          return [...prev, botMessage];
+        }
+        return hasAssistantAfterMessage(prev, userMessage.id) ? prev : [...prev, botMessage];
       });
       if (!loginRequired) {
         browserSessionExpiredRef.current = false;
@@ -781,6 +749,21 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
+      setMessages((prev) => {
+        if (hasAssistantAfterMessage(prev, userMessage.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: `silent-fallback-${Date.now()}`,
+            role: "assistant",
+            content: L(
+              "Não consegui responder essa mensagem agora. Tente enviar de novo em alguns segundos.",
+              "I could not answer this message right now. Try sending it again in a few seconds.",
+            ),
+            createdAt: new Date(),
+          },
+        ];
+      });
       setIsLoading(false);
       inputRef.current?.focus(); 
     }
@@ -904,7 +887,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
                 <div
                   className={
                     m.role === "user"
-                      ? "tts-chat-user-bubble min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm shadow-sm dark:border dark:border-white/10 dark:bg-white/10"
+                      ? "tts-chat-user-bubble min-w-0 max-w-[75%] overflow-hidden rounded-2xl rounded-br-sm bg-tts-deep px-4 py-2.5 text-sm text-white shadow-sm dark:border dark:border-white/10 dark:bg-white/10 dark:!text-white"
                       : "min-w-0 max-w-[80%] overflow-hidden rounded-2xl rounded-bl-sm border border-tts-border bg-tts-surface px-4 py-2.5 text-sm text-tts-deep shadow-sm"
                   }
                 >

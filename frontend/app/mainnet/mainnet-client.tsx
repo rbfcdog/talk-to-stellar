@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Wallet2,
 } from "lucide-react";
+import { SecurePinGate } from "@/components/shared/secure-pin-gate";
 import { getClientSession } from "@/lib/session";
 
 type ApiState = {
@@ -198,7 +199,8 @@ function compactJson(value: unknown) {
 
 export default function MainnetClient() {
   const [networkMode, setNetworkMode] = useState<NetworkMode>("testnet");
-  const [session, setSession] = useState({ authenticated: false, sessionId: "" });
+  const [session, setSession] = useState({ authenticated: false, sessionId: "", sessionSource: "" });
+  const [pinVerified, setPinVerified] = useState(false);
   const [status, setStatus] = useState<MainnetStatus | null>(null);
   const [rampConfig, setRampConfig] = useState<RampConfig | null>(null);
   const [defindexStatus, setDefindexStatus] = useState<DefindexStatus | null>(null);
@@ -234,7 +236,7 @@ export default function MainnetClient() {
   const defindexVaults = Array.isArray(defindexStatus?.vaults) ? defindexStatus.vaults : [];
   const selectedYieldVault = defindexVaults.find((vault) => vault.asset_code === yieldAssetCode || vault.display_asset_code === yieldAssetCode) || defindexVaults[0] || null;
 
-  async function refreshAll() {
+  async function refreshAll(unlocked = pinVerified) {
     setApiState({ loading: true, message: "", error: "" });
     try {
       const [sessionPayload, statusPayload, rampPayload, defindexPayload] = await Promise.all([
@@ -273,11 +275,21 @@ export default function MainnetClient() {
         setWallet(null);
         setBalance(null);
         setOperations([]);
+        setPinVerified(false);
         setApiState({
           loading: false,
           message: "Network console loaded. Sign in to attach Mainnet wallets or run authenticated Testnet flows.",
           error: "",
         });
+        return;
+      }
+
+      if (!unlocked) {
+        setWallet(null);
+        setBalance(null);
+        setOperations([]);
+        setYieldBalance(null);
+        setApiState({ loading: false, message: "Digite seu PIN para ver saldos e operações.", error: "" });
         return;
       }
 
@@ -335,6 +347,10 @@ export default function MainnetClient() {
   }
 
   async function refreshBalance() {
+    if (!pinVerified) {
+      setApiState({ loading: false, message: "", error: "Digite seu PIN para atualizar saldos." });
+      return;
+    }
     setApiState({ loading: true, message: "", error: "" });
     try {
       const [balancePayload, operationsPayload] = await Promise.all([
@@ -377,6 +393,10 @@ export default function MainnetClient() {
   }
 
   async function refreshYieldBalance() {
+    if (!pinVerified) {
+      setApiState({ loading: false, message: "", error: "Digite seu PIN para consultar posição." });
+      return;
+    }
     if (!selectedYieldVault) return;
     setApiState({ loading: true, message: "", error: "" });
     try {
@@ -475,7 +495,7 @@ export default function MainnetClient() {
             </div>
             <button
               type="button"
-              onClick={refreshAll}
+              onClick={() => void refreshAll()}
               className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep hover:bg-tts-surface"
             >
               {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -507,6 +527,21 @@ export default function MainnetClient() {
           <Metric label="Ambiente padrão" value={status?.controls?.runtime_network || "-"} detail="Conta usada no produto" />
         </section>
 
+        {session.authenticated && !pinVerified ? (
+          <SecurePinGate
+            sessionSource={session.sessionSource}
+            title="Abrir saldos"
+            detail="Digite seu PIN para ver carteira, saldos, operações e posições."
+            disabled={!session.sessionId}
+            onVerified={() => {
+              setPinVerified(true);
+              void refreshAll(true);
+            }}
+          />
+        ) : null}
+
+        {!session.authenticated || pinVerified ? (
+        <>
         {networkMode === "testnet" ? (
           <>
             <TestnetRailPanel
@@ -780,6 +815,8 @@ export default function MainnetClient() {
 
           </>
         )}
+        </>
+        ) : null}
 
         <section className="border border-tts-border bg-tts-surface p-5">
           <h2 className="text-lg font-black text-tts-deep">Política de uso</h2>

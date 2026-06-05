@@ -1190,6 +1190,56 @@ export class StellarService {
         }
     }
 
+    static async submitAssetPaymentsFromSecret(input: {
+        sourceSecret: string;
+        payments: Array<{
+            destination: string;
+            amount: string;
+            assetCode: string;
+            assetIssuer?: string;
+        }>;
+        memoText?: string;
+    }): Promise<{ success: boolean; hash?: string; error?: string }> {
+        try {
+            const payments = (input.payments || []).filter((payment) => Number(payment.amount) > 0);
+            if (payments.length === 0) {
+                return { success: false, error: 'No positive payment amount provided.' };
+            }
+
+            const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
+            await this.ensureTestnetAccountFunded(sourceKeypair.publicKey(), 1);
+            for (const payment of payments) {
+                await this.ensureTestnetAccountFunded(payment.destination, 1);
+            }
+
+            const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+            let builder = new TransactionBuilder(sourceAccount, {
+                fee: STELLAR_BASE_FEE_STROOPS,
+                networkPassphrase: stellarConfig.network,
+            });
+
+            for (const payment of payments) {
+                builder = builder.addOperation(Operation.payment({
+                    destination: payment.destination,
+                    asset: createAsset({ code: payment.assetCode, issuer: payment.assetIssuer }),
+                    amount: payment.amount,
+                }));
+            }
+
+            const memo = input.memoText ? sanitizeMemoText(input.memoText) : undefined;
+            if (memo) {
+                builder = builder.addMemo(Memo.text(memo));
+            }
+
+            const transaction = builder.setTimeout(300).build();
+            transaction.sign(sourceKeypair);
+            const result = await this.submitTransactionWithTimeoutRecovery(transaction);
+            return { success: true, hash: result.hash };
+        } catch (error) {
+            return { success: false, error: this.getHorizonErrorMessage(error) };
+        }
+    }
+
     static async submitStrictReceivePaymentFromSecret(input: {
         sourceSecret: string;
         destination: string;
@@ -1198,6 +1248,7 @@ export class StellarService {
         destinationAmount: string;
         sourceMax: string;
         memoText?: string;
+        additionalSourcePayments?: Array<{ destination: string; amount: string; assetCode?: string; assetIssuer?: string }>;
     }): Promise<{ success: boolean; hash?: string; error?: string; sourceAmount?: string; destinationAmount?: string }> {
         try {
             const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
@@ -1264,6 +1315,18 @@ export class StellarService {
                 path: pathAssets,
             }));
 
+            for (const payment of input.additionalSourcePayments || []) {
+                if (Number(payment.amount) <= 0) continue;
+                builder = builder.addOperation(Operation.payment({
+                    destination: payment.destination,
+                    asset: createAsset({
+                        code: payment.assetCode || assetCode(sourceAssetObj),
+                        issuer: payment.assetIssuer || (sourceAssetObj.isNative() ? undefined : sourceAssetObj.getIssuer()),
+                    }),
+                    amount: payment.amount,
+                }));
+            }
+
             const memo = input.memoText ? sanitizeMemoText(input.memoText) : undefined;
             if (memo) {
                 builder = builder.addMemo(Memo.text(memo));
@@ -1285,6 +1348,7 @@ export class StellarService {
         sourceAmount: string;
         destinationAsset: AssetInput;
         memoText?: string;
+        additionalSourcePayments?: Array<{ destination: string; amount: string; assetCode?: string; assetIssuer?: string }>;
     }): Promise<{ success: boolean; hash?: string; error?: string; destinationAmount?: string; destinationMin?: string }> {
         try {
             const sourceKeypair = Keypair.fromSecret(input.sourceSecret);
@@ -1342,6 +1406,18 @@ export class StellarService {
                 destMin: destinationMin,
                 path: pathAssets,
             }));
+
+            for (const payment of input.additionalSourcePayments || []) {
+                if (Number(payment.amount) <= 0) continue;
+                builder = builder.addOperation(Operation.payment({
+                    destination: payment.destination,
+                    asset: createAsset({
+                        code: payment.assetCode || assetCode(sourceAssetObj),
+                        issuer: payment.assetIssuer || (sourceAssetObj.isNative() ? undefined : sourceAssetObj.getIssuer()),
+                    }),
+                    amount: payment.amount,
+                }));
+            }
 
             const memo = input.memoText ? sanitizeMemoText(input.memoText) : undefined;
             if (memo) {

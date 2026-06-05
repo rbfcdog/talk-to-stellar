@@ -96,6 +96,7 @@ describe('AnchorService PIX organization bank account routing', () => {
 
   it('uses the regional sandbox fallback when no active BRL PIX organization account exists', async () => {
     mockSandboxRuntime();
+    process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
     const anchor = {
       getQuote: jest.fn().mockResolvedValue({
@@ -157,6 +158,48 @@ describe('AnchorService PIX organization bank account routing', () => {
       toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
     expect(result.transaction.toAmount).not.toBe('8.65');
+  });
+
+  it('does not generate a sandbox PIX QR when TESOURO settlement is not configured', async () => {
+    mockSandboxRuntime();
+    delete process.env.TESOURO_DISTRIBUTOR_SECRET;
+    delete process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT;
+
+    const anchor = {
+      getQuote: jest.fn(),
+      createOnRamp: jest.fn(),
+    };
+
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'getActiveEtherfuseOrganizationBankAccountId').mockResolvedValue(undefined);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+    jest.spyOn(AnchorService as any, 'findActiveRampOperationByIntent').mockResolvedValue(null);
+    jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'TESOURO',
+      asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    });
+
+    await expect(AnchorService.createOnRampForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      amount: '10',
+      final_asset: 'BRL',
+    })).rejects.toMatchObject({
+      code: 'tesouro_settlement_not_configured',
+    });
+
+    expect(anchor.getQuote).not.toHaveBeenCalled();
+    expect(anchor.createOnRamp).not.toHaveBeenCalled();
   });
 
   it('quotes user-facing BRL in reais instead of raw TESOURO units', async () => {
