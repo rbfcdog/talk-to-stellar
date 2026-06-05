@@ -2044,8 +2044,9 @@ describe('Agent production evals', () => {
       expect(result.response_message).toContain('/pix-off?');
       expect(result.response_message).toContain('mode=offramp');
       expect(result.response_message).toContain('fiat_amount=50');
-      expect(result.response_message).toContain('source_amount=50');
+      expect(result.response_message).toContain('target_brl=50');
       expect(result.response_message).toContain('Para retirar');
+      expect(result.response_message).toContain('taxa de retirada aproximada');
       expect(result.response_message).toContain('quanto chega em reais no seu PIX');
       expect(result.response_message).not.toContain('/pix-on?');
       expect(result.response_message).not.toContain('o PIX a pagar');
@@ -2360,6 +2361,7 @@ describe('Agent production evals', () => {
     expect(source).toContain('show_savings_calculator');
     expect(source).toContain('send_receipt_with_savings');
     expect(source).toContain('show_annual_savings_summary');
+    expect(source).toContain('taxa de retirada aproximada');
     expect(source).toContain('Do not expose SQL, schema cache, provider stack traces');
   });
 });
