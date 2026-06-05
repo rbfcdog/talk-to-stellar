@@ -280,6 +280,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("actualOnRampFeeBrl");
     expect(text).toContain("showSavingsCard");
     expect(text).toContain("estimatedSavingsBrl");
+    expect(text).toContain("const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee");
+    expect(text).toContain('const showOffRampComparison = mode === "offramp" && traditionalFee > 0 && totalEstimatedFee > 0');
+    expect(text).toContain('L("Comparativo", "Comparison")');
+    expect(text).toContain('L("do tradicional", "of traditional cost")');
     expect(text).toContain("const checkoutExpired = Boolean(order && !isSuccessStatus(rawOrderStatus) && (orderExplicitlyExpired || quoteExpired));");
     expect(text).toContain("!checkoutExpired &&");
     expect(text).toContain("function restartOnRampCheckout()");
