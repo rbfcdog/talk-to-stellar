@@ -52,9 +52,8 @@ class EvolutionSendTextError extends Error {
 }
 
 const processedMessages = new Map<string, number>();
-const processedMessageContent = new Map<string, number>();
+const activeWebhookReplies = new Map<string, Promise<void>>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_CONTENT_DEDUPE_TTL_MS = 90 * 1000;
 
 type PersistentDedupeStatus = 'reserved' | 'duplicate' | 'unavailable';
 
@@ -342,29 +341,15 @@ function cleanupProcessedMessages() {
   for (const [key, expiresAt] of processedMessages.entries()) {
     if (expiresAt <= now) processedMessages.delete(key);
   }
-  for (const [key, expiresAt] of processedMessageContent.entries()) {
-    if (expiresAt <= now) processedMessageContent.delete(key);
-  }
 }
 
-function contentDedupeTtlMs(): number {
-  const configured = Number(process.env.EVOLUTION_CONTENT_DEDUPE_TTL_MS || DEFAULT_CONTENT_DEDUPE_TTL_MS);
-  if (!Number.isFinite(configured) || configured < 10_000) return DEFAULT_CONTENT_DEDUPE_TTL_MS;
-  return Math.min(configured, 10 * 60 * 1000);
-}
-
-function hasProcessed(messageKey: string): boolean {
+function isProcessed(messageKey: string): boolean {
   cleanupProcessedMessages();
-  if (processedMessages.has(messageKey)) return true;
+  return processedMessages.has(messageKey);
+}
+
+function markProcessed(messageKey: string): void {
   processedMessages.set(messageKey, Date.now() + PROCESSED_TTL_MS);
-  return false;
-}
-
-function hasRecentlyProcessedContent(messageKey: string): boolean {
-  cleanupProcessedMessages();
-  if (processedMessageContent.has(messageKey)) return true;
-  processedMessageContent.set(messageKey, Date.now() + contentDedupeTtlMs());
-  return false;
 }
 
 function normalizeDedupeText(value: string): string {
@@ -422,8 +407,6 @@ async function reserveEvolutionWebhookDedupe(input: {
   text: string;
 }): Promise<string> {
   const normalizedText = normalizeDedupeText(input.text);
-  const ttl = contentDedupeTtlMs();
-  const bucket = Math.floor(Date.now() / ttl);
   const commonPayload = {
     instance: input.instance,
     remote_jid: input.remoteJid,
@@ -431,31 +414,14 @@ async function reserveEvolutionWebhookDedupe(input: {
     text_hash: dedupeHash(normalizedText),
   };
 
-  const reservations = [
+  const status = await reservePersistentDedupeKey(
+    evolutionDedupeKey('incoming_message', `${input.instance}:${input.remoteJid}:${input.messageId}`),
     {
-      reason: 'duplicate_persistent_message',
-      key: evolutionDedupeKey('incoming_message', `${input.instance}:${input.remoteJid}:${input.messageId}`),
-      payload: {
-        ...commonPayload,
-        dedupe_kind: 'message_id',
-      },
-    },
-    {
-      reason: 'duplicate_persistent_content',
-      key: evolutionDedupeKey('incoming_content', `${input.instance}:${input.remoteJid}:${normalizedText}:${bucket}`),
-      payload: {
-        ...commonPayload,
-        dedupe_kind: 'content',
-        bucket,
-        ttl_ms: ttl,
-      },
-    },
-  ];
-
-  for (const reservation of reservations) {
-    const status = await reservePersistentDedupeKey(reservation.key, reservation.payload);
-    if (status === 'duplicate') return reservation.reason;
-  }
+      ...commonPayload,
+      dedupe_kind: 'message_id',
+    }
+  );
+  if (status === 'duplicate') return 'duplicate_persistent_message';
 
   return '';
 }
@@ -1083,10 +1049,6 @@ export class EvolutionService {
     if (message.fromMe) return { received: true, replied: false, skipped: 'from_me' };
 
     const messageKey = `${message.instance || configuredInstance()}:${message.remoteJid}:${message.messageId}`;
-    if (hasProcessed(messageKey)) {
-      return { received: true, replied: false, skipped: 'duplicate', instance: message.instance };
-    }
-
     const recipient = numberFromRemoteJid(message.remoteJid);
     if (!recipient) {
       return { received: true, replied: false, skipped: 'recipient_not_number', instance: message.instance };
@@ -1100,42 +1062,52 @@ export class EvolutionService {
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
     }
 
-    const contentKey = `${instance}:${message.remoteJid}:${normalizeDedupeText(text)}`;
-    if (hasRecentlyProcessedContent(contentKey)) {
-      return { received: true, replied: false, skipped: 'duplicate_content', recipient, instance };
+    if (isProcessed(messageKey)) {
+      return { received: true, replied: false, skipped: 'duplicate', recipient, instance };
     }
 
-    const persistentDuplicate = await reserveEvolutionWebhookDedupe({
-      instance,
-      remoteJid: message.remoteJid,
-      messageId: message.messageId,
-      text,
-    });
-    if (persistentDuplicate) {
-      return { received: true, replied: false, skipped: persistentDuplicate, recipient, instance };
+    const activeReply = activeWebhookReplies.get(messageKey);
+    if (activeReply) {
+      await activeReply.catch(() => undefined);
+      return { received: true, replied: false, skipped: 'duplicate_in_flight', recipient, instance };
     }
 
-    void this.replyWithAgent({
+    const replyPromise = this.replyWithAgent({
       instance,
       recipient,
       remoteJid: message.remoteJid,
       messageId: message.messageId,
       instanceId: message.instanceId,
       text,
-    })
-      .then(() => {
-        logger.info(`[evolution-webhook] replied with agent to ***${recipient.slice(-4)} on instance ${instance}`);
-      })
-      .catch((error) => {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
-        if (!shouldSendFailureFallback()) return;
-        void this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true })
-          .catch((sendError) => {
-            const sendMessage = sendError instanceof Error ? sendError.message : String(sendError);
-            logger.warn(`[evolution-webhook] failed to send fallback reply to ***${recipient.slice(-4)}: ${sendMessage}`);
-          });
+    });
+    activeWebhookReplies.set(messageKey, replyPromise);
+
+    try {
+      await replyPromise;
+      markProcessed(messageKey);
+      await reserveEvolutionWebhookDedupe({
+        instance,
+        remoteJid: message.remoteJid,
+        messageId: message.messageId,
+        text,
       });
+      logger.info(`[evolution-webhook] replied with agent to ***${recipient.slice(-4)} on instance ${instance}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
+      if (!shouldSendFailureFallback()) throw error;
+      await this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true });
+      markProcessed(messageKey);
+      await reserveEvolutionWebhookDedupe({
+        instance,
+        remoteJid: message.remoteJid,
+        messageId: message.messageId,
+        text,
+      });
+      logger.info(`[evolution-webhook] replied with fallback to ***${recipient.slice(-4)} on instance ${instance}`);
+    } finally {
+      activeWebhookReplies.delete(messageKey);
+    }
 
     return {
       received: true,
@@ -1170,11 +1142,6 @@ export class EvolutionService {
       messageId: input.messageId,
     });
     const replyText = buildUsefulEvolutionReply(response);
-    try {
-      await this.sendText(input.instance, input.recipient, replyText, { reliable: true });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn(`[evolution-webhook] generated agent reply but Evolution sendText failed for ***${input.recipient.slice(-4)}: ${message}`);
-    }
+    await this.sendText(input.instance, input.recipient, replyText, { reliable: true });
   }
 }
