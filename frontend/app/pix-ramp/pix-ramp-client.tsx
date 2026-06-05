@@ -4289,6 +4289,17 @@ function EtherfuseMeasuredFeeNotice({
   const estimatedTtsFee = Number.isFinite(numericAmount) && numericAmount > 0
     ? numericAmount * (ttsFeeBps / 10000)
     : 0;
+  const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee;
+  const traditionalFee = Number.isFinite(numericAmount) && numericAmount > 0
+    ? numericAmount * TRADITIONAL_METHOD_FEE_PCT
+    : 0;
+  const savingsPercent = traditionalFee > 0
+    ? Math.max(0, Math.min(100, ((traditionalFee - totalEstimatedFee) / traditionalFee) * 100))
+    : 0;
+  const remainingFeePercent = traditionalFee > 0
+    ? Math.max(0, Math.min(100, (totalEstimatedFee / traditionalFee) * 100))
+    : 0;
+  const showOffRampComparison = mode === "offramp" && traditionalFee > 0 && totalEstimatedFee > 0;
   const label = mode === "onramp"
     ? L("Antes de gerar o PIX", "Before creating PIX")
     : L("Antes do PIN", "Before PIN");
@@ -4299,6 +4310,20 @@ function EtherfuseMeasuredFeeNotice({
   return (
     <div className="tts-mobile-soft-hide mt-4 rounded-xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep md:block">
       <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{label}</p>
+      {showOffRampComparison && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-tts-confirm/35 bg-tts-confirm/10 p-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{L("Comparativo", "Comparison")}</p>
+            <p className="mt-1 text-2xl font-black leading-none text-tts-confirm">{formatPercentValue(savingsPercent, language)}%</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-black text-tts-deep">{L("menos taxa", "less fee")}</p>
+            <p className="mt-1 text-[10px] font-semibold leading-4 text-tts-muted">
+              {formatPercentValue(remainingFeePercent, language)}% {L("do tradicional", "of traditional cost")}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
           <p className="text-[11px] font-black uppercase tracking-normal text-tts-gold">
