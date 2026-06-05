@@ -308,6 +308,59 @@ describe('AnchorService sandbox PIX confirmation', () => {
     }));
   });
 
+  it('shows completed sandbox ledger BRL on-ramps in wallet balances', async () => {
+    mockSandboxRuntime();
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+      sessionPinHash: 'hash',
+    });
+    jest.spyOn(StellarService, 'ensureTestnetAccountFunded').mockResolvedValue(undefined as any);
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
+      {
+        asset_code: 'TESOURO',
+        asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        balance: '0.0000000',
+      },
+    ] as any);
+    jest.spyOn(OperationRepository, 'findByUserId').mockResolvedValue([
+      {
+        id: 'operation-sandbox-ledger-1',
+        user_id: 'user-1',
+        type: 'PIX_ONRAMP',
+        status: 'COMPLETED',
+        amount: 100.5,
+        asset_code: 'TESOURO',
+        source_session_id: 'session-1',
+        source_public_key: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        context: JSON.stringify({
+          sandbox_ledger_settlement: true,
+          final_settlement_mode: 'sandbox_anchor_only',
+          final_asset: 'TESOURO',
+          final_amount: '100',
+          destination_amount_anchor: '100',
+        }),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as any,
+    ]);
+
+    const result = await AnchorService.getWalletBalancesForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+    });
+
+    expect(result.balances).toContainEqual({
+      asset_code: 'TESOURO',
+      asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+      balance: '100',
+    });
+  });
+
   it('credits BRL on-ramp through the TESOURO distributor when configured', async () => {
     mockSandboxRuntime();
     process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
