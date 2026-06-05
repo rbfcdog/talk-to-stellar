@@ -1107,6 +1107,50 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect(receiptInput.externalDeliveryText).toContain('Valor alvo: 10 XLM');
   });
 
+  it('keeps English on PIX on-ramp callback receipts from operation context', async () => {
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/xlm-pix-en');
+    const result = await (AnchorService as any).notifySandboxOnRampCompleted({
+      transaction: {
+        id: 'sandbox-pix-xlm-processing-en',
+        status: 'completed',
+        fromAmount: '7.32',
+        fromCurrency: 'BRL',
+        toAmount: '',
+        toCurrency: 'XLM',
+        updatedAt: new Date().toISOString(),
+        auto_conversion: {
+          required: true,
+          status: 'pending',
+          destination_asset_code: 'XLM',
+        },
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '7.32',
+      destinationAmount: '7.28',
+      finalAssetCode: 'XLM',
+      desiredFinalAmount: '10',
+      desiredFinalAssetCode: 'XLM',
+      operationContext: {
+        language: 'en',
+        external_provider: 'whatsapp',
+        external_provider_user_id: '+5519997624114',
+      },
+    }, 'sandbox-ledger-xlm-processing-en');
+
+    expect(result).toBe('https://talktostellar.com/receipt/xlm-pix-en');
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      language: 'en',
+      quote: expect.objectContaining({ language: 'en' }),
+      externalDeliveryText: expect.stringContaining('PIX confirmed successfully.'),
+    }));
+    const receiptInput = receiptSpy.mock.calls[0][0] as any;
+    expect(receiptInput.externalDeliveryText).toContain('Target amount: 10 XLM');
+    expect(receiptInput.externalDeliveryText).toContain('Status: conversion to XLM in progress');
+    expect(receiptInput.externalDeliveryText).not.toContain('Valor alvo');
+  });
+
   it('announces post-PIX conversion progress first and sends a separate conversion receipt when it finishes', async () => {
     const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt')
       .mockResolvedValueOnce('https://talktostellar.com/receipt/pix-progress')

@@ -463,6 +463,7 @@ describe('ExternalFinalizeController', () => {
       destination_name: 'Ana Silva',
       session_id: 'session-1',
       owner_id: 'user@example.com',
+      language: 'en',
     });
 
     finalizeGetWalletBySessionMock.mockResolvedValue({
@@ -520,10 +521,14 @@ describe('ExternalFinalizeController', () => {
     );
     expect(PaymentReceiptService.sendReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
+        language: 'en',
         provider: 'whatsapp',
         providerUserId: '5519981808102',
+        externalDeliveryText: expect.stringContaining('Payment completed.'),
       })
     );
+    expect(PaymentReceiptService.sendReceipt.mock.calls[0][0].externalDeliveryText).toContain('Amount:');
+    expect(PaymentReceiptService.sendReceipt.mock.calls[0][0].externalDeliveryText).not.toContain('Pagamento concluído');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({

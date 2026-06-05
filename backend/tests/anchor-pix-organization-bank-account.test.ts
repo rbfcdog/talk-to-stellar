@@ -135,7 +135,7 @@ describe('AnchorService PIX organization bank account routing', () => {
       asset_code: 'TESOURO',
       asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
-    jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
+    const persistSpy = jest.spyOn(AnchorService as any, 'persistRampOperation').mockResolvedValue('op-1');
     process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
 
     const result = await AnchorService.createOnRampForSession({
@@ -144,6 +144,7 @@ describe('AnchorService PIX organization bank account routing', () => {
       customer_id: 'customer-1',
       amount: '10',
       final_asset: 'BRL',
+      language: 'en',
     });
 
     expect(anchor.createOnRamp).not.toHaveBeenCalled();
@@ -159,6 +160,11 @@ describe('AnchorService PIX organization bank account routing', () => {
       toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
     });
     expect(result.transaction.toAmount).not.toBe('8.65');
+    expect(persistSpy).toHaveBeenCalledWith(expect.objectContaining({
+      context: expect.objectContaining({
+        language: 'en',
+      }),
+    }));
   });
 
   it('does not generate a sandbox PIX QR when TESOURO settlement is not configured', async () => {

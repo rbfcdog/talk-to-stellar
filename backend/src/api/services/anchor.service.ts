@@ -49,6 +49,9 @@ interface RampSessionInput {
   sessionId?: string;
   session_token?: string;
   sessionToken?: string;
+  language?: string;
+  lang?: string;
+  locale?: string;
   intent_id?: string;
   intentId?: string;
   operation_key?: string;
@@ -508,6 +511,28 @@ function normalizeRampIntentId(input: RampSessionInput): string {
   return coalesceString(input.intent_id, input.intentId, input.operation_key, input.operationKey)
     .replace(/[^A-Za-z0-9._:-]/g, '')
     .slice(0, 96);
+}
+
+function normalizeRampLanguage(value: unknown): 'pt-BR' | 'en' | '' {
+  const normalized = coalesceString(value).toLowerCase();
+  if (!normalized) return '';
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english') || normalized.includes('ingles')) {
+    return 'en';
+  }
+  return 'pt-BR';
+}
+
+function rampInputLanguage(input: RampSessionInput): 'pt-BR' | 'en' | undefined {
+  return normalizeRampLanguage(coalesceString(input.language, input.lang, input.locale)) || undefined;
+}
+
+function rampContextLanguage(context?: Record<string, unknown> | null): 'pt-BR' | 'en' | undefined {
+  if (!context) return undefined;
+  return normalizeRampLanguage(coalesceString(context.language, context.lang, context.locale)) || undefined;
+}
+
+function rampText(language: 'pt-BR' | 'en' | undefined, pt: string, en: string): string {
+  return language === 'en' ? en : pt;
 }
 
 function externalChannelProvider(input: RampSessionInput): string {
@@ -1900,6 +1925,7 @@ export class AnchorService {
 
   private static async notifySandboxOnRampCompleted(record: SandboxMockOnRampOrder, hash?: string): Promise<string> {
     try {
+      const language = rampContextLanguage(record.operationContext);
       if (Boolean(record.operationContext?.auto_pay_after_ramp)) {
         console.info('[ramp] skipped intermediate PIX funding receipt because auto-pay will send the final receipt');
         return '';
@@ -1956,30 +1982,43 @@ export class AnchorService {
       );
       const externalDeliveryText = pendingPostConversion
         ? [
-            'PIX confirmado com sucesso.',
-            `Valor pago: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
-            `Valor recebido agora: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
-            `Conversão em andamento: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} para ${postAsset?.code || 'a moeda final'}`,
-            'Quando a conversão finalizar, vou mandar outro comprovante aqui.',
+            rampText(language, 'PIX confirmado com sucesso.', 'PIX confirmed successfully.'),
+            `${rampText(language, 'Valor pago', 'Amount paid')}: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
+            `${rampText(language, 'Valor recebido agora', 'Amount received now')}: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
+            `${rampText(language, 'Conversão em andamento', 'Conversion in progress')}: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} ${rampText(language, `para ${postAsset?.code || 'a moeda final'}`, `to ${postAsset?.code || 'the final asset'}`)}`,
+            rampText(language, 'Quando a conversão finalizar, vou mandar outro comprovante aqui.', 'When the conversion finishes, I will send another receipt here.'),
           ].join('\n')
         : pendingNonBrlFinalSettlement
         ? [
-            'PIX confirmado com sucesso.',
-            `Valor pago: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
-            `Valor alvo: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
-            'Destino: sua conta TalkToStellar',
-            `Status: conversão para ${userFacingFinalAsset} em andamento`,
+            rampText(language, 'PIX confirmado com sucesso.', 'PIX confirmed successfully.'),
+            `${rampText(language, 'Valor pago', 'Amount paid')}: ${formatDisplayAmount(record.sourceAmountBrl, 'BRL')}`,
+            `${rampText(language, 'Valor alvo', 'Target amount')}: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}`,
+            `${rampText(language, 'Destino', 'Destination')}: ${rampText(language, 'sua conta TalkToStellar', 'your TalkToStellar account')}`,
+            `${rampText(language, 'Status', 'Status')}: ${rampText(language, `conversão para ${userFacingFinalAsset} em andamento`, `conversion to ${userFacingFinalAsset} in progress`)}`,
           ].join('\n')
         : null;
       const contextMessage = pendingPostConversion
-        ? `PIX confirmado. Recebemos ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} e a conversão para ${postAsset?.code || 'a moeda final'} está em andamento.`
+        ? rampText(
+            language,
+            `PIX confirmado. Recebemos ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} e a conversão para ${postAsset?.code || 'a moeda final'} está em andamento.`,
+            `PIX confirmed. We received ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} and the conversion to ${postAsset?.code || 'the final asset'} is in progress.`
+          )
         : pendingNonBrlFinalSettlement
-        ? `PIX confirmado. Conversão para ${userFacingFinalAsset} em processamento para entregar ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} na sua conta.`
-        : `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`;
+        ? rampText(
+            language,
+            `PIX confirmado. Conversão para ${userFacingFinalAsset} em processamento para entregar ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} na sua conta.`,
+            `PIX confirmed. Conversion to ${userFacingFinalAsset} is processing to deliver ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)} to your account.`
+          )
+        : rampText(
+            language,
+            `Escolhemos a melhor rota para essa conversão e entregamos ${userFacingFinalAsset} na sua conta.${balanceContext}`,
+            `We chose the best route for this conversion and delivered ${userFacingFinalAsset} to your account.`
+          );
       return await PaymentReceiptService.sendReceipt({
         type: 'payment_received',
         sessionId: record.sessionId,
         userId: record.userId,
+        language,
         provider: coalesceString(record.operationContext?.external_provider) || undefined,
         providerUserId: coalesceString(record.operationContext?.external_provider_user_id) || undefined,
         counterpartyLabel: 'PIX',
@@ -2477,11 +2516,13 @@ export class AnchorService {
       destinationAmount,
     );
     const operationId = coalesceString(input.operation.id);
+    const language = rampContextLanguage(input.context);
 
     const receiptUrl = await PaymentReceiptService.sendReceipt({
       type: 'payment_received',
       sessionId: coalesceString(input.operation.source_session_id, input.context.session_id),
       userId: coalesceString(input.operation.user_id, input.context.user_id),
+      language,
       provider: coalesceString(input.context.external_provider) || undefined,
       providerUserId: coalesceString(input.context.external_provider_user_id) || undefined,
       counterpartyLabel: 'PIX',
@@ -2494,7 +2535,11 @@ export class AnchorService {
       feeBrl: fee.feeBrl || null,
       quote: input.context || null,
       status: 'completed',
-      contextMessage: `PIX confirmado. Entregamos ${userFacingFinalAsset} na sua conta TalkToStellar.`,
+      contextMessage: rampText(
+        language,
+        `PIX confirmado. Entregamos ${userFacingFinalAsset} na sua conta TalkToStellar.`,
+        `PIX confirmed. We delivered ${userFacingFinalAsset} to your TalkToStellar account.`
+      ),
       dedupeKey: operationId ? `pix-onramp:${operationId}` : undefined,
     });
 
@@ -2528,11 +2573,13 @@ export class AnchorService {
     const hash = coalesceString(input.hash, input.context.post_conversion_hash);
     if (!sourceAmount || !destinationAmount || !hash) return '';
     const operationId = coalesceString(input.operation.id);
+    const language = rampContextLanguage(input.context);
 
     const receiptUrl = await PaymentReceiptService.sendReceipt({
       type: 'conversion',
       sessionId: coalesceString(input.operation.source_session_id, input.context.session_id),
       userId: coalesceString(input.operation.user_id, input.context.user_id),
+      language,
       provider: coalesceString(input.context.external_provider) || undefined,
       providerUserId: coalesceString(input.context.external_provider_user_id) || undefined,
       counterpartyLabel: 'sua conta TalkToStellar',
@@ -2542,12 +2589,12 @@ export class AnchorService {
       destinationAssetCode: input.destinationAsset.code,
       hash,
       status: 'completed',
-      contextMessage: 'Conversão automática depois do PIX concluída.',
+      contextMessage: rampText(language, 'Conversão automática depois do PIX concluída.', 'Automatic conversion after PIX completed.'),
       externalDeliveryText: [
-        'Conversão final depois do PIX concluída.',
-        `Convertido: ${formatDisplayAmount(sourceAmount, input.sourceAsset.code)}`,
-        `Recebido final: ${formatDisplayAmount(destinationAmount, input.destinationAsset.code)}`,
-        'Status: concluído',
+        rampText(language, 'Conversão final depois do PIX concluída.', 'Final conversion after PIX completed.'),
+        `${rampText(language, 'Convertido', 'Converted')}: ${formatDisplayAmount(sourceAmount, input.sourceAsset.code)}`,
+        `${rampText(language, 'Recebido final', 'Final received')}: ${formatDisplayAmount(destinationAmount, input.destinationAsset.code)}`,
+        `${rampText(language, 'Status', 'Status')}: ${rampText(language, 'concluído', 'completed')}`,
       ].join('\n'),
       dedupeKey: operationId ? `pix-post-conversion:${operationId}` : undefined,
     });
@@ -2663,11 +2710,13 @@ export class AnchorService {
     );
 
     if (!sourceAssetCode || !sourceAmount || !destinationAssetCode || !destinationAmount || !hash) return '';
+    const language = rampContextLanguage(record.operationContext);
 
     const receiptUrl = await PaymentReceiptService.sendReceipt({
       type: 'conversion',
       sessionId: record.sessionId,
       userId: record.userId,
+      language,
       provider: coalesceString(record.operationContext?.external_provider) || undefined,
       providerUserId: coalesceString(record.operationContext?.external_provider_user_id) || undefined,
       counterpartyLabel: 'sua conta TalkToStellar',
@@ -2677,12 +2726,12 @@ export class AnchorService {
       destinationAssetCode,
       hash,
       status: 'completed',
-      contextMessage: `Conversão automática depois do PIX concluída.`,
+      contextMessage: rampText(language, 'Conversão automática depois do PIX concluída.', 'Automatic conversion after PIX completed.'),
       externalDeliveryText: [
-        'Conversão final depois do PIX concluída.',
-        `Convertido: ${formatDisplayAmount(sourceAmount, sourceAssetCode)}`,
-        `Recebido final: ${formatDisplayAmount(destinationAmount, destinationAssetCode)}`,
-        'Status: concluído',
+        rampText(language, 'Conversão final depois do PIX concluída.', 'Final conversion after PIX completed.'),
+        `${rampText(language, 'Convertido', 'Converted')}: ${formatDisplayAmount(sourceAmount, sourceAssetCode)}`,
+        `${rampText(language, 'Recebido final', 'Final received')}: ${formatDisplayAmount(destinationAmount, destinationAssetCode)}`,
+        `${rampText(language, 'Status', 'Status')}: ${rampText(language, 'concluído', 'completed')}`,
       ].join('\n'),
       dedupeKey: record.operationId ? `pix-post-conversion:${record.operationId}` : undefined,
     });
@@ -4187,6 +4236,7 @@ export class AnchorService {
     const autoPayAssetCode = normalizeAssetCode(coalesceString(input.auto_pay_asset_code, input.autoPayAssetCode, finalAsset.code));
     const externalProvider = externalChannelProvider(input);
     const externalProviderUserId = externalChannelProviderUserId(input);
+    const language = rampInputLanguage(input);
 
     const existingIntent = await this.findActiveRampOperationByIntent({
       userId: context.userId,
@@ -4534,6 +4584,7 @@ export class AnchorService {
       session_id: context.sessionId,
       user_id: context.userId,
       public_key: context.publicKey,
+      language: language || undefined,
       external_provider: externalProvider || undefined,
       external_provider_user_id: externalProviderUserId || undefined,
       external_source: coalesceString(input.source) || undefined,
@@ -5063,6 +5114,7 @@ export class AnchorService {
     const amount = sourceAmount ? normalizeAmount(sourceAmount, 'source_amount') : requestedAmount;
     const targetBrl = coalesceString(input.target_brl, input.targetBrl);
     const intentId = normalizeRampIntentId(input);
+    const language = rampInputLanguage(input);
     const rawExternalBankAccount = input.external_bank_account || input.externalBankAccount;
     const pixDestination = pixDestinationFromRampInput(input as Record<string, unknown>, rawExternalBankAccount);
     const externalBankAccount = pixDestination.externalBankAccount;
@@ -5213,6 +5265,7 @@ export class AnchorService {
         provider: 'etherfuse',
         rail: 'pix',
         direction: 'offramp',
+        language: language || undefined,
         intent_id: intentId || undefined,
         customer_id: customerId,
         quote_id: quoteId,
@@ -5465,11 +5518,13 @@ export class AnchorService {
           sourceAmount || transaction?.fromAmount,
           destinationAmount,
         );
+        const language = rampContextLanguage(operationContext) || rampInputLanguage(input);
 
         receiptUrl = await PaymentReceiptService.sendReceipt({
           type: 'payment_sent',
           sessionId: context.sessionId,
           userId: context.userId,
+          language,
           provider: externalChannelProvider(input) || undefined,
           providerUserId: externalChannelProviderUserId(input) || undefined,
           counterpartyLabel: bankLabel,
@@ -5479,7 +5534,7 @@ export class AnchorService {
           destinationAssetCode: 'BRL',
           hash: result.hash || orderId,
           status: 'completed',
-          contextMessage: 'PIX enviado à chave.',
+          contextMessage: rampText(language, 'PIX enviado à chave.', 'PIX sent to the key.'),
           feeDisplay: fee.feeDisplay || null,
           feeBrl: fee.feeBrl || null,
           quote: operationContext || null,
@@ -7654,6 +7709,7 @@ export class AnchorService {
 
     const amount = normalizeAmount(input.amount, 'amount');
     const sourceAsset = normalizeRampUserAsset(input.source_asset_code, input.sourceAssetCode, input.asset_code, input.assetCode, 'BRL');
+    const language = rampInputLanguage(input);
     const destinationAsset = normalizeRampUserAsset(
       input.destination_asset_code,
       input.destinationAssetCode,
@@ -7744,19 +7800,31 @@ export class AnchorService {
     const route = {
       selected: crossAssetTransfer
         ? `${userFacingAssetCode(sourceAsset.code)} -> ${userFacingAssetCode(destinationAsset.code)}`
-        : `${userFacingAssetCode(sourceAsset.code)} direto`,
-      criteria: 'menor custo após a conversão do PIX',
+        : rampText(language, `${userFacingAssetCode(sourceAsset.code)} direto`, `${userFacingAssetCode(sourceAsset.code)} direct`),
+      criteria: rampText(language, 'menor custo após a conversão do PIX', 'lowest cost after PIX conversion'),
       reason: crossAssetTransfer
-        ? `O saldo foi usado em ${userFacingAssetCode(sourceAsset.code)} e entregue em ${userFacingAssetCode(destinationAsset.code)} para ${recipient.displayName}.`
-        : `O saldo final já estava em ${userFacingAssetCode(sourceAsset.code)}; enviar direto evita conversão extra antes de chegar em ${recipient.displayName}.`,
+        ? rampText(
+            language,
+            `O saldo foi usado em ${userFacingAssetCode(sourceAsset.code)} e entregue em ${userFacingAssetCode(destinationAsset.code)} para ${recipient.displayName}.`,
+            `The balance was used in ${userFacingAssetCode(sourceAsset.code)} and delivered in ${userFacingAssetCode(destinationAsset.code)} to ${recipient.displayName}.`
+          )
+        : rampText(
+            language,
+            `O saldo final já estava em ${userFacingAssetCode(sourceAsset.code)}; enviar direto evita conversão extra antes de chegar em ${recipient.displayName}.`,
+            `The final balance was already in ${userFacingAssetCode(sourceAsset.code)}; sending directly avoids an extra conversion before it reaches ${recipient.displayName}.`
+          ),
     };
-    const routeContext = `Escolhemos a melhor rota para essa conversão: ${route.selected}. ${route.reason}`;
+    const routeContext = rampText(
+      language,
+      `Escolhemos a melhor rota para essa conversão: ${route.selected}. ${route.reason}`,
+      `We chose the best route for this conversion: ${route.selected}. ${route.reason}`
+    );
     const displayAmount = formatDisplayAmount(destinationAmount, destinationAsset.code);
     const externalDeliveryText = [
-      'PIX confirmado e transferencia enviada.',
-      `Valor: ${displayAmount}`,
-      `Destino: ${recipient.displayName}`,
-      'Status: concluído',
+      rampText(language, 'PIX confirmado e transferencia enviada.', 'PIX confirmed and transfer sent.'),
+      `${rampText(language, 'Valor', 'Amount')}: ${displayAmount}`,
+      `${rampText(language, 'Destino', 'Destination')}: ${recipient.displayName}`,
+      `${rampText(language, 'Status', 'Status')}: ${rampText(language, 'concluído', 'completed')}`,
     ].join('\n');
     let receiptUrl = '';
     try {
@@ -7764,6 +7832,7 @@ export class AnchorService {
         type: 'payment_sent',
         sessionId: context.sessionId,
         userId: context.userId,
+        language,
         provider: externalChannelProvider(input) || undefined,
         providerUserId: externalChannelProviderUserId(input) || undefined,
         counterpartyLabel: recipient.displayName,
@@ -7787,6 +7856,7 @@ export class AnchorService {
           type: 'payment_received',
           sessionId: recipient.sessionId,
           userId: coalesceString(recipientSession?.user_id) || recipient.sessionId,
+          language,
           counterpartyLabel: 'PIX via TalkToStellar',
           sourceAmount: amount,
           sourceAssetCode: userFacingAssetCode(sourceAsset.code),
