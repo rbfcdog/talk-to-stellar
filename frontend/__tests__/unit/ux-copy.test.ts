@@ -12,7 +12,6 @@ describe("UX copy guardrails", () => {
   it("keeps shared account affordances on money screens", () => {
     const screens = [
       "app/rendimentos/rendimentos-client.tsx",
-      "app/pix-ramp/pix-ramp-client.tsx",
       "app/transactions/transactions-client.tsx",
       "app/balance/balance-client.tsx",
       "app/passkey-test/passkey-test-client.tsx",
@@ -27,6 +26,12 @@ describe("UX copy guardrails", () => {
       const text = source(screen);
       expect(text, `${screen} should not expose chat-only return buttons`).not.toContain("ReturnToChat");
     }
+
+    const pixRampText = source("app/pix-ramp/pix-ramp-client.tsx");
+    expect(pixRampText).toContain("MobilePixStepper");
+    expect(pixRampText).toContain("LiveRampPanel");
+    expect(pixRampText).not.toContain("AccountStatusCard");
+    expect(pixRampText).not.toContain("ReturnToChat");
   });
 
   it("keeps chat link labels mapped to product screens", () => {

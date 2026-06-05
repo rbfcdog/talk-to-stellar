@@ -96,7 +96,7 @@ export function publicErrorMessage(error: unknown, fallback = 'Não consegui con
     case 'pix_account_not_ready':
       return 'Sua conta PIX ainda está sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
     case 'pix_sandbox_settlement_unavailable':
-      return 'A retirada PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.';
+      return 'O PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.';
     case 'service_timeout':
       return 'A operação demorou demais. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.';
     case 'conversion_route_unavailable':

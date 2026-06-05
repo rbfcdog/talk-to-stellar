@@ -257,9 +257,10 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect((record.transaction as any).auto_conversion.destination_amount).toBeUndefined();
   });
 
-  it('does not mark BRL on-ramp as completed when sandbox cannot credit the wallet', async () => {
+  it('completes BRL on-ramp in sandbox ledger mode when no distributor secret is configured', async () => {
     mockSandboxRuntime();
-    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/should-not-send');
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([] as any);
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/brl-sandbox-ledger');
     const orderId = 'sandbox-pix-brl-no-distributor';
 
     (AnchorService as any).sandboxMockOnRampOrders.set(orderId, {
@@ -287,11 +288,24 @@ describe('AnchorService sandbox PIX confirmation', () => {
 
     const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
 
-    expect(record.transaction.status).toBe('failed');
-    expect(record.deliveryError).toContain('TESOURO_DISTRIBUTOR_SECRET');
-    expect(record.deliveryError).toContain('sem movimento real de saldo');
-    expect((record.transaction as any).sandbox_ledger_settlement).toBeUndefined();
-    expect(receiptSpy).not.toHaveBeenCalled();
+    expect(record.transaction.status).toBe('completed');
+    expect(record.deliveryError).toBeUndefined();
+    expect(record.deliveryHash).toMatch(/^sandbox-ledger-/);
+    expect(record.finalAmount).toBe('10.0700000');
+    expect((record.transaction as any).toAmount).toBe('10.0700000');
+    expect((record.transaction as any).sandbox_ledger_settlement).toBe(true);
+    expect((record.transaction as any).auto_conversion).toMatchObject({
+      required: false,
+      status: 'completed',
+      destination_asset_code: 'TESOURO',
+      destination_amount: '10.0700000',
+      mode: 'sandbox_anchor_only',
+    });
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      destinationAmount: '10.0700000',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+    }));
   });
 
   it('credits BRL on-ramp through the TESOURO distributor when configured', async () => {
