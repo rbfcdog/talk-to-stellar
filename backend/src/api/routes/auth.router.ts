@@ -58,6 +58,26 @@ async function findReusableSession(email: string): Promise<any | null> {
   return data;
 }
 
+export function sessionHasPin(session: any): boolean {
+  return Boolean(
+    String(session?.session_password_hash || "").trim() ||
+    String(session?.password_hash || "").trim()
+  );
+}
+
+function googlePinSetupPayload(input: { email: string; displayName: string; reason: string }) {
+  return {
+    success: true,
+    provider: "google",
+    requires_pin_setup: true,
+    email: input.email,
+    user_id: input.email,
+    display_name: input.displayName,
+    reason: input.reason,
+    message: "Create your PIN to finish Google sign-in.",
+  };
+}
+
 router.post("/google", async (req, res) => {
   try {
     const idToken = String(req.body?.credential || req.body?.id_token || req.body?.idToken || "").trim();
@@ -81,15 +101,19 @@ router.post("/google", async (req, res) => {
 
     const existing = await findReusableSession(email);
     if (!existing) {
-      return res.status(200).json({
-        success: true,
-        provider: "google",
-        requires_pin_setup: true,
+      return res.status(200).json(googlePinSetupPayload({
         email,
-        user_id: email,
-        display_name: displayName,
-        message: "Google account not linked yet. Create your PIN to finish sign-in.",
-      });
+        displayName,
+        reason: "google_account_not_linked",
+      }));
+    }
+
+    if (!sessionHasPin(existing)) {
+      return res.status(200).json(googlePinSetupPayload({
+        email,
+        displayName,
+        reason: "pin_setup_required",
+      }));
     }
 
     const sessionId = String(existing?.session_id || uuidv4()).trim();
