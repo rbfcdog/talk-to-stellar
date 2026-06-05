@@ -300,7 +300,6 @@ describe("UX copy guardrails", () => {
     expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');
     expect(text).toContain("Taxa de conversão estimada");
     expect(text).toContain("formatFeeParts");
-    expect(text).toContain("Base para conversão");
     expect(text).toContain("TRADITIONAL_METHOD_ONRAMP_FEE_PCT");
     expect(text).toContain("TRADITIONAL_METHOD_OFFRAMP_FEE_PCT");
     expect(text).toContain("const TRADITIONAL_METHOD_ONRAMP_FEE_PCT = 0.0125");
@@ -315,8 +314,6 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("estimatedSavingsBrl");
     expect(text).toContain("const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee");
     expect(text).toContain('L("Taxa de retirada aprox.", "Est. withdrawal fee")');
-    expect(text).toContain('L("Taxa estimada", "Estimated fee")');
-    expect(text).toContain('L("retirada aproximada", "estimated withdrawal")');
     expect(text).toContain('const showOffRampComparison = mode === "offramp" && traditionalFee > 0 && totalEstimatedFee > 0');
     expect(text).toContain('L("Comparativo", "Comparison")');
     expect(text).toContain('L("do tradicional", "of traditional cost")');
@@ -333,10 +330,16 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("savingsPercentDisplay");
     expect(text).toContain("remainingFeePercentDisplay");
     expect(text).toContain('const savingsCaption = L("menos taxa", "less fee")');
-    expect(text).toContain('const onRampMobilePercentOnly = mode === "onramp" && showSavingsCard');
-    expect(text).toContain('${onRampMobilePercentOnly ? "tts-mobile-soft-hide " : ""}mt-5');
     expect(text).toContain("text-3xl font-black leading-none text-tts-confirm");
+    expect(text).toContain('mode === "onramp" ? L("PIX", "PIX") : L("Retirada aprox.", "Est. withdrawal")');
+    expect(text).toContain('L("App", "App")');
     expect(text).toContain("do custo tradicional");
+    expect(text).not.toContain('L("Você paga", "You pay")');
+    expect(text).not.toContain('L("Entra na conta", "Arrives in account")');
+    expect(text).not.toContain('L("Taxa", "Fee")');
+    expect(text).not.toContain('L("cobrada por fora", "charged on top")');
+    expect(text).not.toContain('L("valor inicial", "starting amount")');
+    expect(text).not.toContain("Base para conversão");
     expect(text).not.toContain("Taxa desta rota:");
     expect(text).not.toContain("Comparado a métodos tradicionais estimados");
     expect(text).not.toContain("formatMoney(estimatedSavingsBrl)");
