@@ -284,6 +284,7 @@ describe("UX copy guardrails", () => {
     expect(text).toContain('const showOffRampComparison = mode === "offramp" && traditionalFee > 0 && totalEstimatedFee > 0');
     expect(text).toContain('L("Comparativo", "Comparison")');
     expect(text).toContain('L("do tradicional", "of traditional cost")');
+    expect(text).toContain("text-tts-deep md:hidden");
     expect(text).toContain("const checkoutExpired = Boolean(order && !isSuccessStatus(rawOrderStatus) && (orderExplicitlyExpired || quoteExpired));");
     expect(text).toContain("!checkoutExpired &&");
     expect(text).toContain("function restartOnRampCheckout()");
