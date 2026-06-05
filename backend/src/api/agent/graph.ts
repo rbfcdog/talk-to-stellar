@@ -4422,11 +4422,26 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
 
     state.success = Boolean(result.success);
     if (result.success) {
-      state.response_message = result.message || this.text(
-        language,
-        'Aplicação consultada.',
-        'Application checked.'
-      );
+      if (toolName === 'get_yield_balance') {
+        const frontendUrl = String(result.frontend_url || result.url || '').trim();
+        state.response_message = frontendUrl
+          ? this.text(
+              language,
+              `Abra seus rendimentos aqui:\n\n${frontendUrl}\n\nA página pede seu PIN antes de mostrar os valores.`,
+              `Open your investments here:\n\n${frontendUrl}\n\nThe page asks for your PIN before showing values.`
+            )
+          : this.text(
+              language,
+              'Abra a tela de rendimentos. Ela pede seu PIN antes de mostrar os valores.',
+              'Open the investments screen. It asks for your PIN before showing values.'
+            );
+      } else {
+        state.response_message = result.message || this.text(
+          language,
+          'Aplicação consultada.',
+          'Application checked.'
+        );
+      }
     } else {
       state.response_message = this.text(
         language,

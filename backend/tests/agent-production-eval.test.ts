@@ -2220,7 +2220,7 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('Pronto para confirmar');
   });
 
-  it('routes yield balance checks to get_yield_balance for CETES', async () => {
+  it('routes yield balance checks to the secure screen without exposing amounts in chat', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     mockRouteIntent(graph, 'route_yield_intent', {
@@ -2232,10 +2232,11 @@ describe('Agent production evals', () => {
 
     executeToolMock.mockResolvedValue(JSON.stringify({
       success: true,
-      message: 'Você tem 40 CETES em posição atual.',
+      frontend_url: 'https://app.example.com/rendimentos?asset=CETES',
+      message: 'Current position: 70 dollars.',
     }));
 
-    const result = await graph.processInput(createState('quanto tenho rendendo em cetes?'));
+    const result = await graph.processInput(createState('quero ver meus investimentos'));
 
     expect(executeToolMock).toHaveBeenCalledWith('get_yield_balance', {
       session_id: 'eval-session',
@@ -2244,7 +2245,11 @@ describe('Agent production evals', () => {
       language: 'pt-BR',
     });
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('40 CETES');
+    expect(result.response_message).toContain('https://app.example.com/rendimentos?asset=CETES');
+    expect(result.response_message).toContain('PIN');
+    expect(result.response_message).not.toContain('Current position');
+    expect(result.response_message).not.toContain('70');
+    expect(result.response_message).not.toContain('dollars');
   });
 
   it('routes explicit yield confirmations with PIN to confirm_yield_action', async () => {
