@@ -703,9 +703,9 @@ function formatNoPathFallbackMessage(errorMessage: string): string {
   return raw || 'Não consegui concluir a conversão agora. Tente novamente em alguns segundos.';
 }
 
-function formatBrl(value: number): string {
+function formatBrl(value: number, language: 'pt-BR' | 'en' = 'pt-BR'): string {
   const displayValue = Number.isFinite(value) && value > 0 && value < 0.01 ? 0.01 : value;
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'pt-BR', {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
@@ -726,8 +726,8 @@ function formatBrlInteger(value: number): string {
   }).format(Number.isFinite(value) ? value : 0));
 }
 
-function formatUsd(value: number): string {
-  return normalizeCurrencySpacing(new Intl.NumberFormat('pt-BR', {
+function formatUsd(value: number, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+  return normalizeCurrencySpacing(new Intl.NumberFormat(language === 'en' ? 'en-US' : 'pt-BR', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
@@ -752,8 +752,8 @@ function shortStellarHash(value: unknown): string {
   return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
 }
 
-function formatSavingsDate(date = new Date()): string {
-  const dateLabel = normalizeCurrencySpacing(new Intl.DateTimeFormat('pt-BR', {
+function formatSavingsDate(date = new Date(), language: 'pt-BR' | 'en' = 'pt-BR'): string {
+  const dateLabel = normalizeCurrencySpacing(new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'pt-BR', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -1925,6 +1925,11 @@ export const toolDefinitions = [
         recipient_name: { type: "string", description: "Nome do destinatário ou contraparte." },
         session_id: { type: "string", description: "Sessão atual para criar links curtos de histórico e comprovante." },
         user_id: { type: "string", description: "Usuário atual, quando disponível." },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Idioma atual da conversa. Use en quando a preferência do usuário estiver em inglês.",
+        },
       },
       required: ["brl_sent", "usd_received", "fee_charged", "stellar_hash", "recipient_name"],
     },
@@ -5417,7 +5422,7 @@ function extractRealRecipientName(row: any, input: any): string {
   ).trim();
 }
 
-async function buildReceiptFeeBreakdown(row: any, input: any): Promise<{
+async function buildReceiptFeeBreakdown(row: any, input: any, language: 'pt-BR' | 'en' = 'pt-BR'): Promise<{
   totalFeeBrl: number;
   networkFeeBrl: number;
   talkToStellarFeeBrl: number;
@@ -5463,11 +5468,14 @@ async function buildReceiptFeeBreakdown(row: any, input: any): Promise<{
   const talkToStellarFeeBrl = explicitPlatformFee || Math.max(0, explicitTotalFee - networkFeeBrl - onRampFeeBrl - offRampFeeBrl);
   const componentTotal = networkFeeBrl + talkToStellarFeeBrl + onRampFeeBrl + offRampFeeBrl;
   const totalFeeBrl = explicitTotalFee || componentTotal;
+  const networkLabel = language === 'en' ? 'Network' : 'Rede';
+  const onRampLabel = language === 'en' ? 'PIX deposit' : 'Entrada PIX';
+  const offRampLabel = language === 'en' ? 'PIX withdrawal' : 'Retirada PIX';
   const feeLines = [
-    `- TalkToStellar: ${normalizeCurrencySpacing(formatBrl(talkToStellarFeeBrl))}`,
-    `- Rede: ${normalizeCurrencySpacing(formatBrl(networkFeeBrl))}`,
-    onRampFeeBrl > 0 ? `- Entrada PIX: ${normalizeCurrencySpacing(formatBrl(onRampFeeBrl))}` : '',
-    offRampFeeBrl > 0 ? `- Retirada PIX: ${normalizeCurrencySpacing(formatBrl(offRampFeeBrl))}` : '',
+    `- TalkToStellar: ${normalizeCurrencySpacing(formatBrl(talkToStellarFeeBrl, language))}`,
+    `- ${networkLabel}: ${normalizeCurrencySpacing(formatBrl(networkFeeBrl, language))}`,
+    onRampFeeBrl > 0 ? `- ${onRampLabel}: ${normalizeCurrencySpacing(formatBrl(onRampFeeBrl, language))}` : '',
+    offRampFeeBrl > 0 ? `- ${offRampLabel}: ${normalizeCurrencySpacing(formatBrl(offRampFeeBrl, language))}` : '',
   ].filter(Boolean);
 
   return {
@@ -5484,6 +5492,8 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
   let stellarHash = String(input.stellar_hash || input.hash || input.payment_hash || '').trim();
   const sessionId = String(input.session_id || input.sessionId || '').trim();
   let userId = String(input.user_id || input.userId || '').trim();
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  const isEn = language === 'en';
 
   if (!userId) {
     try {
@@ -5542,7 +5552,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
     transferDetails?.destinationAssetCode === 'USDC' ? transferDetails?.destinationAmount : '',
   ]) || 0;
   const recipientName = extractRealRecipientName(paymentLog, input);
-  const feeBreakdown = await buildReceiptFeeBreakdown(paymentLog, input);
+  const feeBreakdown = await buildReceiptFeeBreakdown(paymentLog, input, language);
   const feeCharged = feeBreakdown.totalFeeBrl;
   if (brlSent <= 0 || usdReceived <= 0) {
     const sourceAmount = String(
@@ -5589,6 +5599,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
         hash: stellarHash || null,
         completedAt: String(input.completed_at || input.completedAt || paymentLog?.completed_at || paymentLog?.created_at || new Date().toISOString()),
         status: 'Confirmado',
+        language,
       };
       const receiptUrl = sessionId && userId
         ? await PaymentReceiptService.createReceiptLink(receiptInput).catch(() => '')
@@ -5612,7 +5623,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
   const savings = roundMoney(Math.max(0, bankFee - feeCharged));
   const completedAt = String(input.completed_at || input.completedAt || paymentLog?.completed_at || paymentLog?.created_at || new Date().toISOString());
   const parsedCompletedAt = new Date(completedAt);
-  const dateLine = formatSavingsDate(Number.isFinite(parsedCompletedAt.getTime()) ? parsedCompletedAt : new Date());
+  const dateLine = formatSavingsDate(Number.isFinite(parsedCompletedAt.getTime()) ? parsedCompletedAt : new Date(), language);
   const historyLink = await createSavingsShortLink({
     path: '/transactions',
     purpose: 'savings_history',
@@ -5633,7 +5644,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
         destinationAmount: String(usdReceived),
         destinationAssetCode: 'USDC',
         feeBrl: String(feeCharged),
-        feeDisplay: normalizeCurrencySpacing(formatBrl(feeCharged)),
+        feeDisplay: normalizeCurrencySpacing(formatBrl(feeCharged, language)),
         hash: stellarHash || null,
         savings: {
           estimatedSavings: savings,
@@ -5642,6 +5653,7 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
         },
         completedAt,
         status: 'Confirmado',
+        language,
       });
     } catch (error) {
       logger.warn(`[savings-tools] failed to create receipt image link: ${error instanceof Error ? error.message : String(error)}`);
@@ -5658,23 +5670,27 @@ async function executeSendReceiptWithSavings(input: any): Promise<string> {
   }
 
   const message = [
-    '✅ *Transferência concluída*',
+    isEn ? '✅ *Transfer completed*' : '✅ *Transferência concluída*',
     dateLine,
     '',
-    `👤 Destinatário: *${recipientName}*`,
-    `💵 Entregue: *${formatUsd(usdReceived)}*`,
-    `📤 Enviado: ${normalizeCurrencySpacing(formatBrl(brlSent))}`,
-    `💳 Taxa paga: ${normalizeCurrencySpacing(formatBrl(feeCharged))}`,
-    'Detalhe da taxa:',
+    `👤 ${isEn ? 'Recipient' : 'Destinatário'}: *${recipientName}*`,
+    `💵 ${isEn ? 'Delivered' : 'Entregue'}: *${formatUsd(usdReceived, language)}*`,
+    `📤 ${isEn ? 'Sent' : 'Enviado'}: ${normalizeCurrencySpacing(formatBrl(brlSent, language))}`,
+    `💳 ${isEn ? 'Fee paid' : 'Taxa paga'}: ${normalizeCurrencySpacing(formatBrl(feeCharged, language))}`,
+    isEn ? 'Fee details:' : 'Detalhe da taxa:',
     ...feeBreakdown.feeLines,
     '',
     '━━━━━━━━━━━━━━',
-    `💰 *Você economizou ${normalizeCurrencySpacing(formatBrl(savings))}*`,
-    `vs banco que cobraria ${normalizeCurrencySpacing(formatBrl(bankFee))}`,
+    isEn
+      ? `💰 *You saved ${normalizeCurrencySpacing(formatBrl(savings, language))}*`
+      : `💰 *Você economizou ${normalizeCurrencySpacing(formatBrl(savings, language))}*`,
+    isEn
+      ? `vs bank estimate of ${normalizeCurrencySpacing(formatBrl(bankFee, language))}`
+      : `vs banco que cobraria ${normalizeCurrencySpacing(formatBrl(bankFee, language))}`,
     '━━━━━━━━━━━━━━',
     '',
-    `📊 Ver histórico: ${historyLink}`,
-    `📄 Comprovante PDF: ${receiptLink}`,
+    `📊 ${isEn ? 'View history' : 'Ver histórico'}: ${historyLink}`,
+    `📄 ${isEn ? 'Receipt PDF' : 'Comprovante PDF'}: ${receiptLink}`,
   ].join('\n');
 
   return JSON.stringify({
