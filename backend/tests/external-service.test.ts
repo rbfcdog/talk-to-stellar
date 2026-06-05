@@ -245,6 +245,39 @@ describe('ExternalService confirmation channel context', () => {
     expect(tokenPayload.provider_user_id).toBe('5519981808102');
   });
 
+  it('keeps strict-receive conversion mode on conversion confirmation tokens', async () => {
+    const supabase = createSupabaseMock({});
+    const service = new ExternalService(supabase as any);
+
+    const result = await service.createConversionConfirmUrlWithContext({
+      session_id: 'session-1',
+      owner_id: 'user-1',
+      source_amount: '19.55',
+      source_asset_code: 'USDC',
+      dest_amount: '300',
+      dest_asset_code: 'CETES',
+      conversion_mode: 'strict_receive',
+      quote: {
+        sourceAmount: '19.55',
+        sourceMax: '19.941',
+        pathSourceAmount: '19.55',
+        pathSourceMax: '19.941',
+        destinationAmount: '300',
+        networkFeeXlm: '0.00001',
+        path: [],
+      },
+    });
+
+    const tokenPayload = JSON.parse(Buffer.from(result.token.split('.')[1], 'base64url').toString('utf8'));
+
+    expect(tokenPayload.sub).toBe('external_conversion_confirm');
+    expect(tokenPayload.source_amount).toBe('19.55');
+    expect(tokenPayload.dest_amount).toBe('300');
+    expect(tokenPayload.conversion_mode).toBe('strict_receive');
+    expect(tokenPayload.quote.sourceMax).toBe('19.941');
+    expect(tokenPayload.quote.pathSourceMax).toBe('19.941');
+  });
+
   it('uses the user WhatsApp mapping for confirmation links when the browser session only has a web mapping', async () => {
     const supabase = createFilteredExternalAccountsSupabaseMock([
       {

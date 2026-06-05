@@ -1560,6 +1560,7 @@ export default class ExternalFinalizeController {
           dest_asset_code,
           dest_asset_issuer,
           quote: tokenQuote,
+          conversion_mode,
         } = payload as any;
 
         if (!session_id || !dest_amount || !source_asset_code || !dest_asset_code) {
@@ -1629,10 +1630,27 @@ export default class ExternalFinalizeController {
           userId: String(session.user_id),
         });
 
-        const usesStrictSend = Boolean(String(source_amount || '').trim());
+        const conversionMode = String(conversion_mode || tokenQuote?.conversion_mode || '').trim().toLowerCase();
+        const usesStrictReceive = conversionMode === 'strict_receive' || conversionMode === 'receive';
+        const usesStrictSend = !usesStrictReceive && Boolean(String(source_amount || '').trim());
         let quote: any = null;
         let unsignedXdr = '';
         try {
+          const tokenQuoteObject = tokenQuote && typeof tokenQuote === 'object' ? tokenQuote : null;
+          const canReuseStrictReceiveQuote = Boolean(
+            usesStrictReceive &&
+            tokenQuoteObject?.sourceAmount &&
+            tokenQuoteObject?.destinationAmount &&
+            (tokenQuoteObject?.sourceMax || tokenQuoteObject?.pathSourceMax) &&
+            Array.isArray(tokenQuoteObject?.path)
+          );
+          const canReuseStrictSendQuote = Boolean(
+            usesStrictSend &&
+            tokenQuoteObject?.sourceAmount &&
+            tokenQuoteObject?.destinationAmount &&
+            tokenQuoteObject?.destinationMin &&
+            Array.isArray(tokenQuoteObject?.path)
+          );
           logger.info(`[external-finalize] event=conversion_prepare_start ${JSON.stringify({
             request_id: requestId || undefined,
             token_hash: maskLogValue(tokenHash, 10, 6),
@@ -1644,7 +1662,9 @@ export default class ExternalFinalizeController {
             mode: usesStrictSend ? 'strict_send' : 'strict_receive',
           })}`);
 
-          quote = usesStrictSend
+          quote = canReuseStrictReceiveQuote || canReuseStrictSendQuote
+            ? tokenQuoteObject
+            : usesStrictSend
             ? await StellarService.quoteStrictSendConversion({
                 sourcePublicKey: wallet.public_key,
                 destination: wallet.public_key,
@@ -1675,6 +1695,7 @@ export default class ExternalFinalizeController {
                 destAmount: String(dest_amount).trim(),
                 sourceAsset: { code: sourceAssetCode, issuer: sourceAssetIssuer },
                 destAsset: { code: destAssetCode, issuer: destAssetIssuer },
+                quote,
               });
 
           logger.info(`[external-finalize] event=conversion_prepare_success ${JSON.stringify({
@@ -1728,10 +1749,10 @@ export default class ExternalFinalizeController {
             owner_id: owner_id || String(session.user_id),
             source_asset_code: sourceAssetCode,
             source_asset_issuer: sourceAssetIssuer || null,
-            source_amount: String(source_amount || ''),
+            source_amount: String(quote?.sourceAmount || source_amount || ''),
             dest_asset_code: destAssetCode,
             dest_asset_issuer: destAssetIssuer || null,
-            dest_amount: String(dest_amount),
+            dest_amount: String(quote?.destinationAmount || dest_amount),
             token_quote: tokenQuote || null,
             quote,
             browser_id: browserId || null,
