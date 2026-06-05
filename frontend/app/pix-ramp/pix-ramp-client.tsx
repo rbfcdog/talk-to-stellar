@@ -1061,6 +1061,7 @@ export default function PixRampClient({
   const [loading, setLoading] = useState("");
   const [autoRefreshingQuote, setAutoRefreshingQuote] = useState(false);
   const [error, setError] = useState("");
+  const [offRampShortageOpen, setOffRampShortageOpen] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
@@ -1316,6 +1317,20 @@ export default function PixRampClient({
   const offRampAlternativeBalance = offRampAlternativeAsset
     ? sumVisibleBalance(offRampBalancesBefore, offRampAlternativeAsset)
     : 0;
+  function useOffRampAlternativeAsset() {
+    if (!offRampAlternativeAsset) return;
+    const currentAmount = parseHumanAmount(offRampInputValue);
+    const nextAmount = Number.isFinite(currentAmount) && currentAmount > 0
+      ? Math.min(currentAmount, offRampAlternativeBalance)
+      : offRampAlternativeBalance;
+    setTargetAsset(offRampAlternativeAsset);
+    setOffRampFiatAmount("");
+    setOffRampAmount(formatApiAmount(nextAmount || offRampAlternativeBalance));
+    setOffRampPreviewPayload(null);
+    setTemporaryOffRampTestResult(null);
+    setOffRampShortageOpen(false);
+    setError("");
+  }
   const offRampReturnHref = buildAppPath("/pix-off", {
     mode: "offramp",
     amount: offRampInputValue,
@@ -2369,7 +2384,11 @@ export default function PixRampClient({
 	      }
 	      const rawMessage = err instanceof Error ? err.message : String(err || "");
 	      const isPreparingPixTimeout = label === "Preparing PIX checkout" && /timed out|timeout|abort/i.test(rawMessage);
-	      setError(isPreparingPixTimeout ? publicPixPreparationTimeoutMessage(language) : publicRampErrorMessage(err, language));
+	      const userSafeError = isPreparingPixTimeout ? publicPixPreparationTimeoutMessage(language) : publicRampErrorMessage(err, language);
+	      setError(userSafeError);
+        if (rampMode === "offramp" && isInsufficientBalanceText(`${rawMessage} ${userSafeError}`)) {
+          setOffRampShortageOpen(true);
+        }
 	    } finally {
 	      setLoading("");
     }
@@ -3304,34 +3323,13 @@ export default function PixRampClient({
           <section className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm text-tts-error">
             <p className="font-black">{error}</p>
             {offRampInsufficientBalance && (
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <a
-                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-normal text-tts-deep transition hover:bg-tts-error/90"
-                  href={offRampConversionHref}
-                >
-                  {L(`Converter outro ativo para ${friendlyAssetName(offRampInputAsset, language)}`, `Convert another asset to ${friendlyAssetName(offRampInputAsset, language)}`)}
-                </a>
-                {offRampAlternativeAsset ? (
-                  <button
-                    type="button"
-                    className="inline-flex min-h-10 items-center justify-center rounded-full border border-tts-error px-4 py-2 text-xs font-black uppercase tracking-normal text-tts-error transition hover:bg-tts-error/10"
-                    onClick={() => {
-                      const currentAmount = parseHumanAmount(offRampInputValue);
-                      const nextAmount = Number.isFinite(currentAmount) && currentAmount > 0
-                        ? Math.min(currentAmount, offRampAlternativeBalance)
-                        : offRampAlternativeBalance;
-                      setTargetAsset(offRampAlternativeAsset);
-                      setOffRampFiatAmount("");
-                      setOffRampAmount(formatApiAmount(nextAmount || offRampAlternativeBalance));
-                      setOffRampPreviewPayload(null);
-                      setTemporaryOffRampTestResult(null);
-                      setError("");
-                    }}
-                  >
-                    {L(`Usar ${offRampAlternativeAsset} nesta retirada`, `Use ${offRampAlternativeAsset} for this withdrawal`)}
-                  </button>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-tts-error px-4 py-2 text-xs font-black uppercase tracking-normal text-tts-deep transition hover:bg-tts-error/90"
+                onClick={() => setOffRampShortageOpen(true)}
+              >
+                {L("Resolver saldo", "Fix balance")}
+              </button>
             )}
             {rampMode === "onramp" && !orderId && !operationLocked && /conta pix|pix account/i.test(error) && (
               <button
@@ -3353,6 +3351,46 @@ export default function PixRampClient({
               </a>
             )}
           </section>
+        )}
+
+        {offRampShortageOpen && (
+          <div className="fixed inset-0 z-50 flex items-end bg-black/65 px-4 pb-4 pt-10 backdrop-blur-sm sm:items-center sm:justify-center">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="offramp-shortage-title"
+              className="w-full max-w-sm rounded-3xl border border-tts-error/40 bg-tts-surface p-5 text-tts-deep shadow-2xl shadow-black/50"
+            >
+              <p id="offramp-shortage-title" className="text-xl font-black">{L("Saldo insuficiente", "Insufficient balance")}</p>
+              <p className="mt-2 text-sm font-bold leading-5 text-tts-muted">
+                {L("Escolha como continuar.", "Choose how to continue.")}
+              </p>
+              <div className="mt-5 grid gap-3">
+                <a
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-tts-error px-4 py-3 text-sm font-black text-tts-deep transition hover:bg-tts-error/90"
+                  href={offRampConversionHref}
+                >
+                  {L("Converter saldo", "Convert balance")}
+                </a>
+                {offRampAlternativeAsset ? (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-tts-border bg-tts-bg px-4 py-3 text-sm font-black text-tts-deep transition hover:border-tts-error/60"
+                    onClick={useOffRampAlternativeAsset}
+                  >
+                    {L(`Usar ${offRampAlternativeAsset}`, `Use ${offRampAlternativeAsset}`)}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center justify-center rounded-2xl px-4 py-3 text-sm font-black text-tts-muted transition hover:bg-tts-bg/70"
+                  onClick={() => setOffRampShortageOpen(false)}
+                >
+                  {L("Voltar", "Back")}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {config && !config.available && (
@@ -3574,20 +3612,30 @@ export default function PixRampClient({
                   walletPinInputRef.current = node;
                 }}
               />
-              <div className="tts-mobile-soft-hide mt-5 rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 md:block">
-                <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Confirmação final", "Final confirmation")}</p>
-                <p className="mt-2 text-sm font-bold leading-6 text-tts-gold">
-                  {L("Este botão confirma a retirada e envia o valor para sua chave PIX.", "This button confirms the withdrawal and sends the amount to your PIX key.")}
-                </p>
-              </div>
 
               <div className="tts-mobile-action mt-4">
                 <button
-                  className="w-full rounded-2xl bg-tts-gold px-5 py-5 text-base font-black text-tts-deep shadow-sm shadow-cyan-950/30 transition hover:bg-tts-gold disabled:opacity-50"
-                  disabled={!canResolveWallet || Boolean(loading) || walletPin.length < 4 || !normalizedOffRampPixKey || operationLocked}
-                  onClick={() => run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest)}
+                  className={`w-full rounded-2xl px-5 py-5 text-base font-black text-tts-deep shadow-sm transition disabled:opacity-50 ${
+                    offRampInsufficientBalance
+                      ? "bg-tts-error shadow-red-950/20 hover:bg-tts-error/90"
+                      : "bg-tts-gold shadow-cyan-950/30 hover:bg-tts-gold"
+                  }`}
+                  disabled={operationLocked || Boolean(loading) || (!offRampInsufficientBalance && (!canResolveWallet || walletPin.length < 4 || !normalizedOffRampPixKey))}
+                  onClick={() => {
+                    if (offRampInsufficientBalance) {
+                      setOffRampShortageOpen(true);
+                      return;
+                    }
+                    void run("Confirming PIX withdrawal", runTemporaryOffRampEndpointTest);
+                  }}
                 >
-                  {operationLocked ? L("PIX concluído", "PIX complete") : loading === "Confirming PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span> : L("Confirmar retirada", "Confirm withdrawal")}
+                  {operationLocked
+                    ? L("PIX concluído", "PIX complete")
+                    : offRampInsufficientBalance
+                      ? L("Resolver saldo", "Fix balance")
+                      : loading === "Confirming PIX withdrawal"
+                        ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Confirmando...", "Confirming...")}</span>
+                        : L("Confirmar retirada", "Confirm withdrawal")}
                 </button>
               </div>
               </div>
