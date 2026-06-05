@@ -381,10 +381,17 @@ describe("UX copy guardrails", () => {
     expect(returnsPage).toContain('"application"');
     expect(returnsPage).toContain('"returns"');
     expect(pixText).toContain("offRampInsufficientBalance");
-    expect(pixText).toContain("Converter outro ativo para ${friendlyAssetName(offRampInputAsset, language)}");
+    expect(pixText).toContain("offRampShortageOpen");
+    expect(pixText).toContain("setOffRampShortageOpen(true)");
+    expect(pixText).toContain("Saldo insuficiente");
+    expect(pixText).toContain("Converter saldo");
+    expect(pixText).toContain("useOffRampAlternativeAsset");
     expect(pixText).toContain("source_asset: offRampAlternativeAsset");
     expect(pixText).not.toContain("source_asset: offRampAlternativeAsset || offRampInputAsset");
-    expect(pixText).toContain("Usar ${offRampAlternativeAsset} nesta retirada");
+    expect(pixText).toContain("Usar ${offRampAlternativeAsset}");
+    expect(pixText).toContain("bg-tts-error shadow-red-950/20");
+    expect(pixText).not.toContain("Confirmação final");
+    expect(pixText).not.toContain("Este botão confirma a retirada");
   });
 
   it("keeps the transaction history as a full web page, not a chat-only list", () => {
