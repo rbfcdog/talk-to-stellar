@@ -332,6 +332,7 @@ describe('ExternalFinalizeController', () => {
         email: 'user@example.com',
         phone_number: '+55 11 99999-9999',
         pin: '1234',
+        browser_id: 'browser-opened-from-whatsapp-link',
       },
     } as any;
     const res = createResponse();
@@ -339,6 +340,10 @@ describe('ExternalFinalizeController', () => {
     await ExternalFinalizeController.finalize(req, res);
 
     expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(2);
+    expect(finalizeCreateMappingMock.mock.calls.map((call: any[]) => call[0].provider)).toEqual(['whatsapp', 'phone']);
+    expect(finalizeCreateMappingMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'web',
+    }));
     expect(finalizeCreateMappingMock.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         provider: 'whatsapp',

@@ -3008,6 +3008,8 @@ export default class ExternalFinalizeController {
       const userId = normalizedEmail || `external:${provider}:${provider_user_id}`;
       const providerLabel = isPhoneProvider(provider) ? 'WhatsApp' : provider === 'telegram' ? 'Telegram' : 'canal externo';
       const isBrowserProvider = isBrowserExternalProvider(provider);
+      // Opening a WhatsApp/Telegram link in a browser must not make that browser a web identity.
+      const shouldLinkBrowserIdentity = Boolean(browserId && isBrowserProvider);
       const identityLock = isBrowserProvider ? null : await resolveExternalIdentityLock(provider, provider_user_id);
 
       if (identityLock?.canonicalLogin && normalizedEmail !== identityLock.canonicalLogin) {
@@ -3115,7 +3117,7 @@ export default class ExternalFinalizeController {
             },
           });
 
-          if (browserId) {
+          if (shouldLinkBrowserIdentity) {
             await externalRepo.createMapping({
               provider: 'web',
               provider_user_id: browserId,
@@ -3534,7 +3536,7 @@ export default class ExternalFinalizeController {
         },
       });
 
-      if (browserId) {
+      if (shouldLinkBrowserIdentity) {
         await externalRepo.createMapping({
           provider: 'web',
           provider_user_id: browserId,

@@ -246,11 +246,27 @@ export default function CreateAccountClient({
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(passkeyQrTargetUrl)}`
   }, [passkeyQrTargetUrl])
   const tokenProvider = String(tokenPayload?.provider || "").trim().toLowerCase()
+  const tokenSessionScope = tokenProvider === "whatsapp" || tokenProvider === "phone"
+    ? "whatsapp"
+    : tokenProvider === "telegram"
+      ? "telegram"
+      : ""
+  const tokenSessionContext = tokenSessionScope ? {
+    provider: tokenProvider,
+    source: tokenSessionScope,
+    session_scope: tokenSessionScope,
+    session_source: tokenSessionScope,
+  } : {}
   const isExternalLoginOnlyContext = ["whatsapp", "phone", "telegram"].includes(tokenProvider)
   const loginHref = useMemo(() => {
     const params = new URLSearchParams()
     if (token) {
       params.set("token", token)
+    }
+    if (tokenSessionScope) {
+      params.set("provider", tokenProvider)
+      params.set("source", tokenSessionScope)
+      params.set("session_scope", tokenSessionScope)
     }
     if (rawNextPath && rawNextPath !== "/chat") {
       params.set("next", rawNextPath)
@@ -258,7 +274,7 @@ export default function CreateAccountClient({
     params.set("lang", language)
     const query = params.toString()
     return query ? `/login?${query}` : "/login"
-  }, [language, rawNextPath, token])
+  }, [language, rawNextPath, token, tokenProvider, tokenSessionScope])
 
   useEffect(() => {
     if (!isExternalLoginOnlyContext || !token.trim()) return
@@ -668,6 +684,7 @@ export default function CreateAccountClient({
           email_confirmation_code: emailConfirmationCode || undefined,
           browser_id: browserId,
           language,
+          ...tokenSessionContext,
         }),
       })
 
@@ -714,6 +731,11 @@ export default function CreateAccountClient({
       if (!response.ok && (payload as any)?.notAssociated) {
         const params = new URLSearchParams()
         if (finalToken) params.set("token", finalToken)
+        if (tokenSessionScope) {
+          params.set("provider", tokenProvider)
+          params.set("source", tokenSessionScope)
+          params.set("session_scope", tokenSessionScope)
+        }
         if (email.trim()) params.set("email", email.trim())
         if (rawNextPath && rawNextPath !== "/chat") params.set("next", rawNextPath)
         params.set("lang", language)

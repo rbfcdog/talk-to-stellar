@@ -138,6 +138,16 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const externalProviderUserId = String(
     externalPayload?.provider_user_id || searchParams.get("provider_user_id") || ""
   ).trim()
+  const externalSessionScope = externalProvider === "whatsapp" || externalProvider === "phone"
+    ? "whatsapp"
+    : externalProvider === "telegram"
+      ? "telegram"
+      : ""
+  const externalSessionContext = externalSessionScope ? {
+    source: externalSessionScope,
+    session_scope: externalSessionScope,
+    session_source: externalSessionScope,
+  } : {}
   const hasExternalContext = Boolean(externalProvider && externalProviderUserId)
   const isTelegramContext = externalProvider === "telegram"
   const isExternalLoginOnlyContext = ["whatsapp", "phone", "telegram"].includes(externalProvider)
@@ -283,10 +293,15 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     url.searchParams.set("phone_code", "1")
     url.searchParams.set("pair", passkeyPairId)
     url.searchParams.set("email", normalizedEmail)
+    if (externalSessionScope) {
+      url.searchParams.set("provider", externalProvider)
+      url.searchParams.set("source", externalSessionScope)
+      url.searchParams.set("session_scope", externalSessionScope)
+    }
     if (nextPath) url.searchParams.set("next", nextPath)
     if (language) url.searchParams.set("lang", language)
     return url.toString()
-  }, [email, nextPath, passkeyPairId, isPasskeyPhoneCodeMode, language])
+  }, [email, nextPath, passkeyPairId, isPasskeyPhoneCodeMode, language, externalProvider, externalSessionScope])
 
   const qrImageUrl = useMemo(() => {
     if (!canShowPasskeyQr) return ""
@@ -421,6 +436,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
         token: externalToken,
         session_id: sessionId,
         language,
+        ...externalSessionContext,
       }),
     })
 
@@ -466,6 +482,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           pin,
           email_confirmation_code: emailConfirmationCode || undefined,
           language,
+          ...externalSessionContext,
         }),
       })
 
@@ -544,7 +561,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       const initRes = await fetch(`/api/passkeys/auth-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, ...externalSessionContext }),
       })
       const initPayload = await initRes.json().catch(() => ({}))
       if (!initRes.ok || !initPayload.success) {
@@ -562,6 +579,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           user_id: initPayload.userId,
           challenge_id: initPayload.challengeId,
           credential,
+          ...externalSessionContext,
         }),
       })
       const completePayload = await completeRes.json().catch(() => ({}))

@@ -16,5 +16,8 @@ describe("external channel login", () => {
     expect(text).toContain("const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext");
     expect(text).toContain("(!isExternalLoginOnlyContext && !loginEmail)");
     expect(text).toContain("email: loginEmail || undefined");
+    expect(text).toContain("const externalSessionScope = externalProvider ===");
+    expect(text).toContain("session_scope: externalSessionScope");
+    expect(text).toContain("...externalSessionContext");
   });
 });

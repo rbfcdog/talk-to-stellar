@@ -194,6 +194,8 @@ describe("UX copy guardrails", () => {
     expect(agentRoutesText).toContain("entrar na sua conta com PIN");
     expect(createText).toContain('["whatsapp", "phone", "telegram"].includes(tokenProvider)');
     expect(createText).toContain("window.location.replace(loginHref)");
+    expect(createText).toContain("const tokenSessionScope = tokenProvider ===");
+    expect(createText).toContain("...tokenSessionContext");
     expect(createText).toContain("Ambiente de teste");
     expect(createText).toContain("saldo sem valor real");
     expect(createText).toContain("Nenhum valor aqui representa dinheiro de verdade");
