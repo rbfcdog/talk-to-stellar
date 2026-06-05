@@ -1152,13 +1152,20 @@ export default function PixRampClient({
   const targetReceiveInputAsset = editingOnRampReceiveTarget
     ? (desiredReceiveAsset || targetAsset)
     : (desiredFinalAsset || targetAsset);
-  const autoPayDisplayAmount = autoPayAmount && autoPayAsset
-    ? formatRampAsset(autoPayAmount, autoPayAsset)
-    : autoPaySourceAmount && autoPayDestinationAsset
-      ? `${formatRampAsset(autoPaySourceAmount, autoPaySourceAsset || targetAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
-    : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
-  const requestedOnRampTargetDisplay = transferFlow && autoPaySourceAmount && autoPayDestinationAsset
-    ? `${formatRampAsset(autoPaySourceAmount, autoPaySourceAsset || autoPayAsset || targetAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
+  const autoPayDisplaySourceAsset = autoPaySourceAsset || autoPayAsset || targetAsset;
+  const autoPayDisplaySourceAmount = autoPaySourceAmount || autoPayAmount;
+  const autoPayShowsCrossAssetDestination = Boolean(
+    autoPayDisplaySourceAmount &&
+      autoPayDestinationAsset &&
+      autoPayDestinationAsset !== autoPayDisplaySourceAsset
+  );
+  const autoPayDisplayAmount = autoPayShowsCrossAssetDestination
+    ? `${formatRampAsset(autoPayDisplaySourceAmount, autoPayDisplaySourceAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
+    : autoPayAmount && autoPayAsset
+      ? formatRampAsset(autoPayAmount, autoPayAsset)
+      : (desiredFinalAmount && desiredFinalAsset ? formatRampAsset(desiredFinalAmount, desiredFinalAsset) : formatRampAsset(amountBrl, targetAsset));
+  const requestedOnRampTargetDisplay = transferFlow && autoPayShowsCrossAssetDestination
+    ? `${formatRampAsset(autoPayDisplaySourceAmount, autoPayDisplaySourceAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
     : transferFlow && autoPayAmount && autoPayAsset
     ? formatRampAsset(autoPayAmount, autoPayAsset)
     : desiredFinalAmount && desiredFinalAsset
