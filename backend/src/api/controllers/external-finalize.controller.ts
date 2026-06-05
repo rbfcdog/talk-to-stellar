@@ -871,6 +871,7 @@ async function upsertRecentContactFromPayment(input: {
 async function sendTelegramPaymentNotification(input: {
   sessionId: string;
   userId: string;
+  language?: 'pt-BR' | 'en';
   provider?: string | null;
   providerUserId?: string | null;
   amount: string;
@@ -888,8 +889,9 @@ async function sendTelegramPaymentNotification(input: {
   contextMessage?: string | null;
 }): Promise<string> {
   const destinationLabel = input.destinationName || input.destination;
+  const isEn = input.language === 'en';
   const readableDestination = destinationLabel && /^G[A-Z2-7]{55}$/i.test(destinationLabel)
-    ? 'destinatário'
+    ? (isEn ? 'recipient' : 'destinatário')
     : destinationLabel;
 
   try {
@@ -899,16 +901,17 @@ async function sendTelegramPaymentNotification(input: {
       ? formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)
       : '';
     const externalDeliveryText = [
-      'Pagamento concluído.',
-      sourceLabel ? `Origem: ${sourceLabel}` : '',
-      `Valor: ${amountLabel}`,
-      `Destino: ${readableDestination || 'destinatario'}`,
+      isEn ? 'Payment completed.' : 'Pagamento concluído.',
+      sourceLabel ? `${isEn ? 'Source' : 'Origem'}: ${sourceLabel}` : '',
+      `${isEn ? 'Amount' : 'Valor'}: ${amountLabel}`,
+      `${isEn ? 'Destination' : 'Destino'}: ${readableDestination || (isEn ? 'recipient' : 'destinatario')}`,
     ].filter(Boolean).join('\n');
 
     return await PaymentReceiptService.sendReceipt({
       type: 'payment_sent',
       sessionId: input.sessionId,
       userId: input.userId,
+      language: input.language,
       provider: input.provider,
       providerUserId: input.providerUserId,
       counterpartyLabel: readableDestination || 'destinatário',
@@ -938,6 +941,7 @@ async function sendTelegramPaymentNotification(input: {
 async function sendTelegramConversionNotification(input: {
   sessionId: string;
   userId: string;
+  language?: 'pt-BR' | 'en';
   provider?: string | null;
   providerUserId?: string | null;
   sourceAmount: string;
@@ -951,17 +955,19 @@ async function sendTelegramConversionNotification(input: {
   savings?: any;
 }): Promise<string> {
   try {
+    const isEn = input.language === 'en';
     const feeDisplay = input.feeXlm ? await formatNetworkFeeForCustomer(input.feeXlm) : null;
     const externalDeliveryText = [
-      'Conversao concluida.',
-      `De: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}`,
-      `Para: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}`,
+      isEn ? 'Conversion completed.' : 'Conversao concluida.',
+      `${isEn ? 'From' : 'De'}: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}`,
+      `${isEn ? 'To' : 'Para'}: ${formatCustomerAssetAmount(input.destinationAmount, input.destinationAssetCode)}`,
     ].filter(Boolean).join('\n');
 
     return await PaymentReceiptService.sendReceipt({
       type: 'conversion',
       sessionId: input.sessionId,
       userId: input.userId,
+      language: input.language,
       provider: input.provider,
       providerUserId: input.providerUserId,
       sourceAmount: input.sourceAmount,
@@ -1558,6 +1564,16 @@ export default class ExternalFinalizeController {
 
       const tokenHash = await hashPaymentToken(token);
       const tokenSub = String((payload as any)?.sub || '');
+      const payloadLanguage = normalizeLanguage(
+        (payload as any)?.language ||
+        (payload as any)?.lang ||
+        (payload as any)?.locale ||
+        req.body?.language ||
+        req.body?.lang ||
+        req.body?.locale ||
+        req.query?.lang ||
+        req.query?.language
+      );
 
       if (
         ['external_payment_confirm', 'external_conversion_confirm'].includes(tokenSub) &&
@@ -1948,6 +1964,7 @@ export default class ExternalFinalizeController {
         await sendTelegramConversionNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
+          language: payloadLanguage,
           provider: completionChannel.provider,
           providerUserId: completionChannel.providerUserId,
           sourceAmount: String(publicTransferDetails.sourceAmount || quote.sourceAmount),
@@ -2735,6 +2752,7 @@ export default class ExternalFinalizeController {
         const receiptUrl = await sendTelegramPaymentNotification({
           sessionId: String(session_id),
           userId: String(session.user_id),
+          language: payloadLanguage,
           provider: completionChannel.provider,
           providerUserId: completionChannel.providerUserId,
           amount: publicTransferDetails.destinationAmount,
@@ -2761,6 +2779,7 @@ export default class ExternalFinalizeController {
           type: 'payment_sent',
           sessionId: String(session_id),
           userId: String(session.user_id),
+          language: payloadLanguage,
           counterpartyLabel: destinationDisplayName || destination_contact?.contact_name || destination_name || 'destinatário',
           counterpartyKey: destinationDisplayKey || null,
           sourceAmount: publicTransferDetails.sourceAmount,
@@ -2868,6 +2887,7 @@ export default class ExternalFinalizeController {
             type: 'payment_received',
             sessionId: destinationWallet.session_id,
             userId: '',
+            language: payloadLanguage,
             counterpartyLabel: String((session as any).email || session.user_id || 'TalkToStellar'),
             sourceAmount: publicTransferDetails.sourceAmount,
             sourceAssetCode: publicTransferDetails.sourceAssetCode,

@@ -89,12 +89,30 @@ export class PaymentReceiptService {
     return 'pt-BR';
   }
 
+  private static objectLanguage(value?: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return this.objectLanguage(parsed);
+      } catch {
+        return '';
+      }
+    }
+    if (typeof value !== 'object') return '';
+    const record = value as Record<string, any>;
+    return String(record.language || record.lang || record.locale || '').trim();
+  }
+
   private static async resolveReceiptLanguage(input: PaymentReceiptInput): Promise<'pt-BR' | 'en'> {
     const direct = String(
       input.language ||
       input.quote?.language ||
       input.quote?.lang ||
       input.quote?.locale ||
+      input.quote?.metadata?.language ||
+      input.quote?.metadata?.lang ||
+      input.quote?.metadata?.locale ||
       input.quote?.operation_context?.language ||
       input.quote?.operationContext?.language ||
       ''
@@ -106,10 +124,24 @@ export class PaymentReceiptService {
 
     try {
       const session = await this.agentRepo.getSession(sessionId);
-      return this.normalizeReceiptLanguage(
-        (session as any)?.action_params?.language ||
+      const sessionLanguage = String(
+        this.objectLanguage((session as any)?.action_params) ||
         (session as any)?.language ||
         (session as any)?.preferred_language ||
+        ''
+      ).trim();
+      if (sessionLanguage) return this.normalizeReceiptLanguage(sessionLanguage);
+
+      const state = await this.agentRepo.getState(sessionId);
+      const stateLanguage = String(
+        this.objectLanguage((state as any)?.action_params) ||
+        (state as any)?.language ||
+        (state as any)?.preferred_language ||
+        ''
+      ).trim();
+      if (stateLanguage) return this.normalizeReceiptLanguage(stateLanguage);
+
+      return this.normalizeReceiptLanguage(
         ''
       );
     } catch (error) {

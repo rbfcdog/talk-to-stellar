@@ -418,6 +418,55 @@ describe('PaymentReceiptService', () => {
     notifySpy.mockRestore();
   });
 
+  it('falls back to the agent state language for English external receipts', async () => {
+    const originalRepo = (PaymentReceiptService as any).agentRepo;
+    (PaymentReceiptService as any).agentRepo = {
+      getSession: jest.fn().mockResolvedValue({ session_id: 'session-state-language' }),
+      getState: jest.fn().mockResolvedValue({ action_params: { language: 'en' } }),
+    };
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(true);
+    const createSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://talk-to-stellar-owxg.vercel.app/receipt/state-language');
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-state-language',
+      userId: 'user-state-language',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX',
+      sourceAmount: '448.72',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '100',
+      destinationAssetCode: 'USDC',
+      feeBrl: '2.23',
+      hash: 'tx-state-language',
+      quote: { direction: 'onramp' },
+    });
+
+    const sentText = notifySpy.mock.calls[0][0].text;
+    expect(sentText).toContain('✅ *Transfer completed*');
+    expect(sentText).toContain('You saved');
+    expect(sentText).toContain('Receipt: https://talk-to-stellar-owxg.vercel.app/receipt/state-language');
+    expect(sentText).not.toContain('Transferência concluída');
+    expect(sentText).not.toContain('Você economizou');
+
+    (PaymentReceiptService as any).agentRepo = originalRepo;
+    saveSpy.mockRestore();
+    createSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
   it('falls back to hosted receipt URL when the receipt viewer cannot be created', async () => {
     const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockRejectedValue(new Error('receipt_images unavailable'));
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
