@@ -1947,57 +1947,16 @@ export default function PixRampClient({
       return;
     }
 
-    let cancelled = false;
-    setReceiveEstimateLoading(true);
-    setReceiveEstimateReady(false);
-    fetchWithTimeout(`/api/financial/usdc-to-brl-preview?usdc_amount=${encodeURIComponent(receiveUsdc.toFixed(7))}&t=${Date.now()}`, { cache: "no-store" }, 20000)
-      .then((response) => response.json())
-      .then((payload) => {
-        const brlPerUsdc = toPositiveNumber(payload?.quote?.brl_per_usdc, 0);
-        if (!brlPerUsdc) {
-          throw new Error(payload?.message || L("Estimativa BRL/USDC indisponível.", "BRL/USDC estimate unavailable."));
-        }
-        const estimatedBrl = toPositiveNumber(payload?.output?.required_brl, 0) ||
-          (toPositiveNumber(payload?.output?.estimated_brl, 0) + Math.max(toPositiveNumber(payload?.fees?.total_fee_brl, 0), 0.01)) ||
-          (receiveUsdc * brlPerUsdc);
-        if (cancelled) return;
-        setAmountBrl(estimatedBrl.toFixed(2));
-        setReceiveEstimateReady(true);
-        setQuotePayload(null);
-        setQuoteReceivedAt(0);
-        setOrderPayload(null);
-        setGeneratedOnRampOrderKey("");
-        setStatusPayload(null);
-        setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
-        addDebugLog({
-          label: "PIX amount estimated from requested receive amount",
-          method: "GET",
-          path: "/api/financial/usdc-to-brl-preview",
-          request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
-          response: { amount_brl: estimatedBrl.toFixed(2), brl_per_usdc: brlPerUsdc },
-        });
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setReceiveEstimateReady(false);
-          setError(L("Não consegui atualizar a cotação agora. Aguarde alguns segundos antes de gerar o PIX.", "I could not update the quote now. Wait a few seconds before generating PIX."));
-          addDebugLog({
-            label: "PIX amount estimate failed",
-            method: "GET",
-            path: "/api/financial/usdc-to-brl-preview",
-            request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
-            response: {},
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setReceiveEstimateLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setReceiveEstimateReady(true);
+    setReceiveEstimateLoading(false);
+    setError((current) => /calcular automaticamente|atualizar a cotação|estimativa/i.test(current) ? "" : current);
+    addDebugLog({
+      label: "Exact USDC PIX target will be quoted by backend",
+      method: "SERVER",
+      path: "/api/ramp/etherfuse/quote",
+      request: { receive_amount: desiredReceiveAmount, receive_asset: desiredReceiveAsset },
+      response: { contract: "backend_strict_receive_quote" },
+    });
   }, [addDebugLog, desiredReceiveAmount, desiredReceiveAsset, rampMode]);
 
   useEffect(() => {
