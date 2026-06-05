@@ -28,6 +28,17 @@ function mockLatestSessionRow(session: Record<string, unknown> | null) {
   (supabase.from as jest.Mock).mockReturnValue(chain);
 }
 
+function createQueryChain(result: any) {
+  const chain: any = {};
+  chain.select = jest.fn(() => chain);
+  chain.eq = jest.fn(() => chain);
+  chain.order = jest.fn(() => chain);
+  chain.limit = jest.fn(() => chain);
+  chain.maybeSingle = jest.fn().mockResolvedValue(result);
+  chain.then = (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject);
+  return chain;
+}
+
 describe('PinResetController security', () => {
   const originalEnv = { ...process.env };
 
@@ -240,5 +251,112 @@ describe('PinResetController security', () => {
     );
     const payload = (res.json as jest.Mock).mock.calls[0][0];
     expect(payload).not.toHaveProperty('reset_url');
+  });
+
+  it('sends PIN setup email when the recovery email belongs to a users row and the session stores only user_id', async () => {
+    let agentSessionLookup = 0;
+    (supabase.from as jest.Mock).mockImplementation((table: string) => {
+      if (table === 'agent_sessions') {
+        return createQueryChain({
+          data: ++agentSessionLookup === 3
+            ? {
+                session_id: '44444444-4444-4444-8444-444444444444',
+                user_id: 'auth-user-id',
+                email: '',
+                session_token: 'stale-session-token',
+                last_activity: '2024-01-01T00:00:00.000Z',
+              }
+            : null,
+          error: null,
+        });
+      }
+      if (table === 'external_accounts') {
+        return createQueryChain({ data: [], error: null });
+      }
+      if (table === 'users') {
+        return createQueryChain({
+          data: { id: 'auth-user-id', email: 'other@example.com' },
+          error: null,
+        });
+      }
+      return createQueryChain({ data: null, error: null });
+    });
+
+    const req: any = {
+      body: {
+        forgot_pin: true,
+        login_recovery: true,
+        email: 'other@example.com',
+        language: 'en',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.initiatePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(PinResetService.generateResetToken).toHaveBeenCalledWith(
+      'auth-user-id',
+      '44444444-4444-4444-8444-444444444444',
+      expect.objectContaining({
+        email: 'other@example.com',
+        language: 'en',
+      })
+    );
+  });
+
+  it('sends PIN setup email when the recovery email is stored on external account data', async () => {
+    let agentSessionLookup = 0;
+    (supabase.from as jest.Mock).mockImplementation((table: string) => {
+      if (table === 'agent_sessions') {
+        return createQueryChain({
+          data: ++agentSessionLookup === 3
+            ? {
+                session_id: '55555555-5555-4555-8555-555555555555',
+                user_id: 'external-user-id',
+                email: 'old@example.com',
+                session_token: 'stale-session-token',
+                last_activity: '2024-01-01T00:00:00.000Z',
+              }
+            : null,
+          error: null,
+        });
+      }
+      if (table === 'external_accounts') {
+        return createQueryChain({
+          data: [{
+            session_id: '55555555-5555-4555-8555-555555555555',
+            user_id: 'external-user-id',
+            data: { email: 'mapped@example.com' },
+          }],
+          error: null,
+        });
+      }
+      return createQueryChain({ data: null, error: null });
+    });
+
+    const req: any = {
+      body: {
+        forgot_pin: true,
+        login_recovery: true,
+        email: 'mapped@example.com',
+        language: 'en',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.initiatePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(PinResetService.generateResetToken).toHaveBeenCalledWith(
+      'external-user-id',
+      '55555555-5555-4555-8555-555555555555',
+      expect.objectContaining({
+        email: 'mapped@example.com',
+        language: 'en',
+      })
+    );
   });
 });

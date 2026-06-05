@@ -53,6 +53,19 @@ function looksLikeEmail(value: unknown): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
 }
 
+function missingTableError(error: any, tableName: string): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toUpperCase();
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    message.includes(`relation "${tableName}" does not exist`) ||
+    message.includes(`relation public.${tableName} does not exist`) ||
+    message.includes(`could not find the table 'public.${tableName}'`) ||
+    (message.includes(tableName) && message.includes('schema cache'))
+  );
+}
+
 function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
@@ -72,6 +85,105 @@ async function loadSession(sessionId: string): Promise<any | null> {
   return data || null;
 }
 
+function withRecoveryEmail(session: any | null, email: string): any | null {
+  if (!session?.session_id) return session;
+  const normalizedEmail = normalizeIdentity(email);
+  if (!looksLikeEmail(normalizedEmail)) return session;
+  return {
+    ...session,
+    recovery_email: normalizedEmail,
+  };
+}
+
+function resetEmailForSession(session: any, fallbackIdentity?: string): string | undefined {
+  const candidates = [
+    session?.recovery_email,
+    session?.reset_email,
+    session?.email,
+    session?.user_id,
+    fallbackIdentity,
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeIdentity(candidate);
+    if (looksLikeEmail(normalized)) return normalized;
+  }
+  return undefined;
+}
+
+async function loadLatestSessionByUserId(userId: string, recoveryEmail?: string): Promise<any | null> {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return null;
+
+  const { data, error } = await supabase
+    .from('agent_sessions')
+    .select('session_id, user_id, email, session_token, last_activity, created_at, updated_at')
+    .eq('user_id', normalizedUserId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load recoverable session by user_id: ${error.message}`);
+  }
+  if (!data?.session_id) return null;
+  return withRecoveryEmail(data, recoveryEmail || '');
+}
+
+async function loadLatestSessionFromExternalEmail(identity: string): Promise<any | null> {
+  const normalizedIdentity = normalizeIdentity(identity);
+  if (!looksLikeEmail(normalizedIdentity)) return null;
+
+  const { data, error } = await supabase
+    .from('external_accounts')
+    .select('session_id, user_id, data')
+    .order('updated_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    if (missingTableError(error, 'external_accounts')) return null;
+    throw new Error(`Failed to load recoverable external identity: ${error.message}`);
+  }
+
+  for (const row of data || []) {
+    const rowData = (row as any)?.data && typeof (row as any).data === 'object' ? (row as any).data : {};
+    const rowEmail = normalizeIdentity(rowData.email || rowData.user_id || rowData.userId || (row as any)?.user_id || '');
+    if (rowEmail !== normalizedIdentity) continue;
+
+    const sessionId = String((row as any)?.session_id || '').trim();
+    if (sessionId) {
+      const session = await loadSession(sessionId);
+      if (session?.session_id) return withRecoveryEmail(session, normalizedIdentity);
+    }
+
+    const userSession = await loadLatestSessionByUserId(String((row as any)?.user_id || '').trim(), normalizedIdentity);
+    if (userSession?.session_id) return userSession;
+  }
+
+  return null;
+}
+
+async function loadLatestSessionFromUserEmail(identity: string): Promise<any | null> {
+  const normalizedIdentity = normalizeIdentity(identity);
+  if (!looksLikeEmail(normalizedIdentity)) return null;
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email')
+    .eq('email', normalizedIdentity)
+    .maybeSingle();
+
+  if (error) {
+    if (missingTableError(error, 'users')) return null;
+    throw new Error(`Failed to load recoverable user identity: ${error.message}`);
+  }
+
+  const userId = String((data as any)?.id || '').trim();
+  const userEmail = normalizeIdentity((data as any)?.email || normalizedIdentity);
+  if (!userId) return null;
+
+  return await loadLatestSessionByUserId(userId, userEmail);
+}
+
 async function loadLatestSessionByIdentity(identity: string): Promise<any | null> {
   const normalizedIdentity = normalizeIdentity(identity);
   if (!normalizedIdentity) return null;
@@ -89,8 +201,14 @@ async function loadLatestSessionByIdentity(identity: string): Promise<any | null
     if (error) {
       throw new Error(`Failed to load recoverable session: ${error.message}`);
     }
-    if (data?.session_id) return data;
+    if (data?.session_id) return withRecoveryEmail(data, looksLikeEmail(normalizedIdentity) ? normalizedIdentity : '');
   }
+
+  const externalSession = await loadLatestSessionFromExternalEmail(normalizedIdentity);
+  if (externalSession?.session_id) return externalSession;
+
+  const userEmailSession = await loadLatestSessionFromUserEmail(normalizedIdentity);
+  if (userEmailSession?.session_id) return userEmailSession;
 
   return null;
 }
@@ -137,7 +255,7 @@ async function resolveLoginRecoverySession(req: Request): Promise<any | null> {
       const sessionEmail = normalizeIdentity(tokenSession.email);
       const sessionUserId = normalizeIdentity(tokenSession.user_id);
       if (!requestedEmail || requestedEmail === sessionEmail || requestedEmail === sessionUserId) {
-        return tokenSession;
+        return withRecoveryEmail(tokenSession, requestedEmail);
       }
     }
   }
@@ -153,7 +271,7 @@ async function resolveLoginRecoverySession(req: Request): Promise<any | null> {
         const sessionEmail = normalizeIdentity(mappedSession.email);
         const sessionUserId = normalizeIdentity(mappedSession.user_id);
         if (!requestedEmail || requestedEmail === sessionEmail || requestedEmail === sessionUserId || requestedEmail === mappingEmail) {
-          return mappedSession;
+          return withRecoveryEmail(mappedSession, mappingEmail || requestedEmail);
         }
       }
     }
@@ -256,7 +374,7 @@ export class PinResetController {
           resolvedUserId,
           String(session.session_id || session_id),
           {
-            email: session.email || (looksLikeEmail(resolvedUserId) ? resolvedUserId : undefined),
+            email: resetEmailForSession(session, resolvedUserId),
             language,
           }
         );
@@ -310,7 +428,7 @@ export class PinResetController {
         resolvedUserId,
         String(recoverySession.session_id),
         {
-          email: recoverySession.email || (looksLikeEmail(resolvedUserId) ? resolvedUserId : undefined),
+          email: resetEmailForSession(recoverySession, resolvedUserId),
           language,
         }
       );
