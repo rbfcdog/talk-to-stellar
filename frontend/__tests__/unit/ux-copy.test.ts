@@ -351,7 +351,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain('finalAsset === "BRL"');
     expect(text).toContain("Conversão para");
     expect(text).toContain("!returnToPath && !stayOpenAfterSuccess");
-    expect(text).toContain("receipt-top-return-cta");
+    expect(text).toContain("ReturnAfterSuccessPopup");
+    expect(text).toContain("role=\"dialog\"");
+    expect(text).toContain('L("PIX finalizado", "PIX complete")');
+    expect(text).not.toContain("receipt-top-return-cta");
     expect(text).toContain("statusLabel(temporaryOffRampTestResult.final_transaction?.status");
     expect(webFeedbackText).toContain("isExternalChannelPage()");
     expect(webFeedbackText).toContain('source === "whatsapp" || source === "telegram"');
