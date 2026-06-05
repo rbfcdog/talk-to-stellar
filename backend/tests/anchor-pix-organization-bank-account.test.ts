@@ -1,5 +1,6 @@
 import { AnchorService } from '../src/api/services/anchor.service';
 import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
+import { StellarService } from '../src/api/services/stellar.service';
 
 describe('AnchorService PIX organization bank account routing', () => {
   const originalEnv = { ...process.env };
@@ -331,6 +332,89 @@ describe('AnchorService PIX organization bank account routing', () => {
     });
   });
 
+  it('quotes exact USDC PIX receive amount from the dynamic Stellar route before creating the BRL checkout amount', async () => {
+    const anchor = {
+      getQuote: jest.fn().mockResolvedValue({
+        id: 'quote-usdc-exact-1',
+        fromCurrency: 'BRL',
+        toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        fromAmount: '2512.50',
+        toAmount: '2500.00',
+        destinationAmountAfterFee: '2500.00',
+        exchangeRate: '0.9950',
+        fee: '5.00',
+        feeAmount: '5.00',
+        feeBps: '20',
+        provider: 'etherfuse',
+      }),
+    };
+
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_BRL = '0.05';
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue(anchor);
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+    });
+    jest.spyOn(StellarService, 'quotePathPayment').mockResolvedValue({
+      sourceAmount: '2500',
+      sourceMax: '2500',
+      destinationAmount: '500',
+      sourceAsset: {
+        code: 'TESOURO',
+        issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+      },
+      destinationAsset: { code: 'USDC', issuer: 'GUSDC' },
+      networkFeeXlm: '0.00001',
+      path: [],
+    } as any);
+
+    const result = await AnchorService.getQuoteForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      customer_id: 'customer-1',
+      direction: 'onramp',
+      amount: '',
+      from_currency: 'BRL',
+      to_currency: 'TESOURO',
+      final_asset: 'USDC',
+      desired_final_amount: '500',
+      desired_final_asset: 'USDC',
+    });
+
+    expect(StellarService.quotePathPayment).toHaveBeenCalledWith(expect.objectContaining({
+      sourcePublicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAsset: expect.objectContaining({
+        code: 'TESOURO',
+        issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+      }),
+      destAsset: expect.objectContaining({ code: 'USDC' }),
+      destAmount: '500',
+    }));
+    expect(anchor.getQuote).toHaveBeenCalledWith(expect.objectContaining({
+      fromAmount: '2512.50',
+      fromCurrency: 'BRL',
+      toCurrency: 'TESOURO:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+    }));
+    expect(result.quote).toMatchObject({
+      userFacingToCurrency: expect.stringContaining('USDC'),
+      userFacingToAmount: '500',
+      finalConversionRequired: true,
+      finalConversionSourceAmount: '2500',
+      finalConversionMode: 'strict_receive_exact_usdc',
+      requestedFinalAmount: '500',
+      requestedFinalAssetCode: 'USDC',
+      anchorProviderFeeAmount: '5',
+      talkToStellarFeeAmount: '7.5',
+      totalFeeAmount: '12.5',
+    });
+  });
+
   it('keeps provider on-ramp orders user-facing at TESOURO equals real instead of raw provider units', async () => {
     mockSandboxRuntime();
 
@@ -461,7 +545,7 @@ describe('AnchorService PIX organization bank account routing', () => {
     expect(result.operation_id).toBe('op-1');
     expect(result.transaction.id).toMatch(/^sandbox-offramp-/);
     expect(result.transaction).toMatchObject({
-      fromAmount: '48.6880919',
+      fromAmount: '10.0000000',
       toAmount: '56.00',
       toCurrency: 'BRL',
       fiatAccount: {

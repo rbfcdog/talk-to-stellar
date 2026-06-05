@@ -286,6 +286,8 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("estimatePixOnRampGrossForBrlReceive(toPositiveNumber(requestedFinalAmount, 0)).toFixed(2)");
     expect(text).toContain("amount: quoteAmountBrl");
     expect(text).toContain("amount: orderAmountBrl");
+    expect(text).toContain("Exact USDC PIX target will be quoted by backend");
+    expect(text).not.toContain("/api/financial/usdc-to-brl-preview");
     expect(text).toContain("refreshOrder(false)");
     expect(text).toContain("function extractRampReceiptUrl(...sources: unknown[]): string");
     expect(text).toContain("function buildRampReceiptFallbackUrl(reference: unknown): string");
