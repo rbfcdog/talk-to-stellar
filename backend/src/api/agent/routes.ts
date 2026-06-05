@@ -514,6 +514,21 @@ function sessionHasAccountIdentity(sessionData: SessionData | null | undefined, 
   );
 }
 
+function sessionHasPinCredential(sessionData: SessionData | null | undefined): boolean {
+  return Boolean(
+    String((sessionData as any)?.session_password_hash || '').trim() ||
+      String((sessionData as any)?.password_hash || '').trim()
+  );
+}
+
+function externalOnboardingMessage(language: 'pt-BR' | 'en', url: string): string {
+  return localized(
+    language,
+    `Para continuar, crie sua conta.\nAbra este link:\n${url}\n\nSe você já tem conta, use "Já tenho conta" na página de cadastro.`,
+    `To continue, create your account.\nOpen this link:\n${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
+  );
+}
+
 function formatStartupBalanceLine(balance: any, index: number): string {
   const asset = String(balance?.asset || balance?.asset_code || 'UNKNOWN').toUpperCase();
   const amount = String(balance?.balance || '0.0000000');
@@ -672,11 +687,7 @@ export function createAgentRoutes(
             onboardingRequired: true,
             reason: "not_linked",
             creationUrl: url,
-            message: localized(
-              requestLanguage,
-              `Para continuar, crie sua conta.\nAbra este link:\n${url}\n\nSe você já tem conta, use "Já tenho conta" na página de cadastro.`,
-              `To continue, create your account.\nOpen this link:\n${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
-            ),
+            message: externalOnboardingMessage(requestLanguage, url),
           });
         }
 
@@ -685,7 +696,28 @@ export function createAgentRoutes(
           const expiredExternalSession = Boolean(externalSession && isSessionExpired(externalSession));
           const ownerMatchesExternalMapping = sessionMatchesExternalOwner(externalSession, existing.user_id);
           const hasAccountIdentity = sessionHasAccountIdentity(externalSession, existing);
-          if (!hasAccountIdentity && (!externalSession || ownerMatchesExternalMapping)) {
+          let linkedWallet = null;
+          if (externalSession && ownerMatchesExternalMapping) {
+            linkedWallet = await walletRepo.getWalletBySession(String(existing.session_id)).catch((error) => {
+              logger.warn(`[external-channel] account verification failed for ${normalizedProvider}/${channelProviderUserId.slice(-6)}: ${error instanceof Error ? error.message : String(error)}`);
+              return null;
+            });
+          }
+          const hasWallet = Boolean(
+            String((linkedWallet as any)?.public_key || '').trim()
+          );
+          const hasPin = sessionHasPinCredential(externalSession);
+          const missingAccountReason =
+            !externalSession
+              ? "missing_account_session"
+              : !hasAccountIdentity
+                ? "missing_account_identity"
+                : ownerMatchesExternalMapping && !hasWallet
+                  ? "missing_account_wallet"
+                  : ownerMatchesExternalMapping && !hasPin
+                    ? "missing_account_credentials"
+                    : "";
+          if (missingAccountReason && (!externalSession || ownerMatchesExternalMapping)) {
             const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, {
               source: normalizedProvider,
               language: externalResponseLanguage,
@@ -699,13 +731,9 @@ export function createAgentRoutes(
               session_id: session_id || null,
               success: true,
               onboardingRequired: true,
-              reason: "missing_account_identity",
+              reason: missingAccountReason,
               creationUrl: url,
-              message: localized(
-                externalResponseLanguage,
-                `Para continuar, crie sua conta.\nAbra este link:\n${url}\n\nSe você já tem conta, use "Já tenho conta" na página de cadastro.`,
-                `To continue, create your account.\nOpen this link:\n${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
-              ),
+              message: externalOnboardingMessage(externalResponseLanguage, url),
             });
           }
           if (!externalSession || !ownerMatchesExternalMapping) {
