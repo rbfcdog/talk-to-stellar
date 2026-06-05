@@ -1657,6 +1657,11 @@ export const toolDefinitions = [
           type: "string",
           description: "Frontend screen that originated this confirmation, for example pix, rendimentos, convert, transactions, or chat.",
         },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the confirmation link and completion notification.",
+        },
       },
       required: ["amount", "destination", "session_id", "owner_id"],
     },
@@ -4278,6 +4283,8 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
     let normalizedDestination = destinationCandidate ? String(destinationCandidate).trim() : '';
     normalizedDestination = repairLegacyStarterContactKey(normalizedDestination);
     const quote = input.quote && typeof input.quote === 'object' ? input.quote : null;
+    const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+    const isEn = language === 'en';
     const contextMessage = String(input.memo || input.context_message || '').replace(/\s+/g, ' ').trim().slice(0, 120);
     const destinationAmount = input.destination_amount || input.destinationAmount || quote?.destinationAmount;
     const normalizedAmount = destinationAmount
@@ -4399,7 +4406,7 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       destination_asset_issuer: input.destination_asset_issuer || input.destinationAssetIssuer || quote?.destinationAsset?.issuer || asset.issuer || null,
       transaction_context_message: contextMessage || null,
       memo: contextMessage || null,
-      language: input.language || input.lang || input.locale || null,
+      language,
       provider: String(input.provider || input.external_provider || '').trim() || null,
       provider_user_id: String(input.provider_user_id || input.providerUserId || input.external_provider_user_id || '').trim() || null,
       source: String(input.source || input.external_source || input.provider || input.external_provider || '').trim() || null,
@@ -4415,10 +4422,14 @@ async function executePreparePaymentConfirmation(input: any): Promise<string> {
       savings_estimate: savingsEstimate,
       estimated_fee_display: unifiedFee.display,
       estimated_platform_fee: null,
-      message:
-        `Gerei o link de confirmação com a cotação atual para enviar ${normalizedAmount} ${asset.code} para ${destinationName || normalizedDestination}. ` +
-        `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
-        `Abra para revisar e confirmar com PIN:\n\n${url}`,
+      language,
+      message: isEn
+        ? `I created the confirmation link with the current quote to send ${normalizedAmount} ${asset.code} to ${destinationName || normalizedDestination}. ` +
+          `${contextMessage ? `Payment message: "${contextMessage}". ` : ''}` +
+          `Open it to review and confirm with PIN:\n\n${url}`
+        : `Gerei o link de confirmação com a cotação atual para enviar ${normalizedAmount} ${asset.code} para ${destinationName || normalizedDestination}. ` +
+          `${contextMessage ? `Mensagem do pagamento: "${contextMessage}". ` : ''}` +
+          `Abra para revisar e confirmar com PIN:\n\n${url}`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
