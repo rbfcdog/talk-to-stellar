@@ -1,6 +1,7 @@
 import { PinResetController } from '../src/api/controllers/pin-reset.controller';
 import { PinResetService } from '../src/api/services/core/pin-reset.service';
 import { supabase } from '../src/config/supabase';
+import jwt from 'jsonwebtoken';
 
 function mockResponse() {
   const res: any = {};
@@ -13,6 +14,16 @@ function mockSessionRow(session: Record<string, unknown> | null) {
   const chain: any = {};
   chain.select = jest.fn(() => chain);
   chain.eq = jest.fn(() => chain);
+  chain.maybeSingle = jest.fn().mockResolvedValue({ data: session, error: null });
+  (supabase.from as jest.Mock).mockReturnValue(chain);
+}
+
+function mockLatestSessionRow(session: Record<string, unknown> | null) {
+  const chain: any = {};
+  chain.select = jest.fn(() => chain);
+  chain.eq = jest.fn(() => chain);
+  chain.order = jest.fn(() => chain);
+  chain.limit = jest.fn(() => chain);
   chain.maybeSingle = jest.fn().mockResolvedValue({ data: session, error: null });
   (supabase.from as jest.Mock).mockReturnValue(chain);
 }
@@ -122,5 +133,112 @@ describe('PinResetController security', () => {
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(PinResetService.generateResetToken).not.toHaveBeenCalled();
+  });
+
+  it('initiates login recovery by email without returning a reset URL', async () => {
+    mockLatestSessionRow({
+      session_id: '22222222-2222-4222-8222-222222222222',
+      user_id: 'user@example.com',
+      email: 'user@example.com',
+      session_token: 'stale-session-token',
+      last_activity: '2024-01-01T00:00:00.000Z',
+    });
+
+    const req: any = {
+      body: {
+        forgot_pin: true,
+        login_recovery: true,
+        email: 'user@example.com',
+        language: 'en',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.initiatePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(PinResetService.generateResetToken).toHaveBeenCalledWith(
+      'user@example.com',
+      '22222222-2222-4222-8222-222222222222',
+      expect.objectContaining({
+        email: 'user@example.com',
+        language: 'en',
+      })
+    );
+    const payload = (res.json as jest.Mock).mock.calls[0][0];
+    expect(payload.success).toBe(true);
+    expect(payload.message).toContain('If this account exists');
+    expect(payload.masked_email).toBe('u**r@example.com');
+    expect(payload).not.toHaveProperty('reset_url');
+    expect(payload).not.toHaveProperty('token');
+  });
+
+  it('returns a generic login recovery response when no account is found', async () => {
+    mockLatestSessionRow(null);
+
+    const req: any = {
+      body: {
+        forgot_pin: true,
+        login_recovery: true,
+        email: 'missing@example.com',
+        language: 'en',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.initiatePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(PinResetService.generateResetToken).not.toHaveBeenCalled();
+    const payload = (res.json as jest.Mock).mock.calls[0][0];
+    expect(payload.success).toBe(true);
+    expect(payload.message).toBe('If this account exists, we sent the PIN setup link by email.');
+    expect(payload).not.toHaveProperty('reset_url');
+    expect(payload).not.toHaveProperty('token');
+  });
+
+  it('can recover from an external login token that carries the linked session', async () => {
+    const token = jwt.sign({
+      sub: 'external_onboard',
+      provider: 'whatsapp',
+      provider_user_id: '5575496918127',
+      session_id: '33333333-3333-4333-8333-333333333333',
+    }, process.env.JWT_SECRET || 'test-only-jwt-secret-with-enough-entropy');
+    mockSessionRow({
+      session_id: '33333333-3333-4333-8333-333333333333',
+      user_id: 'ana@example.com',
+      email: 'ana@example.com',
+      session_token: 'expired-session-token',
+      last_activity: '2024-01-01T00:00:00.000Z',
+    });
+
+    const req: any = {
+      body: {
+        forgot_pin: true,
+        login_recovery: true,
+        token,
+        provider: 'whatsapp',
+        provider_user_id: '5575496918127',
+        language: 'en',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.initiatePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(PinResetService.generateResetToken).toHaveBeenCalledWith(
+      'ana@example.com',
+      '33333333-3333-4333-8333-333333333333',
+      expect.objectContaining({
+        email: 'ana@example.com',
+        language: 'en',
+      })
+    );
+    const payload = (res.json as jest.Mock).mock.calls[0][0];
+    expect(payload).not.toHaveProperty('reset_url');
   });
 });

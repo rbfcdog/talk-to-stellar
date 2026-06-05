@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
+import { ArrowRight, Loader2, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +38,8 @@ export function SecurePinGate({
   const L = (pt: string, en: string) => (language === "pt-BR" ? pt : en);
   const [pin, setPin] = useState("");
   const [status, setStatus] = useState<"idle" | "checking">("idle");
+  const [resetStatus, setResetStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [resetMessage, setResetMessage] = useState("");
   const [error, setError] = useState("");
 
   async function verifyPin() {
@@ -75,6 +77,36 @@ export function SecurePinGate({
       setError(caught instanceof Error ? caught.message : L("Não consegui validar o PIN agora.", "I could not verify the PIN right now."));
     } finally {
       setStatus("idle");
+    }
+  }
+
+  async function requestPinReset() {
+    if (disabled || resetStatus === "sending") return;
+    const source = String(sessionSource || "").trim();
+    setResetStatus("sending");
+    setResetMessage("");
+    setError("");
+    try {
+      const response = await fetch("/api/security/reset-pin-init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          forgot_pin: true,
+          language,
+          source,
+          session_source: source,
+          session_scope: source,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.success === false) {
+        throw new Error(payload?.message || L("Não consegui enviar o e-mail de PIN agora.", "I could not send the PIN email right now."));
+      }
+      setResetStatus("sent");
+      setResetMessage(String(payload?.message || L("Enviamos o link de configuração do PIN por e-mail.", "We sent the PIN setup link by email.")));
+    } catch (caught) {
+      setResetStatus("error");
+      setResetMessage(caught instanceof Error ? caught.message : L("Não consegui enviar o e-mail de PIN agora.", "I could not send the PIN email right now."));
     }
   }
 
@@ -131,6 +163,22 @@ export function SecurePinGate({
           {status === "checking" ? L("Validando", "Checking") : L("Continuar", "Continue")}
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={() => void requestPinReset()}
+        disabled={disabled || resetStatus === "sending"}
+        className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-xs font-black text-white/62 transition hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+      >
+        {resetStatus === "sending" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Mail className="h-4 w-4" aria-hidden="true" />}
+        {resetStatus === "sending" ? L("Enviando e-mail", "Sending email") : L("Esqueci meu PIN", "Forgot PIN")}
+      </button>
+
+      {resetMessage ? (
+        <p className={`mt-3 rounded-2xl border px-4 py-3 text-sm font-bold ${resetStatus === "sent" ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100" : "border-red-400/25 bg-red-400/10 text-red-100"}`}>
+          {resetMessage}
+        </p>
+      ) : null}
 
       {error ? (
         <p className="mt-3 rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-100">

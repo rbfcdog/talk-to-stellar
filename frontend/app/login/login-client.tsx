@@ -6,7 +6,7 @@ import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
-import { Chrome, Fingerprint, LogIn, MessageCircle, Send } from "lucide-react"
+import { Chrome, Fingerprint, LogIn, Mail, MessageCircle, Send } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
 import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
@@ -168,6 +168,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const [loginDone, setLoginDone] = useState(false)
   const [externalLinkUsed, setExternalLinkUsed] = useState(false)
   const [googleLoginError, setGoogleLoginError] = useState("")
+  const [pinResetStatus, setPinResetStatus] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const [pinResetMessage, setPinResetMessage] = useState("")
   const [googleScriptReady, setGoogleScriptReady] = useState(false)
   const [passkeyPairId, setPasskeyPairId] = useState("")
   const [passkeyPairCode, setPasskeyPairCode] = useState("")
@@ -525,6 +527,48 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       actionLockRef.current = false
       setStatus("error")
       setError(err instanceof Error ? err.message : "Failed to sign in with email and PIN.")
+    }
+  }
+
+  async function handleForgotPin() {
+    if (pinResetStatus === "sending" || externalLinkUsed) return
+    const recoveryEmail = normalizeLoginEmail(externalResolvedLogin || email.trim())
+    const canUseExternalRecovery = Boolean(hasExternalContext && externalToken)
+
+    if (!recoveryEmail && !canUseExternalRecovery) {
+      setPinResetStatus("error")
+      setPinResetMessage(t("login_forgot_pin_need_email"))
+      return
+    }
+
+    setPinResetStatus("sending")
+    setPinResetMessage("")
+    setError("")
+
+    try {
+      const response = await fetch("/api/security/reset-pin-init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          forgot_pin: true,
+          login_recovery: true,
+          email: recoveryEmail || undefined,
+          token: canUseExternalRecovery ? externalToken : undefined,
+          provider: hasExternalContext ? externalProvider : "web",
+          provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId(),
+          language,
+          ...externalSessionContext,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload?.success === false) {
+        throw new Error(payload?.message || t("login_forgot_pin_error"))
+      }
+      setPinResetStatus("sent")
+      setPinResetMessage(String(payload?.message || t("login_forgot_pin_sent")))
+    } catch (err) {
+      setPinResetStatus("error")
+      setPinResetMessage(err instanceof Error ? err.message : t("login_forgot_pin_error"))
     }
   }
 
@@ -991,6 +1035,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
   const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext
   const displayedResolvedLogin = externalResolvedLogin ? maskLoginEmail(externalResolvedLogin) : ""
+  const canRequestPinReset = Boolean((externalResolvedLogin || email.trim()) || (hasExternalContext && externalToken))
 
   return (
     <AuthShell
@@ -1051,9 +1096,21 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           </label>
         )}
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-tts-deep">{t("login_pin")}</span>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="login-pin-input" className="text-xs font-medium text-tts-deep">{t("login_pin")}</label>
+            <button
+              type="button"
+              onClick={() => void handleForgotPin()}
+              disabled={!canRequestPinReset || pinResetStatus === "sending" || externalLinkUsed}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-tts-border px-3 py-1 text-[11px] font-bold text-tts-muted transition hover:border-tts-gold hover:text-tts-deep disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+              {pinResetStatus === "sending" ? t("login_forgot_pin_sending") : t("login_forgot_pin")}
+            </button>
+          </div>
           <Input
+            id="login-pin-input"
             value={pin}
             onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
             type="password"
@@ -1062,7 +1119,20 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             disabled={externalLinkUsed}
             placeholder={t("login_pin_placeholder")}
           />
-        </label>
+        </div>
+
+        {pinResetMessage && (
+          <p
+            className={
+              pinResetStatus === "sent"
+                ? "rounded-lg border-l-4 border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-medium text-tts-deep"
+                : "rounded-lg border-l-4 border-tts-error bg-tts-error/10 px-3 py-2 text-xs text-tts-error"
+            }
+            role={pinResetStatus === "sent" ? "status" : "alert"}
+          >
+            {pinResetMessage}
+          </p>
+        )}
 
         {EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && (
           <label className="flex flex-col gap-1.5 rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5">

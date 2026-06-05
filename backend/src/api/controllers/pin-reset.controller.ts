@@ -1,10 +1,19 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { PinResetService } from '../services/core/pin-reset.service';
 import { logger } from '../../utils/logger';
 import { supabase } from '../../config/supabase';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { hashWalletPin } from '../../utils/pin-hash';
+import { getRequiredJwtSecret } from '../../config/secrets';
+import {
+  ExternalRepository,
+  normalizeExternalProvider,
+  normalizeExternalProviderUserId,
+} from '../repository/core/external.repository';
+
+const externalRepo = new ExternalRepository(supabase as any);
 
 function timingSafeEqualString(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(String(left || ''));
@@ -39,6 +48,11 @@ function normalizeIdentity(value: unknown): string {
   return String(value || '').trim().toLowerCase();
 }
 
+function looksLikeEmail(value: unknown): boolean {
+  const normalized = normalizeIdentity(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
 function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
@@ -58,6 +72,128 @@ async function loadSession(sessionId: string): Promise<any | null> {
   return data || null;
 }
 
+async function loadLatestSessionByIdentity(identity: string): Promise<any | null> {
+  const normalizedIdentity = normalizeIdentity(identity);
+  if (!normalizedIdentity) return null;
+
+  const columns = looksLikeEmail(normalizedIdentity) ? ['email', 'user_id'] : ['user_id', 'email'];
+  for (const column of columns) {
+    const { data, error } = await supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, email, session_token, last_activity, created_at, updated_at')
+      .eq(column, normalizedIdentity)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to load recoverable session: ${error.message}`);
+    }
+    if (data?.session_id) return data;
+  }
+
+  return null;
+}
+
+function readExternalPayload(req: Request): any | null {
+  const token = String(req.body?.token || req.body?.external_token || '').trim();
+  if (!token) return null;
+
+  const payload = jwt.verify(token, getRequiredJwtSecret()) as any;
+  if (String(payload?.sub || '') !== 'external_onboard') {
+    throw new Error('Invalid external login token.');
+  }
+  return payload;
+}
+
+async function resolveLoginRecoverySession(req: Request): Promise<any | null> {
+  let payload: any | null = null;
+  try {
+    payload = readExternalPayload(req);
+  } catch {
+    throw new Error('Invalid or expired recovery link. Request a new login link and try again.');
+  }
+
+  const provider = normalizeExternalProvider(String(req.body?.provider || payload?.provider || '').trim());
+  const providerUserId = normalizeExternalProviderUserId(
+    provider,
+    String(req.body?.provider_user_id || payload?.provider_user_id || '').trim()
+  );
+  const requestedEmail = normalizeIdentity(
+    req.body?.email ||
+      req.body?.user_id ||
+      payload?.email ||
+      payload?.user_id ||
+      payload?.userId ||
+      payload?.owner_id ||
+      payload?.ownerId ||
+      ''
+  );
+
+  const tokenSessionId = String(payload?.session_id || payload?.sessionId || '').trim();
+  if (tokenSessionId) {
+    const tokenSession = await loadSession(tokenSessionId);
+    if (tokenSession?.session_id) {
+      const sessionEmail = normalizeIdentity(tokenSession.email);
+      const sessionUserId = normalizeIdentity(tokenSession.user_id);
+      if (!requestedEmail || requestedEmail === sessionEmail || requestedEmail === sessionUserId) {
+        return tokenSession;
+      }
+    }
+  }
+
+  const useExternalMapping = provider && providerUserId && provider !== 'web' && provider !== 'browser';
+  if (useExternalMapping) {
+    const mapping = await externalRepo.findByProviderAndId(provider, providerUserId);
+    const mappingData = mapping?.data && typeof mapping.data === 'object' ? mapping.data as Record<string, unknown> : {};
+    const mappingEmail = normalizeIdentity(mappingData.email || mappingData.user_id || mappingData.userId || mapping?.user_id || '');
+    if (mapping?.session_id) {
+      const mappedSession = await loadSession(String(mapping.session_id));
+      if (mappedSession?.session_id) {
+        const sessionEmail = normalizeIdentity(mappedSession.email);
+        const sessionUserId = normalizeIdentity(mappedSession.user_id);
+        if (!requestedEmail || requestedEmail === sessionEmail || requestedEmail === sessionUserId || requestedEmail === mappingEmail) {
+          return mappedSession;
+        }
+      }
+    }
+    const mappedIdentity = normalizeIdentity(mapping?.user_id || mappingEmail);
+    if (mappedIdentity) {
+      const mappedSession = await loadLatestSessionByIdentity(mappedIdentity);
+      if (mappedSession?.session_id) return mappedSession;
+    }
+  }
+
+  if (requestedEmail) {
+    return await loadLatestSessionByIdentity(requestedEmail);
+  }
+
+  return null;
+}
+
+function wantsLoginRecovery(req: Request): boolean {
+  return Boolean(
+    req.body?.forgot_pin ||
+      req.body?.login_recovery ||
+      req.body?.recovery ||
+      req.body?.token ||
+      req.body?.external_token ||
+      req.body?.email ||
+      req.body?.provider_user_id
+  );
+}
+
+function genericRecoveryMessage(language: 'pt-BR' | 'en', maskedEmail?: string): string {
+  if (language === 'en') {
+    return maskedEmail
+      ? `If this account exists, we sent the PIN setup link to ${maskedEmail}.`
+      : 'If this account exists, we sent the PIN setup link by email.';
+  }
+  return maskedEmail
+    ? `Se esta conta existir, enviamos o link de configuração do PIN para ${maskedEmail}.`
+    : 'Se esta conta existir, enviamos o link de configuração do PIN por e-mail.';
+}
+
 export class PinResetController {
   /**
    * Initiate PIN reset - Generate temporary reset token
@@ -66,22 +202,24 @@ export class PinResetController {
   static async initiatePinReset(req: Request, res: Response) {
     try {
       const { user_id, session_id } = req.body;
+      const language = normalizeLanguage(req.body?.language || req.headers['accept-language']);
+      const loginRecovery = wantsLoginRecovery(req);
 
-      if (!session_id) {
+      if (!session_id && !loginRecovery) {
         return res.status(400).json({
           success: false,
           message: 'session_id is required',
         });
       }
 
-      const session = await loadSession(String(session_id));
-      if (!session) {
+      const session = session_id ? await loadSession(String(session_id)) : null;
+      if (!session && !loginRecovery) {
         return res.status(404).json({
           success: false,
           message: 'Session not found',
         });
       }
-      if (isSessionExpired(session)) {
+      if (session && isSessionExpired(session) && !loginRecovery) {
         return res.status(401).json({
           success: false,
           message: 'Session expired. Sign in again before resetting your PIN.',
@@ -89,56 +227,101 @@ export class PinResetController {
       }
 
       const providedSessionToken = readSessionToken(req);
-      const storedSessionToken = String(session.session_token || '').trim();
+      const storedSessionToken = String(session?.session_token || '').trim();
       const authorizedBySession =
         Boolean(providedSessionToken && storedSessionToken) &&
         timingSafeEqualString(providedSessionToken, storedSessionToken);
 
-      if (!authorizedBySession && !isInternalRequest(req)) {
+      if (session && !isSessionExpired(session) && (authorizedBySession || isInternalRequest(req))) {
+        const requestedUserId = normalizeIdentity(user_id);
+        const sessionUserId = normalizeIdentity(session.user_id);
+        const sessionEmail = normalizeIdentity(session.email);
+        const resolvedUserId = String(user_id || session.user_id || session.email || '').trim();
+
+        if (!resolvedUserId) {
+          return res.status(409).json({
+            success: false,
+            message: 'Session does not have a recoverable user identity.',
+          });
+        }
+
+        if (requestedUserId && requestedUserId !== sessionUserId && requestedUserId !== sessionEmail) {
+          return res.status(403).json({
+            success: false,
+            message: 'Requested user_id does not match the authenticated session.',
+          });
+        }
+
+        const resetData = await PinResetService.generateResetToken(
+          resolvedUserId,
+          String(session.session_id || session_id),
+          {
+            email: session.email || (looksLikeEmail(resolvedUserId) ? resolvedUserId : undefined),
+            language,
+          }
+        );
+
+        logger.info(`PIN reset initiated for session ${session.session_id || session_id}`);
+
+        return res.status(200).json({
+          success: true,
+          message: resetData.email_sent && resetData.masked_email
+            ? language === 'en'
+              ? `Email sent to ${resetData.masked_email}. The link is valid for ${resetData.expires_in_minutes} minutes.`
+              : `E-mail enviado para ${resetData.masked_email}. O link vale por ${resetData.expires_in_minutes} minutos.`
+            : language === 'en'
+              ? `Reset link generated. Valid for ${resetData.expires_in_minutes} minutes.`
+              : `Link de redefinição gerado. Válido por ${resetData.expires_in_minutes} minutos.`,
+          reset_url: resetData.reset_url,
+          expires_in_minutes: resetData.expires_in_minutes,
+          email_sent: Boolean(resetData.email_sent),
+          masked_email: resetData.masked_email,
+        });
+      }
+
+      if (!loginRecovery) {
         return res.status(401).json({
           success: false,
           message: 'Valid session_token or internal authorization is required to initiate PIN reset.',
         });
       }
 
-      const requestedUserId = normalizeIdentity(user_id);
-      const sessionUserId = normalizeIdentity(session.user_id);
-      const sessionEmail = normalizeIdentity(session.email);
-      const resolvedUserId = String(user_id || session.user_id || session.email || '').trim();
-
-      if (!resolvedUserId) {
-        return res.status(409).json({
-          success: false,
-          message: 'Session does not have a recoverable user identity.',
+      const recoverySession = session && (authorizedBySession || isInternalRequest(req))
+        ? session
+        : await resolveLoginRecoverySession(req);
+      if (!recoverySession?.session_id) {
+        return res.status(200).json({
+          success: true,
+          message: genericRecoveryMessage(language),
+          email_sent: true,
         });
       }
 
-      if (requestedUserId && requestedUserId !== sessionUserId && requestedUserId !== sessionEmail) {
-        return res.status(403).json({
-          success: false,
-          message: 'Requested user_id does not match the authenticated session.',
+      const resolvedUserId = String(recoverySession.user_id || recoverySession.email || '').trim();
+      if (!resolvedUserId) {
+        return res.status(200).json({
+          success: true,
+          message: genericRecoveryMessage(language),
+          email_sent: true,
         });
       }
 
       const resetData = await PinResetService.generateResetToken(
         resolvedUserId,
-        String(session_id),
+        String(recoverySession.session_id),
         {
-          email: session.email,
-          language: normalizeLanguage(req.body?.language || req.headers['accept-language']),
+          email: recoverySession.email || (looksLikeEmail(resolvedUserId) ? resolvedUserId : undefined),
+          language,
         }
       );
 
-      logger.info(`PIN reset initiated for session ${session_id}`);
+      logger.info(`PIN reset email initiated from login recovery for session ${recoverySession.session_id}`);
 
       return res.status(200).json({
         success: true,
-        message: resetData.email_sent && resetData.masked_email
-          ? `E-mail enviado para ${resetData.masked_email}. O link vale por ${resetData.expires_in_minutes} minutos.`
-          : `Reset link generated. Valid for ${resetData.expires_in_minutes} minutes.`,
-        reset_url: resetData.reset_url,
+        message: genericRecoveryMessage(language, resetData.masked_email),
         expires_in_minutes: resetData.expires_in_minutes,
-        email_sent: Boolean(resetData.email_sent),
+        email_sent: true,
         masked_email: resetData.masked_email,
       });
     } catch (error: any) {
