@@ -179,6 +179,7 @@ describe('agent Telegram identity binding', () => {
         user_id: 'alice@example.com',
         email: 'alice@example.com',
         session_token: 'linked-token',
+        password_hash: 'hashed-pin',
         public_key: 'G'.padEnd(56, 'B'),
         last_activity: new Date().toISOString(),
       },
@@ -230,6 +231,7 @@ describe('agent Telegram identity binding', () => {
         user_id: 'whatsapp@example.com',
         email: 'whatsapp@example.com',
         session_token: 'linked-token',
+        password_hash: 'hashed-pin',
         public_key: 'G'.padEnd(56, 'C'),
         last_activity: '2020-01-01T00:00:00.000Z',
       },
@@ -360,6 +362,133 @@ describe('agent Telegram identity binding', () => {
     });
   });
 
+  it('treats WhatsApp mappings with a missing database session as not onboarded', async () => {
+    const repository = createRepository({});
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: '55555555-5555-4555-8555-555555555555',
+      user_id: 'real@example.com',
+    });
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'olaaa',
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.onboardingRequired).toBe(true);
+      expect(payload.reason).toBe('missing_account_session');
+      expect(payload.creationUrl).toBe('https://app.example.com/create-account');
+      expect(createOnboardUrlWithShortLinkMock).toHaveBeenCalledWith('whatsapp', '5511999999999', expect.objectContaining({
+        source: 'whatsapp',
+      }));
+      expect(createLoginUrlWithShortLinkMock).not.toHaveBeenCalled();
+      expect(processInputMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('treats WhatsApp mappings without a wallet row as not onboarded', async () => {
+    const linkedSessionId = '66666666-6666-4666-8666-666666666666';
+    const repository = createRepository({
+      [linkedSessionId]: {
+        user_id: 'real@example.com',
+        email: 'real@example.com',
+        session_token: 'linked-token',
+        password_hash: 'hashed-pin',
+        last_activity: new Date().toISOString(),
+      },
+    });
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: linkedSessionId,
+      user_id: 'real@example.com',
+    });
+    getWalletBySessionMock.mockResolvedValueOnce(null);
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'olaaa',
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.onboardingRequired).toBe(true);
+      expect(payload.reason).toBe('missing_account_wallet');
+      expect(payload.creationUrl).toBe('https://app.example.com/create-account');
+      expect(createOnboardUrlWithShortLinkMock).toHaveBeenCalledWith('whatsapp', '5511999999999', expect.objectContaining({
+        source: 'whatsapp',
+      }));
+      expect(createLoginUrlWithShortLinkMock).not.toHaveBeenCalled();
+      expect(processInputMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('treats WhatsApp mappings without a PIN credential as not onboarded', async () => {
+    const linkedSessionId = '77777777-7777-4777-8777-777777777777';
+    const repository = createRepository({
+      [linkedSessionId]: {
+        user_id: 'real@example.com',
+        email: 'real@example.com',
+        session_token: 'linked-token',
+        public_key: 'G'.padEnd(56, 'D'),
+        last_activity: new Date().toISOString(),
+      },
+    });
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: linkedSessionId,
+      user_id: 'real@example.com',
+    });
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'quero deslogar',
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.onboardingRequired).toBe(true);
+      expect(payload.reason).toBe('missing_account_credentials');
+      expect(payload.creationUrl).toBe('https://app.example.com/create-account');
+      expect(createOnboardUrlWithShortLinkMock).toHaveBeenCalledWith('whatsapp', '5511999999999', expect.objectContaining({
+        source: 'whatsapp',
+      }));
+      expect(createLoginUrlWithShortLinkMock).not.toHaveBeenCalled();
+      expect(processInputMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('requires re-login when the mapped Telegram session belongs to a different account owner', async () => {
     const staleSessionId = '11111111-1111-4111-8111-111111111111';
     const linkedSessionId = '22222222-2222-4222-8222-222222222222';
@@ -374,6 +503,7 @@ describe('agent Telegram identity binding', () => {
         user_id: 'bob@example.com',
         email: 'bob@example.com',
         session_token: 'linked-token',
+        password_hash: 'hashed-pin',
         public_key: 'G'.padEnd(56, 'B'),
         last_activity: new Date().toISOString(),
       },
