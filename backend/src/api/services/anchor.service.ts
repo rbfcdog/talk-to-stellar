@@ -5857,7 +5857,91 @@ export class AnchorService {
         : {
           amount_decimal: amountDecimal,
           raw: balance,
-        },
+      },
+    };
+  }
+
+  static async getDefindexYieldHistoryForSession(input: RampSessionInput & {
+    asset_code?: string;
+    assetCode?: string;
+    vault_address?: string;
+    vaultAddress?: string;
+  }): Promise<{
+    success: true;
+    public_key: string;
+    vault: Record<string, unknown>;
+    points: Array<{
+      date: string;
+      amount: string;
+      delta: string;
+      action: 'deposit' | 'withdraw';
+      operation_id: string;
+    }>;
+    source: 'operation_history';
+  }> {
+    const context = await this.resolveSessionWallet(input);
+    const assetCode = coalesceString(input.asset_code, input.assetCode);
+    const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
+    const vault = DefindexYieldService.requireVault(assetCode, requestedVault);
+    let operations: Awaited<ReturnType<typeof OperationRepository.findByUserId>>;
+
+    try {
+      operations = await OperationRepository.findByUserId(context.userId);
+    } catch (error) {
+      logDefindex('warn', 'history_operation_load_failed', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        ...defindexErrorFields(error),
+      });
+      operations = [];
+    }
+
+    const relevant = (operations || [])
+      .filter((operation) => {
+        const type = String(operation?.type || '').toUpperCase();
+        if (!type.startsWith('DEFINDEX_YIELD_')) return false;
+        const status = String(operation?.status || '').toUpperCase();
+        if (!['COMPLETED', 'SUCCESS'].includes(status)) return false;
+        if (normalizeAssetCode(operation?.asset_code) !== normalizeAssetCode(vault.asset_code)) return false;
+        if (operation?.source_public_key && String(operation.source_public_key) !== context.publicKey) return false;
+        if (!operation?.source_public_key && operation?.source_session_id && String(operation.source_session_id) !== context.sessionId) return false;
+
+        const operationContext = parseOperationContext(operation?.context);
+        const operationVault = coalesceString(operationContext.vault_address, operationContext.vaultAddress);
+        return !operationVault || operationVault === vault.vault_address;
+      })
+      .sort((a, b) => Date.parse(String(a.created_at || '')) - Date.parse(String(b.created_at || '')));
+
+    let running = 0;
+    const points = relevant.flatMap((operation) => {
+      const rawAmount = parseHumanAmountNumber(operation?.amount);
+      if (!Number.isFinite(rawAmount) || rawAmount <= 0) return [];
+      const type = String(operation?.type || '').toUpperCase();
+      const action = type.includes('WITHDRAW') ? 'withdraw' as const : 'deposit' as const;
+      const delta = action === 'withdraw' ? -rawAmount : rawAmount;
+      running = Math.max(0, running + delta);
+      return [{
+        date: String(operation.created_at || operation.updated_at || new Date().toISOString()),
+        amount: formatDecimalAmount(running),
+        delta: delta < 0 ? `-${formatDecimalAmount(Math.abs(delta))}` : formatDecimalAmount(delta),
+        action,
+        operation_id: String(operation.id || ''),
+      }];
+    });
+
+    return {
+      success: true,
+      public_key: context.publicKey,
+      vault: {
+        ...vault,
+        display_asset_code: userFacingAssetCode(vault.asset_code),
+      },
+      points,
+      source: 'operation_history',
     };
   }
 

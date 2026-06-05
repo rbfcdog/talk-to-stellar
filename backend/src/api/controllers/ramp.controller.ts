@@ -185,6 +185,16 @@ export class RampController {
     }
   }
 
+  static async getDefindexYieldHistory(req: Request, res: Response) {
+    try {
+      const result = await AnchorService.getDefindexYieldHistoryForSession(requestInput(req));
+      res.status(200).json(result);
+    } catch (error: any) {
+      logYieldRouteFailure('history', req, error);
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, req));
+    }
+  }
+
   static async prepareDefindexYield(req: Request, res: Response) {
     try {
       const result = await AnchorService.prepareDefindexYieldForSession(requestInput(req));
