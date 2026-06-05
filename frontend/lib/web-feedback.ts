@@ -10,7 +10,7 @@ export type WebChatFeedback = {
 
 export const WEB_CHAT_FEEDBACK_EVENT = "talk-to-stellar:web-chat-feedback"
 export const WEB_CHAT_FEEDBACK_CHANNEL = "talk-to-stellar-web-chat-feedback"
-export const INTERMEDIATE_PAGE_CLOSE_DELAY_MS = 600
+export const INTERMEDIATE_PAGE_CLOSE_DELAY_MS = 4000
 export const INTERMEDIATE_PAGE_CLOSE_COPY = "Esta tela fecha automaticamente."
 const WEB_CHAT_FEEDBACK_KEY = "talk-to-stellar.webChatFeedbackQueue"
 
