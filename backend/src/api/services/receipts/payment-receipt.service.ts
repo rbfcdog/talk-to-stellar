@@ -15,6 +15,7 @@ export type PaymentReceiptInput = {
   type: ReceiptType;
   sessionId: string;
   userId: string;
+  language?: 'pt-BR' | 'en' | string | null;
   provider?: string | null;
   providerUserId?: string | null;
   counterpartyLabel?: string | null;
@@ -76,6 +77,43 @@ export class PaymentReceiptService {
       return 'TalkToStellar';
     }
     return raw;
+  }
+
+  private static normalizeReceiptLanguage(value?: unknown): 'pt-BR' | 'en' {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english') || normalized.includes('ingles')) {
+      return 'en';
+    }
+    return 'pt-BR';
+  }
+
+  private static async resolveReceiptLanguage(input: PaymentReceiptInput): Promise<'pt-BR' | 'en'> {
+    const direct = String(
+      input.language ||
+      input.quote?.language ||
+      input.quote?.lang ||
+      input.quote?.locale ||
+      input.quote?.operation_context?.language ||
+      input.quote?.operationContext?.language ||
+      ''
+    ).trim();
+    if (direct) return this.normalizeReceiptLanguage(direct);
+
+    const sessionId = String(input.sessionId || '').trim();
+    if (!sessionId) return 'pt-BR';
+
+    try {
+      const session = await this.agentRepo.getSession(sessionId);
+      return this.normalizeReceiptLanguage(
+        (session as any)?.action_params?.language ||
+        (session as any)?.language ||
+        (session as any)?.preferred_language ||
+        ''
+      );
+    } catch (error) {
+      logger.debug(`[receipt] could not resolve receipt language for session=${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      return 'pt-BR';
+    }
   }
 
   private static sanitizeUserFacingText(value?: string | null): string {
@@ -246,13 +284,16 @@ export class PaymentReceiptService {
         counterpartyLabel: this.userFacingCounterpartyLabel(input.counterpartyLabel) || null,
         counterpartyKey: input.counterpartyKey || null,
         completedAt: input.completedAt || null,
+        language: input.language || null,
       },
     });
   }
 
   static async sendReceipt(input: PaymentReceiptInput): Promise<string> {
-    const text = await this.buildReceiptText(input);
-    const cumulativeSavingsText = await this.cumulativeSavingsLine(input);
+    const language = await this.resolveReceiptLanguage(input);
+    const localizedInput = { ...input, language };
+    const text = await this.buildReceiptText(localizedInput);
+    const cumulativeSavingsText = await this.cumulativeSavingsLine(localizedInput);
     let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
     const explicitDedupeKey = String(input.dedupeKey || '').trim();
@@ -261,7 +302,7 @@ export class PaymentReceiptService {
       : `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
 
     try {
-      viewerUrl = await this.createReceiptLink(input);
+      viewerUrl = await this.createReceiptLink(localizedInput);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to create receipt link: ${message}`);
@@ -274,11 +315,11 @@ export class PaymentReceiptService {
         .replace(/(?:^|\n)\s*(?:Comprovante|Receipt):\s*(?:\n|$)/gi, '\n')
         .trim();
       if (!base || !receiptUrl || base.includes(receiptUrl)) return base;
-      return `${base}\nComprovante: ${receiptUrl}`;
+      return `${base}\n${language === 'en' ? 'Receipt' : 'Comprovante'}: ${receiptUrl}`;
     };
     const textWithLink = appendReceiptLink(text);
-    const savingsFirstDeliveryText = appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(input, receiptUrl));
-    const externalDeliveryBase = this.sanitizeUserFacingText(input.externalDeliveryText);
+    const savingsFirstDeliveryText = appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(localizedInput, receiptUrl));
+    const externalDeliveryBase = this.sanitizeUserFacingText(localizedInput.externalDeliveryText);
     const externalDeliveryText = savingsFirstDeliveryText || appendReceiptLink(externalDeliveryBase || text);
 
     try {
@@ -356,8 +397,8 @@ export class PaymentReceiptService {
     }
   }
 
-  private static whatsappCurrency(value: number, currency: 'BRL' | 'USD', decimals = 2): string {
-    const formatted = new Intl.NumberFormat('pt-BR', {
+  private static whatsappCurrency(value: number, currency: 'BRL' | 'USD', decimals = 2, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    const formatted = new Intl.NumberFormat(language === 'en' ? 'en-US' : 'pt-BR', {
       style: 'currency',
       currency,
       minimumFractionDigits: decimals,
@@ -366,10 +407,10 @@ export class PaymentReceiptService {
     return formatted.replace(/\u00a0/g, ' ');
   }
 
-  private static whatsappTimestamp(completedAt?: string | null): string {
+  private static whatsappTimestamp(completedAt?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const parsed = completedAt ? Date.parse(completedAt) : Date.now();
     const date = Number.isFinite(parsed) ? new Date(parsed) : new Date();
-    const dateLabel = new Intl.DateTimeFormat('pt-BR', {
+    const dateLabel = new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'pt-BR', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -445,6 +486,8 @@ export class PaymentReceiptService {
   private static async buildSavingsFirstWhatsappReceipt(input: PaymentReceiptInput, viewerUrl?: string): Promise<string> {
     const type = String(input.type || '').trim();
     if (!this.shouldUseSavingsFirstExternalReceipt(input)) return '';
+    const language = this.normalizeReceiptLanguage(input.language);
+    const isEn = language === 'en';
 
     const fee = await this.resolveFeeBreakdown(input);
     const grossBrl = this.estimateReceiptBrlAmount(input, fee);
@@ -470,20 +513,26 @@ export class PaymentReceiptService {
     });
     const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash);
     return [
-      type === 'conversion' ? '✅ *Conversão concluída*' : '✅ *Transferência concluída*',
-      this.whatsappTimestamp(input.completedAt),
+      type === 'conversion'
+        ? (isEn ? '✅ *Conversion completed*' : '✅ *Conversão concluída*')
+        : (isEn ? '✅ *Transfer completed*' : '✅ *Transferência concluída*'),
+      this.whatsappTimestamp(input.completedAt, language),
       '',
-      `💵 Entregue: *${this.whatsappCurrency(usdReceived, 'USD')}*`,
-      `📤 Enviado: ${this.whatsappCurrency(grossBrl, 'BRL')}`,
-      `💳 Taxa paga: ${this.whatsappCurrency(actualFeeBrl, 'BRL')}`,
+      `💵 ${isEn ? 'Delivered' : 'Entregue'}: *${this.whatsappCurrency(usdReceived, 'USD', 2, language)}*`,
+      `📤 ${isEn ? 'Sent' : 'Enviado'}: ${this.whatsappCurrency(grossBrl, 'BRL', 2, language)}`,
+      `💳 ${isEn ? 'Fee paid' : 'Taxa paga'}: ${this.whatsappCurrency(actualFeeBrl, 'BRL', 2, language)}`,
       '',
       '━━━━━━━━━━━━━━',
-      `💰 *Você economizou ${this.whatsappCurrency(savings, 'BRL')}*`,
-      `vs banco que cobraria ${this.whatsappCurrency(traditionalFeeBrl, 'BRL')}`,
+      isEn
+        ? `💰 *You saved ${this.whatsappCurrency(savings, 'BRL', 2, language)}*`
+        : `💰 *Você economizou ${this.whatsappCurrency(savings, 'BRL', 2, language)}*`,
+      isEn
+        ? `vs bank estimate of ${this.whatsappCurrency(traditionalFeeBrl, 'BRL', 2, language)}`
+        : `vs banco que cobraria ${this.whatsappCurrency(traditionalFeeBrl, 'BRL', 2, language)}`,
       '━━━━━━━━━━━━━━',
       '',
-      `📊 Ver histórico: ${historyUrl}`,
-      `📄 Comprovante: ${receiptUrl}`,
+      `📊 ${isEn ? 'View history' : 'Ver histórico'}: ${historyUrl}`,
+      `📄 ${isEn ? 'Receipt' : 'Comprovante'}: ${receiptUrl}`,
     ].join('\n');
   }
 

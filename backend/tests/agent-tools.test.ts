@@ -241,10 +241,10 @@ describe('Agent tool execution', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.quote.brl_per_usdc).toBe(5.13);
-    expect(parsed.output.receive_usdc).toBeCloseTo(974.66, 2);
+    expect(parsed.output.receive_usdc).toBeCloseTo(971.73, 2);
     expect(parsed.fees.total_fee_brl).toBeGreaterThanOrEqual(0);
-    expect(parsed.comparison.traditional_fee_brl).toBe(175);
-    expect(parsed.message).toContain('Estimativa: R$ 5.000 -> US$ 974,66 líquido.');
+    expect(parsed.comparison.traditional_fee_brl).toBe(62.5);
+    expect(parsed.message).toContain('Estimativa: R$ 5.000 -> US$ 971,73 líquido.');
   });
 
   it('shows a WhatsApp savings calculator with real conversion preview data and comparison fees', async () => {
@@ -254,15 +254,15 @@ describe('Agent tool execution', () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.success).toBe(true);
-    expect(parsed.usd_received).toBeCloseTo(974.66, 2);
+    expect(parsed.usd_received).toBeCloseTo(971.73, 2);
     expect(parsed.brl_per_usdc).toBe(5.13);
-    expect(parsed.talktostellar_fee_brl).toBe(0);
-    expect(parsed.traditional_bank_fee_brl).toBe(175);
+    expect(parsed.talktostellar_fee_brl).toBe(15);
+    expect(parsed.traditional_bank_fee_brl).toBe(62.5);
     expect(parsed.wise_reference_fee_brl).toBe(90);
-    expect(parsed.savings_brl).toBeGreaterThan(174.99);
-    expect(parsed.annual_savings_brl).toBeGreaterThan(2099);
+    expect(parsed.savings_brl).toBeGreaterThan(47.49);
+    expect(parsed.annual_savings_brl).toBeGreaterThan(569);
     expect(parsed.message).toContain('💸 *Simulação de envio: R$ 5.000*');
-    expect(parsed.message).toContain('✅ Você recebe líquido: *US$ 974,66*');
+    expect(parsed.message).toContain('✅ Você recebe líquido: *US$ 971,73*');
     expect(parsed.message).toContain('💱 Dólar agora: *R$ 5,1300*');
     expect(parsed.message).toContain('Taxa total');
   });
@@ -290,11 +290,11 @@ describe('Agent tool execution', () => {
       const parsed = JSON.parse(output);
 
       expect(parsed.success).toBe(true);
-      expect(parsed.savings_brl).toBe(160);
+      expect(parsed.savings_brl).toBe(47.5);
       expect(parsed.recipient_name).toBe('Ana Silva');
       expect(parsed.message).toContain('✅ *Transferência concluída*');
       expect(parsed.message).toContain('👤 Destinatário: *Ana Silva*');
-      expect(parsed.message).toContain('💰 *Você economizou R$ 160,00*');
+      expect(parsed.message).toContain('💰 *Você economizou R$ 47,50*');
       expect(parsed.message.indexOf('💰 *Você economizou')).toBeLessThan(parsed.message.indexOf('📄 Comprovante PDF:'));
       expect(parsed.message).toContain('📊 Ver histórico: https://app.example.com/r/savings_history');
       expect(parsed.message).toContain('📄 Comprovante PDF: https://app.example.com/receipt/test');
@@ -303,6 +303,48 @@ describe('Agent tool execution', () => {
         userId: 'user-1',
         counterpartyLabel: 'Ana Silva',
       }));
+    } finally {
+      shortLinkSpy.mockRestore();
+      receiptSpy.mockRestore();
+    }
+  });
+
+  it('builds the savings receipt in English when language is en', async () => {
+    const ExternalService = require('../src/api/services/core/external.service').default;
+    const { PaymentReceiptService } = require('../src/api/services/payment-receipt.service');
+    const shortLinkSpy = jest
+      .spyOn(ExternalService.prototype, 'shortenPublicUrl')
+      .mockImplementation(async (input: any) => `https://app.example.com/r/${input.purpose}`);
+    const receiptSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://app.example.com/receipt/en-test');
+
+    try {
+      const output = await executeTool('send_receipt_with_savings', {
+        brl_sent: '448.72',
+        usd_received: '100',
+        fee_charged: '2.23',
+        stellar_hash: 'englishreceiptccccccccccccccccccccccccccccccccccd91c',
+        recipient_name: 'Ana Silva',
+        session_id: '22222222-2222-4222-8222-222222222222',
+        user_id: 'user-english',
+        language: 'en',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toContain('✅ *Transfer completed*');
+      expect(parsed.message).toContain('👤 Recipient: *Ana Silva*');
+      expect(parsed.message).toContain('💵 Delivered:');
+      expect(parsed.message).toContain('📤 Sent:');
+      expect(parsed.message).toContain('💳 Fee paid:');
+      expect(parsed.message).toContain('💰 *You saved');
+      expect(parsed.message).toContain('📊 View history: https://app.example.com/r/savings_history');
+      expect(parsed.message).toContain('📄 Receipt PDF: https://app.example.com/receipt/en-test');
+      expect(parsed.message).not.toContain('Transferência concluída');
+      expect(parsed.message).not.toContain('Destinatário');
+      expect(parsed.message).not.toContain('Você economizou');
+      expect(parsed.message).not.toContain('Comprovante');
     } finally {
       shortLinkSpy.mockRestore();
       receiptSpy.mockRestore();
