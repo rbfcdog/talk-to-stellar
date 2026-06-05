@@ -810,11 +810,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function normalizeBalances(balances: any[]): Array<{
+type NormalizedWalletBalance = {
   asset_code: string;
   asset_issuer?: string;
   balance: string;
-}> {
+};
+
+function normalizeBalances(balances: any[]): NormalizedWalletBalance[] {
   const configuredCodes = new Set(['XLM', ...getUserFacingAssetCodes()]);
   return (Array.isArray(balances) ? balances : [])
     .map((balance) => ({
@@ -826,6 +828,41 @@ function normalizeBalances(balances: any[]): Array<{
       configuredCodes.has(balance.asset_code) &&
       (balance.asset_code === 'XLM' || assetMatchesConfiguredIssuer(balance.asset_code, balance.asset_issuer))
     ));
+}
+
+function mergeBalanceAdjustments(
+  balances: NormalizedWalletBalance[],
+  adjustments: NormalizedWalletBalance[],
+): NormalizedWalletBalance[] {
+  const byKey = new Map<string, NormalizedWalletBalance & { numericBalance: number }>();
+  const keyFor = (balance: NormalizedWalletBalance) => `${normalizeAssetCode(balance.asset_code)}:${balance.asset_issuer || ''}`;
+
+  for (const balance of balances) {
+    const key = keyFor(balance);
+    const numericBalance = parseHumanAmountNumber(balance.balance);
+    byKey.set(key, {
+      ...balance,
+      numericBalance: Number.isFinite(numericBalance) ? numericBalance : 0,
+    });
+  }
+
+  for (const adjustment of adjustments) {
+    const amount = parseHumanAmountNumber(adjustment.balance);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const key = keyFor(adjustment);
+    const existing = byKey.get(key);
+    byKey.set(key, {
+      asset_code: normalizeAssetCode(adjustment.asset_code),
+      asset_issuer: adjustment.asset_issuer,
+      numericBalance: (existing?.numericBalance || 0) + amount,
+      balance: '0',
+    });
+  }
+
+  return Array.from(byKey.values()).map(({ numericBalance, ...balance }) => ({
+    ...balance,
+    balance: formatDecimalAmount(numericBalance),
+  }));
 }
 
 function assertSufficientBalance(
@@ -1786,6 +1823,9 @@ export class AnchorService {
           }
         } catch (balanceError) {
           console.warn('[ramp] Could not read updated balance for PIX receipt:', debugErrorMessage(balanceError));
+        }
+        if (!balanceContext && (record.transaction as any).sandbox_ledger_settlement === true) {
+          balanceContext = ` Saldo atualizado: ${formatDisplayAmount(destinationAmount, userFacingFinalAsset)}.`;
         }
       }
       const fee = receiptBrlFeeFromContext(
@@ -5089,6 +5129,69 @@ export class AnchorService {
     return { order_id: orderId, upstream_status: status, success: status >= 200 && status < 300 };
   }
 
+  private static async getSandboxLedgerBalanceAdjustments(
+    context: SessionWalletContext,
+  ): Promise<NormalizedWalletBalance[]> {
+    if (!this.getRuntimeInfo().sandbox) return [];
+
+    let operations: Awaited<ReturnType<typeof OperationRepository.findByUserId>>;
+    try {
+      operations = await OperationRepository.findByUserId(context.userId);
+    } catch (error) {
+      console.warn('[ramp] Could not load sandbox ledger balance adjustments:', debugErrorMessage(error));
+      return [];
+    }
+
+    const totals = new Map<string, { asset_code: string; asset_issuer?: string; amount: number }>();
+    const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
+
+    for (const operation of operations || []) {
+      if (String(operation?.type || '').toUpperCase() !== 'PIX_ONRAMP') continue;
+      if (!['COMPLETED', 'SUCCESS'].includes(String(operation?.status || '').toUpperCase())) continue;
+
+      const sourcePublicKey = coalesceString((operation as any).source_public_key);
+      const sourceSessionId = coalesceString((operation as any).source_session_id);
+      if (sourcePublicKey && sourcePublicKey !== context.publicKey) continue;
+      if (!sourcePublicKey && sourceSessionId && sourceSessionId !== context.sessionId) continue;
+
+      const operationContext = parseOperationContext(operation?.context);
+      if (operationContext.sandbox_ledger_settlement !== true) continue;
+      if (coalesceString(operationContext.final_settlement_mode) !== 'sandbox_anchor_only') continue;
+      if (operationContext.auto_pay_after_ramp === true) continue;
+
+      const finalAsset = resolveRampFinalAsset(
+        operationContext.final_asset,
+        operationContext.target_asset,
+        operationContext.final_asset_code,
+        operation?.asset_code,
+        'TESOURO',
+      );
+
+      if (!sameIssuedAsset(finalAsset, tesouroAsset)) continue;
+
+      const amount = parseHumanAmountNumber(coalesceString(
+        operationContext.final_amount,
+        operationContext.destination_amount_anchor,
+        operation?.amount,
+      ));
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const key = `${finalAsset.code}:${finalAsset.issuer || ''}`;
+      const existing = totals.get(key);
+      totals.set(key, {
+        asset_code: finalAsset.code,
+        asset_issuer: finalAsset.issuer,
+        amount: (existing?.amount || 0) + amount,
+      });
+    }
+
+    return Array.from(totals.values()).map((row) => ({
+      asset_code: row.asset_code,
+      asset_issuer: row.asset_issuer,
+      balance: formatDecimalAmount(row.amount),
+    }));
+  }
+
   static async getWalletBalancesForSession(input: RampSessionInput): Promise<{
     public_key: string;
     balances: Array<{ asset_code: string; asset_issuer?: string; balance: string }>;
@@ -5098,9 +5201,11 @@ export class AnchorService {
       await StellarService.ensureTestnetAccountFunded(context.publicKey, 1);
     }
     const balances = await StellarService.getAccountBalance(context.publicKey);
+    const normalizedBalances = normalizeBalances(balances);
+    const sandboxLedgerAdjustments = await this.getSandboxLedgerBalanceAdjustments(context);
     return {
       public_key: context.publicKey,
-      balances: normalizeBalances(balances),
+      balances: mergeBalanceAdjustments(normalizedBalances, sandboxLedgerAdjustments),
     };
   }
 
