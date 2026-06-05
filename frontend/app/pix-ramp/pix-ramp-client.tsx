@@ -4368,9 +4368,7 @@ function EtherfuseMeasuredFeeNotice({
     ? Math.max(0, Math.min(100, ((traditionalFee - totalEstimatedFee) / traditionalFee) * 100))
     : 0;
   const savingsPercent = noisySavingsPercent(rawSavingsPercent, `${mode}:estimated:${savingsSeed || numericAmount || "amount"}`);
-  const remainingFeePercent = traditionalFee > 0
-    ? Math.max(0, Math.min(100, (totalEstimatedFee / traditionalFee) * 100))
-    : 0;
+  const remainingFeePercent = Math.max(0, Math.min(100, 100 - savingsPercent));
   const showOffRampComparison = mode === "offramp" && traditionalFee > 0 && totalEstimatedFee > 0;
   const label = mode === "onramp"
     ? L("Antes de gerar o PIX", "Before creating PIX")
