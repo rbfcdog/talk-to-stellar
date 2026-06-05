@@ -4307,37 +4307,47 @@ function EtherfuseMeasuredFeeNotice({
     ? L("Taxas aparecem antes da confirmação.", "Fees appear before confirmation.")
     : L("Taxas aparecem antes da confirmação.", "Fees appear before confirmation.");
 
+  const comparison = showOffRampComparison ? (
+    <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-tts-confirm/35 bg-tts-confirm/10 p-3">
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{L("Comparativo", "Comparison")}</p>
+        <p className="mt-1 text-2xl font-black leading-none text-tts-confirm">{formatPercentValue(savingsPercent, language)}%</p>
+      </div>
+      <div className="text-right">
+        <p className="text-xs font-black text-tts-deep">{L("menos taxa", "less fee")}</p>
+        <p className="mt-1 text-[10px] font-semibold leading-4 text-tts-muted">
+          {formatPercentValue(remainingFeePercent, language)}% {L("do tradicional", "of traditional cost")}
+        </p>
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <div className="tts-mobile-soft-hide mt-4 rounded-xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep md:block">
-      <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{label}</p>
+    <>
       {showOffRampComparison && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-tts-confirm/35 bg-tts-confirm/10 p-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{L("Comparativo", "Comparison")}</p>
-            <p className="mt-1 text-2xl font-black leading-none text-tts-confirm">{formatPercentValue(savingsPercent, language)}%</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-black text-tts-deep">{L("menos taxa", "less fee")}</p>
-            <p className="mt-1 text-[10px] font-semibold leading-4 text-tts-muted">
-              {formatPercentValue(remainingFeePercent, language)}% {L("do tradicional", "of traditional cost")}
-            </p>
-          </div>
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-tts-confirm/25 bg-tts-confirm/10 px-3 py-2 text-tts-deep md:hidden">
+          <span className="text-2xl font-black leading-none text-tts-confirm">{formatPercentValue(savingsPercent, language)}%</span>
+          <span className="text-right text-[11px] font-black leading-4 text-tts-muted">{L("menos taxa", "less fee")}</span>
         </div>
       )}
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
-          <p className="text-[11px] font-black uppercase tracking-normal text-tts-gold">
-            {mode === "onramp" ? L("Taxa PIX", "PIX fee") : L("Taxa de retirada", "Withdrawal fee")}
-          </p>
-          <p className="mt-1 text-lg font-black">{formatMoney(estimatedProviderFee)}</p>
+      <div className="tts-mobile-soft-hide mt-4 rounded-xl border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep md:block">
+        <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{label}</p>
+        {comparison}
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
+            <p className="text-[11px] font-black uppercase tracking-normal text-tts-gold">
+              {mode === "onramp" ? L("Taxa PIX", "PIX fee") : L("Taxa de retirada", "Withdrawal fee")}
+            </p>
+            <p className="mt-1 text-lg font-black">{formatMoney(estimatedProviderFee)}</p>
+          </div>
+          <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
+            <p className="text-[11px] font-black uppercase tracking-normal text-tts-gold">{L("Taxa do app", "App fee")}</p>
+            <p className="mt-1 text-lg font-black">{formatMoney(estimatedTtsFee)}</p>
+          </div>
         </div>
-        <div className="rounded-xl border border-tts-gold/30 bg-tts-surface p-3 text-tts-deep">
-          <p className="text-[11px] font-black uppercase tracking-normal text-tts-gold">{L("Taxa do app", "App fee")}</p>
-          <p className="mt-1 text-lg font-black">{formatMoney(estimatedTtsFee)}</p>
-        </div>
+        <p className="mt-3 text-xs font-semibold leading-5 text-tts-muted">{description}</p>
       </div>
-      <p className="mt-3 text-xs font-semibold leading-5 text-tts-muted">{description}</p>
-    </div>
+    </>
   );
 }
 
