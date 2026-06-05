@@ -20,7 +20,7 @@ export class QuotesController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, 'Nao consegui criar a cotacao agora. Tente novamente em alguns segundos.'),
+        message: publicErrorMessage(error, 'Não consegui criar a cotação agora. Tente novamente em alguns segundos.'),
       });
     }
   }

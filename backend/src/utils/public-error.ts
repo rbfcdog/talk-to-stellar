@@ -57,55 +57,55 @@ function supportCode() {
   return `TTS-${stamp}-${suffix}`;
 }
 
-export function publicErrorMessage(error: unknown, fallback = 'Nao consegui concluir agora. Tente novamente em alguns segundos.') {
+export function publicErrorMessage(error: unknown, fallback = 'Não consegui concluir agora. Tente novamente em alguns segundos.') {
   const raw = rawMessage(error);
 
   switch (publicErrorCode(error)) {
     case 'quote_expired':
-      return 'A estimativa expirou. Atualize o valor ou peca uma nova estimativa no chat.';
+      return 'A estimativa expirou. Atualize o valor ou peça uma nova estimativa no chat.';
     case 'link_expired':
-      return 'Esse link expirou ou ja foi usado. Peca um novo link no chat.';
+      return 'Esse link expirou ou já foi usado. Peça um novo link no chat.';
     case 'session_expired':
-      return 'Sua sessao expirou. Entre novamente para continuar.';
+      return 'Sua sessão expirou. Entre novamente para continuar.';
     case 'setup_unavailable':
-      return 'Este ambiente ainda esta finalizando uma configuracao. Tente novamente em alguns segundos.';
+      return 'Este ambiente ainda está finalizando uma configuração. Tente novamente em alguns segundos.';
     case 'identity_conflict':
-      return 'Ja existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.';
+      return 'Já existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.';
     case 'account_preparing':
-      return 'Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.';
+      return 'Sua conta ainda está sendo preparada. Tente novamente em alguns segundos.';
     case 'yield_execution_disabled':
-      return 'A confirmacao ainda nao esta ativada neste ambiente de teste. Voce pode consultar a tela, mas a execucao real esta bloqueada.';
+      return 'A confirmação ainda não está ativada neste ambiente de teste. Você pode consultar a tela, mas a execução real está bloqueada.';
     case 'account_signing_unavailable':
-      return 'Esta conta ainda nao esta pronta para assinar esta operacao. Entre novamente e tente outra vez.';
+      return 'Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.';
     case 'missing_pin':
       return 'Digite o PIN da conta para confirmar.';
     case 'review_not_prepared':
-      return 'Prepare a confirmacao novamente e confirme em seguida.';
+      return 'Prepare a confirmação novamente e confirme em seguida.';
     case 'execution_unavailable':
-      return 'Nao consegui enviar essa transacao agora. Nenhum valor saiu da conta. Prepare uma nova confirmacao e tente novamente.';
+      return 'Não consegui enviar essa transação agora. Nenhum valor saiu da conta. Prepare uma nova confirmação e tente novamente.';
     case 'yield_unavailable':
-      return 'Nao foi possivel atualizar a aplicacao agora. Tente novamente em alguns segundos.';
+      return 'Não foi possível atualizar a aplicação agora. Tente novamente em alguns segundos.';
     case 'invalid_pin':
-      return 'Nao consegui validar o PIN. Confira e tente novamente.';
+      return 'Não consegui validar o PIN. Confira e tente novamente.';
     case 'insufficient_balance':
       return 'Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.';
     case 'recipient_not_found':
-      return 'Esse destinatario nao esta nos seus contatos salvos. Digite "contatos" no chat e escolha uma pessoa salva antes de gerar o PIX.';
+      return 'Esse destinatário não está nos seus contatos salvos. Digite "contatos" no chat e escolha uma pessoa salva antes de gerar o PIX.';
     case 'recipient_asset_not_ready':
-      return 'O destinatario ainda nao esta pronto para receber esse ativo. Peca para a pessoa entrar na conta TalkToStellar e ativar o ativo; depois gere um novo link.';
+      return 'O destinatário ainda não está pronto para receber esse ativo. Peça para a pessoa entrar na conta TalkToStellar e ativar o ativo; depois gere um novo link.';
     case 'pix_account_not_ready':
-      return 'Sua conta PIX ainda esta sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
+      return 'Sua conta PIX ainda está sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.';
     case 'pix_sandbox_settlement_unavailable':
-      return 'A retirada PIX em testnet ainda esta finalizando a configuracao. Tente novamente em alguns segundos.';
+      return 'A retirada PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.';
     case 'service_timeout':
-      return 'A operacao demorou demais. Tente novamente em alguns segundos; se o PIX ja foi pago, consulte o status antes de gerar outro.';
+      return 'A operação demorou demais. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.';
     case 'conversion_route_unavailable':
-      return 'Nao consegui encontrar uma rota segura para essa conversao agora. Tente novamente em alguns segundos ou escolha outro valor.';
+      return 'Não consegui encontrar uma rota segura para essa conversão agora. Tente novamente em alguns segundos ou escolha outro valor.';
     case 'provider_unavailable':
-      return 'O servico de pagamento nao respondeu agora. Tente novamente em alguns segundos; se ja confirmou algo, consulte o status antes de repetir.';
+      return 'O serviço de pagamento não respondeu agora. Tente novamente em alguns segundos; se já confirmou algo, consulte o status antes de repetir.';
   }
 
-  return fallback || raw || 'Nao consegui concluir agora. Tente novamente em alguns segundos.';
+  return fallback || raw || 'Não consegui concluir agora. Tente novamente em alguns segundos.';
 }
 
 export function publicErrorPayload(error: unknown, options: { code?: string; includeSupportCode?: boolean; fallback?: string } = {}): PublicErrorPayload {

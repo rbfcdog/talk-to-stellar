@@ -753,20 +753,20 @@ function classifyDefindexBuildFailure(error: unknown): {
   if (/missing\s*trustline|missingtrustline|trustline|trust line/.test(text)) {
     return {
       code: 'yield_account_setup_required',
-      reason: 'Aplicacao preparada. Nao precisa criar outra conta; falta ativar esta moeda para confirmacao nesta conta. Tente novamente em alguns segundos ou escolha outra opcao.',
+      reason: 'Aplicação preparada. Não precisa criar outra conta; falta ativar esta moeda para confirmação nesta conta. Tente novamente em alguns segundos ou escolha outra opção.',
       setupRequired: true,
     };
   }
   if (/insufficient|underfunded|not enough|saldo|balance/.test(text)) {
     return {
       code: 'insufficient_balance',
-      reason: 'Aplicacao preparada, mas o saldo disponivel nao e suficiente para confirmar este valor.',
+      reason: 'Aplicação preparada, mas o saldo disponível não é suficiente para confirmar este valor.',
       setupRequired: false,
     };
   }
   return {
     code: 'yield_execution_unavailable',
-    reason: 'Aplicacao preparada. A confirmacao por PIN ainda nao esta disponivel para esta opcao; tente novamente em alguns segundos ou escolha outra opcao.',
+    reason: 'Aplicação preparada. A confirmação por PIN ainda não está disponível para esta opção; tente novamente em alguns segundos ou escolha outra opção.',
     setupRequired: false,
   };
 }
@@ -948,6 +948,35 @@ function calculateBalanceDeltas(before: any[], after: any[]): Array<{
       delta: Number.isFinite(delta) ? delta.toFixed(7).replace(/\.?0+$/, '') : '0',
     };
   });
+}
+
+function issuedAssetBalanceAmount(
+  balances: any[],
+  asset: { code: string; issuer?: string },
+): number {
+  const settlementCode = settlementAssetCode(asset.code);
+  const normalized = normalizeBalances(balances).find((balance) => (
+    normalizeAssetCode(balance.asset_code) === normalizeAssetCode(settlementCode) &&
+    (normalizeAssetCode(settlementCode) === 'XLM' || assetMatchesConfiguredIssuer(settlementCode, balance.asset_issuer))
+  ));
+  const amount = Number(String(normalized?.balance || '0').replace(',', '.'));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function balanceDeltaAmount(before: any[], after: any[], asset: { code: string; issuer?: string }): number {
+  return issuedAssetBalanceAmount(after, asset) - issuedAssetBalanceAmount(before, asset);
+}
+
+function sandboxSettlementBalancePollDelays(): number[] {
+  const configured = String(process.env.SANDBOX_SETTLEMENT_BALANCE_POLL_MS || '').trim();
+  if (configured) {
+    const parsed = configured
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    if (parsed.length > 0) return parsed;
+  }
+  return [800, 1500, 2500, 4000];
 }
 
 function parseIssuedAssetIdentifier(identifier: string): { code: string; issuer?: string } {
@@ -1498,10 +1527,10 @@ export class AnchorService {
       input.passcode,
     );
     if (!/^\d{4,8}$/.test(pin)) {
-      throw apiError('PIN da conta e obrigatorio para confirmar esta operacao.', 400, 'missing_pin');
+      throw apiError('PIN da conta é obrigatório para confirmar esta operação.', 400, 'missing_pin');
     }
     if (!context.sessionPinHash || !verifyWalletPin(pin, context.sessionPinHash).valid) {
-      throw apiError('PIN invalido. Tente novamente.', 401, 'invalid_pin');
+      throw apiError('PIN inválido. Tente novamente.', 401, 'invalid_pin');
     }
     return pin;
   }
@@ -1751,7 +1780,8 @@ export class AnchorService {
             normalizeAssetCode(balance.asset_code) === normalizeAssetCode(settlementFinalAsset) &&
             (normalizeAssetCode(settlementFinalAsset) === 'XLM' || assetMatchesConfiguredIssuer(settlementFinalAsset, balance.asset_issuer))
           ));
-          if (updated?.balance) {
+          const updatedBalance = Number(String(updated?.balance || '0').replace(',', '.'));
+          if (updated && Number.isFinite(updatedBalance) && updatedBalance > 0) {
             balanceContext = ` Saldo atualizado: ${formatDisplayAmount(updated.balance, userFacingFinalAsset)}.`;
           }
         } catch (balanceError) {
@@ -1803,6 +1833,7 @@ export class AnchorService {
         status: pendingNonBrlFinalSettlement || pendingPostConversion ? 'processing' : 'completed',
         contextMessage,
         externalDeliveryText,
+        dedupeKey: record.operationId ? `pix-onramp:${record.operationId}` : undefined,
       });
     } catch (error) {
       console.warn('[ramp] Could not notify sandbox PIX completion:', debugErrorMessage(error));
@@ -2283,6 +2314,7 @@ export class AnchorService {
       coalesceString(input.context.source_amount_brl, input.transaction.fromAmount, input.operation.amount),
       destinationAmount,
     );
+    const operationId = coalesceString(input.operation.id);
 
     const receiptUrl = await PaymentReceiptService.sendReceipt({
       type: 'payment_received',
@@ -2301,9 +2333,9 @@ export class AnchorService {
       quote: input.context || null,
       status: 'completed',
       contextMessage: `PIX confirmado. Entregamos ${userFacingFinalAsset} na sua conta TalkToStellar.`,
+      dedupeKey: operationId ? `pix-onramp:${operationId}` : undefined,
     });
 
-    const operationId = coalesceString(input.operation.id);
     if (receiptUrl && operationId) {
       await OperationRepository.update(operationId, {
         context: JSON.stringify({
@@ -2333,6 +2365,7 @@ export class AnchorService {
     const destinationAmount = coalesceString(input.destinationAmount, input.context.post_conversion_amount, input.context.final_amount);
     const hash = coalesceString(input.hash, input.context.post_conversion_hash);
     if (!sourceAmount || !destinationAmount || !hash) return '';
+    const operationId = coalesceString(input.operation.id);
 
     const receiptUrl = await PaymentReceiptService.sendReceipt({
       type: 'conversion',
@@ -2354,9 +2387,9 @@ export class AnchorService {
         `Recebido final: ${formatDisplayAmount(destinationAmount, input.destinationAsset.code)}`,
         'Status: concluído',
       ].join('\n'),
+      dedupeKey: operationId ? `pix-post-conversion:${operationId}` : undefined,
     });
 
-    const operationId = coalesceString(input.operation.id);
     if (receiptUrl && operationId) {
       await OperationRepository.update(operationId, {
         context: JSON.stringify({
@@ -2489,6 +2522,7 @@ export class AnchorService {
         `Recebido final: ${formatDisplayAmount(destinationAmount, destinationAssetCode)}`,
         'Status: concluído',
       ].join('\n'),
+      dedupeKey: record.operationId ? `pix-post-conversion:${record.operationId}` : undefined,
     });
 
     if (receiptUrl) {
@@ -2717,6 +2751,7 @@ export class AnchorService {
     const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
 
     if (sameIssuedAsset(finalAsset, tesouroAsset)) {
+      const balancesBefore = await StellarService.getAccountBalance(record.publicKey);
       const directTesouroResult = await StellarService.submitAssetPaymentFromSecret({
         sourceSecret,
         destination: record.publicKey,
@@ -2727,6 +2762,24 @@ export class AnchorService {
       });
 
       if (directTesouroResult.success) {
+        let balancesAfter = await StellarService.getAccountBalance(record.publicKey);
+        let deliveredDelta = balanceDeltaAmount(balancesBefore, balancesAfter, tesouroAsset);
+        const expectedDelta = Number(destinationAmountTesouro);
+        for (const delayMs of sandboxSettlementBalancePollDelays()) {
+          if (Number.isFinite(deliveredDelta) && deliveredDelta + 0.0000001 >= expectedDelta) break;
+          await sleep(delayMs);
+          balancesAfter = await StellarService.getAccountBalance(record.publicKey);
+          deliveredDelta = balanceDeltaAmount(balancesBefore, balancesAfter, tesouroAsset);
+        }
+
+        if (!Number.isFinite(deliveredDelta) || deliveredDelta + 0.0000001 < expectedDelta) {
+          return this.failSandboxOnRamp(
+            record,
+            `Sandbox TESOURO delivery was submitted but wallet balance did not increase by ${destinationAmountTesouro}. ` +
+              `Detected delta: ${Number.isFinite(deliveredDelta) ? deliveredDelta.toFixed(7).replace(/\.?0+$/, '') : 'unknown'}.`,
+          );
+        }
+
         record.finalAmount = destinationAmountTesouro;
         record.deliverySourceAmount = record.sourceAmountBrl;
         (record.transaction as any).toAmount = destinationAmountTesouro;
@@ -2901,73 +2954,36 @@ export class AnchorService {
     const finalAsset = resolveRampFinalAsset(record.finalAssetCode || 'TESOURO', record.finalAssetIssuer);
     const tesouroAsset = { code: 'TESOURO', issuer: this.getTesouroIssuer() };
     const pseudoHash = `sandbox-ledger-${String(record.transaction.id || crypto.randomUUID()).replace(/^sandbox-pix-/, '').slice(0, 18)}`;
-    if (!sameIssuedAsset(finalAsset, tesouroAsset)) {
-      record.deliverySourceAmount = record.sourceAmountBrl;
-      record.finalConversionSourceAmount = destinationAmountTesouro;
-      (record.transaction as any).sandbox_ledger_settlement = true;
-      (record.transaction as any).auto_conversion = {
-        required: true,
-        status: 'pending',
-        source_asset_code: 'TESOURO',
-        source_amount: destinationAmountTesouro,
-        destination_asset_code: finalAsset.code,
-        destination_asset_issuer: finalAsset.issuer,
-        mode: 'sandbox_anchor_only',
-        reason,
-      };
-
-      return this.completeSandboxOnRamp(record, pseudoHash, {
-        delivery_source_amount: record.sourceAmountBrl,
-        destination_amount_anchor: destinationAmountTesouro,
-        final_conversion_status: 'pending',
-        final_conversion_source_amount: destinationAmountTesouro,
-        final_conversion_mode: 'sandbox_anchor_only',
-        final_settlement_mode: 'sandbox_anchor_only',
-        sandbox_ledger_settlement: true,
-        settlement_note: `${reason} Final ${finalAsset.code} conversion was not simulated as a fake balance movement.`,
-      });
+    if (sameIssuedAsset(finalAsset, tesouroAsset)) {
+      return this.failSandboxOnRamp(
+        record,
+        `${reason} Configure TESOURO_DISTRIBUTOR_SECRET para creditar reais na wallet; recusando marcar o PIX como concluído sem movimento real de saldo.`,
+      );
     }
 
-    const finalAmount = toStellarAmount(coalesceString(
-      record.finalAmount,
-      record.desiredFinalAmount,
-      record.operationContext?.final_amount,
-      record.transaction.toAmount,
-      destinationAmountTesouro,
-    ));
-
-    record.finalAmount = finalAmount;
     record.deliverySourceAmount = record.sourceAmountBrl;
-    record.finalConversionHash = pseudoHash;
     record.finalConversionSourceAmount = destinationAmountTesouro;
-    (record.transaction as any).toAmount = finalAmount;
-    (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
-    (record.transaction as any).finalAmount = finalAmount;
     (record.transaction as any).sandbox_ledger_settlement = true;
     (record.transaction as any).auto_conversion = {
-      required: !sameIssuedAsset(finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() }),
-      status: 'completed',
+      required: true,
+      status: 'pending',
       source_asset_code: 'TESOURO',
       source_amount: destinationAmountTesouro,
       destination_asset_code: finalAsset.code,
       destination_asset_issuer: finalAsset.issuer,
-      destination_amount: finalAmount,
-      hash: pseudoHash,
-      mode: 'sandbox_ledger_no_distributor',
+      mode: 'sandbox_anchor_only',
       reason,
     };
 
     return this.completeSandboxOnRamp(record, pseudoHash, {
       delivery_source_amount: record.sourceAmountBrl,
       destination_amount_anchor: destinationAmountTesouro,
-      final_conversion_status: 'completed',
-      final_conversion_hash: pseudoHash,
+      final_conversion_status: 'pending',
       final_conversion_source_amount: destinationAmountTesouro,
-      final_conversion_mode: 'sandbox_ledger_no_distributor',
-      final_settlement_mode: 'sandbox_ledger_no_distributor',
-      final_amount: finalAmount,
+      final_conversion_mode: 'sandbox_anchor_only',
+      final_settlement_mode: 'sandbox_anchor_only',
       sandbox_ledger_settlement: true,
-      settlement_note: reason,
+      settlement_note: `${reason} Final ${finalAsset.code} conversion was not simulated as a fake balance movement.`,
     });
   }
 
@@ -3105,26 +3121,10 @@ export class AnchorService {
     assertSufficientBalance(currentBalances, sourceAsset, debitAmount);
     const collector = await this.ensureSandboxCollectorTrustline(sourceAsset);
     if (!collector.success || !collector.publicKey) {
-      if (this.sandboxLedgerSettlementEnabled()) {
-        const pseudoHash = `sandbox-offramp-${crypto.randomUUID().replace(/-/g, '')}`;
-        record.transaction.status = 'completed' as any;
-        record.transaction.updatedAt = new Date().toISOString();
-        record.submitHash = pseudoHash;
-        record.transaction.stellarTxHash = pseudoHash;
-        record.transaction.toAmount = record.destinationBrl || record.targetBrl || record.transaction.toAmount;
-        record.transaction.toCurrency = 'BRL';
-        (record.transaction as any).metadata = {
-          ...((record.transaction as any).metadata || {}),
-          sandbox_ledger_settlement: true,
-          final_settlement_mode: 'sandbox_ledger_no_distributor',
-          settlement_note: collector.error || `Could not prepare sandbox ${sourceAsset.code} collector.`,
-        };
-        await this.updateRampOperationStatus(record.operationId || input.operationId, 'COMPLETED');
-        return { success: true, order_id: input.orderId, hash: pseudoHash };
-      }
       record.transaction.status = 'failed' as any;
       record.transaction.updatedAt = new Date().toISOString();
-      record.submitError = collector.error || `Could not prepare sandbox ${sourceAsset.code} collector.`;
+      record.submitError = `${collector.error || `Could not prepare sandbox ${sourceAsset.code} collector.`} ` +
+        'Configure TESOURO_DISTRIBUTOR_SECRET and TESOURO_DISTRIBUTOR_PUBLIC to debit the wallet; refusing to mark PIX off-ramp as completed without a real balance movement.';
       await this.updateRampOperationStatus(record.operationId || input.operationId, 'FAILED');
       return { success: false, order_id: input.orderId, error: record.submitError };
     }
@@ -3149,6 +3149,25 @@ export class AnchorService {
       record.submitError = result.error || 'Sandbox off-ramp payment failed.';
       await this.updateRampOperationStatus(record.operationId || input.operationId, 'FAILED');
       return { ...result, order_id: input.orderId };
+    }
+
+    let balancesAfter = normalizeBalances(await StellarService.getAccountBalance(input.context.publicKey));
+    let debitedDelta = -balanceDeltaAmount(currentBalances, balancesAfter, sourceAsset);
+    const expectedDebit = Number(debitAmount);
+    for (const delayMs of sandboxSettlementBalancePollDelays()) {
+      if (Number.isFinite(debitedDelta) && debitedDelta + 0.0000001 >= expectedDebit) break;
+      await sleep(delayMs);
+      balancesAfter = normalizeBalances(await StellarService.getAccountBalance(input.context.publicKey));
+      debitedDelta = -balanceDeltaAmount(currentBalances, balancesAfter, sourceAsset);
+    }
+
+    if (!Number.isFinite(debitedDelta) || debitedDelta + 0.0000001 < expectedDebit) {
+      record.transaction.status = 'failed' as any;
+      record.transaction.updatedAt = new Date().toISOString();
+      record.submitError = `Sandbox off-ramp transaction was submitted but wallet balance did not decrease by ${debitAmount}. ` +
+        `Detected debit: ${Number.isFinite(debitedDelta) ? debitedDelta.toFixed(7).replace(/\.?0+$/, '') : 'unknown'}.`;
+      await this.updateRampOperationStatus(record.operationId || input.operationId, 'FAILED');
+      return { success: false, order_id: input.orderId, error: record.submitError, hash: result.hash };
     }
 
     record.transaction.status = 'completed' as any;
@@ -5355,7 +5374,7 @@ export class AnchorService {
           requiresConversion: true,
           conversionReady: false,
           executionBlockedCode: 'yield_account_setup_required',
-          executionBlockedReason: 'Aplicacao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
+          executionBlockedReason: 'Aplicação preparada. Não precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicação nesta conta. Tente novamente em alguns segundos.',
           setupRequired: true,
           vaultDepositAsset,
           walletSourceAsset,
@@ -5368,7 +5387,7 @@ export class AnchorService {
         requiresConversion: true,
         conversionReady: false,
         executionBlockedCode: 'yield_account_setup_required',
-        executionBlockedReason: 'Aplicacao preparada. Nao precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicacao nesta conta. Tente novamente em alguns segundos.',
+        executionBlockedReason: 'Aplicação preparada. Não precisa criar outra conta; ainda falta ativar a moeda usada por esta aplicação nesta conta. Tente novamente em alguns segundos.',
         setupRequired: true,
         trustline,
         vaultDepositAsset,
@@ -5384,7 +5403,7 @@ export class AnchorService {
         requiresConversion: true,
         conversionReady: false,
         executionBlockedCode: 'insufficient_balance',
-        executionBlockedReason: 'Aplicacao preparada, mas o saldo disponivel nao e suficiente para converter e confirmar este valor.',
+        executionBlockedReason: 'Aplicação preparada, mas o saldo disponível não é suficiente para converter e confirmar este valor.',
         setupRequired: false,
         trustline,
         vaultDepositAsset,
@@ -5451,8 +5470,8 @@ export class AnchorService {
           conversionReady: false,
           executionBlockedCode: 'yield_asset_conversion_unavailable',
           executionBlockedReason: sourceAvailable + 0.0000001 < sameCodeSanity.sourceMax
-            ? 'Aplicacao preparada, mas o saldo disponivel nao cobre a margem de seguranca para converter e confirmar este valor.'
-            : 'Aplicacao preparada. A rota de teste entre as duas emissoes desta moeda esta distorcida agora, entao a confirmacao foi bloqueada para evitar perda no valor convertido.',
+            ? 'Aplicação preparada, mas o saldo disponível não cobre a margem de segurança para converter e confirmar este valor.'
+            : 'Aplicação preparada. A rota de teste entre as duas emissões desta moeda está distorcida agora, então a confirmação foi bloqueada para evitar perda no valor convertido.',
           setupRequired: false,
           trustline,
           vaultDepositAsset,
@@ -5489,7 +5508,7 @@ export class AnchorService {
         requiresConversion: true,
         conversionReady: false,
         executionBlockedCode: 'yield_asset_conversion_unavailable',
-        executionBlockedReason: 'Aplicacao preparada. A rota para converter o saldo escolhido para esta aplicacao nao esta disponivel agora.',
+        executionBlockedReason: 'Aplicação preparada. A rota para converter o saldo escolhido para esta aplicação não está disponível agora.',
         setupRequired: false,
         trustline,
         vaultDepositAsset,
@@ -5576,7 +5595,7 @@ export class AnchorService {
           sufficient: false,
           executionBlockedCode: 'insufficient_balance',
           executionBlockedReason:
-            `Aplicacao preparada, mas XLM precisa manter reserva de rede. ` +
+            `Aplicação preparada, mas XLM precisa manter reserva de rede. ` +
             `Disponivel para aplicar: ${formatDisplayAmount(formatDecimalAmount(xlm.spendable), 'XLM')}. ` +
             `Saldo total: ${formatDisplayAmount(formatDecimalAmount(xlm.total), 'XLM')}. ` +
             `Reserva estimada: ${formatDisplayAmount(formatDecimalAmount(xlm.reserve), 'XLM')}.`,
@@ -5620,7 +5639,7 @@ export class AnchorService {
           sufficient: false,
           executionBlockedCode: 'insufficient_balance',
           executionBlockedReason:
-            `Aplicacao preparada, mas o saldo disponivel em ${userFacingAssetCode(sourceCode)} nao cobre este valor. ` +
+            `Aplicação preparada, mas o saldo disponível em ${userFacingAssetCode(sourceCode)} não cobre este valor. ` +
             `Disponivel: ${formatDisplayAmount(formatDecimalAmount(available), userFacingAssetCode(sourceCode))}. ` +
             `Solicitado: ${formatDisplayAmount(formatDecimalAmount(requested), userFacingAssetCode(sourceCode))}.`,
           sourceAvailable: formatDecimalAmount(available),
@@ -5754,7 +5773,7 @@ export class AnchorService {
     }
     const compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
     if (!compatibility.compatible) {
-      const reason = 'Aplicacao preparada. Esta opcao de teste usa uma moeda diferente da moeda que aparece no saldo da conta. Escolha outra opcao ou aguarde uma opcao compativel antes de confirmar.';
+      const reason = 'Aplicação preparada. Esta opção de teste usa uma moeda diferente da moeda que aparece no saldo da conta. Escolha outra opção ou aguarde uma opção compatível antes de confirmar.';
       logDefindex('warn', 'prepare_vault_asset_incompatible', {
         request_id: defindexRequestId(input),
         session_id: maskLogValue(context.sessionId),
@@ -5894,7 +5913,7 @@ export class AnchorService {
       const block = classified.code === 'insufficient_balance' && !hasVerifiedInsufficientBalance
         ? {
             code: 'yield_execution_unavailable' as const,
-            reason: 'Aplicacao preparada, mas a confirmacao de investimento esta indisponivel agora. Tente novamente em alguns segundos.',
+            reason: 'Aplicação preparada, mas a confirmação de investimento está indisponível agora. Tente novamente em alguns segundos.',
             setupRequired: false,
           }
         : classified;
@@ -5999,14 +6018,14 @@ export class AnchorService {
       });
       throw apiError(
         runtime.execution_blocked_reason ||
-          'Confirmacao de aplicacao desativada neste ambiente.',
+          'Confirmação de aplicação desativada neste ambiente.',
         403,
         'yield_execution_disabled',
       );
     }
     const context = await this.resolveSessionWallet(input);
     const walletPin = this.requireWalletPin(input, context);
-    if (!walletPin) throw apiError('PIN da conta e obrigatorio para confirmar esta operacao.', 400, 'missing_pin');
+    if (!walletPin) throw apiError('PIN da conta é obrigatório para confirmar esta operação.', 400, 'missing_pin');
     if (!context.vaultSecretId) {
       logDefindex('warn', 'execute_missing_signing_material', {
         request_id: defindexRequestId(input),
@@ -6014,7 +6033,7 @@ export class AnchorService {
         user_id: maskLogValue(context.userId),
         public_key: maskLogValue(context.publicKey),
       });
-      throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+      throw apiError('Esta conta ainda não está pronta para assinar esta operação.', 409, 'account_signing_unavailable');
     }
     let prepared = await this.prepareDefindexYieldForSession(input);
     const action = prepared.action;
@@ -6038,7 +6057,7 @@ export class AnchorService {
           vault_secret_id: maskLogValue(context.vaultSecretId),
           ...defindexErrorFields(error),
         });
-        throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+        throw apiError('Esta conta ainda não está pronta para assinar esta operação.', 409, 'account_signing_unavailable');
       }
       if (!/^S[A-Z2-7]{55}$/.test(secret)) {
         logDefindex('warn', 'execute_secret_invalid_format', {
@@ -6048,7 +6067,7 @@ export class AnchorService {
           public_key: maskLogValue(context.publicKey),
           vault_secret_id: maskLogValue(context.vaultSecretId),
         });
-        throw apiError('Esta conta ainda nao esta pronta para assinar esta operacao.', 409, 'account_signing_unavailable');
+        throw apiError('Esta conta ainda não está pronta para assinar esta operação.', 409, 'account_signing_unavailable');
       }
       return secret;
     };
@@ -6061,7 +6080,7 @@ export class AnchorService {
       const sourceMax = coalesceString(conversion.source_max, conversion.path_source_max);
       const destinationMin = coalesceString(conversion.destination_min);
       if (!sourceAsset || !destinationAsset || !destinationAmount || (!destinationMin && !sourceMax)) {
-        throw apiError('A confirmacao precisa ser preparada novamente.', 409, 'review_not_prepared');
+        throw apiError('A confirmação precisa ser preparada novamente.', 409, 'review_not_prepared');
       }
       const unsafeRatio = unsafeSameSymbolConversionRatio({
         sourceAsset,
@@ -6084,7 +6103,7 @@ export class AnchorService {
           same_symbol_ratio: unsafeRatio,
         });
         throw apiError(
-          'A conversao automatica entre duas emissoes desta moeda esta distorcida neste testnet. A confirmacao foi bloqueada para evitar perda de valor.',
+          'A conversão automática entre duas emissões desta moeda está distorcida neste testnet. A confirmação foi bloqueada para evitar perda de valor.',
           409,
           'yield_asset_conversion_unavailable',
         );
@@ -6135,7 +6154,7 @@ export class AnchorService {
           vault_address: maskLogValue(vault.vault_address),
           error: converted.error,
         });
-        throw apiError('Nao foi possivel converter o saldo para a moeda usada nesta aplicacao agora. Tente novamente mais tarde.', 409, 'yield_asset_conversion_unavailable');
+        throw apiError('Não foi possível converter o saldo para a moeda usada nesta aplicação agora. Tente novamente mais tarde.', 409, 'yield_asset_conversion_unavailable');
       }
       logDefindex('info', 'execute_vault_asset_conversion_success', {
         request_id: defindexRequestId(input),
@@ -6174,7 +6193,7 @@ export class AnchorService {
       const blockedCode = coalesceString((prepared as any).execution_blocked_code, 'yield_execution_unavailable');
       const blockedReason = coalesceString(
         prepared.execution_blocked_reason,
-        'A confirmacao por PIN ainda nao esta disponivel para esta aplicacao.',
+        'A confirmação por PIN ainda não está disponível para esta aplicação.',
       );
       logDefindex('warn', 'execute_review_not_ready', {
         request_id: defindexRequestId(input),
@@ -6212,7 +6231,7 @@ export class AnchorService {
         network: vault.network,
         ...defindexErrorFields(error),
       });
-      throw apiError('A confirmacao nao esta pronta. Prepare a operacao novamente antes de confirmar.', 409, 'review_not_prepared');
+      throw apiError('A confirmação não está pronta. Prepare a operação novamente antes de confirmar.', 409, 'review_not_prepared');
     }
 
     let sent: { hash: string; raw: any };
@@ -6248,7 +6267,7 @@ export class AnchorService {
         network: vault.network,
         ...defindexErrorFields(error),
       });
-      throw apiError('Falha de envio da transacao externa.', 502, 'execution_unavailable');
+      throw apiError('Falha de envio da transação externa.', 502, 'execution_unavailable');
     }
     logDefindex('info', 'execute_submit_success', {
       request_id: defindexRequestId(input),
@@ -7013,7 +7032,7 @@ export class AnchorService {
       'PIX confirmado e transferencia enviada.',
       `Valor: ${displayAmount}`,
       `Destino: ${recipient.displayName}`,
-      'Status: concluido',
+      'Status: concluído',
     ].join('\n');
     let receiptUrl = '';
     try {
@@ -7173,7 +7192,7 @@ export class AnchorService {
   }> {
     try {
       const operation = await OperationRepository.findById(operationId);
-      if (!operation) throw apiError('Operacao nao encontrada em nosso sistema.', 404);
+      if (!operation) throw apiError('Operação não encontrada em nosso sistema.', 404);
 
       const context = operation.context ? JSON.parse(operation.context) : {};
       const orderId = coalesceString(context.anchor_order_id, context.order_id);
@@ -7194,7 +7213,7 @@ export class AnchorService {
       }
 
 	      const message = ourStatus === 'COMPLETED'
-	        ? 'Ramp PIX concluido com sucesso.'
+	        ? 'Ramp PIX concluído com sucesso.'
 	        : `Status atual do PIX: ${transaction.status}.`;
 
       return { status: ourStatus, message, transaction };

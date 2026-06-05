@@ -76,7 +76,7 @@ function linkUsedRedirect(req: NextRequest) {
   const url = new URL("/link-used", req.url);
   url.searchParams.set(
     "message",
-    "Este link expirou ou ja foi usado. Por seguranca, os detalhes da operacao nao ficam mais disponiveis.",
+    "Este link expirou ou já foi usado. Por segurança, os detalhes da operação não ficam mais disponíveis.",
   );
   const response = NextResponse.redirect(url);
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");

@@ -14,7 +14,7 @@ describe('public-error utility', () => {
 
   it('uses the safe fallback for unknown internal errors', () => {
     expect(publicErrorMessage('Unexpected database driver stack trace')).toBe(
-      'Nao consegui concluir agora. Tente novamente em alguns segundos.'
+      'Não consegui concluir agora. Tente novamente em alguns segundos.'
     );
   });
 
@@ -23,7 +23,7 @@ describe('public-error utility', () => {
       'Failed to fund account using Friendbot: 400 createAccountAlreadyExist'
     );
 
-    expect(message).toBe('Sua conta ainda esta sendo preparada. Tente novamente em alguns segundos.');
+    expect(message).toBe('Sua conta ainda está sendo preparada. Tente novamente em alguns segundos.');
     expect(message).not.toMatch(/Friendbot|createAccountAlreadyExist|Failed to fund/i);
   });
 
@@ -32,7 +32,7 @@ describe('public-error utility', () => {
 
     expect(message).toContain('demorou demais');
     expect(message).not.toContain('aborted');
-    expect(message).not.toBe('Nao consegui concluir agora. Tente novamente em alguns segundos.');
+    expect(message).not.toBe('Não consegui concluir agora. Tente novamente em alguns segundos.');
   });
 
   it('maps missing Etherfuse customer context to PIX account setup guidance', () => {
@@ -46,7 +46,7 @@ describe('public-error utility', () => {
   it('hides database unique constraint names from user-facing messages', () => {
     const message = publicErrorMessage('duplicate key value violates unique constraint "idx_external_accounts_data_phone_unique"');
 
-    expect(message).toContain('Ja existe uma conta');
+    expect(message).toContain('Já existe uma conta');
     expect(message).not.toContain('idx_external_accounts_data_phone_unique');
     expect(message).not.toMatch(/duplicate key|unique constraint/i);
   });
@@ -54,7 +54,7 @@ describe('public-error utility', () => {
   it('maps disabled application execution without exposing env names', () => {
     const message = publicErrorMessage('Execução Defindex está desativada. Configure DEFINDEX_ENABLE_EXECUTION=true para assinar e enviar.');
 
-    expect(message).toContain('confirmacao');
+    expect(message).toContain('confirmação');
     expect(message).toContain('teste');
     expect(message).not.toMatch(/Defindex|DEFINDEX|ENABLE_EXECUTION|assinar e enviar/i);
   });
@@ -63,30 +63,30 @@ describe('public-error utility', () => {
     const message = publicErrorMessage('Wallet private key is not available in Vault for Defindex yield.');
 
     expect(message).toContain('conta');
-    expect(message).toContain('operacao');
+    expect(message).toContain('operação');
     expect(message).not.toMatch(/Wallet private key|Vault|Defindex|secret/i);
   });
 
   it('maps confirmation PIN and state failures to actionable messages', () => {
     expect(publicErrorMessage('PIN da conta e obrigatorio para confirmar esta operacao.')).toContain('PIN');
-    expect(publicErrorMessage('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.')).toContain('Prepare a confirmacao');
+    expect(publicErrorMessage('A revisao nao esta pronta. Prepare a operacao novamente antes de confirmar.')).toContain('Prepare a confirmação');
     expect(publicErrorMessage('Falha de envio da transacao externa.')).toContain('Nenhum valor saiu');
   });
 
   it('maps recipient asset readiness failures without hiding the required action', () => {
     const message = publicErrorMessage('Ana Silva ainda nao pode receber CETES. Peca para ativar recebimento.');
 
-    expect(message).toContain('destinatario');
+    expect(message).toContain('destinatário');
     expect(message).toContain('receber esse ativo');
     expect(message).toContain('ativar o ativo');
-    expect(message).not.toBe('Nao consegui concluir agora. Tente novamente em alguns segundos.');
+    expect(message).not.toBe('Não consegui concluir agora. Tente novamente em alguns segundos.');
   });
 
   it('maps Stellar submission failures to a non-generic no-funds-left message', () => {
     const message = publicErrorMessage('Falha ao enviar a transacao Stellar para Ana Silva. Nenhum valor saiu da conta.');
 
-    expect(message).toContain('Nao consegui enviar');
+    expect(message).toContain('Não consegui enviar');
     expect(message).toContain('Nenhum valor saiu');
-    expect(message).not.toBe('Nao consegui concluir agora. Tente novamente em alguns segundos.');
+    expect(message).not.toBe('Não consegui concluir agora. Tente novamente em alguns segundos.');
   });
 });

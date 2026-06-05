@@ -922,6 +922,9 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('Do not reinterpret "100 xlm" as "R$100"');
     expect(prompt).toContain('A named human recipient after "pra", "para", "pro", or "a" makes route_pix_onramp_intent invalid');
     expect(prompt).toContain('"quero mandar 100 cetes d" followed by "pra ana silva via pix" is route_pix_intent');
+    expect(prompt).toContain('"quero mandar 10 usdc pra fora da conta" -> route_pix_offramp_intent');
+    expect(prompt).toContain('Never ask for recipient for "pra fora da conta"');
+    expect(prompt).toContain('Without a conversion layer and with "da conta"/"minha conta", it is route_pix_offramp_intent');
     expect(prompt).toContain('"mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN"');
     expect(prompt).toContain('Missing recipient for payment does not make it general');
     expect(prompt).not.toContain('uero mandar 10 xlm pra ana silva');
@@ -971,6 +974,8 @@ describe('Agent production evals', () => {
     expect(descriptionByName.route_pix_onramp_intent).toContain('fazer PIX pra Ana Silva de 100 XLM');
     expect(descriptionByName.route_pix_offramp_intent).toContain('PIX saída/off-ramp only');
     expect(descriptionByName.route_pix_offramp_intent).toContain('mandar pra fora 50 reais em pix');
+    expect(descriptionByName.route_pix_offramp_intent).toContain('quero mandar 10 usdc pra fora da conta');
+    expect(descriptionByName.route_pix_offramp_intent).toContain('recipient_query empty');
     expect(descriptionByName.route_pix_intent).toContain('prefer route_pix_onramp_intent');
     expect(descriptionByName.route_pix_intent).toContain('prefer route_pix_offramp_intent');
     expect(descriptionByName.route_pix_intent).toContain('PIX wins over contacts');
@@ -984,6 +989,7 @@ describe('Agent production evals', () => {
     expect(descriptionByName.route_contacts_intent).toContain('contacts tool is invalid');
     expect(descriptionByName.route_payment_intent).toContain('must not become general help');
     expect(descriptionByName.route_payment_intent).toContain('when PIX is not the requested rail');
+    expect(descriptionByName.route_payment_intent).toContain('Do not use for "pra fora da conta"');
     expect(descriptionByName.route_payment_intent).toContain('Do not use for PIX top-up');
     expect(descriptionByName.route_payment_link_intent).toContain('does not require an existing contact');
     expect(descriptionByName.route_price_quote_intent).toContain('needs_clarification=true');
@@ -1084,6 +1090,7 @@ describe('Agent production evals', () => {
       { name: 'payment layered external conversion missing destination', input: 'uero mandar 10 usdc em xlm pra fora', expectedIntent: IntentType.PAYMENT, expectedTool: 'route_payment_intent', risk: 'high', needsClarification: true, expectedAmount: '10', expectedSourceAssetCode: 'USDC', expectedDestAssetCode: 'XLM' },
       { name: 'pix off ramp outside', input: 'quero mandar pra fora 50 reais em pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix off ramp outside without pix word', input: 'quero mandar 50 reais pra fora da minha conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
+      { name: 'pix off ramp own account usdc no pix word', input: 'quero mandar 10 usdc pra fora da conta', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high', expectedAmount: '10', expectedAssetCode: 'USDC' },
       { name: 'pix off ramp bank wording', input: 'tirar 80 usdc pro meu banco', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix off ramp own key', input: 'sacar 25 usdc para minha chave pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high' },
       { name: 'pix off ramp account exit wording', input: 'quero tirar dinheiro da conta e mandar pro meu pix', expectedIntent: IntentType.PIX, expectedTool: 'route_pix_offramp_intent', risk: 'high', needsClarification: true },

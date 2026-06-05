@@ -482,7 +482,7 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
         </div>
         <div>
           <h2 className="text-lg font-bold">{L("Confirme seu PIN", "Confirm your PIN")}</h2>
-          <p className="text-sm text-tts-muted">{L("Acesso aberto pelo WhatsApp pede PIN antes de mostrar rendimentos.", "WhatsApp access requires your PIN before showing returns.")}</p>
+          <p className="text-sm text-tts-muted">{L("Digite seu PIN para ver seus rendimentos.", "Enter your PIN to see your returns.")}</p>
         </div>
       </div>
 

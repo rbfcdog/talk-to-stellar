@@ -258,7 +258,7 @@ function normalizeAgentResponse(payload: any): string {
     payload?.content ||
     payload?.reply ||
     ''
-  ).trim() || 'Nao consegui gerar uma resposta agora. Tente novamente em alguns segundos.';
+  ).trim() || 'Não consegui gerar uma resposta agora. Tente novamente em alguns segundos.';
 }
 
 function isGenericAgentReply(value: string): boolean {
@@ -271,13 +271,13 @@ function isGenericAgentReply(value: string): boolean {
 
   if (!normalized) return true;
   return (
-    normalized.includes('nao consegui processar sua mensagem') ||
-    normalized.includes('desculpe, nao consegui processar sua mensagem') ||
-    normalized.includes('nao consegui entender com seguranca') ||
+    normalized.includes('não consegui processar sua mensagem') ||
+    normalized.includes('desculpe, não consegui processar sua mensagem') ||
+    normalized.includes('não consegui entender com segurança') ||
     normalized.includes('posso ajudar com:') ||
     normalized.includes('diga o objetivo em uma frase') ||
     normalized.includes('diga seu objetivo em uma frase') ||
-    normalized === 'nao consegui gerar uma resposta agora. tente novamente em alguns segundos.'
+    normalized === 'não consegui gerar uma resposta agora. tente novamente em alguns segundos.'
   );
 }
 

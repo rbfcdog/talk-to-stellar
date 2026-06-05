@@ -7265,7 +7265,7 @@ async function executeResetPin(input: any): Promise<string> {
     }
 
     if (!resolvedUserId) {
-      throw new Error('Nao foi possivel identificar o usuario da sessao para redefinir PIN. Tente se autenticar novamente.');
+      throw new Error('Não foi possível identificar o usuário da sessão para redefinir PIN. Tente se autenticar novamente.');
     }
 
     // Generate reset token

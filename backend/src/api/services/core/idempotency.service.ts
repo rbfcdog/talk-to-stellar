@@ -222,7 +222,7 @@ export class IdempotencyService {
     }
 
     if (existingRow.request_hash !== requestHash) {
-      return { conflict: 'Este link expirou ou ja foi usado. Gere um novo link para continuar.' };
+      return { conflict: 'Este link expirou ou já foi usado. Gere um novo link para continuar.' };
     }
 
     if (existingRow.status === 'completed') {

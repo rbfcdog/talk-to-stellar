@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Eye, Loader2, RefreshCw, Wallet2 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { SecurePinGate } from "@/components/shared/secure-pin-gate";
+import { calculateAssetDistribution } from "@/lib/asset-distribution";
 import { getClientSession } from "@/lib/session";
 
 type BalanceLine = {
@@ -112,8 +113,7 @@ export default function BalanceClient() {
   }
 
   const rows = useMemo(() => buildBalanceRows(balances), [balances]);
-  const distributionTotal = useMemo(() => rows.reduce((sum, row) => sum + Math.max(0, row.value), 0), [rows]);
-  const nonZeroRows = rows.filter((row) => row.value > 0.0000001);
+  const distributionRows = useMemo(() => calculateAssetDistribution(rows), [rows]);
 
   return (
     <main className="min-h-screen bg-[#070707] text-white">
@@ -122,11 +122,11 @@ export default function BalanceClient() {
           <div className="min-w-0">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] font-black uppercase tracking-normal text-white/55">
               <Eye className="h-4 w-4" aria-hidden="true" />
-              Saldo seguro
+              Saldo da conta
             </p>
             <h1 className="mt-3 text-2xl font-black tracking-normal text-white sm:text-4xl">Sua conta</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/58">
-              Saldo, XLM e ativos aparecem só depois do PIN.
+              Digite seu PIN para ver saldo, XLM e outros ativos.
             </p>
           </div>
           {status === "ready" ? (
@@ -144,7 +144,7 @@ export default function BalanceClient() {
         <AccountStatusCard
           state={status === "checking" ? "loading" : authenticated ? "connected" : "signed-out"}
           title={authenticated ? "Conta conectada" : undefined}
-          detail={authenticated ? "PIN obrigatório antes de mostrar valores." : "Entre para abrir sua conta com segurança."}
+          detail={authenticated ? "Digite seu PIN para ver os valores." : "Entre para abrir sua conta."}
           ctaHref="/login?next=/balance"
           ctaLabel="Entrar"
           className="border-white/10 bg-white/[0.06] text-white [&_*]:!text-white"
@@ -212,21 +212,22 @@ export default function BalanceClient() {
                 <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-black text-white">Distribuição</p>
-                    <p className="text-xs font-bold text-white/42">{nonZeroRows.length || 0} ativos com saldo</p>
+                    <p className="text-xs font-bold text-white/42">{distributionRows.length || 0} ativos com saldo</p>
                   </div>
                   <div className="mt-4 space-y-3">
-                    {rows.map((row) => {
-                      const width = distributionTotal > 0 ? Math.max(3, Math.round((Math.max(0, row.value) / distributionTotal) * 100)) : 0;
-                      return (
-                        <div key={`bar-${row.asset}`} className="grid grid-cols-[4.5rem_minmax(0,1fr)_4rem] items-center gap-3">
-                          <span className="text-xs font-black text-white/55">{row.asset === "USDC" ? "USD" : row.asset}</span>
-                          <span className="h-2 overflow-hidden rounded-full bg-white/10">
-                            <span className="block h-full rounded-full bg-white" style={{ width: `${width}%` }} />
-                          </span>
-                          <span className="text-right text-xs font-bold text-white/45">{distributionTotal > 0 ? `${width}%` : "0%"}</span>
-                        </div>
-                      );
-                    })}
+                    {distributionRows.length === 0 ? (
+                      <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-bold text-white/45">
+                        Sem saldo para distribuir.
+                      </p>
+                    ) : distributionRows.map((row) => (
+                      <div key={`bar-${row.asset}`} className="grid grid-cols-[4.5rem_minmax(0,1fr)_4rem] items-center gap-3">
+                        <span className="text-xs font-black text-white/55">{row.asset === "USDC" ? "USD" : row.asset}</span>
+                        <span className="h-2 overflow-hidden rounded-full bg-white/10">
+                          <span className="block h-full rounded-full bg-white" style={{ width: `${row.barPercent}%` }} />
+                        </span>
+                        <span className="text-right text-xs font-bold text-white/45">{row.percent}%</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

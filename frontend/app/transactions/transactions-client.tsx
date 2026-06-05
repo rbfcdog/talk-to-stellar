@@ -422,7 +422,7 @@ export default function TransactionsClient() {
 
           <AccountStatusCard
             state={status === "checking" || status === "loading" ? "loading" : authenticated ? "connected" : "signed-out"}
-            detail={authenticated ? "PIN obrigatório antes de mostrar movimentações." : "Entre para carregar as movimentações da conta."}
+            detail={authenticated ? "Digite seu PIN para ver as movimentações." : "Entre para carregar as movimentações da conta."}
             ctaHref="/login?next=/transactions"
             ctaLabel="Entrar"
           />

@@ -29,7 +29,8 @@ describe("rendimentos channel PIN gate", () => {
     expect(text).toContain("requiresChannelPin");
     expect(text).toContain("!channelPinUnlocked");
     expect(text).toContain("ChannelPinGate");
-    expect(text).toContain("Acesso aberto pelo WhatsApp pede PIN antes de mostrar rendimentos.");
+    expect(text).toContain("Digite seu PIN para ver seus rendimentos.");
+    expect(text).not.toContain("Acesso aberto pelo WhatsApp pede PIN antes de mostrar rendimentos.");
     expect(routeText).toContain("router.post('/session/verify-pin'");
   });
 });

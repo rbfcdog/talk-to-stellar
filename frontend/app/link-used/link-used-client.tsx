@@ -6,7 +6,7 @@ import { OperationalCard, OperationalPage, StatusPill } from "@/components/layou
 export default function LinkUsedClient() {
   const searchParams = useSearchParams()
   const rawMessage = String(searchParams.get("message") || "").trim()
-  const message = rawMessage || "Este link expirou ou ja foi usado. Por seguranca, os detalhes da operacao nao ficam mais disponiveis."
+  const message = rawMessage || "Este link expirou ou já foi usado. Por segurança, os detalhes da operação não ficam mais disponíveis."
 
   return (
     <OperationalPage size="sm" frameClassName="flex min-h-screen items-center">
