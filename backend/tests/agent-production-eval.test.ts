@@ -914,6 +914,8 @@ describe('Agent production evals', () => {
     expect(prompt).toContain('If PIX pays another person/contact, preserve the requested final asset');
     expect(prompt).toContain('previous user "quero mandar 100 cetes d" and latest user "pra Ana Silva via pix"');
     expect(prompt).toContain('route_pix_intent with amount="100", asset_code="CETES", recipient_query="Ana Silva"');
+    expect(prompt).toContain('"want to send 100 USDC PIX to Ana Silva so they receive in CETES"');
+    expect(prompt).toContain('dest_asset_code="CETES"');
     expect(prompt).toContain('For single-asset quote requests in Portuguese/Brazil context, default the quote against BRL');
     expect(prompt).toContain('"uero ver a cotacao do cetes"');
     expect(prompt).toContain('source_asset_code=CETES, dest_asset_code=BRL, quote_mode=market_price');

@@ -474,6 +474,14 @@ function normalizeLanguage(value: unknown): 'pt-BR' | 'en' {
   return 'pt-BR';
 }
 
+function normalizeOptionalLanguage(value: unknown): 'pt-BR' | 'en' | '' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
+  if (normalized === 'pt' || normalized === 'pt-br' || normalized.startsWith('pt-') || normalized.includes('portugu')) return 'pt-BR';
+  return '';
+}
+
 function localized(language: 'pt-BR' | 'en', pt: string, en: string): string {
   return language === 'en' ? en : pt;
 }
@@ -581,6 +589,7 @@ export function createAgentRoutes(
       const normalizedSource = String(source || "").trim().toLowerCase();
       const normalizedProvider = normalizeSourceProvider(normalizedSource);
       let runtimeExternalContext: Record<string, string> = {};
+      let externalStoredLanguage: 'pt-BR' | 'en' | '' = '';
       if (normalizedProvider === "telegram" || normalizedProvider === "whatsapp") {
         // Hard gate: external channels are backend-to-backend integrations
         // (the Telegram/WhatsApp bot calling this backend). Require a shared
@@ -623,6 +632,14 @@ export function createAgentRoutes(
         };
 
         const existing = await externalService.checkExternalAccount(normalizedProvider, channelProviderUserId);
+        externalStoredLanguage = normalizeOptionalLanguage(
+          (existing as any)?.data?.language ||
+            (existing as any)?.data?.lang ||
+            (existing as any)?.data?.locale ||
+            (existing as any)?.data?.preferred_language ||
+            (existing as any)?.data?.preferredLanguage
+        );
+        const externalResponseLanguage = externalStoredLanguage || requestLanguage;
         if (!existing) {
           const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
             source: normalizedProvider,
@@ -655,7 +672,7 @@ export function createAgentRoutes(
               sessionId: String(existing.session_id || '').trim() || undefined,
               userId: String(existing.user_id || '').trim() || undefined,
               source: normalizedProvider,
-              language: requestLanguage,
+              language: externalResponseLanguage,
               ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
               ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
               ...(metadata?.message_id ? { message_id: String(metadata.message_id) } : {}),
@@ -669,7 +686,7 @@ export function createAgentRoutes(
               reason: ownerMatchesExternalMapping ? "session_expired" : "external_identity_mismatch",
               creationUrl: url,
               message: localized(
-                requestLanguage,
+                externalResponseLanguage,
                 ownerMatchesExternalMapping
                   ? `Sua sessão expirou.\n\nAbra este link para entrar novamente:\n${url}\n\nNa página, use a opção "Já tenho conta".`
                   : `Não consegui confirmar que este ${channelLabel} ainda está conectado à mesma conta.\n\nAbra este link para entrar novamente:\n${url}`,
@@ -838,7 +855,7 @@ export function createAgentRoutes(
 
       // Get previous state before hydration checks (used to honor explicit logout marker).
       const previousState = await repository.getState(sessionId);
-      const preferredLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale || (previousState?.action_params as any)?.language);
+      const preferredLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale || externalStoredLanguage || (previousState?.action_params as any)?.language);
       const forceLoggedOut = Boolean((previousState?.action_params as any)?.force_logged_out) &&
         Object.keys(runtimeExternalContext).length === 0;
 

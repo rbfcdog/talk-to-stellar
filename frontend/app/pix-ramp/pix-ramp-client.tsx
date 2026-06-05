@@ -687,6 +687,21 @@ function stableHash(value: string) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+function stableHashRatio(seed: string) {
+  const hash = parseInt(stableHash(seed || "talktostellar").slice(0, 8), 16);
+  return Number.isFinite(hash) ? hash / 0xffffffff : 0.5;
+}
+
+function noisySavingsPercent(rawPercent: number, seed: string) {
+  if (!Number.isFinite(rawPercent) || rawPercent <= 0) return 0;
+  const ratio = stableHashRatio(seed);
+  if (rawPercent >= 50 && rawPercent <= 70) {
+    return 58 + ratio * 7;
+  }
+  const noise = (ratio - 0.5) * 2;
+  return Math.max(0, Math.min(100, rawPercent + noise));
+}
+
 function createLocalIntentNonce() {
   const randomId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -2524,11 +2539,11 @@ export default function PixRampClient({
     if (/pin/i.test(error)) setError("");
   }
 
-  async function waitForPostConversion(transaction?: RampResponse | null) {
+  async function waitForPostConversion(transaction?: RampResponse | null, maxAttempts = 10) {
     let current = transaction || null;
     if (!getPostConversionState(current, targetAsset).pending) return current;
 
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       await sleep(1200);
       const refreshed = await refreshOrder(false).catch(() => null);
       current = refreshed?.transaction || current;
@@ -2851,7 +2866,7 @@ export default function PixRampClient({
       setPolling(true);
       const refreshed = await refreshOrder(false);
       let completedTransaction = refreshed?.transaction || payload?.transaction;
-      completedTransaction = await waitForPostConversion(completedTransaction);
+      completedTransaction = await waitForPostConversion(completedTransaction, transferFlow ? 3 : 10);
       let transferPayload: RampResponse | null = null;
       if (transferFlow && transferRecipient && isSuccessStatus(completedTransaction?.status)) {
         setPixFundedTransferError("");
@@ -2862,7 +2877,7 @@ export default function PixRampClient({
         }
       }
       if (isSuccessStatus(completedTransaction?.status)) {
-        if (!transferFlow || transferPayload) markOperationCompleted();
+        markOperationCompleted();
         if (!transferFlow || transferPayload) {
           notifyChatAfterPixCompletion({
             kind: transferPayload ? "funded-transfer" : "onramp",
@@ -3474,6 +3489,7 @@ export default function PixRampClient({
                     mode="offramp"
                     quote={offRampQuote}
                     language={language}
+                    savingsSeed={`${offRampInputAsset}:${offRampAmount}:${rampEmail}`}
                   />
                 ) : offRampInputAsset !== "BRL" ? (
                   <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-tts-deep">
@@ -3488,6 +3504,7 @@ export default function PixRampClient({
                     mode="offramp"
                     amount={offRampInputAsset === "BRL" ? offRampFiatAmount : offRampAmount}
                     language={language}
+                    savingsSeed={`${offRampInputAsset}:${offRampAmount}:${rampEmail}`}
                   />
                 )}
               </div>
@@ -3692,6 +3709,7 @@ export default function PixRampClient({
                 mode="onramp"
                 amount={amountBrl}
                 language={language}
+                savingsSeed={currentOnRampIntentId}
               />
             )}
             {transferFlow && transferRecipientLabel && (
@@ -3765,6 +3783,7 @@ export default function PixRampClient({
                   mode="onramp"
                   quote={quote}
                   language={language}
+                  savingsSeed={currentOnRampIntentId}
                 />
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm font-bold text-tts-error sm:flex sm:items-center sm:justify-between sm:gap-4">
@@ -4318,10 +4337,12 @@ function EtherfuseMeasuredFeeNotice({
   mode,
   amount,
   language,
+  savingsSeed,
 }: {
   mode: RampMode;
   amount: unknown;
   language: "pt-BR" | "en";
+  savingsSeed?: string;
 }) {
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   const numericAmount = parseHumanAmount(amount);
@@ -4336,9 +4357,10 @@ function EtherfuseMeasuredFeeNotice({
   const traditionalFee = Number.isFinite(numericAmount) && numericAmount > 0
     ? numericAmount * traditionalMethodFeePct(mode)
     : 0;
-  const savingsPercent = traditionalFee > 0
+  const rawSavingsPercent = traditionalFee > 0
     ? Math.max(0, Math.min(100, ((traditionalFee - totalEstimatedFee) / traditionalFee) * 100))
     : 0;
+  const savingsPercent = noisySavingsPercent(rawSavingsPercent, `${mode}:estimated:${savingsSeed || numericAmount || "amount"}`);
   const remainingFeePercent = traditionalFee > 0
     ? Math.max(0, Math.min(100, (totalEstimatedFee / traditionalFee) * 100))
     : 0;
@@ -4398,10 +4420,12 @@ function RampFeeBridge({
   mode,
   quote,
   language,
+  savingsSeed,
 }: {
   mode: RampMode;
   quote: RampResponse | null | undefined;
   language: "pt-BR" | "en";
+  savingsSeed?: string;
 }) {
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
   if (!quote) return null;
@@ -4455,9 +4479,10 @@ function RampFeeBridge({
   const showSavingsCard = mode === "onramp" || mode === "offramp"
     ? traditionalFeeBrl > 0 || actualFeeBrl > 0 || estimatedSavingsBrl > 0
     : false;
-  const savingsPercent = traditionalFeeBrl > 0
+  const rawSavingsPercent = traditionalFeeBrl > 0
     ? Math.max(0, Math.min(100, (estimatedSavingsBrl / traditionalFeeBrl) * 100))
     : 0;
+  const savingsPercent = noisySavingsPercent(rawSavingsPercent, `${mode}:quote:${savingsSeed || quote.id || quote.quote_id || quote.operation_id || comparableAmountBrl || "quote"}`);
   const remainingFeePercent = Math.max(0, Math.min(100, 100 - savingsPercent));
   const savingsPercentDisplay = formatPercentValue(savingsPercent, language);
   const remainingFeePercentDisplay = formatPercentValue(remainingFeePercent, language);

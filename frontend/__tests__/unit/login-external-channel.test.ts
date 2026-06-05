@@ -20,4 +20,23 @@ describe("external channel login", () => {
     expect(text).toContain("session_scope: externalSessionScope");
     expect(text).toContain("...externalSessionContext");
   });
+
+  it("offers email PIN recovery from login and preserves external token context", () => {
+    const text = source("app/login/login-client.tsx");
+    const securityProxy = source("app/api/security/[...path]/route.ts");
+    const dictionary = source("lib/i18n.tsx");
+    const securePinGate = source("components/shared/secure-pin-gate.tsx");
+
+    expect(text).toContain('fetch("/api/security/reset-pin-init"');
+    expect(text).toContain("forgot_pin: true");
+    expect(text).toContain("login_recovery: true");
+    expect(text).toContain("token: canUseExternalRecovery ? externalToken : undefined");
+    expect(text).toContain("provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId()");
+    expect(text).toContain("login_forgot_pin");
+    expect(dictionary).toContain('login_forgot_pin: "Forgot PIN?"');
+    expect(dictionary).toContain('login_forgot_pin: "Esqueci o PIN"');
+    expect(securityProxy).toContain('proxyBackendApi(req, "api/security"');
+    expect(securePinGate).toContain('fetch("/api/security/reset-pin-init"');
+    expect(securePinGate).toContain("forgot_pin: true");
+  });
 });
