@@ -314,8 +314,25 @@ function buildEvolutionFallbackReply(intent?: string): string {
   return buildCapabilityHelpMessage();
 }
 
+function compactMarkdownTopicReply(value: string): string {
+  const raw = String(value || '').trim();
+  if (!/^##\s+/m.test(raw)) return raw;
+
+  const firstSection = raw
+    .split(/\n\s*-{3,}\s*\n/)
+    .map((part) => part.trim())
+    .find(Boolean) || raw;
+
+  return firstSection
+    .split('\n')
+    .filter((line) => !/^##\s+/.test(line.trim()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function buildUsefulEvolutionReply(response: AgentResponse): string {
-  const message = String(response.message || '').trim();
+  const message = compactMarkdownTopicReply(String(response.message || '').trim());
   if (!isGenericAgentReply(message)) return message;
 
   const intent = String(response.intent || response.raw?.intent || '').trim();

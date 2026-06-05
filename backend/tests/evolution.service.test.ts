@@ -220,6 +220,59 @@ describe('EvolutionService', () => {
     expect(sentText).toContain('Pode escrever normal');
   });
 
+  it('strips multi-topic Markdown explanation blocks before sending to WhatsApp', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: [
+            '## PIX',
+            'PIX is the fastest way to move money in your account.',
+            '',
+            '---',
+            '',
+            '## ASSETS',
+            'Assets are the currencies that can appear in your account.',
+          ].join('\n'),
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    await EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-markdown-explanation-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'helooo',
+        },
+      },
+    });
+
+    expect(sendTextSpy).toHaveBeenCalledTimes(1);
+    const sentText = String(sendTextSpy.mock.calls[0]?.[2] || '');
+    expect(sentText).toBe('PIX is the fastest way to move money in your account.');
+    expect(sentText).not.toContain('##');
+    expect(sentText).not.toContain('---');
+    expect(sentText).not.toContain('ASSETS');
+  });
+
   it('keeps Evolution instanceId as diagnostic metadata and uses the configured instance name for delivery', async () => {
     process.env.EVOLUTION_INSTANCE = 'TalkToStellar';
     const fetchMock = jest.fn(async (...args: any[]) => {
