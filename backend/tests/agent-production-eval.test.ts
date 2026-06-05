@@ -1864,6 +1864,111 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
+  it('keeps cross-asset payment quote copy in English for English external sessions', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const contactPublicKey = 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC';
+    mockRouteIntent(graph, 'route_payment_intent', {
+      amount: '100',
+      asset_code: 'USDC',
+      dest_asset_code: 'CETES',
+      recipient_query: 'Ana Silva',
+      language: 'pt-BR',
+    });
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Ana Silva',
+              stellar_public_key: contactPublicKey,
+              email: 'ana@example.com',
+            },
+          ],
+        });
+      }
+      if (name === 'get_balance') {
+        return JSON.stringify({
+          success: true,
+          balances: [
+            { asset: 'USDC', balance: '250.0000000' },
+          ],
+        });
+      }
+      if (name === 'get_saldo_tecnico') {
+        return JSON.stringify({
+          success: true,
+          balances: [
+            { asset: 'USDC', asset_issuer: 'USDCISSUER' },
+            { asset: 'CETES', asset_issuer: 'CETESISSUER' },
+          ],
+        });
+      }
+      if (name === 'get_best_route') {
+        return JSON.stringify({
+          success: true,
+          quote: {
+            sourceAmount: '100',
+            sourceAsset: { code: 'USDC', issuer: 'USDCISSUER' },
+            destinationAmount: '1540.11',
+            destinationAsset: { code: 'CETES', issuer: 'CETESISSUER' },
+            quote_ttl_seconds: 30,
+          },
+          fee_breakdown: {
+            total_fee_display: '0.00001 XLM',
+          },
+          quote_ttl_seconds: 30,
+        });
+      }
+      if (name === 'prepare_payment_confirmation') {
+        return JSON.stringify({
+          success: true,
+          url: 'https://app.example.com/confirm-payment?token=ana-cetes',
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const state = createState('ant to send 100 usdc to ana silva so they recieve in CETES');
+    state.action_params = {
+      ...state.action_params,
+      language: 'en',
+      external_provider: 'whatsapp',
+      external_provider_user_id: '5575496918127',
+      external_source: 'whatsapp',
+    };
+
+    const result = await graph.processInput(state);
+
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(result.success).toBe(true);
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_payment_confirmation', expect.objectContaining({
+      language: 'en',
+      provider: 'whatsapp',
+      provider_user_id: '5575496918127',
+      source: 'whatsapp',
+      source_amount: '100',
+      source_asset_code: 'USDC',
+      amount: '1540.11',
+      asset_code: 'CETES',
+    }));
+    expect(result.response_message).toContain('Estimate before confirmation');
+    expect(result.response_message).toContain('you send US$ 100.00');
+    expect(result.response_message).toContain('Ana Silva receives approximately 1540.11 CETES');
+    expect(result.response_message).toContain('Estimated fee: 0.00001 XLM.');
+    expect(result.response_message).toContain('Quote valid for 30 seconds.');
+    expect(result.response_message).toContain('To confirm, open the link:');
+    expect(result.response_message).toContain('/confirm-payment?token=ana-cetes');
+    expect(result.response_message).not.toContain('Estimativa antes de confirmar');
+    expect(result.response_message).not.toContain('Taxa estimada');
+    expect(result.response_message).not.toContain('Cotação válida');
+    expect(result.response_message).not.toContain('Para confirmar');
+  });
+
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
