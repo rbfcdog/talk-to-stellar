@@ -295,7 +295,7 @@ describe('PaymentReceiptService', () => {
     }));
     expect(notifySpy.mock.calls[0][0].text).toContain('Valor: US$ 100.00');
     expect(notifySpy.mock.calls[0][0].text).toContain('Destino: Ana Silva');
-    expect(notifySpy.mock.calls[0][0].text).not.toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Comprovante: https://talk-to-stellar-owxg.vercel.app/');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('💰 *Você economizou');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Liquidação');
@@ -341,14 +341,53 @@ describe('PaymentReceiptService', () => {
       buttonUrl: null,
       text: expect.stringContaining('PIX confirmado com sucesso.'),
     }));
-    expect(notifySpy.mock.calls[0][0].text).not.toContain('Comprovante:');
-    expect(notifySpy.mock.calls[0][0].text).not.toContain(fallbackUrl);
+    expect(notifySpy.mock.calls[0][0].text).toContain(`Comprovante: ${fallbackUrl}`);
 
     createSpy.mockRestore();
     notifySpy.mockRestore();
   });
 
-  it('preserves explicit conversion callback text without appending a receipt link', async () => {
+  it('does not deliver the same receipt externally twice when the dedupe key already exists', async () => {
+    const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockResolvedValue('https://app.example.com/receipt/once');
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(false);
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    const result = await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-pix-dedupe',
+      userId: 'user-pix-dedupe',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: '10.15',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '10.07',
+      destinationAssetCode: 'BRL',
+      hash: 'sandbox-ledger-duplicate',
+      dedupeKey: 'pix-onramp:operation-duplicate',
+      externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$10.07',
+    });
+
+    expect(result).toBe('https://app.example.com/receipt/once');
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+      dedupeKey: 'receipt:pix-onramp:operation-duplicate:text',
+    }));
+    expect(notifySpy).not.toHaveBeenCalled();
+
+    createSpy.mockRestore();
+    saveSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
+  it('preserves explicit conversion callback text and appends the receipt link', async () => {
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
       whatsapp: {
         attempted: true,
@@ -383,7 +422,7 @@ describe('PaymentReceiptService', () => {
     }));
     expect(notifySpy.mock.calls[0][0].text).toContain('Convertido: 100 XLM');
     expect(notifySpy.mock.calls[0][0].text).toContain('Recebido: US$ 65.00');
-    expect(notifySpy.mock.calls[0][0].text).not.toContain('Comprovante:');
+    expect(notifySpy.mock.calls[0][0].text).toContain('Comprovante: https://talk-to-stellar-owxg.vercel.app/');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Você economizou');
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
 
@@ -420,6 +459,7 @@ describe('PaymentReceiptService', () => {
     const text = String(notifySpy.mock.calls[0]?.[0]?.text || '');
     expect(text).toContain('Pagamento concluido.');
     expect(text).toContain('Valor: 10 XLM');
+    expect(text).toContain('Comprovante: https://talk-to-stellar-owxg.vercel.app/');
     expect(text).not.toContain('Entregue: *US$ 0,00*');
     expect(text).not.toContain('Enviado: R$ 0,00');
     expect(text).not.toContain('Você economizou R$ 0,00');

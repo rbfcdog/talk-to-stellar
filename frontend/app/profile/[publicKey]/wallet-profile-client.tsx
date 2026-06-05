@@ -18,6 +18,7 @@ import {
   UserCircle2,
   Wallet,
 } from "lucide-react"
+import { calculateAssetDistribution } from "@/lib/asset-distribution"
 import { getClientSession } from "@/lib/session"
 
 type BalanceItem = {
@@ -129,7 +130,10 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
     }
     return Array.from(grouped.values()).sort((a, b) => b.raw - a.raw)
   }, [balances])
-  const totalAssets = visibleBalances.reduce((sum, item) => sum + item.raw, 0)
+  const distributionRows = useMemo(() => (
+    calculateAssetDistribution(visibleBalances.map((balance) => ({ asset: balance.code, value: balance.raw })))
+  ), [visibleBalances])
+  const distributionByAsset = useMemo(() => new Map(distributionRows.map((row) => [row.asset, row])), [distributionRows])
   const largestBalance = visibleBalances[0] || null
   const stats = payload?.stats || {}
   const lastActivity = formatWhen(stats?.last_received_at)
@@ -266,7 +270,8 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                   <div className="mt-5 space-y-4">
                     <div className="flex h-4 overflow-hidden border border-tts-border bg-tts-bg">
                       {visibleBalances.map((balance) => {
-                        const width = Math.max(4, (balance.raw / Math.max(totalAssets, 1)) * 100)
+                        const distribution = distributionByAsset.get(balance.code)
+                        const width = distribution?.percent || 0
                         return (
                           <div
                             key={balance.code}
@@ -279,13 +284,13 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {visibleBalances.map((balance) => {
-                        const percent = totalAssets > 0 ? (balance.raw / totalAssets) * 100 : 0
+                        const percent = distributionByAsset.get(balance.code)?.percent || 0
                         return (
                           <div key={balance.code} className="border border-tts-border bg-tts-bg p-4">
                             <div className="flex items-center gap-2">
                               <span className={`h-3 w-3 shrink-0 ${assetTone(balance.code)}`} />
                               <p className="text-sm font-black text-tts-deep">{displayAssetCode(balance.code)}</p>
-                              <p className="ml-auto text-xs font-black text-tts-muted">{formatNumber(percent, 1, 1)}%</p>
+                              <p className="ml-auto text-xs font-black text-tts-muted">{percent}%</p>
                             </div>
                             <p className="mt-3 text-lg font-black text-tts-deep">{formatBalance(balance.raw, balance.code)}</p>
                             <div className="mt-3 h-2 bg-tts-surface">
@@ -323,7 +328,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
             <section className="grid gap-4 lg:grid-cols-3">
               <InfoPanel title="Recebimentos" value={Number(stats?.total_received_operations || 0)} detail="operações recebidas registradas" />
               <InfoPanel title="Perfil público" value={publicProfileUrl ? "Ativo" : "Indisponível"} detail={publicProfileUrl ? compactKey(publicProfileUrl) : "sem link público"} href={publicProfileUrl || undefined} />
-              <InfoPanel title="Segurança" value="PIN obrigatório" detail="Ações financeiras continuam separadas da consulta." />
+              <InfoPanel title="Segurança" value="PIN na confirmação" detail="Envios, PIX e conversões pedem PIN antes de concluir." />
             </section>
           </>
         ) : null}

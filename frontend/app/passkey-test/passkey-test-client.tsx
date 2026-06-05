@@ -52,15 +52,15 @@ function passkeyErrorMessage(error: unknown) {
   const normalized = message.toLowerCase();
 
   if (name === "NotAllowedError") {
-    return "A confirmacao foi cancelada ou expirou. Toque no botao e confirme no aparelho novamente.";
+    return "A confirmação foi cancelada ou expirou. Toque no botão e confirme no aparelho novamente.";
   }
   if (name === "SecurityError" || normalized.includes("rp id")) {
-    return "A passkey precisa abrir no dominio configurado em PASSKEY_RP_ID/PASSKEY_ORIGIN.";
+    return "A passkey precisa abrir no domínio configurado em PASSKEY_RP_ID/PASSKEY_ORIGIN.";
   }
   if (/session|token|unauthor|auth|login/i.test(message)) {
     return "Entre na conta neste mesmo navegador antes de registrar a passkey.";
   }
-  return message || "Nao foi possivel concluir o teste de passkey.";
+  return message || "Não foi possível concluir o teste de passkey.";
 }
 
 function passkeyErrorHint(errorText: string) {
@@ -218,7 +218,7 @@ export default function PasskeyTestClient() {
     try {
       const payload = await postPasskey("smart-account-status", {});
       setSmartStatus(payload);
-      setStatusState({ loading: false, message: "Status de seguranca avancada atualizado.", error: "" });
+      setStatusState({ loading: false, message: "Status de segurança avançada atualizado.", error: "" });
     } catch (error) {
       setStatusState({ loading: false, message: "", error: passkeyErrorMessage(error) });
     }
@@ -339,7 +339,7 @@ export default function PasskeyTestClient() {
                 onClick={refreshSession}
                 icon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
               >
-                Atualizar sessao
+                Atualizar sessão
               </ActionButton>
               <a
                 href="/login?next=/passkey-test"

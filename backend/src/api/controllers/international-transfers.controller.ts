@@ -15,7 +15,7 @@ function statusFromError(error: any): number {
 function errorBody(error: any) {
   return {
     success: false,
-    message: publicErrorMessage(error, 'Nao consegui atualizar a rota entre instituicoes agora. Tente novamente em alguns segundos.'),
+    message: publicErrorMessage(error, 'Não consegui atualizar a rota entre instituições agora. Tente novamente em alguns segundos.'),
   };
 }
 

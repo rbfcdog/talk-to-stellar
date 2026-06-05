@@ -181,7 +181,7 @@ export class TransferNotificationService {
       ...(directMapping ? [directMapping] : []),
       ...(await this.findExternalMappings(sessionId, userId)),
     ]);
-    const text = 'Logout concluido. Sua conta foi desconectada deste canal.';
+    const text = 'Logout concluído. Sua conta foi desconectada deste canal.';
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);

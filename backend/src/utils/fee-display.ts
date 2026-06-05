@@ -9,7 +9,7 @@ type FeeDisplay = {
 export const DEFAULT_NETWORK_FEE_XLM = '0.0000100';
 
 function formatSmallCurrency(value: number, currency: 'US$' | 'R$'): string {
-  if (!Number.isFinite(value) || value < 0) return `${currency} indisponivel`;
+  if (!Number.isFinite(value) || value < 0) return `${currency} indisponível`;
   const decimals = value > 0 && value < 0.01 ? 6 : 2;
   const threshold = Math.pow(10, -decimals);
   if (value > 0 && value < threshold) {
@@ -49,7 +49,7 @@ export function formatCustomerAssetAmount(amount?: string, assetCode?: string): 
   const formatQuantity = (quantity: number) =>
     quantity.toFixed(7).replace(/\.?0+$/, '');
 
-  if (!Number.isFinite(value)) return 'valor indisponivel';
+  if (!Number.isFinite(value)) return 'valor indisponível';
   const truncated = Math.trunc(value * 100) / 100;
   if (code === 'BRL' || code === 'TESOURO') return `R$ ${truncated.toFixed(2)}`;
   if (code === 'USDC') return `US$ ${truncated.toFixed(2)}`;

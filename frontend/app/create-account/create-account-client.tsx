@@ -417,7 +417,7 @@ export default function CreateAccountClient({
 
     if (!browserSupportsWebAuthn()) {
       return L(
-        "Este navegador nao suporta Passkey. A conta ja funciona com PIN.",
+        "Este navegador não suporta Passkey. A conta já funciona com PIN.",
         "This browser does not support Passkey. The account already works with PIN.",
       )
     }
@@ -425,7 +425,7 @@ export default function CreateAccountClient({
     const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname)
     if (!window.isSecureContext && !isLocalhost) {
       return L(
-        "Passkey precisa abrir em HTTPS. A conta ja funciona com PIN.",
+        "Passkey precisa abrir em HTTPS. A conta já funciona com PIN.",
         "Passkey must open on HTTPS. The account already works with PIN.",
       )
     }
@@ -440,7 +440,7 @@ export default function CreateAccountClient({
     const platformAvailable = await platformAuthenticatorIsAvailable().catch(() => false)
     if (!platformAvailable) {
       return L(
-        "Este aparelho/navegador nao liberou biometria agora. A conta ja funciona com PIN.",
+        "Este aparelho/navegador não liberou biometria agora. A conta já funciona com PIN.",
         "This device/browser did not make biometrics available now. The account already works with PIN.",
       )
     }

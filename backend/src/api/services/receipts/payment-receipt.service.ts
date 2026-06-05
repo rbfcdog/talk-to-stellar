@@ -39,6 +39,7 @@ export type PaymentReceiptInput = {
   status?: string | null;
   contextMessage?: string | null;
   externalDeliveryText?: string | null;
+  dedupeKey?: string | null;
 };
 
 type FeeBreakdown = {
@@ -53,6 +54,12 @@ type FeeBreakdown = {
 
 export class PaymentReceiptService {
   private static agentRepo = new AgentRepository(supabase);
+
+  private static isUniqueViolation(error: any): boolean {
+    const code = String(error?.code || '').trim();
+    const message = String(error?.message || '').toLowerCase();
+    return code === '23505' || message.includes('duplicate key') || message.includes('violates unique constraint');
+  }
 
   private static userFacingAssetCode(assetCode?: string | null): string {
     const normalized = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
@@ -138,25 +145,28 @@ export class PaymentReceiptService {
     sessionId: string;
     content: string;
     dedupeKey: string;
-  }) {
+  }): Promise<boolean> {
     const { error } = await supabase
       .from('agent_messages')
-      .upsert({
+      .insert({
         session_id: input.sessionId,
         role: 'assistant',
         content: input.content,
         dedupe_key: input.dedupeKey,
         created_at: new Date().toISOString(),
-      }, { onConflict: 'dedupe_key' });
+      });
 
     if (error) {
+      if (this.isUniqueViolation(error)) return false;
       const message = String(error?.message || '').toLowerCase();
       if (message.includes('dedupe_key') || message.includes('schema cache')) {
         await this.agentRepo.saveMessage(input.sessionId, 'assistant', input.content);
-        return;
+        return true;
       }
       throw error;
     }
+
+    return true;
   }
 
   static toPublicOperationId(settlementReference?: string | null): string {
@@ -205,7 +215,10 @@ export class PaymentReceiptService {
     const cumulativeSavingsText = await this.cumulativeSavingsLine(input);
     let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
-    const receiptDedupeKey = `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
+    const explicitDedupeKey = String(input.dedupeKey || '').trim();
+    const receiptDedupeKey = explicitDedupeKey
+      ? `receipt:${explicitDedupeKey}`
+      : `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
 
     try {
       viewerUrl = await this.createReceiptLink(input);
@@ -215,17 +228,26 @@ export class PaymentReceiptService {
     }
 
     const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash);
-    const textWithLink = receiptUrl ? `${text}\nComprovante: ${receiptUrl}` : text;
-    const savingsFirstDeliveryText = await this.buildSavingsFirstWhatsappReceipt(input, receiptUrl);
+    const appendReceiptLink = (value: string): string => {
+      const base = String(value || '').trim();
+      if (!base || !receiptUrl || base.includes(receiptUrl)) return base;
+      return `${base}\nComprovante: ${receiptUrl}`;
+    };
+    const textWithLink = appendReceiptLink(text);
+    const savingsFirstDeliveryText = appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(input, receiptUrl));
     const externalDeliveryBase = String(input.externalDeliveryText || '').trim();
-    const externalDeliveryText = savingsFirstDeliveryText || externalDeliveryBase || text;
+    const externalDeliveryText = savingsFirstDeliveryText || appendReceiptLink(externalDeliveryBase || text);
 
     try {
-      await this.saveReceiptMessage({
+      const savedPrimaryReceipt = await this.saveReceiptMessage({
         sessionId: input.sessionId,
         content: textWithLink,
         dedupeKey: `${receiptDedupeKey}:text`,
       });
+      if (!savedPrimaryReceipt) {
+        logger.info(`[receipt] skipped duplicate receipt delivery dedupe_key=${receiptDedupeKey}`);
+        return receiptUrl || '';
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`[receipt] failed to save receipt message: ${message}`);
@@ -427,7 +449,7 @@ export class PaymentReceiptService {
     const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
     const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     const fee = await this.resolveFeeBreakdown(input);
-    const feeLabel = fee.actualDisplay || 'indisponivel';
+    const feeLabel = fee.actualDisplay || 'indisponível';
 
     return ReceiptImageService.toSvg(
       ReceiptImageService.fromPaymentReceipt({
@@ -605,7 +627,7 @@ export class PaymentReceiptService {
   }
 
   private static feeLine(fee: FeeBreakdown): string {
-    if (!fee.actualDisplay) return 'Taxa: indisponivel';
+    if (!fee.actualDisplay) return 'Taxa: indisponível';
     return `Taxa: ${fee.actualDisplay}`;
   }
 

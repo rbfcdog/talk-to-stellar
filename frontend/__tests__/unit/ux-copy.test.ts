@@ -241,6 +241,8 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("function extractRampReceiptUrl(...sources: unknown[]): string");
     expect(text).toContain("function buildRampReceiptFallbackUrl(reference: unknown): string");
     expect(text).toContain("receiptUrl: extractRampReceiptUrl(completedTransaction, refreshed, payload)");
+    expect(text).toContain("const backendReceiptUrl = extractRampReceiptUrl(");
+    expect(text).toContain("if (backendReceiptUrl) return;");
     expect(text).toContain("buildRampReceiptFallbackUrl(transactionHash || operationId || orderId)");
     expect(text).toContain("const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload)");
     expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');
@@ -263,8 +265,12 @@ describe("UX copy guardrails", () => {
     expect(text).toContain('disabled={!canPrepareOnRampPix}');
     expect(text).toContain('L("Economia nesta rota", "Savings on this route")');
     expect(text).toContain('L("Economia estimada", "Estimated savings")');
-    expect(text).toContain("Comparado a métodos tradicionais estimados");
-    expect(text).toContain("border border-tts-gold bg-tts-gold-bg p-4 text-tts-deep");
+    expect(text).toContain("savingsPercentDisplay");
+    expect(text).toContain("remainingFeePercentDisplay");
+    expect(text).toContain('L("menos taxa", "less fee")');
+    expect(text).toContain("do custo tradicional");
+    expect(text).not.toContain("Comparado a métodos tradicionais estimados");
+    expect(text).not.toContain("formatMoney(estimatedSavingsBrl)");
     expect(text).not.toContain('L("Taxa da conta", "Account fee")');
     expect(text).not.toContain('L("Taxa total", "Total fee")');
     expect(text).not.toContain("Esse é o valor descontado nesta operação");
@@ -362,8 +368,24 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Maior saldo");
     expect(text).toContain("Ações rápidas");
     expect(text).toContain("Copiar chave");
-    expect(text).toContain("PIN obrigatório");
+    expect(text).toContain("PIN na confirmação");
+    expect(text).not.toContain("PIN obrigatório");
     expect(text).not.toContain("Payment link");
     expect(text).not.toContain("Pay ");
+  });
+
+  it("keeps PIN copy natural on balance and transactions pages", () => {
+    const balanceText = source("app/balance/balance-client.tsx");
+    const transactionsText = source("app/transactions/transactions-client.tsx");
+    const agentText = source("../backend/src/api/agent/graph.ts");
+
+    expect(balanceText).toContain("Digite seu PIN para ver saldo, XLM e outros ativos.");
+    expect(balanceText).toContain("Digite seu PIN para ver os valores.");
+    expect(transactionsText).toContain("Digite seu PIN para ver as movimentações.");
+    expect(agentText).toContain("Abra seu saldo aqui:");
+    expect(agentText).toContain("Abra seu histórico aqui:");
+    expect(agentText).not.toContain("Para proteger seu saldo");
+    expect(agentText).not.toContain("Para proteger seu histórico");
+    expect(agentText).not.toContain("tela segura abaixo");
   });
 });

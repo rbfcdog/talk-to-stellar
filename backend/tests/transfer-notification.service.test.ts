@@ -370,7 +370,7 @@ describe('TransferNotificationService', () => {
     expect(sendTextMock).toHaveBeenCalledWith(
       'main',
       '5519981808102',
-      expect.stringContaining('Login concluido'),
+      expect.stringContaining('Conta conectada'),
       { reliable: true }
     );
   });
@@ -394,7 +394,7 @@ describe('TransferNotificationService', () => {
     expect(sendTextMock).toHaveBeenCalledWith(
       'main',
       '5519981808102',
-      expect.stringContaining('Login concluido'),
+      expect.stringContaining('Conta conectada'),
       { reliable: true }
     );
   });

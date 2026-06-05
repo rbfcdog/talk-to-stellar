@@ -23,6 +23,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     (AnchorService as any).sandboxMockOnRampOrders?.clear?.();
+    (AnchorService as any).sandboxMockOffRampOrders?.clear?.();
     process.env = { ...originalEnv };
   });
 
@@ -254,6 +255,316 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect((record.transaction as any).toAmount).toBe('');
     expect((record.transaction as any).finalAmount).toBeUndefined();
     expect((record.transaction as any).auto_conversion.destination_amount).toBeUndefined();
+  });
+
+  it('does not mark BRL on-ramp as completed when sandbox cannot credit the wallet', async () => {
+    mockSandboxRuntime();
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/should-not-send');
+    const orderId = 'sandbox-pix-brl-no-distributor';
+
+    (AnchorService as any).sandboxMockOnRampOrders.set(orderId, {
+      transaction: {
+        id: orderId,
+        status: 'pending',
+        fromAmount: '10.15',
+        fromCurrency: 'BRL',
+        toAmount: '10.07',
+        toCurrency: 'TESOURO',
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        paymentInstructions: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sandbox_mock: true,
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '10.15',
+      destinationAmount: '10.07',
+      finalAssetCode: 'TESOURO',
+      finalAmount: '10.07',
+    });
+
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+
+    expect(record.transaction.status).toBe('failed');
+    expect(record.deliveryError).toContain('TESOURO_DISTRIBUTOR_SECRET');
+    expect(record.deliveryError).toContain('sem movimento real de saldo');
+    expect((record.transaction as any).sandbox_ledger_settlement).toBeUndefined();
+    expect(receiptSpy).not.toHaveBeenCalled();
+  });
+
+  it('credits BRL on-ramp through the TESOURO distributor when configured', async () => {
+    mockSandboxRuntime();
+    process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/brl-pix');
+    jest.spyOn(StellarService, 'getAccountBalance')
+      .mockResolvedValueOnce([
+        {
+          asset_code: 'TESOURO',
+          asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+          balance: '0.0000000',
+        },
+      ] as any)
+      .mockResolvedValue([
+        {
+          asset_code: 'TESOURO',
+          asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+          balance: '10.0700000',
+        },
+      ] as any);
+    const paymentSpy = jest.spyOn(StellarService, 'submitAssetPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'stellar-tesouro-delivery-hash',
+    } as any);
+    const orderId = 'sandbox-pix-brl-distributor';
+
+    (AnchorService as any).sandboxMockOnRampOrders.set(orderId, {
+      transaction: {
+        id: orderId,
+        status: 'pending',
+        fromAmount: '10.15',
+        fromCurrency: 'BRL',
+        toAmount: '10.07',
+        toCurrency: 'TESOURO',
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        paymentInstructions: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sandbox_mock: true,
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '10.15',
+      destinationAmount: '10.07',
+      finalAssetCode: 'TESOURO',
+      finalAmount: '10.07',
+      operationId: 'operation-brl-distributor',
+    });
+
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+
+    expect(record.transaction.status).toBe('completed');
+    expect(record.deliveryHash).toBe('stellar-tesouro-delivery-hash');
+    expect(record.finalAmount).toBe('10.0700000');
+    expect((record.transaction as any).toAmount).toBe('10.0700000');
+    expect(paymentSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sourceSecret: process.env.TESOURO_DISTRIBUTOR_SECRET,
+      destination: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      amount: '10.0700000',
+      assetCode: 'TESOURO',
+      memoText: 'PIX ONRAMP SANDBOX',
+    }));
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      dedupeKey: 'pix-onramp:operation-brl-distributor',
+    }));
+  });
+
+  it('does not complete BRL on-ramp when TESOURO submit succeeds but wallet balance does not change', async () => {
+    mockSandboxRuntime();
+    process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    process.env.SANDBOX_SETTLEMENT_BALANCE_POLL_MS = '0';
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/should-not-send');
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
+      {
+        asset_code: 'TESOURO',
+        asset_issuer: 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4',
+        balance: '0.0000000',
+      },
+    ] as any);
+    jest.spyOn(StellarService, 'submitAssetPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'stellar-tesouro-delivery-hash',
+    } as any);
+    const orderId = 'sandbox-pix-brl-no-delta';
+
+    (AnchorService as any).sandboxMockOnRampOrders.set(orderId, {
+      transaction: {
+        id: orderId,
+        status: 'pending',
+        fromAmount: '100.50',
+        fromCurrency: 'BRL',
+        toAmount: '100',
+        toCurrency: 'TESOURO',
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        paymentInstructions: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sandbox_mock: true,
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '100.50',
+      destinationAmount: '100',
+      finalAssetCode: 'TESOURO',
+      finalAmount: '100',
+      operationId: 'operation-brl-no-delta',
+    });
+
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+
+    expect(record.transaction.status).toBe('failed');
+    expect(record.deliveryError).toContain('wallet balance did not increase');
+    expect(record.deliveryError).toContain('Detected delta: 0');
+    expect(receiptSpy).not.toHaveBeenCalled();
+  });
+
+  it('registers sandbox off-ramp fallback orders so submitting debits the wallet', async () => {
+    mockSandboxRuntime();
+    const context = {
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+      sessionPinHash: 'hash',
+    };
+    const transaction = (AnchorService as any).createSandboxOffRampFallback({
+      context,
+      customerId: 'customer-1',
+      quoteId: 'quote-1',
+      amount: '2',
+      sourceAmount: '2',
+      sourceAssetCode: 'XLM',
+      targetBrl: '5.00',
+      destinationBrl: '5.00',
+      externalBankAccount: { pix_key: '11999999999', pix_key_type: 'phone' },
+    });
+    const map = (AnchorService as any).sandboxMockOffRampOrders as Map<string, unknown>;
+    expect(map.get(transaction.id)).toBeTruthy();
+
+    jest.spyOn(StellarService, 'getAccountBalance')
+      .mockResolvedValueOnce([
+        { asset_type: 'native', balance: '10.0000000' },
+      ] as any)
+      .mockResolvedValue([
+        { asset_type: 'native', balance: '8.0000000' },
+      ] as any);
+    jest.spyOn(AnchorService as any, 'ensureSandboxCollectorTrustline').mockResolvedValue({
+      success: true,
+      publicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    const paymentSpy = jest.spyOn(StellarService, 'submitAssetPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'sandbox-offramp-hash',
+    } as any);
+
+    const result = await (AnchorService as any).submitSandboxOffRamp({
+      context,
+      orderId: transaction.id,
+    });
+
+    expect(result).toMatchObject({ success: true, hash: 'sandbox-offramp-hash', order_id: transaction.id });
+    expect(paymentSpy).toHaveBeenCalledWith(expect.objectContaining({
+      destination: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      amount: '2.0000000',
+      assetCode: 'XLM',
+      memoText: 'PIX OFFRAMP SANDBOX',
+    }));
+  });
+
+  it('does not complete sandbox off-ramp when the submitted transfer does not debit the wallet', async () => {
+    mockSandboxRuntime();
+    process.env.SANDBOX_SETTLEMENT_BALANCE_POLL_MS = '0';
+    const context = {
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+      sessionPinHash: 'hash',
+    };
+    const transaction = (AnchorService as any).createSandboxOffRampFallback({
+      context,
+      customerId: 'customer-1',
+      quoteId: 'quote-1',
+      amount: '2',
+      sourceAmount: '2',
+      sourceAssetCode: 'XLM',
+      targetBrl: '5.00',
+      destinationBrl: '5.00',
+      externalBankAccount: { pix_key: '11999999999', pix_key_type: 'phone' },
+    });
+
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
+      { asset_type: 'native', balance: '10.0000000' },
+    ] as any);
+    jest.spyOn(AnchorService as any, 'ensureSandboxCollectorTrustline').mockResolvedValue({
+      success: true,
+      publicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    jest.spyOn(VaultService.prototype, 'getSecret').mockResolvedValue('SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    jest.spyOn(StellarService, 'submitAssetPaymentFromSecret').mockResolvedValue({
+      success: true,
+      hash: 'sandbox-offramp-no-delta-hash',
+    } as any);
+
+    const result = await (AnchorService as any).submitSandboxOffRamp({
+      context,
+      orderId: transaction.id,
+      operationId: 'operation-offramp-no-delta',
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      order_id: transaction.id,
+      hash: 'sandbox-offramp-no-delta-hash',
+    });
+    expect(result.error).toContain('wallet balance did not decrease');
+    expect(result.error).toContain('Detected debit: 0');
+  });
+
+  it('does not complete sandbox off-ramp without a collector that can receive the debit', async () => {
+    mockSandboxRuntime();
+    const context = {
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      email: 'user@example.com',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      vaultSecretId: 'vault-1',
+      sessionPinHash: 'hash',
+    };
+    const transaction = (AnchorService as any).createSandboxOffRampFallback({
+      context,
+      customerId: 'customer-1',
+      quoteId: 'quote-1',
+      amount: '2',
+      sourceAmount: '2',
+      sourceAssetCode: 'XLM',
+      targetBrl: '5.00',
+      destinationBrl: '5.00',
+      externalBankAccount: { pix_key: '11999999999', pix_key_type: 'phone' },
+    });
+
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
+      { asset_type: 'native', balance: '10.0000000' },
+    ] as any);
+    jest.spyOn(AnchorService as any, 'ensureSandboxCollectorTrustline').mockResolvedValue({
+      success: false,
+      publicKey: '',
+      error: 'collector unavailable',
+    });
+    const paymentSpy = jest.spyOn(StellarService, 'submitAssetPaymentFromSecret');
+
+    const result = await (AnchorService as any).submitSandboxOffRamp({
+      context,
+      orderId: transaction.id,
+      operationId: 'operation-offramp-no-collector',
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      order_id: transaction.id,
+    });
+    expect(result.error).toContain('collector unavailable');
+    expect(result.error).toContain('refusing to mark PIX off-ramp as completed without a real balance movement');
+    expect(paymentSpy).not.toHaveBeenCalled();
   });
 
   it('sends a WhatsApp callback receipt when non-BRL on-ramp settlement is still processing', async () => {

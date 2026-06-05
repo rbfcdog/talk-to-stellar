@@ -877,7 +877,7 @@ async function sendTelegramPaymentNotification(input: {
       ? formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)
       : '';
     const externalDeliveryText = [
-      'Pagamento concluido.',
+      'Pagamento concluído.',
       sourceLabel ? `Origem: ${sourceLabel}` : '',
       `Valor: ${amountLabel}`,
       `Destino: ${readableDestination || 'destinatario'}`,

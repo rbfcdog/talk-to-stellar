@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { AccountStatusCard } from "@/components/shared/account-status";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -289,6 +288,14 @@ function formatMoney(value: unknown, currency = "BRL") {
   const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${currency}`;
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(numeric);
+}
+
+function formatPercentValue(value: number, language: "pt-BR" | "en") {
+  const safe = Number.isFinite(value) ? value : 0;
+  return new Intl.NumberFormat(language, {
+    minimumFractionDigits: safe < 10 && safe > 0 ? 1 : 0,
+    maximumFractionDigits: 1,
+  }).format(safe);
 }
 
 function toPositiveNumber(value: unknown, fallback = 0) {
@@ -725,6 +732,7 @@ function WalletPinInput({
   inputRef,
   placeholder = "Enter your PIN",
   clearLabel = "Clear",
+  showClear = true,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -732,6 +740,7 @@ function WalletPinInput({
   inputRef?: (node: HTMLInputElement | null) => void;
   placeholder?: string;
   clearLabel?: string;
+  showClear?: boolean;
 }) {
   const border = tone === "cyan"
     ? "focus-within:border-tts-gold"
@@ -761,13 +770,15 @@ function WalletPinInput({
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 8))}
         />
-        <button
-          type="button"
-          className="mr-2 rounded-full border border-tts-border bg-tts-surface px-3 py-2 text-xs font-black text-tts-muted transition hover:text-tts-deep"
-          onClick={() => onChange("")}
-        >
-          {clearLabel}
-        </button>
+        {showClear && (
+          <button
+            type="button"
+            className="mr-2 rounded-full border border-tts-border bg-tts-surface px-3 py-2 text-xs font-black text-tts-muted transition hover:text-tts-deep"
+            onClick={() => onChange("")}
+          >
+            {clearLabel}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1406,7 +1417,6 @@ export default function PixRampClient({
   );
   const onRampPrimaryDisabled = Boolean(!canUseExistingOnRampCheckout && !canPrepareOnRampPix);
   const payablePixAvailable = Boolean(pixCode && !isSandboxMockOrder);
-  const demoPixMode = Boolean(order && (isSandboxMockOrder || (config?.available && !payablePixAvailable)));
   const sandboxQrPayload = isSandboxMockOrder
     ? `talktostellar://pix-onramp?order=${encodeURIComponent(orderId)}&operation=${encodeURIComponent(operationId)}&amount=${encodeURIComponent(effectiveOnRampPixPayAmount)}&asset=${encodeURIComponent(targetAsset)}`
     : "";
@@ -1533,10 +1543,10 @@ export default function PixRampClient({
         state: orderId ? "done" : loading.includes("PIX") || loading.includes("Preparing") ? "active" : "pending",
       },
       {
-        label: L("Confirmação do PIX", "PIX confirmation"),
+        label: L("PIN", "PIN"),
         detail: onRampComplete
           ? L("PIX confirmado.", "PIX confirmed.")
-          : orderId ? L("Clique em confirmar após fazer o PIX.", "Click confirm after making the PIX.") : L("Aguardando geração do checkout.", "Waiting for checkout creation."),
+          : orderId ? L("Aguardando PIN.", "Waiting for PIN.") : L("Aguardando geração do checkout.", "Waiting for checkout creation."),
         state: onRampComplete ? "done" : orderId ? "active" : "pending",
       },
       {
@@ -1608,14 +1618,10 @@ export default function PixRampClient({
       setMobileStage("receipt");
       return;
     }
-    if (rampMode === "onramp" && onRampPixCheckoutAvailable && !checkoutExpired && !orderFailed) {
-      setMobileStage("payment");
-      return;
-    }
     if (rampMode === "offramp" && offRampQuote) {
       setMobileStage("payment");
     }
-  }, [checkoutExpired, offRampQuote, onRampPixCheckoutAvailable, orderFailed, rampMode, step, temporaryOffRampTestResult]);
+  }, [offRampQuote, rampMode, step, temporaryOffRampTestResult]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2363,7 +2369,7 @@ export default function PixRampClient({
         offRampAny.order_id ||
         ""
     ).trim();
-    const receiptUrl = extractRampReceiptUrl(
+    const backendReceiptUrl = extractRampReceiptUrl(
       input.receiptUrl,
       input.transferPayload,
       input.offRampPayload,
@@ -2371,7 +2377,8 @@ export default function PixRampClient({
       statusPayload,
       orderPayload,
       onRampReceiptUrl
-    ) || buildRampReceiptFallbackUrl(transactionHash || operationId || orderId);
+    );
+    const receiptUrl = backendReceiptUrl || buildRampReceiptFallbackUrl(transactionHash || operationId || orderId);
     const feedbackKey = `${input.kind}:${operationId || orderId || atomicIntentKey}:${receiptUrl}`;
     if (pixFeedbackKeysRef.current.has(feedbackKey)) return;
     pixFeedbackKeysRef.current.add(feedbackKey);
@@ -2396,6 +2403,7 @@ export default function PixRampClient({
           pix_target: offRampPixTargetDisplay,
         },
       });
+      if (backendReceiptUrl) return;
       enqueueWebChatFeedback([
         L("PIX enviado com sucesso.", "PIX sent successfully."),
         L(`Valor retirado: ${offRampReceiptAmount}`, `Withdrawn amount: ${offRampReceiptAmount}`),
@@ -2422,6 +2430,7 @@ export default function PixRampClient({
           recipient,
         },
       });
+      if (backendReceiptUrl) return;
       enqueueWebChatFeedback([
         L("PIX confirmado e transferência enviada.", "PIX confirmed and transfer sent."),
         L(`PIX pago: ${effectiveOnRampPixPayDisplay}`, `PIX paid: ${effectiveOnRampPixPayDisplay}`),
@@ -2484,6 +2493,7 @@ export default function PixRampClient({
         target_asset: finalAsset,
       },
     });
+    if (backendReceiptUrl) return;
     enqueueWebChatFeedback([
       L("PIX confirmado com sucesso.", "PIX confirmed successfully."),
       L(`Valor pago: ${paidAmount}`, `Paid amount: ${paidAmount}`),
@@ -2694,7 +2704,7 @@ export default function PixRampClient({
           request: { amount: amountBrl, targetAsset, desiredFinalAmount, desiredFinalAsset },
           response: { reason: quoteNeedsCustomerRefresh ? "missing_customer_context" : quoteForOrder?.id ? "expiring_soon" : "missing", remaining_ms: quoteTimeRemainingMs },
         });
-        const fresh = await requestQuote({ displayQuote: !exactOnRampValueContract });
+        const fresh = await requestQuote({ displayQuote: true });
         authForOrder = fresh.auth;
         quoteForOrder = fresh.quoteResult?.quote;
         customerForOrder = fresh.customerResult;
@@ -3194,13 +3204,6 @@ export default function PixRampClient({
                   )}
               </div>
             </div>
-            <AccountStatusCard
-              state={!sessionReady ? "loading" : hasSession ? "connected" : "signed-out"}
-              ctaHref={loginHref || "/login"}
-              detail={hasSession ? L("Sua conta está pronta para confirmar este PIX.", "Your account is ready to confirm this PIX.") : undefined}
-              compact
-              className="hidden bg-tts-bg/70 md:block"
-            />
           </section>
         </header>
 
@@ -3618,25 +3621,30 @@ export default function PixRampClient({
               </>
             )}
 
-            <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-tts-border bg-tts-bg/60 p-2 sm:grid-cols-4" aria-label={transferFlow ? L("Moeda de envio", "Send currency") : L("Moeda de recebimento", "Receive currency")}>
-              {TARGET_ASSETS.map((asset) => (
-                <button
-                  key={asset}
-                  type="button"
-                  className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-sm" : "text-tts-muted hover:bg-tts-surface"}`}
-                  aria-pressed={targetAsset === asset}
-                  onClick={() => {
-                    if (asset !== targetAsset) {
-                      setTargetAsset(asset);
-                      setDesiredReceiveAmount("");
-                      setDesiredReceiveAsset("");
-                      clearQuoteState();
-                    }
-                  }}
-                >
-                  {friendlyAssetName(asset, language)}
-                </button>
-              ))}
+            <div className="mt-5">
+              <p id="pix-receive-asset-label" className="mb-2 text-sm font-black tracking-normal text-tts-muted">
+                {L("Receber em:", "Receive in:")}
+              </p>
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-tts-border bg-tts-bg/60 p-2 sm:grid-cols-4" aria-labelledby="pix-receive-asset-label">
+                {TARGET_ASSETS.map((asset) => (
+                  <button
+                    key={asset}
+                    type="button"
+                    className={`rounded-2xl px-4 py-3 text-sm font-black transition ${targetAsset === asset ? "bg-tts-confirm text-tts-deep shadow-sm" : "text-tts-muted hover:bg-tts-surface"}`}
+                    aria-pressed={targetAsset === asset}
+                    onClick={() => {
+                      if (asset !== targetAsset) {
+                        setTargetAsset(asset);
+                        setDesiredReceiveAmount("");
+                        setDesiredReceiveAsset("");
+                        clearQuoteState();
+                      }
+                    }}
+                  >
+                    {friendlyAssetName(asset, language)}
+                  </button>
+                ))}
+              </div>
             </div>
             {!quote && !exactOnRampValueContract && (
               <EtherfuseMeasuredFeeNotice
@@ -3689,7 +3697,7 @@ export default function PixRampClient({
                   : quoteExpired
                     ? L("Continuar", "Continue")
                   : onRampPixAlreadyGenerated
-                    ? L("Continuar para o PIX", "Continue to PIX")
+                    ? L("Continuar", "Continue")
                     : waitingForReceiveEstimate
                       ? <span className="inline-flex items-center justify-center gap-2"><InlineSpinner />{L("Atualizando cotação...", "Updating quote...")}</span>
                       : receiveEstimateMissing
@@ -3814,19 +3822,7 @@ export default function PixRampClient({
                         {L("Esse PIX não pode mais ser confirmado. Gere um novo PIX para continuar.", "This PIX can no longer be confirmed. Create a new PIX to continue.")}
                       </p>
                     </div>
-                  ) : demoPixMode ? (
-                    <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-sm font-bold text-tts-gold md:mt-5 md:p-4">
-                      <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Confirmação do PIX", "PIX confirmation")}</p>
-                      <p className="mt-2">
-                        {isSandboxMockOrder
-                          ? L("Depois de pagar, confirme aqui para concluir a operação.", "After paying, confirm here to complete the operation.")
-                          : L("Depois de pagar no app do seu banco, confirme aqui para continuar.", "After paying in your bank app, confirm here to continue.")}
-                      </p>
-                      <p className="tts-mobile-soft-hide mt-2 text-tts-gold md:block">
-                        {L("Você verá o valor final e o status da operação nesta mesma tela.", "You will see the final amount and operation status on this same page.")}
-                      </p>
-                    </div>
-                  ) : (
+                  ) : payablePixAvailable ? (
                     <div className="mt-5 rounded-2xl bg-tts-bg/60 p-4">
                       <p className="mb-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
                         {L("PIX bancário integrado. Use o QR ou copie o código para pagar no seu app do banco.", "Bank PIX integrated. Use the QR or copy the code to pay in your bank app.")}
@@ -3840,7 +3836,7 @@ export default function PixRampClient({
                       <p className="mt-3 max-h-28 overflow-auto break-all rounded-2xl bg-tts-surface p-3 font-mono text-xs text-tts-deep">{pixCode || "PIX code not returned yet"}</p>
                       <p className="mt-3 text-sm text-tts-muted">{L("Chave PIX", "PIX key")}: <span className="font-mono text-tts-deep">{pixKey || L("indisponível", "unavailable")}</span></p>
                     </div>
-                  )}
+                  ) : null}
 
                   {orderFailed && (
                     <div className="mt-5 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-tts-error">
@@ -3856,32 +3852,27 @@ export default function PixRampClient({
                   )}
 
                   {config?.available && !orderFailed && !(isSandboxMockOrder && !localMockFallbackAllowed) && (
-                    <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-gold shadow-sm shadow-amber-950/20 md:mt-5 md:p-4">
+                    <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/70 p-3 text-tts-deep shadow-sm md:mt-5 md:p-4">
                         {sandboxSimulationComplete ? (
                           <p className="mt-3 rounded-2xl border border-tts-confirm bg-tts-confirm/10 p-3 text-sm font-black text-tts-confirm">
                             {L("PIX confirmado.", "PIX confirmed.")} {transferFlow ? pixFundedTransferResult?.transaction_hash ? L("A transferência foi enviada.", "The transfer was sent.") : L("A transferência automática ainda está finalizando.", "The automatic transfer is still finishing.") : L(`${onRampReceivedDisplay} entrou na conta.`, `${onRampReceivedDisplay} arrived in the account.`)}
                           </p>
                         ) : (
                           <>
-                            <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Depois de pagar o PIX", "After paying PIX")}</p>
-                            <p className="mt-2 text-sm font-bold leading-6 text-tts-gold">
-                              {isSandboxMockOrder
-                                ? L("Digite o PIN para concluir.", "Enter the PIN to complete.")
-                                : L("Digite o PIN para confirmar e continuar.", "Enter the PIN to confirm and continue.")}
-                            </p>
-                            <label className="mt-4 block text-sm font-bold text-tts-gold">{L("PIN da conta", "Account PIN")}</label>
+                            <label className="sr-only">{L("PIN", "PIN")}</label>
                             <WalletPinInput
                               value={walletPin}
                               onChange={updateWalletPin}
                               tone="amber"
                               placeholder={L("Digite seu PIN", "Enter your PIN")}
                               clearLabel={L("Limpar", "Clear")}
+                              showClear={false}
                               inputRef={(node) => {
                                 walletPinInputRef.current = node;
                               }}
                             />
                             <button
-                              className="mt-4 w-full rounded-2xl bg-tts-gold px-5 py-5 text-base font-black text-tts-deep shadow-sm shadow-amber-950/30 transition hover:bg-tts-gold/90 disabled:opacity-50"
+                              className="mt-3 w-full rounded-2xl bg-tts-confirm px-5 py-5 text-base font-black text-tts-deep shadow-sm shadow-tts-confirm/20 transition hover:bg-tts-confirm/90 disabled:opacity-50"
                               disabled={Boolean(loading) || !orderId || walletPin.length < 4 || operationLocked}
                               onClick={() => run("Confirming PIX received", simulatePixPayment)}
                             >
@@ -4294,12 +4285,18 @@ function RampFeeBridge({
   const showSavingsCard = mode === "onramp" || mode === "offramp"
     ? traditionalFeeBrl > 0 || actualFeeBrl > 0 || estimatedSavingsBrl > 0
     : false;
+  const savingsPercent = traditionalFeeBrl > 0
+    ? Math.max(0, Math.min(100, (estimatedSavingsBrl / traditionalFeeBrl) * 100))
+    : 0;
+  const remainingFeePercent = Math.max(0, Math.min(100, 100 - savingsPercent));
+  const savingsPercentDisplay = formatPercentValue(savingsPercent, language);
+  const remainingFeePercentDisplay = formatPercentValue(remainingFeePercent, language);
   const savingsTitle = mode === "onramp"
     ? L("Economia nesta rota", "Savings on this route")
     : L("Economia estimada", "Estimated savings");
   const savingsDescription = L(
-    `Comparado a métodos tradicionais estimados em ${formatMoney(traditionalFeeBrl)}. Aqui a taxa estimada é ${formatMoney(actualFeeBrl)} antes do PIN.`,
-    `Compared with traditional methods estimated at ${formatMoney(traditionalFeeBrl)}. Here the estimated fee is ${formatMoney(actualFeeBrl)} before PIN.`,
+    `Taxa desta rota: ${remainingFeePercentDisplay}% do custo tradicional, antes do PIN.`,
+    `This route fee: ${remainingFeePercentDisplay}% of the traditional cost before PIN.`,
   );
   const feeTitle = mode === "onramp"
     ? L("Resumo do PIX", "PIX summary")
@@ -4328,15 +4325,15 @@ function RampFeeBridge({
       </div>
 
       {showSavingsCard && (
-        <div className="mt-4 rounded-2xl border border-tts-gold bg-tts-gold-bg p-3 text-tts-deep sm:p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mt-4 rounded-2xl border border-tts-gold/50 bg-tts-gold-bg/70 p-3 text-tts-deep">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-normal text-tts-gold sm:text-xs sm:tracking-normal">
+              <p className="text-[10px] font-black uppercase tracking-normal text-tts-gold">
                 {savingsTitle}
               </p>
-              <p className="mt-1 text-xl font-black sm:text-2xl">{formatMoney(estimatedSavingsBrl)}</p>
+              <p className="mt-1 text-base font-black">{savingsPercentDisplay}% {L("menos taxa", "less fee")}</p>
             </div>
-            <p className="max-w-sm text-[10px] font-semibold leading-4 text-tts-muted sm:text-[11px]">
+            <p className="max-w-sm text-[10px] font-semibold leading-4 text-tts-muted">
               {savingsDescription}
             </p>
           </div>
@@ -4548,7 +4545,7 @@ function AssetMovement({ title, before, after, deltas }: {
         {before.length > 0 && after.length === 0 ? (
           <>
             <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-sm font-bold text-tts-gold">
-              Snapshot inicial capturado. O delta so aparece quando o snapshot final existir, para nao mostrar saldo como zero antes da liquidacao.
+              Snapshot inicial capturado. O delta só aparece quando o snapshot final existir, para não mostrar saldo como zero antes da liquidação.
             </div>
             {before.map((item) => (
               <div key={`${item.asset_code}:${item.asset_issuer || "native"}`} className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">

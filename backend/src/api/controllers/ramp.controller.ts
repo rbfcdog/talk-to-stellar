@@ -12,7 +12,7 @@ function statusFromError(error: any): number {
 }
 
 function errorMessage(error: any): string {
-  return publicErrorMessage(error, 'Nao consegui concluir a operacao PIX agora. Tente novamente em alguns segundos.');
+  return publicErrorMessage(error, 'Não consegui concluir a operação PIX agora. Tente novamente em alguns segundos.');
 }
 
 function errorPayload(error: any): Record<string, unknown> {
@@ -35,7 +35,7 @@ function yieldErrorPayload(error: any, req?: Request): Record<string, unknown> {
   return {
     ...publicErrorPayload(error, {
       includeSupportCode: true,
-      fallback: 'Nao foi possivel atualizar a aplicacao agora. Tente novamente em alguns segundos.',
+      fallback: 'Não foi possível atualizar a aplicação agora. Tente novamente em alguns segundos.',
     }),
     ...(requestId ? { request_id: requestId } : {}),
   };
