@@ -601,6 +601,35 @@ describe('Agent tool execution', () => {
     expect(statusSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('formats yield balance from raw contract units before replying in chat', async () => {
+    const { AnchorService } = require('../src/api/services/anchor.service');
+    const balanceSpy = jest.spyOn(AnchorService, 'getDefindexYieldBalanceForSession').mockResolvedValueOnce({
+      success: true,
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      vault: { asset_code: 'USDC', display_asset_code: 'USDC' },
+      balance: {
+        dfTokens: 700000000,
+        underlyingBalance: [700000000],
+      },
+    } as any);
+
+    const output = await executeTool('get_yield_balance', {
+      session_id: '11111111-1111-4111-8111-111111111111',
+      asset_code: 'USDC',
+      language: 'pt-BR',
+    });
+    const parsed = JSON.parse(output);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.amount).toBe('70');
+    expect(parsed.message).toContain('Posição atual: 70 dólares.');
+    expect(parsed.message).not.toContain('700000000');
+    expect(balanceSpy).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: '11111111-1111-4111-8111-111111111111',
+      asset_code: 'USDC',
+    }));
+  });
+
   it('prepares yield through the tool layer without exposing unsigned operation payloads', async () => {
     const { AnchorService } = require('../src/api/services/anchor.service');
     const prepareSpy = jest.spyOn(AnchorService, 'prepareDefindexYieldForSession').mockResolvedValueOnce({

@@ -350,6 +350,81 @@ function formatDecimalAmount(value: unknown): string {
   return amount.toFixed(7).replace(/\.?0+$/, '');
 }
 
+const DEFINDEX_CONTRACT_DECIMALS = 7;
+const DEFINDEX_CONTRACT_SCALE = BigInt(10) ** BigInt(DEFINDEX_CONTRACT_DECIMALS);
+
+function normalizeDefindexNumberText(value: unknown): string {
+  return String(value ?? '').trim().replace(/\s+/g, '').replace(',', '.');
+}
+
+function decimalDefindexAmount(value: unknown): string {
+  const raw = normalizeDefindexNumberText(value);
+  if (!/^\d+(\.\d+)?$/.test(raw)) return '';
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? formatDecimalAmount(parsed) : '';
+}
+
+function defindexAmountFromContractUnits(value: unknown): string {
+  const raw = normalizeDefindexNumberText(value);
+  if (!/^\d+$/.test(raw)) return decimalDefindexAmount(value);
+  const units = BigInt(raw);
+  if (units <= BigInt(0)) return '';
+  const whole = units / DEFINDEX_CONTRACT_SCALE;
+  const fraction = (units % DEFINDEX_CONTRACT_SCALE)
+    .toString()
+    .padStart(DEFINDEX_CONTRACT_DECIMALS, '0')
+    .replace(/0+$/, '');
+  return fraction ? `${whole.toString()}.${fraction}` : whole.toString();
+}
+
+function defindexAmountFromUnitArray(value: unknown): string {
+  if (!Array.isArray(value)) return defindexAmountFromContractUnits(value);
+  let total = BigInt(0);
+  for (const item of value) {
+    const raw = normalizeDefindexNumberText(item);
+    if (/^\d+$/.test(raw)) total += BigInt(raw);
+  }
+  return total > BigInt(0) ? defindexAmountFromContractUnits(total.toString()) : '';
+}
+
+function extractDefindexBalanceAmountDecimal(value: any): string {
+  if (value === null || value === undefined) return '0';
+  if (typeof value === 'string' || typeof value === 'number') return defindexAmountFromContractUnits(value) || '0';
+  if (Array.isArray(value)) return defindexAmountFromUnitArray(value) || '0';
+  if (typeof value !== 'object') return '0';
+
+  const decimalCandidates = [
+    value.amount_decimal,
+    value.amountDecimal,
+    value.balance_decimal,
+    value.balanceDecimal,
+    value.display_amount,
+    value.displayAmount,
+  ];
+  const decimalFound = decimalCandidates
+    .map((candidate) => decimalDefindexAmount(candidate))
+    .find((candidate) => Number(candidate) > 0);
+  if (decimalFound) return decimalFound;
+
+  const unitCandidates = [
+    value.underlyingBalance,
+    value.underlying_balance,
+    value.underlyingBalances,
+    value.underlying_balances,
+    value.assetBalance,
+    value.asset_balance,
+    value.balance,
+    value.amount,
+    value.total,
+    value.shares,
+    value.dfTokens,
+  ];
+  const unitFound = unitCandidates
+    .map((candidate) => defindexAmountFromUnitArray(candidate))
+    .find((candidate) => Number(candidate) > 0);
+  return unitFound || '0';
+}
+
 function formatCentsCeil(value: unknown): string {
   const amount = parseHumanAmountNumber(value);
   if (!Number.isFinite(amount) || amount <= 0) return '0';
@@ -5756,6 +5831,7 @@ export class AnchorService {
       }
       throw error;
     }
+    const amountDecimal = extractDefindexBalanceAmountDecimal(balance);
     logDefindex('info', 'balance_success', {
       request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
@@ -5764,6 +5840,7 @@ export class AnchorService {
       asset_code: vault.asset_code,
       vault_address: maskLogValue(vault.vault_address),
       network: vault.network,
+      amount_decimal: amountDecimal,
     });
     return {
       success: true,
@@ -5772,7 +5849,15 @@ export class AnchorService {
         ...vault,
         display_asset_code: userFacingAssetCode(vault.asset_code),
       },
-      balance,
+      balance: balance && typeof balance === 'object' && !Array.isArray(balance)
+        ? {
+          ...(balance as Record<string, unknown>),
+          amount_decimal: amountDecimal,
+        }
+        : {
+          amount_decimal: amountDecimal,
+          raw: balance,
+        },
     };
   }
 
