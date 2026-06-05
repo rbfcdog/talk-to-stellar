@@ -319,6 +319,8 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("estimatedSavingsBrl");
     expect(text).toContain("function noisySavingsPercent");
     expect(text).toContain("return 58 + ratio * 7");
+    expect(text).toContain("const remainingFeePercent = Math.max(0, Math.min(100, 100 - savingsPercent));");
+    expect(text).not.toContain("(totalEstimatedFee / traditionalFee) * 100");
     expect(text).toContain("completedTransaction = await waitForPostConversion(completedTransaction, transferFlow ? 3 : 10)");
     expect(text).toContain("markOperationCompleted();");
     expect(text).toContain("const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee");
