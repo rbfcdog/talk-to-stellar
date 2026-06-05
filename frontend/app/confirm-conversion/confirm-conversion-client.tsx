@@ -10,6 +10,7 @@ import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target"
+import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 
 type ValidationResult = {
   success?: boolean
@@ -117,6 +118,18 @@ function formatRouteChainFromPayload(payload: any) {
   const chain = [source, ...hops, destination].filter(Boolean)
   const compact = chain.filter((asset, index) => index === 0 || asset !== chain[index - 1])
   return compact.join(" -> ")
+}
+
+function isPixReturnTarget(target: ReturnTarget) {
+  const source = String(target?.source || "").toLowerCase()
+  const href = String(target?.href || "").toLowerCase()
+  return (
+    source.includes("pix") ||
+    source.includes("onramp") ||
+    source.includes("offramp") ||
+    href.includes("/pix-") ||
+    href.includes("/pix-ramp")
+  )
 }
 
 function buildActionUrl(path: string, params: Record<string, unknown>) {
@@ -229,6 +242,20 @@ export default function ConfirmConversionClient({
     return () => window.clearInterval(timer)
   }, [status])
 
+  const payload = validation?.payload || {}
+  const returnTarget = initialReturnTarget || resolveReturnTarget({
+    language: feedbackLanguage,
+    returnTo: payload.return_to || payload.returnTo || queryReturnTo,
+    source: payload.return_source || payload.returnSource || payload.from || queryReturnSource || payload.source || completionSource,
+    fallbackSource: "convert",
+  })
+  const pixReturnTarget = isPixReturnTarget(returnTarget)
+
+  useEffect(() => {
+    if (status !== "done" || !result?.success || !pixReturnTarget) return
+    closeIntermediatePage()
+  }, [pixReturnTarget, result?.success, status])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token.trim() || !pin.trim() || validation?.valid === false) return
@@ -286,7 +313,6 @@ export default function ConfirmConversionClient({
     )
   }
 
-  const payload = validation?.payload || {}
   const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || payload.sourceAssetCode || "")
   const destAssetCode = normalizeAssetCode(payload.dest_asset_code || payload.destAssetCode || "")
   const isCrossAssetConversion = Boolean(sourceAssetCode && destAssetCode && sourceAssetCode !== destAssetCode)
@@ -304,12 +330,6 @@ export default function ConfirmConversionClient({
   const transactionsUrl = buildActionUrl("/transactions", {
     from: "confirm-conversion",
     lang: feedbackLanguage,
-  })
-  const returnTarget = initialReturnTarget || resolveReturnTarget({
-    language: feedbackLanguage,
-    returnTo: payload.return_to || payload.returnTo || queryReturnTo,
-    source: payload.return_source || payload.returnSource || payload.from || queryReturnSource || payload.source || completionSource,
-    fallbackSource: "convert",
   })
   const estimatedFeeDisplay = String(payload.estimated_fee_display || payload.quote?.fee_display || "")
   const showEstimatedFee = hasUsableFeeDisplay(estimatedFeeDisplay)
@@ -504,12 +524,14 @@ export default function ConfirmConversionClient({
                   {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                     <p>{T(feedbackLanguage, "Economia estimada nesta operação", "Estimated savings on this operation")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
                   )}
-                  <a
-                    href={returnTarget.href}
-                    className="mt-3 inline-flex w-full items-center justify-center bg-tts-deep px-4 py-3 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
-                  >
-                    {returnTarget.label}
-                  </a>
+                  {!pixReturnTarget && (
+                    <a
+                      href={returnTarget.href}
+                      className="mt-3 inline-flex w-full items-center justify-center bg-tts-deep px-4 py-3 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+                    >
+                      {returnTarget.label}
+                    </a>
+                  )}
                 </motion.div>
               )}
               {status === "error" && (
@@ -522,6 +544,38 @@ export default function ConfirmConversionClient({
               )}
               </AnimatePresence>
             </div>
+
+            <AnimatePresence>
+              {status === "done" && result?.success && pixReturnTarget && (
+                <motion.div
+                  initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                  className="fixed inset-x-3 bottom-3 z-50 rounded-3xl border border-tts-confirm/60 bg-tts-surface/95 p-4 text-tts-deep shadow-2xl shadow-black/30 backdrop-blur md:static md:mt-4 md:rounded-2xl"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-tts-confirm text-sm font-black text-tts-deep">
+                      OK
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">
+                        {T(feedbackLanguage, "PIX atualizado", "PIX updated")}
+                      </p>
+                      <p className="mt-1 text-base font-black text-tts-deep">
+                        {T(feedbackLanguage, "Volte ao PIX para continuar.", "Back to PIX to continue.")}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={returnTarget.href}
+                    className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
+                  >
+                    {returnTarget.label}
+                  </a>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
         </div>
       </div>

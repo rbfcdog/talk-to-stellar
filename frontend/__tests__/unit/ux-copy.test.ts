@@ -142,6 +142,11 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Conversão não concluída");
     expect(text).toContain("visibleSupportCode");
     expect(text).toContain("O resultado é salvo no histórico da conta.");
+    expect(text).toContain("isPixReturnTarget");
+    expect(text).toContain("closeIntermediatePage()");
+    expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
+    expect(text).toContain("PIX atualizado");
+    expect(text).toContain("Volte ao PIX para continuar.");
     expect(text).not.toContain("Voltar ao chat");
     expect(text).not.toContain("Back to chat");
     expect(text).not.toContain('buildActionUrl("/chat"');
@@ -338,6 +343,7 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Conversão para");
     expect(text).toContain("!returnToPath && !stayOpenAfterSuccess");
     expect(text).toContain("receipt-top-return-cta");
+    expect(text).toContain("statusLabel(temporaryOffRampTestResult.final_transaction?.status");
     expect(webFeedbackText).toContain("isExternalChannelPage()");
     expect(webFeedbackText).toContain('source === "whatsapp" || source === "telegram"');
     expect(chatText).toContain('chatId !== "agent" || typeof window === "undefined" || externalPriorityChat');
