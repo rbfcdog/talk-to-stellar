@@ -282,6 +282,84 @@ describe('agent Telegram identity binding', () => {
     });
   });
 
+  it('sends unlinked WhatsApp users to account creation instead of PIN login', async () => {
+    const repository = createRepository({});
+    checkExternalAccountMock.mockResolvedValue(null);
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'hello',
+          language: 'en',
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.onboardingRequired).toBe(true);
+      expect(payload.reason).toBe('not_linked');
+      expect(payload.creationUrl).toBe('https://app.example.com/create-account');
+      expect(payload.message).toContain('create your account');
+      expect(payload.message).not.toContain('PIN');
+      expect(createOnboardUrlWithShortLinkMock).toHaveBeenCalledWith('whatsapp', '5511999999999', expect.objectContaining({
+        source: 'whatsapp',
+      }));
+      expect(createLoginUrlWithShortLinkMock).not.toHaveBeenCalled();
+      expect(processInputMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('treats WhatsApp mappings without an account email as onboarding placeholders', async () => {
+    const linkedSessionId = '44444444-4444-4444-8444-444444444444';
+    const repository = createRepository({
+      [linkedSessionId]: {
+        user_id: 'user_1780000000000',
+        email: '',
+        session_token: 'placeholder-token',
+        last_activity: new Date().toISOString(),
+      },
+    });
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: linkedSessionId,
+      user_id: 'user_1780000000000',
+    });
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'quero deslogar',
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+      const payload = await response.json() as any;
+
+      expect(response.status).toBe(200);
+      expect(payload.onboardingRequired).toBe(true);
+      expect(payload.reason).toBe('missing_account_identity');
+      expect(payload.creationUrl).toBe('https://app.example.com/create-account');
+      expect(createOnboardUrlWithShortLinkMock).toHaveBeenCalledWith('whatsapp', '5511999999999', expect.objectContaining({
+        source: 'whatsapp',
+      }));
+      expect(createLoginUrlWithShortLinkMock).not.toHaveBeenCalled();
+      expect(processInputMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('requires re-login when the mapped Telegram session belongs to a different account owner', async () => {
     const staleSessionId = '11111111-1111-4111-8111-111111111111';
     const linkedSessionId = '22222222-2222-4222-8222-222222222222';

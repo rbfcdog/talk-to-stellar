@@ -490,12 +490,28 @@ function normalizeAccountOwner(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function looksLikeEmail(value: unknown): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeAccountOwner(value));
+}
+
 function sessionMatchesExternalOwner(sessionData: SessionData | null | undefined, externalUserId: unknown): boolean {
   const owner = normalizeAccountOwner(externalUserId);
   if (!owner) return true;
   const sessionUserId = normalizeAccountOwner((sessionData as any)?.user_id);
   const sessionEmail = normalizeAccountOwner((sessionData as any)?.email);
   return owner === sessionUserId || owner === sessionEmail;
+}
+
+function sessionHasAccountIdentity(sessionData: SessionData | null | undefined, mapping: any): boolean {
+  const mappedData = mapping?.data && typeof mapping.data === 'object' ? mapping.data : {};
+  return Boolean(
+    looksLikeEmail((sessionData as any)?.email) ||
+      looksLikeEmail((sessionData as any)?.user_id) ||
+      looksLikeEmail(mapping?.user_id) ||
+      looksLikeEmail(mappedData.email) ||
+      looksLikeEmail(mappedData.user_id) ||
+      looksLikeEmail(mappedData.userId)
+  );
 }
 
 function formatStartupBalanceLine(balance: any, index: number): string {
@@ -641,7 +657,7 @@ export function createAgentRoutes(
         );
         const externalResponseLanguage = externalStoredLanguage || requestLanguage;
         if (!existing) {
-          const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
+          const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, {
             source: normalizedProvider,
             language: requestLanguage,
             ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
@@ -654,11 +670,12 @@ export function createAgentRoutes(
             session_id: session_id || null,
             success: true,
             onboardingRequired: true,
+            reason: "not_linked",
             creationUrl: url,
             message: localized(
               requestLanguage,
-              `Sua sessão não está ativa no momento.\n\nAbra este link para entrar na sua conta com PIN:\n${url}`,
-              `Your session is not active right now.\n\nOpen this link to sign in to your account with PIN:\n${url}`
+              `Para continuar, crie sua conta.\nAbra este link:\n${url}\n\nSe você já tem conta, use "Já tenho conta" na página de cadastro.`,
+              `To continue, create your account.\nOpen this link:\n${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
             ),
           });
         }
@@ -667,6 +684,30 @@ export function createAgentRoutes(
           let externalSession = await repository.getSession(String(existing.session_id));
           const expiredExternalSession = Boolean(externalSession && isSessionExpired(externalSession));
           const ownerMatchesExternalMapping = sessionMatchesExternalOwner(externalSession, existing.user_id);
+          const hasAccountIdentity = sessionHasAccountIdentity(externalSession, existing);
+          if (!hasAccountIdentity && (!externalSession || ownerMatchesExternalMapping)) {
+            const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, {
+              source: normalizedProvider,
+              language: externalResponseLanguage,
+              ...(metadata?.remote_jid ? { remote_jid: String(metadata.remote_jid) } : {}),
+              ...(metadata?.instance ? { instance: String(metadata.instance) } : {}),
+              ...(metadata?.message_id ? { message_id: String(metadata.message_id) } : {}),
+              ...(metadata?.phone_number ? { phone_number: String(metadata.phone_number) } : {}),
+              ...(metadata?.whatsapp_number ? { whatsapp_number: String(metadata.whatsapp_number) } : {}),
+            });
+            return res.status(200).json({
+              session_id: session_id || null,
+              success: true,
+              onboardingRequired: true,
+              reason: "missing_account_identity",
+              creationUrl: url,
+              message: localized(
+                externalResponseLanguage,
+                `Para continuar, crie sua conta.\nAbra este link:\n${url}\n\nSe você já tem conta, use "Já tenho conta" na página de cadastro.`,
+                `To continue, create your account.\nOpen this link:\n${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
+              ),
+            });
+          }
           if (!externalSession || !ownerMatchesExternalMapping) {
             const { url } = await externalService.createLoginUrlWithShortLink(normalizedProvider, channelProviderUserId, {
               sessionId: String(existing.session_id || '').trim() || undefined,
