@@ -166,6 +166,8 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   autoPayAmount?: string;
   auto_pay_asset_code?: string;
   autoPayAssetCode?: string;
+  auto_pay_destination_asset_code?: string;
+  autoPayDestinationAssetCode?: string;
   bank_account_id?: string;
   bankAccountId?: string;
   memo?: string;
@@ -4234,6 +4236,11 @@ export class AnchorService {
     const autoPayRecipient = coalesceString(input.auto_pay_recipient, input.autoPayRecipient);
     const autoPayAmount = coalesceString(input.auto_pay_amount, input.autoPayAmount);
     const autoPayAssetCode = normalizeAssetCode(coalesceString(input.auto_pay_asset_code, input.autoPayAssetCode, finalAsset.code));
+    const autoPayDestinationAssetCode = normalizeAssetCode(coalesceString(
+      input.auto_pay_destination_asset_code,
+      input.autoPayDestinationAssetCode,
+      autoPayAssetCode,
+    ));
     const externalProvider = externalChannelProvider(input);
     const externalProviderUserId = externalChannelProviderUserId(input);
     const language = rampInputLanguage(input);
@@ -4616,6 +4623,7 @@ export class AnchorService {
       auto_pay_recipient: autoPayRecipient || undefined,
       auto_pay_amount: autoPayAmount || undefined,
       auto_pay_asset_code: autoPayAfterRamp ? autoPayAssetCode : undefined,
+      auto_pay_destination_asset_code: autoPayAfterRamp ? autoPayDestinationAssetCode : undefined,
       payment_instructions: transaction.paymentInstructions,
       sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
       upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
@@ -5586,11 +5594,22 @@ export class AnchorService {
 
     const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId, context);
     if (mockRecord) {
+      let autoPayStatus = '';
+      if (
+        mockRecord.transaction.status === 'completed' &&
+        Boolean(mockRecord.operationContext?.auto_pay_after_ramp)
+      ) {
+        autoPayStatus = 'processing';
+        void this.submitAutoPayAfterRamp(mockRecord, input, context).catch((error) => {
+          console.warn('[ramp] Could not complete PIX-funded auto-pay after ramp:', debugErrorMessage(error));
+        });
+      }
       return {
         order_id: orderId,
         upstream_status: mockRecord.transaction.status === 'completed' ? 200 : 500,
         success: mockRecord.transaction.status === 'completed',
         transaction: mockRecord.transaction,
+        ...(autoPayStatus ? { auto_pay_status: autoPayStatus } : {}),
         ...(mockRecord.deliveryHash ? { delivery_hash: mockRecord.deliveryHash } : {}),
         ...(mockRecord.deliverySourceAmount ? { delivery_source_amount: mockRecord.deliverySourceAmount } : {}),
         ...(mockRecord.receiptUrl ? { receipt_url: mockRecord.receiptUrl } : {}),
@@ -5601,6 +5620,57 @@ export class AnchorService {
 
     const status = await this.getEtherfuseClient().simulateFiatReceived(orderId);
     return { order_id: orderId, upstream_status: status, success: status >= 200 && status < 300 };
+  }
+
+  private static async submitAutoPayAfterRamp(
+    record: SandboxMockOnRampOrder,
+    input: any,
+    context: SessionWalletContext,
+  ): Promise<Record<string, unknown> | null> {
+    const operationContext = record.operationContext || {};
+    if (!operationContext.auto_pay_after_ramp) return null;
+
+    const amount = coalesceString(
+      operationContext.auto_pay_amount,
+      record.finalAmount,
+      (record.transaction as OnRampTransaction & { finalAmount?: string }).finalAmount,
+      record.transaction.toAmount,
+    );
+    const sourceAssetCode = normalizeAssetCode(coalesceString(
+      operationContext.auto_pay_asset_code,
+      record.finalAssetCode,
+      record.transaction.toCurrency,
+    ));
+    const destinationAssetCode = normalizeAssetCode(coalesceString(
+      operationContext.auto_pay_destination_asset_code,
+      operationContext.auto_pay_destination_asset,
+      sourceAssetCode,
+    ));
+    const recipient = coalesceString(operationContext.auto_pay_recipient);
+
+    if (!amount || !sourceAssetCode || !recipient) {
+      throw apiError('Auto-pay after PIX is missing amount, asset, or recipient.', 400);
+    }
+
+    return this.submitPixFundedTransferForSession({
+      session_id: context.sessionId,
+      session_token: context.sessionToken,
+      pin: coalesceString(input.pin, input.wallet_pin, input.walletPin),
+      wallet_pin: coalesceString(input.wallet_pin, input.pin, input.walletPin),
+      walletPin: coalesceString(input.walletPin, input.wallet_pin, input.pin),
+      amount,
+      asset_code: sourceAssetCode,
+      source_asset_code: sourceAssetCode,
+      destination_asset_code: destinationAssetCode || sourceAssetCode,
+      recipient,
+      recipient_name: recipient,
+      order_id: coalesceString(input.order_id, input.orderId, record.transaction.id),
+      operation_id: coalesceString(input.operation_id, input.operationId, record.operationId),
+      language: coalesceString(operationContext.language, input.language),
+      provider: coalesceString(operationContext.external_provider, input.provider, input.external_provider),
+      provider_user_id: coalesceString(operationContext.external_provider_user_id, input.provider_user_id, input.external_provider_user_id),
+      source: coalesceString(operationContext.external_source, input.source),
+    } as any);
   }
 
   private static async findSandboxLedgerAdjustmentOperations(

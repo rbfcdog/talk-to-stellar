@@ -95,6 +95,7 @@ const TRADITIONAL_METHOD_ONRAMP_FEE_PCT = 0.0125;
 const TRADITIONAL_METHOD_OFFRAMP_FEE_PCT = 0.0167;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
+const PIX_SUCCESS_CLOSE_DELAY_MS = 900;
 const DEFAULT_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"];
 const FIAT_FORMAT_ASSETS = new Set(["BRL", "USD"]);
 const ASSET_SYMBOLS: Record<string, string> = {
@@ -1823,7 +1824,7 @@ export default function PixRampClient({
   useEffect(() => {
     if (step !== "success") return;
     if (stayOpenAfterSuccess) return;
-    closeIntermediatePage();
+    closeIntermediatePage(PIX_SUCCESS_CLOSE_DELAY_MS);
   }, [stayOpenAfterSuccess, step]);
 
   useEffect(() => {
@@ -2870,6 +2871,14 @@ export default function PixRampClient({
         walletPin: pin,
       }, "POST", undefined, buildIdempotencyKey(`confirm-onramp:${operationId || orderId || executionIntentId}`));
       if (payload?.transaction) setStatusPayload(payload);
+      const backendAutoPayStarted = transferFlow && String(payload?.auto_pay_status || "").toLowerCase() === "processing";
+      const backendConfirmedPix = Boolean(payload?.success === true && (isSuccessStatus(payload?.transaction?.status) || backendAutoPayStarted));
+      if (backendConfirmedPix && backendAutoPayStarted) {
+        setPolling(false);
+        markOperationCompleted();
+        setStep("success");
+        return;
+      }
       setPolling(true);
       const refreshed = await refreshOrder(false);
       let completedTransaction = refreshed?.transaction || payload?.transaction;
