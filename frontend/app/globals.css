@@ -886,11 +886,29 @@
   }
 
   .tts-op-page .tts-choice-grid button {
+    background: color-mix(in oklab, var(--tts-bg) 88%, white 12%) !important;
+    color: var(--tts-deep) !important;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
   }
 
   .tts-op-page .tts-choice-grid button[aria-pressed='true'] {
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--tts-surface) 88%, var(--tts-confirm) 12%), var(--tts-surface)) !important;
+    color: var(--tts-deep) !important;
+    border-color: color-mix(in oklab, var(--tts-confirm) 74%, white 26%) !important;
     transform: translateY(-1px);
+  }
+
+  .tts-op-page .tts-choice-grid button .tts-choice-name {
+    color: var(--tts-deep) !important;
+  }
+
+  .tts-op-page .tts-choice-grid button .tts-choice-description {
+    color: var(--tts-muted) !important;
+  }
+
+  .tts-op-page .tts-choice-grid button[aria-pressed='true'] .tts-choice-badge {
+    background-color: rgba(255, 255, 255, 0.055) !important;
   }
 
   .tts-op-page .tts-stage-strip {
