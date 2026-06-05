@@ -56,4 +56,15 @@ describe("external channel login", () => {
     expect(createText).toContain("setPhoneNumber(lockedWhatsAppPhoneNumber)");
     expect(createText).toContain("disabled={Boolean(lockedWhatsAppPhoneNumber)}");
   });
+
+  it("syncs language toggles to the backend preference endpoint", () => {
+    const i18nText = source("lib/i18n.tsx");
+    const routeText = source("app/api/chat/language/route.ts");
+
+    expect(i18nText).toContain("syncLanguagePreference");
+    expect(i18nText).toContain('fetch("/api/chat/language"');
+    expect(i18nText).toContain("currentClientSessionScope");
+    expect(routeText).toContain("/api/agent/language");
+    expect(routeText).toContain("readSessionCookies");
+  });
 });

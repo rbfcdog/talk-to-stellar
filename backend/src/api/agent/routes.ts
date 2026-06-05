@@ -17,7 +17,11 @@ import ExternalService from "../services/core/external.service";
 import { supabase } from "../../config/supabase";
 import { isSessionExpired } from "../../utils/session-expiry";
 import { TransferNotificationService } from "../services/transfer-notification.service";
-import { normalizeExternalProviderUserId } from "../repository/core/external.repository";
+import {
+  externalProviderAliases,
+  normalizeExternalProvider,
+  normalizeExternalProviderUserId,
+} from "../repository/core/external.repository";
 import { getRequiredJwtSecret } from "../../config/secrets";
 import { timingSafeEqualString } from "../../utils/password";
 
@@ -482,6 +486,20 @@ function normalizeOptionalLanguage(value: unknown): 'pt-BR' | 'en' | '' {
   return '';
 }
 
+function extractLanguagePreference(text: string): 'pt-BR' | 'en' | '' {
+  const normalized = String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  if (!normalized) return '';
+  if (/^(english|en|speak english|talk in english|answer in english|switch to english|use english|in english)$/i.test(normalized)) return 'en';
+  if (/^(portugues|portuguese|pt|pt-br|fale portugues|falar portugues|responda em portugues|switch to portuguese|use portuguese)$/i.test(normalized)) return 'pt-BR';
+  if (/\b(speak|talk|answer|respond|switch|use)\s+in\s+english\b/.test(normalized)) return 'en';
+  if (/\b(fale|responda|mude|troque|use)\b.*\b(portugues|pt-br)\b/.test(normalized)) return 'pt-BR';
+  return '';
+}
+
 function localized(language: 'pt-BR' | 'en', pt: string, en: string): string {
   return language === 'en' ? en : pt;
 }
@@ -527,6 +545,192 @@ function externalOnboardingMessage(language: 'pt-BR' | 'en', url: string): strin
     `Para continuar, crie sua conta.\nAbra este link:\n${url}\n\nSe você já tem conta, use "Já tenho conta" na página de cadastro.`,
     `To continue, create your account.\nOpen this link:\n${url}\n\nIf you already have an account, use "I already have an account" on the sign-up page.`
   );
+}
+
+function languageFromSession(sessionData: SessionData | null | undefined): 'pt-BR' | 'en' | '' {
+  return normalizeOptionalLanguage(
+    (sessionData as any)?.preferred_language ||
+      (sessionData as any)?.preferredLanguage ||
+      (sessionData as any)?.language ||
+      (sessionData as any)?.lang ||
+      (sessionData as any)?.locale
+  );
+}
+
+function languageFromActionParams(actionParams: any): 'pt-BR' | 'en' | '' {
+  return normalizeOptionalLanguage(
+    actionParams?.preferred_language ||
+      actionParams?.preferredLanguage ||
+      actionParams?.language ||
+      actionParams?.lang ||
+      actionParams?.locale
+  );
+}
+
+function isMissingLanguageStorageError(error: any): boolean {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('schema cache') ||
+    message.includes('does not exist') ||
+    message.includes('could not find') ||
+    message.includes('column') ||
+    message.includes('relation')
+  );
+}
+
+async function updateSessionLanguagePreference(sessionId: string, language: 'pt-BR' | 'en') {
+  if (!sessionId) return;
+  const updatedAt = new Date().toISOString();
+  const attempts = [
+    { preferred_language: language, language, updated_at: updatedAt },
+    { preferred_language: language, updated_at: updatedAt },
+    { language, updated_at: updatedAt },
+  ];
+
+  for (const update of attempts) {
+    const { error } = await supabase
+      .from('agent_sessions')
+      .update(update)
+      .eq('session_id', sessionId);
+    if (!error) return;
+    if (!isMissingLanguageStorageError(error)) throw error;
+  }
+}
+
+async function updateAgentStateLanguagePreference(sessionId: string, language: 'pt-BR' | 'en') {
+  if (!sessionId) return;
+  try {
+    const { data } = await supabase
+      .from('agent_states')
+      .select('action_params')
+      .eq('session_id', sessionId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const currentActionParams = data?.action_params && typeof data.action_params === 'object' ? data.action_params : {};
+    if (!data) return;
+    const { error } = await supabase
+      .from('agent_states')
+      .update({
+        action_params: {
+          ...currentActionParams,
+          language,
+          preferred_language: language,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('session_id', sessionId);
+    if (error && !isMissingLanguageStorageError(error)) throw error;
+  } catch (error) {
+    if (!isMissingLanguageStorageError(error)) throw error;
+  }
+}
+
+async function selectExternalLanguageRows(input: {
+  provider?: string;
+  providerUserId?: string;
+  sessionId?: string;
+  userId?: string;
+}): Promise<any[]> {
+  const rows = new Map<string, any>();
+  const addRows = (items: any[] | null | undefined) => {
+    for (const row of items || []) {
+      const key = String(row?.id || `${row?.provider || ''}:${row?.provider_user_id || ''}:${row?.session_id || ''}:${row?.user_id || ''}`);
+      if (key) rows.set(key, row);
+    }
+  };
+
+  const provider = normalizeExternalProvider(String(input.provider || ''));
+  const providerUserId = normalizeExternalProviderUserId(provider, String(input.providerUserId || ''));
+  if (provider && providerUserId) {
+    const providers = externalProviderAliases(provider);
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('id, provider, provider_user_id, session_id, user_id, data')
+      .in('provider', providers)
+      .eq('provider_user_id', providerUserId)
+      .limit(20);
+    if (!error) addRows(data as any[]);
+    else if (!isMissingLanguageStorageError(error)) throw error;
+  }
+
+  if (input.sessionId) {
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('id, provider, provider_user_id, session_id, user_id, data')
+      .eq('session_id', input.sessionId)
+      .limit(50);
+    if (!error) addRows(data as any[]);
+    else if (!isMissingLanguageStorageError(error)) throw error;
+  }
+
+  if (input.userId) {
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('id, provider, provider_user_id, session_id, user_id, data')
+      .eq('user_id', input.userId)
+      .limit(50);
+    if (!error) addRows(data as any[]);
+    else if (!isMissingLanguageStorageError(error)) throw error;
+  }
+
+  return Array.from(rows.values());
+}
+
+async function updateExternalLanguagePreference(input: {
+  provider?: string;
+  providerUserId?: string;
+  sessionId?: string;
+  userId?: string;
+  language: 'pt-BR' | 'en';
+}) {
+  const rows = await selectExternalLanguageRows(input);
+  for (const row of rows) {
+    const data = row?.data && typeof row.data === 'object' ? row.data : {};
+    const update = {
+      data: {
+        ...data,
+        language: input.language,
+        preferred_language: input.language,
+      },
+      updated_at: new Date().toISOString(),
+    };
+    const query = supabase.from('external_accounts').update(update);
+    const result = row?.id
+      ? await query.eq('id', row.id)
+      : await query
+          .eq('provider', String(row?.provider || ''))
+          .eq('provider_user_id', String(row?.provider_user_id || ''));
+    if (result.error && !isMissingLanguageStorageError(result.error)) throw result.error;
+  }
+}
+
+async function persistLanguagePreference(input: {
+  sessionId?: string;
+  userId?: string;
+  provider?: string;
+  providerUserId?: string;
+  language?: string;
+}) {
+  const language = normalizeOptionalLanguage(input.language);
+  if (!language) return { persisted: false, language: '' as const };
+  const sessionId = String(input.sessionId || '').trim();
+  const userId = String(input.userId || '').trim();
+  const provider = String(input.provider || '').trim();
+  const providerUserId = String(input.providerUserId || '').trim();
+  const hasPersistenceTarget = Boolean(sessionId || userId || (provider && providerUserId));
+  if (!hasPersistenceTarget) return { persisted: false, language };
+
+  await updateSessionLanguagePreference(sessionId, language);
+  await updateAgentStateLanguagePreference(sessionId, language);
+  await updateExternalLanguagePreference({
+    provider,
+    providerUserId,
+    sessionId,
+    userId,
+    language,
+  });
+  return { persisted: true, language };
 }
 
 function formatStartupBalanceLine(balance: any, index: number): string {
@@ -586,6 +790,63 @@ export function createAgentRoutes(
   const externalService = new ExternalService(supabase as any);
   const walletRepo = new WalletRepository(supabase as any);
 
+  router.post('/language', (async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const requestedLanguage = normalizeOptionalLanguage(req.body?.language || req.body?.lang || req.body?.locale);
+      if (!requestedLanguage) {
+        return res.status(400).json({ success: false, message: 'language must be en or pt-BR' });
+      }
+
+      const sessionId = String(req.body?.session_id || req.body?.sessionId || req.headers['x-session-id'] || '').trim();
+      const sessionToken = readSessionToken(req);
+      const provider = normalizeExternalProvider(String(
+        req.body?.provider ||
+          req.body?.external_provider ||
+          req.body?.source ||
+          req.body?.metadata?.provider ||
+          req.body?.metadata?.external_provider ||
+          ''
+      ));
+      const providerUserId = normalizeExternalProviderUserId(provider, String(
+        req.body?.provider_user_id ||
+          req.body?.providerUserId ||
+          req.body?.external_provider_user_id ||
+          req.body?.metadata?.provider_user_id ||
+          req.body?.metadata?.external_provider_user_id ||
+          ''
+      ));
+
+      let sessionData: SessionData | null = null;
+      if (sessionId) {
+        sessionData = await repository.getSession(sessionId);
+        const storedToken = String((sessionData as any)?.session_token || '').trim();
+        if (storedToken && (!sessionToken || !timingSafeEqualString(storedToken, sessionToken))) {
+          return res.status(401).json({ success: false, message: 'Invalid session token' });
+        }
+      }
+
+      const result = await persistLanguagePreference({
+        sessionId: sessionData ? sessionId : '',
+        userId: String((sessionData as any)?.user_id || '').trim(),
+        provider: sessionData ? provider : '',
+        providerUserId: sessionData ? providerUserId : '',
+        language: requestedLanguage,
+      });
+
+      return res.status(200).json({
+        success: true,
+        language: requestedLanguage,
+        persisted: result.persisted,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler);
+
   /**
    * POST /api/agent/query
    * Main endpoint for agent queries
@@ -599,6 +860,7 @@ export function createAgentRoutes(
       const { query, session_id, source, metadata } = req.body;
       let requestSessionToken = readSessionToken(req);
       const requestLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale);
+      const explicitMessageLanguage = extractLanguagePreference(String(query || ''));
       const requestedSessionId = String(req.body.session_id || session_id || "").trim();
       const hasValidRequestedSessionId = requestedSessionId ? isValidUUID(requestedSessionId) : false;
       const rawRequestedSessionData = hasValidRequestedSessionId
@@ -924,7 +1186,22 @@ export function createAgentRoutes(
 
       // Get previous state before hydration checks (used to honor explicit logout marker).
       const previousState = await repository.getState(sessionId);
-      const preferredLanguage = normalizeLanguage(req.body?.language || metadata?.language || metadata?.locale || externalStoredLanguage || (previousState?.action_params as any)?.language);
+      const storedLanguage =
+        languageFromActionParams(previousState?.action_params) ||
+        languageFromSession(sessionData) ||
+        externalStoredLanguage;
+      const preferredLanguage = explicitMessageLanguage || storedLanguage || requestLanguage;
+      if (explicitMessageLanguage) {
+        await persistLanguagePreference({
+          sessionId,
+          userId: String((sessionData as any)?.user_id || '').trim(),
+          provider: String(runtimeExternalContext.external_provider || '').trim(),
+          providerUserId: String(runtimeExternalContext.external_provider_user_id || '').trim(),
+          language: explicitMessageLanguage,
+        }).catch((error) => {
+          logger.warn(`[language-preference] failed to persist explicit preference for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
       const forceLoggedOut = Boolean((previousState?.action_params as any)?.force_logged_out) &&
         Object.keys(runtimeExternalContext).length === 0;
 
@@ -984,6 +1261,7 @@ export function createAgentRoutes(
           ...actionParams,
           ...runtimeExternalContext,
           language: preferredLanguage,
+          preferred_language: preferredLanguage,
         },
         pending_payment: previousState?.pending_payment || (previousState?.action_params as any)?.pending_payment,
         pending_conversion: (previousState as any)?.pending_conversion || (previousState?.action_params as any)?.pending_conversion,

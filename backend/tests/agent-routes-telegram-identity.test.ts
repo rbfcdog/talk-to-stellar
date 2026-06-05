@@ -241,6 +241,7 @@ describe('agent Telegram identity binding', () => {
       provider_user_id: '5511999999999',
       session_id: linkedSessionId,
       user_id: 'whatsapp@example.com',
+      data: { language: 'en' },
     });
 
     await withAgentServer(repository, async (baseUrl) => {
@@ -278,6 +279,8 @@ describe('agent Telegram identity binding', () => {
             external_provider: 'whatsapp',
             external_provider_user_id: '5511999999999',
             session_token: 'linked-token',
+            language: 'en',
+            preferred_language: 'en',
           }),
         })
       );
