@@ -601,14 +601,18 @@ describe('Agent tool execution', () => {
         provider: 'whatsapp',
         provider_user_id: '5519981808102',
         source: 'whatsapp',
+        language: 'en',
       });
       const parsed = JSON.parse(output);
 
       expect(parsed.success).toBe(true);
-      expect(parsed.message).toContain('Gerei o link de confirmação com a cotação atual');
+      expect(parsed.language).toBe('en');
+      expect(parsed.message).toContain('I created the confirmation link with the current quote');
       expect(parsed.message).toContain('100 USDC');
       expect(parsed.message).toContain('Ana Silva');
       expect(parsed.message).toContain('https://app.example.com/r/payment');
+      expect(parsed.message).not.toContain('Gerei o link de confirmação');
+      expect(parsed.message).not.toContain('Abra para revisar');
       expect(parsed.message).not.toMatch(/saldo/i);
       expect(parsed.message).not.toMatch(/taxa estimada|indispon[ií]vel/i);
       expect(createPaymentSpy).toHaveBeenCalledWith(
@@ -621,6 +625,7 @@ describe('Agent tool execution', () => {
           provider: 'whatsapp',
           provider_user_id: '5519981808102',
           source: 'whatsapp',
+          language: 'en',
         })
       );
     } finally {
