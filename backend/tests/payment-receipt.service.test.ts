@@ -12,6 +12,7 @@ describe('PaymentReceiptService', () => {
       BACKEND_URL: 'http://localhost:8080',
       TRADITIONAL_FEE_PCT: '0.045',
     };
+    (PaymentReceiptService as any).clearExternalDeliveryDedupeForTests?.();
   });
 
   afterAll(() => {
@@ -495,7 +496,7 @@ describe('PaymentReceiptService', () => {
     notifySpy.mockRestore();
   });
 
-  it('does not deliver the same receipt externally twice when the dedupe key already exists', async () => {
+  it('still delivers one external callback when the receipt row already exists', async () => {
     const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockResolvedValue('https://app.example.com/receipt/once');
     const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(false);
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
@@ -524,11 +525,34 @@ describe('PaymentReceiptService', () => {
       externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$10.07',
     });
 
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-pix-dedupe',
+      userId: 'user-pix-dedupe',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX',
+      sourceAmount: '10.15',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '10.07',
+      destinationAssetCode: 'BRL',
+      hash: 'sandbox-ledger-duplicate',
+      dedupeKey: 'pix-onramp:operation-duplicate',
+      externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$10.07',
+    });
+
     expect(result).toBe('https://app.example.com/receipt/once');
     expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
       dedupeKey: 'receipt:pix-onramp:operation-duplicate:text',
     }));
-    expect(notifySpy).not.toHaveBeenCalled();
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      text: expect.stringContaining('PIX confirmado com sucesso.'),
+      buttonText: null,
+      buttonUrl: null,
+    }));
 
     createSpy.mockRestore();
     saveSpy.mockRestore();
