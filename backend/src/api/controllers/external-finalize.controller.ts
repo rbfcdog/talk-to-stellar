@@ -2980,10 +2980,24 @@ export default class ExternalFinalizeController {
         has_cpf: Boolean(rawCpf),
         has_browser_id: Boolean(browserId),
       })}`);
-      const channelMetadata = externalChannelMetadata(payload, req.body, normalizedPhoneNumber);
-      if (isPhoneProvider(provider) && !normalizedPhoneNumber) {
-        normalizedPhoneNumber = provider_user_id;
+      if (isPhoneProvider(provider)) {
+        const lockedPhoneNumber = normalizePhoneForCompare(provider_user_id);
+        if (!lockedPhoneNumber) {
+          return res.status(400).json({
+            success: false,
+            message: 'Token do WhatsApp sem telefone válido.',
+          });
+        }
+        if (normalizedPhoneNumber && normalizedPhoneNumber !== lockedPhoneNumber) {
+          return res.status(409).json({
+            success: false,
+            message: 'Este link do WhatsApp só pode criar conta para o número que recebeu a mensagem.',
+            lockedPhoneNumber,
+          });
+        }
+        normalizedPhoneNumber = lockedPhoneNumber;
       }
+      const channelMetadata = externalChannelMetadata(payload, req.body, normalizedPhoneNumber);
 
       const providedPin = String(pin || '').trim();
       if (!providedPin) {

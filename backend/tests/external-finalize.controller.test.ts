@@ -367,6 +367,41 @@ describe('ExternalFinalizeController', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
+  it('rejects WhatsApp account creation when the submitted phone differs from the channel number', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_onboard',
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+    });
+
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    const req = {
+      body: {
+        token: 'signed-token',
+        name: 'User Example',
+        email: 'user@example.com',
+        phone_number: '+55 21 98888-7777',
+        pin: '1234',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      lockedPhoneNumber: '5511999999999',
+    }));
+    expect(finalizeSaveSessionMock).not.toHaveBeenCalled();
+    expect(finalizeSaveWalletMock).not.toHaveBeenCalled();
+    expect(finalizeCreateMappingMock).not.toHaveBeenCalled();
+  });
+
   it('sets a PIN on an existing browser email session instead of creating a duplicate account', async () => {
     const jwt = require('jsonwebtoken');
     jwt.verify.mockReturnValueOnce({

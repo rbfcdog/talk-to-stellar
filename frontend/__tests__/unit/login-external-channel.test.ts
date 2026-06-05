@@ -47,4 +47,13 @@ describe("external channel login", () => {
     expect(createText).toContain("const loginHref = useMemo");
     expect(createText).toContain("I already have an account");
   });
+
+  it("locks the create-account phone field to the WhatsApp token number", () => {
+    const createText = source("app/create-account/create-account-client.tsx");
+
+    expect(createText).toContain("const lockedWhatsAppPhoneNumber = useMemo");
+    expect(createText).toContain("tokenPayload?.provider_user_id");
+    expect(createText).toContain("setPhoneNumber(lockedWhatsAppPhoneNumber)");
+    expect(createText).toContain("disabled={Boolean(lockedWhatsAppPhoneNumber)}");
+  });
 });

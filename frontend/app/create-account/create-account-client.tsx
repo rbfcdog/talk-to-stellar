@@ -162,6 +162,10 @@ function looksLikeEmail(value?: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
 }
 
+function normalizePhoneDigits(value?: unknown): string {
+  return String(value || "").replace(/\D+/g, "")
+}
+
 export default function CreateAccountClient({
   initialToken = '',
   initialValidation = null,
@@ -246,6 +250,17 @@ export default function CreateAccountClient({
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(passkeyQrTargetUrl)}`
   }, [passkeyQrTargetUrl])
   const tokenProvider = String(tokenPayload?.provider || "").trim().toLowerCase()
+  const lockedWhatsAppPhoneNumber = useMemo(() => {
+    if (tokenProvider !== "whatsapp" && tokenProvider !== "phone") return ""
+    const digits = normalizePhoneDigits(
+      tokenPayload?.provider_user_id ||
+        tokenPayload?.phone_number ||
+        tokenPayload?.phoneNumber ||
+        tokenPayload?.whatsapp_number ||
+        tokenPayload?.whatsappNumber
+    )
+    return digits ? `+${digits}` : ""
+  }, [tokenPayload, tokenProvider])
   const tokenSessionScope = tokenProvider === "whatsapp" || tokenProvider === "phone"
     ? "whatsapp"
     : tokenProvider === "telegram"
@@ -475,6 +490,11 @@ export default function CreateAccountClient({
       setName(nameFromUrl)
     }
   }, [nameFromUrl])
+
+  useEffect(() => {
+    if (!lockedWhatsAppPhoneNumber) return
+    setPhoneNumber(lockedWhatsAppPhoneNumber)
+  }, [lockedWhatsAppPhoneNumber])
 
   useEffect(() => {
     async function validateToken() {
@@ -1029,6 +1049,7 @@ export default function CreateAccountClient({
             value={phoneNumber}
             onChange={(event) => setPhoneNumber(event.target.value)}
             type="tel"
+            disabled={Boolean(lockedWhatsAppPhoneNumber)}
             placeholder="+55 11 99999-9999"
           />
         </label>
