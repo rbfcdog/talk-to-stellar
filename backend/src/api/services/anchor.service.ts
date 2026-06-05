@@ -384,16 +384,23 @@ function receiptBrlFeeFromContext(
 ): { feeDisplay?: string; feeBrl?: string } {
   const providerFee = parseHumanAmountNumber(coalesceString(
     context?.provider_onramp_fee_amount,
+    context?.provider_offramp_fee_amount,
+    context?.provider_withdrawal_fee_amount,
     context?.provider_fee_amount,
     context?.anchor_provider_fee_amount,
+    context?.anchorProviderFeeAmount,
+    context?.providerFeeAmount,
+    context?.feeAmount,
   ));
   const appFee = parseHumanAmountNumber(coalesceString(
     context?.talktostellar_transaction_fee_amount,
+    context?.talkToStellarFeeAmount,
     context?.app_fee_amount,
     context?.platform_fee_amount,
   ));
   const totalFromContext = parseHumanAmountNumber(coalesceString(
     context?.total_fee_amount,
+    context?.totalFeeAmount,
     context?.total_fee_brl,
     context?.actual_fee_brl,
   ));
@@ -5378,6 +5385,11 @@ export class AnchorService {
           mockRecord?.destinationBrl,
           transaction?.toAmount,
         );
+        const fee = receiptBrlFeeFromContext(
+          operationContext,
+          sourceAmount || transaction?.fromAmount,
+          destinationAmount,
+        );
 
         receiptUrl = await PaymentReceiptService.sendReceipt({
           type: 'payment_sent',
@@ -5393,6 +5405,9 @@ export class AnchorService {
           hash: result.hash || orderId,
           status: 'completed',
           contextMessage: 'PIX enviado ao seu PIX.',
+          feeDisplay: fee.feeDisplay || null,
+          feeBrl: fee.feeBrl || null,
+          quote: operationContext || null,
         });
 
         if (receiptUrl && operationId) {
@@ -7148,6 +7163,31 @@ export class AnchorService {
     const balancesAfter = normalizeBalances(afterRaw);
     const destinationAmount = targetBrl || coalesceString(quoteResult.quote.toAmount, sourcePlan.estimatedTargetBrl, requestedSourceAmount);
     const destinationAssetCode = 'BRL';
+    const receiptQuote: Record<string, unknown> = {
+      ...(quoteResult.quote as unknown as Record<string, unknown>),
+      direction: 'offramp',
+      source_amount: requestedSourceAmount,
+      sourceAmount: requestedSourceAmount,
+      source_asset_code: sourceAsset.code,
+      target_brl: destinationAmount,
+      destination_amount: destinationAmount,
+      destinationAssetCode,
+    };
+    if (targetBrl && isBrlSettlementAsset(sourceAsset)) {
+      const brlFeeBridge = this.estimateOnRampBrlFeeBridge(requestedSourceAmount, null, targetBrl);
+      receiptQuote.anchorProviderFeeAmount = brlFeeBridge.providerFeeAmount;
+      receiptQuote.anchor_provider_fee_amount = brlFeeBridge.providerFeeAmount;
+      receiptQuote.talkToStellarFeeAmount = brlFeeBridge.talkToStellarFeeAmount;
+      receiptQuote.talktostellar_transaction_fee_amount = brlFeeBridge.talkToStellarFeeAmount;
+      receiptQuote.totalFeeAmount = brlFeeBridge.totalFeeAmount;
+      receiptQuote.total_fee_amount = brlFeeBridge.totalFeeAmount;
+      receiptQuote.total_fee_brl = brlFeeBridge.totalFeeAmount;
+    }
+    const receiptFee = receiptBrlFeeFromContext(
+      receiptQuote,
+      requestedSourceAmount,
+      destinationAmount,
+    );
     const externalBank = (externalBankAccount || {}) as Record<string, unknown>;
     const bankLabel = coalesceString(
       externalBank.label,
@@ -7171,6 +7211,9 @@ export class AnchorService {
           hash: submitResult.hash || orderResult.transaction.id,
           status: 'completed',
           contextMessage: 'PIX enviado ao seu PIX.',
+          feeDisplay: receiptFee.feeDisplay || null,
+          feeBrl: receiptFee.feeBrl || null,
+          quote: receiptQuote,
         });
         if (receiptUrl && orderResult.operation_id) {
           const operation = await OperationRepository.findById(orderResult.operation_id).catch(() => null);

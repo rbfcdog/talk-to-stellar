@@ -825,6 +825,73 @@ export class PaymentReceiptService {
     return 0;
   }
 
+  private static inferPixOffRampFeeBrl(input: PaymentReceiptInput): number {
+    if (String(input.type || '').trim() !== 'payment_sent' || !this.isPixLikeReceipt(input)) return 0;
+    const quote = input.quote || {};
+    const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
+    const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode || input.sourceAssetCode);
+    const sourceIsReal = sourceAssetCode === 'BRL' || sourceAssetCode === 'TESOURO';
+    const destinationIsReal = destinationAssetCode === 'BRL' || destinationAssetCode === 'TESOURO';
+
+    const explicitFee = this.toPositiveNumber(
+      quote.total_fee_amount ||
+      quote.totalFeeAmount ||
+      quote.total_fee_brl ||
+      quote.actual_fee_brl ||
+      quote.fee_brl
+    );
+    if (explicitFee > 0) return explicitFee;
+
+    const providerFee = this.toPositiveNumber(
+      quote.provider_offramp_fee_amount ||
+      quote.providerOffRampFeeAmount ||
+      quote.provider_withdrawal_fee_amount ||
+      quote.withdrawal_fee_amount ||
+      quote.anchor_provider_fee_amount ||
+      quote.anchorProviderFeeAmount ||
+      quote.provider_fee_amount ||
+      quote.providerFeeAmount ||
+      quote.feeAmount
+    );
+    const appFee = this.toPositiveNumber(
+      quote.talktostellar_transaction_fee_amount ||
+      quote.talkToStellarFeeAmount ||
+      quote.app_fee_amount ||
+      quote.platform_fee_amount
+    );
+    if (providerFee + appFee > 0) return providerFee + appFee;
+
+    const sourceGross = this.toPositiveNumber(
+      quote.source_amount ||
+      quote.sourceAmount ||
+      quote.fromAmount ||
+      (sourceIsReal ? input.sourceAmount : '')
+    );
+    const destinationNet = this.toPositiveNumber(
+      quote.target_brl ||
+      quote.targetBrl ||
+      quote.destination_amount ||
+      quote.destinationAmount ||
+      quote.toAmount ||
+      (destinationIsReal ? input.destinationAmount : '')
+    );
+    if (sourceIsReal && destinationIsReal && sourceGross > 0 && destinationNet > 0 && sourceGross > destinationNet) {
+      return sourceGross - destinationNet;
+    }
+
+    const brlBase = destinationNet || (destinationIsReal ? this.toPositiveNumber(input.destinationAmount) : 0);
+    if (brlBase > 0) {
+      const providerBps = this.envBps('ETHERFUSE_OFFRAMP_FEE_BPS', 'ETHERFUSE_WITHDRAWAL_FEE_BPS', 'ETHERFUSE_ONRAMP_FEE_BPS', 'ETHERFUSE_TESTNET_FEE_BPS') || 20;
+      const appBps = this.envBps('TALKTOSTELLAR_SPREAD_BPS', 'TTS_SPREAD_BPS') || 30;
+      const totalBps = Math.min(1000, Math.max(0, providerBps + appBps));
+      if (totalBps > 0 && totalBps < 10000) {
+        return brlBase * (totalBps / 10000);
+      }
+    }
+
+    return 0;
+  }
+
   private static receiptUsdBrlRate(input: PaymentReceiptInput): number {
     const sourceAmount = this.toPositiveNumber(input.sourceAmount || input.destinationAmount);
     const destinationAmount = this.toPositiveNumber(input.destinationAmount);
@@ -914,8 +981,8 @@ export class PaymentReceiptService {
       destinationAssetCode: destinationAssetCode || null,
     });
 
-    const inferredPixOnRampFeeBrl = this.inferPixOnRampFeeBrl(input);
-    const actualFeeBrlFromPayload = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl || inferredPixOnRampFeeBrl);
+    const inferredPixFeeBrl = this.inferPixOnRampFeeBrl(input) || this.inferPixOffRampFeeBrl(input);
+    const actualFeeBrlFromPayload = this.toPositiveNumber(unifiedFee.fee_brl || input.feeBrl || parsedDisplay.brl || inferredPixFeeBrl);
     const actualFeeUsdcFromPayload = this.toPositiveNumber(unifiedFee.fee_usdc || input.feeUsdc || parsedDisplay.usdc);
     let actualDisplay = String(unifiedFee.display || display || '').trim();
     const traditionalFeePct = EconomyEngineService.traditionalFeePct();
