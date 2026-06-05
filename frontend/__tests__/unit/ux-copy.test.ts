@@ -71,6 +71,7 @@ describe("UX copy guardrails", () => {
 
   it("keeps conversion confirmation inside the web flow, not chat", () => {
     const text = source("app/convert/convert-client.tsx");
+    const globalCss = source("app/globals.css");
     const financialRouter = source("../backend/src/api/routes/financial.router.ts");
 
     expect(text).toContain("AccountStatusCard");
@@ -103,6 +104,13 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("...externalLinkContext");
     expect(text).toContain("fetch(`/api/ramp/${scopedRampApiPath(path)}`");
     expect(text).toContain("{ source: sessionScope, session_scope: sessionScope }");
+    expect(text).toContain("tts-choice-selected");
+    expect(text).toContain("tts-choice-name");
+    expect(text).toContain("tts-choice-badge");
+    expect(text).not.toContain('selected ? "border-tts-confirm bg-tts-confirm/15');
+    expect(globalCss).toContain(".tts-op-page .tts-choice-grid button[aria-pressed='true']");
+    expect(globalCss).toContain(".tts-op-page .tts-choice-grid button .tts-choice-name");
+    expect(globalCss).toContain("color: var(--tts-deep) !important");
     expect(text).not.toContain("ReturnToChat");
     expect(text).not.toContain('buildUrl("/chat"');
     expect(financialRouter).toContain("conversion-confirmation");

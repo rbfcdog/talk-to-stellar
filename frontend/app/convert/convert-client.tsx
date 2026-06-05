@@ -1114,14 +1114,14 @@ function AssetPicker({
               aria-pressed={selected}
               className={`rounded-xl border text-left transition ${
                 compact ? "flex min-h-[3.35rem] items-center gap-2 px-2 py-2" : "min-h-[96px] p-3"
-              } ${selected ? "border-tts-confirm bg-tts-confirm/15 shadow-sm ring-2 ring-tts-confirm/40" : "border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
+              } ${selected ? "tts-choice-selected border-tts-confirm shadow-sm ring-2 ring-tts-confirm/40" : "tts-choice-idle border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
-              <span className={`inline-flex shrink-0 border px-1.5 py-1 text-[10px] font-black uppercase tracking-normal ${asset.tone}`}>
+              <span className={`tts-choice-badge inline-flex shrink-0 border px-1.5 py-1 text-[10px] font-black uppercase tracking-normal ${asset.tone}`}>
                 {asset.short}
               </span>
               <span className={compact ? "block min-w-0" : "block"}>
-                <span className={`${compact ? "mt-0 text-xs" : "mt-3 text-sm"} block truncate font-black text-tts-deep`}>{assetName(asset, language)}</span>
-                <span className={`${compact ? "hidden" : "mt-1 block"} text-xs leading-5 text-tts-muted`}>{assetDescription(asset, language)}</span>
+                <span className={`tts-choice-name ${compact ? "mt-0 text-xs" : "mt-3 text-sm"} block truncate font-black text-tts-deep`}>{assetName(asset, language)}</span>
+                <span className={`tts-choice-description ${compact ? "hidden" : "mt-1 block"} text-xs leading-5 text-tts-muted`}>{assetDescription(asset, language)}</span>
               </span>
             </button>
           );
