@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     public_key TEXT,
     phone_number TEXT,
     pix_key TEXT,
+    language TEXT,
+    preferred_language TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -68,6 +70,10 @@ ALTER TABLE wallets
 ADD COLUMN IF NOT EXISTS pix_key TEXT;
 ALTER TABLE agent_sessions
 ADD COLUMN IF NOT EXISTS pix_key TEXT;
+ALTER TABLE agent_sessions
+ADD COLUMN IF NOT EXISTS language TEXT;
+ALTER TABLE agent_sessions
+ADD COLUMN IF NOT EXISTS preferred_language TEXT;
 -- Ensure operations has wallet fields for existing environments
 ALTER TABLE operations
 ADD COLUMN IF NOT EXISTS source_public_key TEXT;

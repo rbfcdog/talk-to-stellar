@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   public_key TEXT,
   phone_number TEXT,
   pix_key TEXT,
+  language TEXT,
+  preferred_language TEXT,
   password_hash TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -101,6 +103,8 @@ ALTER TABLE wallets ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE wallets ADD COLUMN IF NOT EXISTS pix_key TEXT;
 ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS pix_key TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS language TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS preferred_language TEXT;
 ALTER TABLE operations ADD COLUMN IF NOT EXISTS source_public_key TEXT;
 ALTER TABLE operations ADD COLUMN IF NOT EXISTS source_session_id UUID;
 ALTER TABLE operations ADD COLUMN IF NOT EXISTS destination_session_id UUID;

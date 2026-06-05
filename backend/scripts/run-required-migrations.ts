@@ -71,6 +71,7 @@ const orderedMigrations = [
   '20260602_01_legacy_email_verification_null_created_backfill.sql',
   '20260602_02_passkey_login_pairing_codes.sql',
   '20260602_03_user_research_evidence.sql',
+  '20260605_00_agent_session_language_preference.sql',
 ];
 
 function resolveExecutionList(): string[] {

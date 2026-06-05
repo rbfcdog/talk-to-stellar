@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { currentClientSessionScope } from "@/lib/session";
 
 export type AppLanguage = "pt-BR" | "en";
 
@@ -255,6 +256,21 @@ function persistLanguage(language: AppLanguage) {
   document.documentElement.lang = language === "pt-BR" ? "pt-BR" : "en";
 }
 
+function syncLanguagePreference(language: AppLanguage) {
+  if (typeof window === "undefined") return;
+  const source = currentClientSessionScope();
+  fetch("/api/chat/language", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      language,
+      source,
+      metadata: { source, language },
+    }),
+    cache: "no-store",
+  }).catch(() => {});
+}
+
 /** Context provider that exposes the active language + a t() lookup with {{placeholder}} interpolation. */
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
@@ -283,11 +299,13 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     const next = normalizeLanguage(queryLanguage);
     setLanguageState(next);
     persistLanguage(next);
+    syncLanguagePreference(next);
   }, [queryLanguage]);
 
   const setLanguage = (next: AppLanguage) => {
     setLanguageState(next);
     persistLanguage(next);
+    syncLanguagePreference(next);
   };
 
   const value = useMemo<LanguageContextValue>(() => ({
