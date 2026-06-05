@@ -1,5 +1,6 @@
 const checkExternalAccountMock = jest.fn();
 const createOnboardUrlMock = jest.fn();
+const createLoginUrlMock = jest.fn();
 const getWalletBySessionMock = jest.fn();
 const getSessionMock = jest.fn();
 const getUserPasskeysMock = jest.fn();
@@ -15,7 +16,7 @@ jest.mock('../src/api/services/core/external.service', () => ({
 	    checkExternalAccount: checkExternalAccountMock,
 	    createOnboardUrl: createOnboardUrlMock,
 	    createOnboardUrlWithShortLink: createOnboardUrlMock,
-	    createLoginUrlWithShortLink: createOnboardUrlMock,
+	    createLoginUrlWithShortLink: createLoginUrlMock,
 	  })),
 	}));
 
@@ -60,6 +61,7 @@ describe('ExternalController', () => {
   beforeEach(() => {
     checkExternalAccountMock.mockReset();
     createOnboardUrlMock.mockReset();
+    createLoginUrlMock.mockReset();
     getWalletBySessionMock.mockReset();
     getSessionMock.mockReset();
     getUserPasskeysMock.mockReset();
@@ -92,9 +94,10 @@ describe('ExternalController', () => {
 
     expect(checkExternalAccountMock).toHaveBeenCalledWith('telegram', '555');
     expect(getWalletBySessionMock).toHaveBeenCalledWith('session-123');
-	    expect(createOnboardUrlMock).toHaveBeenCalledWith('telegram', '555', expect.objectContaining({
+    expect(createOnboardUrlMock).toHaveBeenCalledWith('telegram', '555', expect.objectContaining({
       source: 'telegram',
     }));
+    expect(createLoginUrlMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -126,6 +129,7 @@ describe('ExternalController', () => {
     await ExternalController.checkAccount(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(createLoginUrlMock).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
@@ -170,6 +174,7 @@ describe('ExternalController', () => {
 
     expect(getSessionMock).toHaveBeenCalledWith('session-123');
     expect(getUserPasskeysMock).toHaveBeenCalledWith('user-123');
+    expect(createLoginUrlMock).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -621,22 +621,20 @@ export class ExternalController {
         });
       }
 
-      const shouldUseLoginOnlyLink = !isBrowserExternalProvider(normalizedProvider);
-      const { token, url } = shouldUseLoginOnlyLink
-        ? await externalService.createLoginUrlWithShortLink(normalizedProvider, provider_user_id, {
-            ...externalData,
-            source: normalizedProvider,
-            language: req.body?.language,
-          })
-        : await externalService.createOnboardUrlWithShortLink(normalizedProvider, provider_user_id, externalData);
+      const fallbackReason = existing && !forceNewAccount ? 'missing_credentials' : 'not_linked';
+      const { token, url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, provider_user_id, {
+        ...externalData,
+        source: normalizedProvider,
+        language: req.body?.language,
+      });
 
       return res.status(200).json({
         success: true,
         exists: false,
         onboardingRequired: true,
-        reason: 'missing_credentials',
+        reason: fallbackReason,
         creationUrl: url,
-        loginOnly: shouldUseLoginOnlyLink,
+        loginOnly: false,
         token,
       });
     } catch (error: any) {

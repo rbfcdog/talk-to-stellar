@@ -9,12 +9,12 @@ function source(path: string) {
 }
 
 describe("external channel login", () => {
-  it("keeps WhatsApp and Telegram login PIN-only without requiring an email in the browser", () => {
+  it("keeps resolved WhatsApp and Telegram login PIN-only without requiring email entry", () => {
     const text = source("app/login/login-client.tsx");
 
     expect(text).toContain('["whatsapp", "phone", "telegram"].includes(externalProvider)');
-    expect(text).toContain("const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext");
-    expect(text).toContain("(!isExternalLoginOnlyContext && !loginEmail)");
+    expect(text).toContain("const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext && Boolean(externalResolvedLogin)");
+    expect(text).toContain("!loginEmail");
     expect(text).toContain("email: loginEmail || undefined");
     expect(text).toContain("const externalSessionScope = externalProvider ===");
     expect(text).toContain("session_scope: externalSessionScope");
@@ -38,5 +38,13 @@ describe("external channel login", () => {
     expect(securityProxy).toContain('proxyBackendApi(req, "api/security"');
     expect(securePinGate).toContain('fetch("/api/security/reset-pin-init"');
     expect(securePinGate).toContain("forgot_pin: true");
+  });
+
+  it("does not auto-redirect external signup links to the PIN login screen", () => {
+    const createText = source("app/create-account/create-account-client.tsx");
+
+    expect(createText).not.toContain("window.location.replace(loginHref)");
+    expect(createText).toContain("const loginHref = useMemo");
+    expect(createText).toContain("I already have an account");
   });
 });

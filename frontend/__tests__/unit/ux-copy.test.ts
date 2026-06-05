@@ -185,15 +185,14 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("Go back to");
   });
 
-  it("keeps WhatsApp and Telegram account links login-only", () => {
+  it("keeps WhatsApp and Telegram signup links from auto-opening PIN login", () => {
     const loginText = source("app/login/login-client.tsx");
     const createText = source("app/create-account/create-account-client.tsx");
     const agentRoutesText = source("../backend/src/api/agent/routes.ts");
 
-    expect(agentRoutesText).toContain("createLoginUrlWithShortLink(normalizedProvider");
-    expect(agentRoutesText).toContain("entrar na sua conta com PIN");
-    expect(createText).toContain('["whatsapp", "phone", "telegram"].includes(tokenProvider)');
-    expect(createText).toContain("window.location.replace(loginHref)");
+    expect(agentRoutesText).toContain("createOnboardUrlWithShortLink(normalizedProvider");
+    expect(agentRoutesText).toContain("create your account");
+    expect(createText).not.toContain("window.location.replace(loginHref)");
     expect(createText).toContain("const tokenSessionScope = tokenProvider ===");
     expect(createText).toContain("...tokenSessionContext");
     expect(createText).toContain("Ambiente de teste");

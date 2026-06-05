@@ -1024,16 +1024,16 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   const loginEmail = externalResolvedLogin || email.trim()
+  const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext && Boolean(externalResolvedLogin)
   const pinSubmitDisabled =
     externalLinkUsed ||
     actionLockRef.current ||
     status === "pin" ||
     status === "passkey" ||
-    (!isExternalLoginOnlyContext && !loginEmail) ||
+    !loginEmail ||
     !pin.trim() ||
     (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)
 
-  const useExternalPinOnlyLogin = hasExternalContext && isExternalLoginOnlyContext
   const displayedResolvedLogin = externalResolvedLogin ? maskLoginEmail(externalResolvedLogin) : ""
   const canRequestPinReset = Boolean((externalResolvedLogin || email.trim()) || (hasExternalContext && externalToken))
 
