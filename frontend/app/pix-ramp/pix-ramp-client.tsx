@@ -376,17 +376,6 @@ function formatQuoteAmount(value: unknown, currency: TargetAsset = "BRL") {
   return formatRampAsset(value, currency);
 }
 
-function formatFeeParts(parts: Array<{ amount: number; currency: TargetAsset }>) {
-  const grouped = new Map<TargetAsset, number>();
-  for (const part of parts) {
-    if (!Number.isFinite(part.amount) || part.amount <= 0) continue;
-    grouped.set(part.currency, (grouped.get(part.currency) || 0) + part.amount);
-  }
-  return Array.from(grouped.entries())
-    .map(([currency, amount]) => formatQuoteAmount(amount.toFixed(7), currency))
-    .join(" + ");
-}
-
 function formatApiAmount(value: unknown) {
   const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return "";
@@ -1246,36 +1235,6 @@ export default function PixRampClient({
   const quote = quotePayload?.quote;
   const activeOnRampQuote = orderPayload?.quote || quote;
   const onRampFeeEstimate = buildRampFeeBridgeEstimate("onramp", activeOnRampQuote);
-  const onRampConversionFeeSummary = useMemo(() => {
-    if (rampMode !== "onramp") return "";
-
-    const estimatedFromQuote = onRampFeeEstimate
-      ? formatFeeParts([
-          {
-            amount: onRampFeeEstimate.providerFeeAmount,
-            currency: onRampFeeEstimate.providerFeeCurrency,
-          },
-          {
-            amount: onRampFeeEstimate.ttsTransactionFeeAmount,
-            currency: onRampFeeEstimate.ttsTransactionFeeCurrency,
-          },
-        ])
-      : "";
-    if (estimatedFromQuote) {
-      return L(`Taxa de conversão estimada: ${estimatedFromQuote}.`, `Estimated conversion fee: ${estimatedFromQuote}.`);
-    }
-    if (exactOnRampValueContract) {
-      return L("Taxa calculada junto com a cotação final.", "Fee calculated with the final quote.");
-    }
-
-    const fallbackBase = toPositiveNumber(desiredFinalAmount || amountBrl, 0);
-    if (!fallbackBase) return L("Calculando taxa de conversão.", "Calculating conversion fee.");
-
-    const providerFee = fallbackBase * (clientEtherfuseOnRampFeeBps() / 10000);
-    const appFee = Math.max(fallbackBase * (clientTtsTransactionFeeBps() / 10000), clientTtsTransactionMinBrl());
-    const fallbackFee = providerFee + appFee;
-    return L(`Taxa de conversão estimada: ${formatMoney(fallbackFee)}.`, `Estimated conversion fee: ${formatMoney(fallbackFee)}.`);
-  }, [L, amountBrl, desiredFinalAmount, exactOnRampValueContract, onRampFeeEstimate, rampMode]);
   const feeAdjustedAutoPayAmount = transferFlow &&
     !autoPayAmount &&
     !autoPaySourceAmount &&
@@ -3389,18 +3348,6 @@ export default function PixRampClient({
           operationLocked={operationLocked}
         />
 
-        <div className="hidden md:block">
-          <LiveRampPanel
-            mode={rampMode}
-            steps={liveSteps}
-            loading={loading}
-            status={statusLabel(status, language)}
-            launchedFromChat={launchedFromChat}
-            language={language}
-            feeSummary={onRampConversionFeeSummary}
-          />
-        </div>
-
         {!lockedMode && (
         <section className="mt-5 hidden gap-3 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:grid sm:grid-cols-2">
           <button
@@ -4552,91 +4499,6 @@ function RampFeeBridge({
         </div>
       </div>
     </div>
-  );
-}
-
-function LiveRampPanel({ mode, steps, loading, status, launchedFromChat, language, feeSummary }: {
-  mode: RampMode;
-  steps: LiveStep[];
-  loading: string;
-  status: string;
-  launchedFromChat: boolean;
-  language: "pt-BR" | "en";
-  feeSummary?: string;
-}) {
-  const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
-  const completed = steps.filter((step) => step.state === "done").length;
-  const progress = steps.length ? Math.round((completed / steps.length) * 100) : 0;
-  const activeStep = steps.find((step) => step.state === "active") || steps.find((step) => step.state === "warning");
-  const panelDescription = mode === "onramp" && feeSummary
-    ? feeSummary
-    : launchedFromChat
-      ? L("Acompanhe a confirmação.", "Track confirmation.")
-      : L("Valor, taxas e confirmação em uma tela.", "Amount, fees, and confirmation in one screen.");
-
-  return (
-    <section className="mt-5 overflow-hidden rounded-xl border border-tts-border bg-tts-surface shadow-sm backdrop-blur">
-      <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="border-b border-tts-border bg-tts-bg p-5 text-tts-deep sm:p-6 lg:border-b-0 lg:border-r">
-          <p className="text-xs font-black uppercase tracking-normal opacity-70">PIX</p>
-          <h2 className="mt-2 text-2xl font-bold">
-            {mode === "onramp" ? L("Adicionar saldo", "Add money") : L("Enviar para PIX", "Send to PIX")}
-          </h2>
-          <p className="mt-3 text-sm font-bold opacity-75">
-            {panelDescription}
-          </p>
-          <div className="mt-5 rounded-full bg-tts-bg/60 p-1">
-            <div
-              className={`h-3 rounded-full transition-all duration-700 ${mode === "onramp" ? "bg-tts-confirm" : "bg-tts-gold"}`}
-              style={{ width: `${Math.max(6, progress)}%` }}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-normal opacity-70">
-            <span>{completed}/{steps.length} {L("etapas", "steps")}</span>
-	            <span className="inline-flex items-center gap-2">{loading ? <InlineSpinner tone="white" /> : null}{loading ? publicLoadingLabel(loading, language) : statusLabel(status, language)}</span>
-          </div>
-        </div>
-
-        <div className="grid gap-3 p-4 sm:p-5">
-          {activeStep && (
-            <div className="rounded-xl border border-tts-border bg-tts-bg/60 p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className={`h-3 w-3 rounded-full ${activeStep.state === "warning" ? "bg-tts-gold" : "animate-pulse bg-tts-confirm"}`} />
-                <p className="text-xs font-black uppercase tracking-normal text-tts-muted">
-                  {L("Agora", "Now")}
-                </p>
-              </div>
-              <p className="mt-2 text-lg font-black text-tts-deep">{activeStep.label}</p>
-              <p className="mt-1 text-sm font-bold text-tts-muted">{activeStep.detail}</p>
-            </div>
-          )}
-
-          <div className="grid gap-2 md:grid-cols-2">
-            {steps.map((step, index) => (
-              <div key={`${step.label}-${index}`} className="rounded-xl border border-tts-border bg-tts-bg/60 p-4">
-                <div className="flex items-start gap-3">
-                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
-                    step.state === "done"
-                      ? "bg-tts-confirm text-tts-deep"
-                      : step.state === "active"
-                        ? "bg-tts-gold text-tts-deep"
-                        : step.state === "warning"
-                          ? "bg-tts-gold text-tts-deep"
-                          : "bg-tts-surface text-tts-muted"
-                  }`}>
-                    {step.state === "done" ? "OK" : index + 1}
-                  </span>
-                  <div>
-                    <p className="text-sm font-black text-tts-deep">{step.label}</p>
-                    <p className="mt-1 text-xs font-semibold leading-5 text-tts-muted">{step.detail}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
   );
 }
 

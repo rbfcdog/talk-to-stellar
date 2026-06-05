@@ -35,7 +35,9 @@ describe("UX copy guardrails", () => {
     const pixRampText = source("app/pix-ramp/pix-ramp-client.tsx");
     const rendimentosText = source("app/rendimentos/rendimentos-client.tsx");
     expect(pixRampText).toContain("MobilePixStepper");
-    expect(pixRampText).toContain("LiveRampPanel");
+    expect(pixRampText).not.toContain("LiveRampPanel");
+    expect(pixRampText).not.toContain("Acompanhe a confirmação.");
+    expect(pixRampText).not.toContain("Track confirmation.");
     expect(pixRampText).not.toContain("AccountStatusCard");
     expect(rendimentosText).not.toContain("AccountStatusCard");
     expect(pixRampText).not.toContain("ReturnToChat");
@@ -298,8 +300,9 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("buildRampReceiptFallbackUrl(transactionHash || operationId || orderId)");
     expect(text).toContain("const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload)");
     expect(text).toContain('receiptUrl ? L(`Comprovante: ${receiptUrl}`, `Receipt: ${receiptUrl}`) : ""');
-    expect(text).toContain("Taxa de conversão estimada");
-    expect(text).toContain("formatFeeParts");
+    expect(text).not.toContain("Taxa de conversão estimada");
+    expect(text).not.toContain("formatFeeParts");
+    expect(text).toContain("RampFeeBridge");
     expect(text).toContain("TRADITIONAL_METHOD_ONRAMP_FEE_PCT");
     expect(text).toContain("TRADITIONAL_METHOD_OFFRAMP_FEE_PCT");
     expect(text).toContain("const TRADITIONAL_METHOD_ONRAMP_FEE_PCT = 0.0125");
