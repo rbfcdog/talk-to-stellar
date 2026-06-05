@@ -9,6 +9,12 @@ function source(path: string) {
 }
 
 describe("UX copy guardrails", () => {
+  it("keeps intermediate success pages visible long enough to read", () => {
+    const text = source("lib/web-feedback.ts");
+
+    expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_DELAY_MS = 4000");
+  });
+
   it("keeps shared account affordances on money screens", () => {
     const screens = [
       "app/rendimentos/rendimentos-client.tsx",
