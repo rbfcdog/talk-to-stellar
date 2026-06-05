@@ -31,10 +31,10 @@ export type SavingsIdentity = {
   message: string;
 };
 
-const DEFAULT_TRADITIONAL_FEE_PCT = Number(process.env.TRADITIONAL_FEE_PCT || 0.035);
+const DEFAULT_TRADITIONAL_FEE_PCT = Number(process.env.TRADITIONAL_FEE_PCT || 0.0125);
 
 function comparisonMethodForRate(rate: number): string {
-  const normalized = Number.isFinite(rate) && rate > 0 ? rate : 0.035;
+  const normalized = Number.isFinite(rate) && rate > 0 ? rate : 0.0125;
   const pct = normalized * 100;
   const compact = pct.toFixed(2).replace(/\.?0+$/, '').replace('.', '_');
   return `traditional_providers_average_${compact}pct`;
