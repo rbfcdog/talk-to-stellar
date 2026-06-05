@@ -36,53 +36,36 @@ describe('Agent balance flow', () => {
     jest.clearAllMocks();
   });
 
-  it('uses session_id fallback when public_key is missing', async () => {
+  it('opens the secure balance screen without exposing values in chat', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
     const state = createState('');
-
-    (executeTool as jest.Mock).mockResolvedValue(
-      JSON.stringify({
-        success: true,
-        balances: [
-          { asset: 'BRL', balance: '12.3400000' },
-          { asset: 'USDC', balance: '8.9000000' },
-        ],
-      })
-    );
+    jest.spyOn(graph as any, 'buildBalanceUrl').mockResolvedValue('https://app.example/balance?lang=pt-BR');
 
     const result = await (graph as any).handleBalanceCheck(state);
 
-    expect(executeTool).toHaveBeenCalledWith('get_balance', {
-      session_id: '11111111-1111-4111-8111-111111111111',
-      public_key: undefined,
-    });
+    expect(executeTool).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
-    expect(result.response_message).toContain('Saldo da sua conta TalkToStellar:');
-    expect(result.response_message).toContain('R$: 12.3400000');
-    expect(result.response_message).toContain('US$: 8.9000000');
+    expect(result.response_message).toContain('Abra seu saldo aqui:');
+    expect(result.response_message).toContain('https://app.example/balance?lang=pt-BR');
+    expect(result.response_message).toContain('PIN');
+    expect(result.response_message).not.toContain('12.3400000');
+    expect(result.response_message).not.toContain('8.9000000');
   });
 
-  it('does not expose account preparation internals when balance is unavailable', async () => {
+  it('does not call the raw balance tool for a chat balance request', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt');
     const state = createState('GTESTPUBLICKEY');
-
-    (executeTool as jest.Mock).mockResolvedValue(
-      JSON.stringify({
-        success: false,
-        code: 'account_preparing',
-        error: 'Failed to fund account using Friendbot: 400 createAccountAlreadyExist',
-      })
-    );
+    jest.spyOn(graph as any, 'buildBalanceUrl').mockResolvedValue('https://app.example/balance?lang=pt-BR');
 
     const result = await (graph as any).handleBalanceCheck(state);
 
-    expect(result.success).toBe(false);
-    expect(result.response_message).toBe('Não consegui consultar seu saldo agora. Tente novamente em alguns segundos.');
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('https://app.example/balance?lang=pt-BR');
     expect(result.response_message).not.toContain('Friendbot');
     expect(result.response_message).not.toContain('createAccountAlreadyExist');
-    expect(result.response_message).not.toContain('sincronizando');
   });
 
   it('calculates spendable XLM when user asks to convert the whole balance', async () => {

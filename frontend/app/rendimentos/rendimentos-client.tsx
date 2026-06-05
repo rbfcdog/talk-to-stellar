@@ -16,7 +16,6 @@ import {
   Plus,
   WalletCards,
 } from "lucide-react";
-import { AccountStatusCard } from "@/components/shared/account-status";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
@@ -414,13 +413,6 @@ export default function RendimentosClient({
           <button type="button" className="tts-stage-button" data-active={tab === "apply"} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</button>
         </div>
 
-        <AccountStatusCard
-          state={sessionLoading ? "loading" : session.authenticated ? "connected" : "signed-out"}
-          ctaHref="/login?next=/rendimentos"
-          compact
-          className="mb-6"
-        />
-
         {apiState.error && (
           <div className="flex items-start gap-3 border border-tts-error bg-tts-error/10 p-4 mb-6 text-sm" role="alert">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-tts-error" />
@@ -676,6 +668,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   convertAssetsUrl: string; pixTopUpUrl: string;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const selectedAvailableDisplay = formatPositionAmount(balanceForSelected?.balance || "0", selectedProfile, language);
   const [investmentHelpOpen, setInvestmentHelpOpen] = useState(false);
   const hasPrepared = Boolean(yieldResult);
   const submitted = Boolean(yieldResult?.submitted || yieldResult?.hash);
@@ -720,11 +713,19 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
       </div>
 
       {selectedBalanceInsufficient && (
-        <div className="rounded-2xl border border-tts-gold bg-tts-gold-bg p-4 text-sm">
-          <p className="font-bold text-tts-gold mb-2">{L("Saldo insuficiente", "Insufficient balance")}</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <a href={convertAssetsUrl} className="inline-flex min-h-11 items-center justify-center gap-1.5 bg-tts-gold px-3 py-2 text-xs font-bold text-tts-deep"><ArrowRightLeft className="h-3.5 w-3.5" /> {L("Converter ativos", "Convert assets")}</a>
-            <a href={pixTopUpUrl} className="inline-flex min-h-11 items-center justify-center gap-1.5 border border-tts-gold px-3 py-2 text-xs font-bold text-tts-gold"><ArrowDownToLine className="h-3.5 w-3.5" /> PIX</a>
+        <div className="rounded-2xl border border-tts-error/40 bg-tts-error/10 p-4 text-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-tts-error" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-tts-error">{L("Saldo insuficiente", "Insufficient balance")}</p>
+              <p className="mt-1 text-xs font-bold text-tts-muted">
+                {L(`Disponível: ${selectedAvailableDisplay}`, `Available: ${selectedAvailableDisplay}`)}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <a href={convertAssetsUrl} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-tts-deep px-3 py-2 text-xs font-black text-tts-surface"><ArrowRightLeft className="h-3.5 w-3.5" /> {L("Converter", "Convert")}</a>
+            <a href={pixTopUpUrl} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-tts-border px-3 py-2 text-xs font-black text-tts-deep"><ArrowDownToLine className="h-3.5 w-3.5" /> PIX</a>
           </div>
         </div>
       )}

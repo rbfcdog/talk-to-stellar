@@ -1125,7 +1125,7 @@ export const toolDefinitions = [
   },
   {
     name: "get_yield_balance",
-    description: "Check how much the signed-in user currently has in an application option. Use for questions about current position in an option.",
+    description: "Open the secure investments screen for the signed-in user's current positions. Never return or reveal position amounts in chat; the frontend screen asks for PIN before showing values.",
     parameters: {
       type: "object",
       properties: {
@@ -3143,23 +3143,13 @@ async function executeGetYieldBalance(input: any): Promise<string> {
     const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || input.external_source || input.external_provider);
     const rawUrl = buildYieldFrontendUrl({ assetCode, language, sessionScope });
     const frontendUrl = await shortenYieldUrl(rawUrl, 'rendimentos', sessionId);
-    const result: any = await AnchorService.getDefindexYieldBalanceForSession({
-      ...input,
-      asset_code: assetCode,
-    });
-    const currency = yieldCurrencyCode(result?.vault?.asset_code || assetCode);
-    const amount = extractYieldBalanceAmount(result?.balance);
-    const name = formatYieldAssetName(result?.vault?.asset_code || assetCode, language);
 
     return JSON.stringify({
       success: true,
-      currency,
-      amount,
-      balance: amount,
-	      frontend_url: frontendUrl,
-	      message: language === 'en'
-	        ? `Current position: ${amount} ${name}.\n\nOpen:\n${frontendUrl}`
-	        : `Posição atual: ${amount} ${name}.\n\nAbrir:\n${frontendUrl}`,
+      frontend_url: frontendUrl,
+      message: language === 'en'
+        ? `Open your investments here:\n\n${frontendUrl}\n\nThe page asks for your PIN before showing values.`
+        : `Abra seus rendimentos aqui:\n\n${frontendUrl}\n\nA página pede seu PIN antes de mostrar os valores.`,
     });
   } catch (error) {
     return JSON.stringify({
