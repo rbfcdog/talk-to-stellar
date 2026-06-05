@@ -91,7 +91,8 @@ type PostConversionState = {
 const DEFAULT_TTS_TRANSACTION_FEE_BPS = 30;
 const ETHERFUSE_TESTNET_FEE_BPS = 20;
 const ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL = 0.2;
-const TRADITIONAL_METHOD_FEE_PCT = 0.035;
+const TRADITIONAL_METHOD_ONRAMP_FEE_PCT = 0.035;
+const TRADITIONAL_METHOD_OFFRAMP_FEE_PCT = 0.045;
 const RAMP_REQUEST_TIMEOUT_MS = 120000;
 const RAMP_ONRAMP_REQUEST_TIMEOUT_MS = 60000;
 const DEFAULT_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"];
@@ -268,6 +269,10 @@ function clientTtsTransactionMinBrl() {
 function clientEtherfuseOnRampFeeBps() {
   const parsed = Number(process.env.NEXT_PUBLIC_ETHERFUSE_ONRAMP_FEE_BPS || process.env.NEXT_PUBLIC_ETHERFUSE_TESTNET_FEE_BPS || ETHERFUSE_TESTNET_FEE_BPS);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 1000) : ETHERFUSE_TESTNET_FEE_BPS;
+}
+
+function traditionalMethodFeePct(mode: RampMode) {
+  return mode === "offramp" ? TRADITIONAL_METHOD_OFFRAMP_FEE_PCT : TRADITIONAL_METHOD_ONRAMP_FEE_PCT;
 }
 
 function estimatePixOnRampGrossForBrlReceive(receiveBrl: number) {
@@ -4291,7 +4296,7 @@ function EtherfuseMeasuredFeeNotice({
     : 0;
   const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee;
   const traditionalFee = Number.isFinite(numericAmount) && numericAmount > 0
-    ? numericAmount * TRADITIONAL_METHOD_FEE_PCT
+    ? numericAmount * traditionalMethodFeePct(mode)
     : 0;
   const savingsPercent = traditionalFee > 0
     ? Math.max(0, Math.min(100, ((traditionalFee - totalEstimatedFee) / traditionalFee) * 100))
@@ -4410,7 +4415,7 @@ function RampFeeBridge({
     0,
   );
   const comparableAmountBrl = mode === "offramp" ? offRampReceivedBrl : onRampPaidBrl;
-  const traditionalFeeBrl = traditionalFeeBrlFromQuote || (comparableAmountBrl > 0 ? comparableAmountBrl * TRADITIONAL_METHOD_FEE_PCT : 0);
+  const traditionalFeeBrl = traditionalFeeBrlFromQuote || (comparableAmountBrl > 0 ? comparableAmountBrl * traditionalMethodFeePct(mode) : 0);
   const savingsBrlFromQuote = toPositiveNumber(
     quote?.savings_estimate?.estimated_savings_brl ||
     quote?.savings?.estimated_savings ||
