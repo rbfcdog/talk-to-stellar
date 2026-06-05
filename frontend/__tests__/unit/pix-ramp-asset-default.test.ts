@@ -29,6 +29,21 @@ describe("PIX asset defaults", () => {
     expect(text).toContain('target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined');
   });
 
+  it("calculates non-BRL PIX withdrawal fees from the converted BRL destination", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain("function quoteBrlDestinationAmount");
+    expect(text).toContain("function estimatedBrlOffRampFeeParts");
+    expect(text).toContain('const brlDestinationAmount = mode === "offramp" ? quoteBrlDestinationAmount(quote) : NaN;');
+    expect(text).toContain('const brlOffRampFeeParts = mode === "offramp" ? estimatedBrlOffRampFeeParts(brlDestinationAmount) : null;');
+    expect(text).toContain('providerFeeFromBps = mode === "offramp" && brlOffRampFeeParts');
+    expect(text).toContain('mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.appFee)');
+    expect(text).toContain('target_brl: quotePayload.target_brl || sourcePayload?.target_brl || sourcePayload?.destination_amount');
+    expect(text).toContain('destination_amount: quotePayload.destination_amount || sourcePayload?.destination_amount || sourcePayload?.target_brl');
+    expect(text).toContain('Calcule para ver quanto chega no PIX.');
+    expect(text).toContain('A taxa estimada usa o valor convertido em reais.');
+  });
+
   it("does not copy exact XLM/CETES receive targets into the BRL PIX amount field", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
 

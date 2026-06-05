@@ -393,10 +393,48 @@ function formatApiAmount(value: unknown) {
   return numeric.toFixed(7).replace(/\.?0+$/, "");
 }
 
+function quoteBrlDestinationAmount(quote: RampResponse | null | undefined) {
+  if (!quote) return NaN;
+  const candidates = [
+    quote.target_brl,
+    quote.targetBrl,
+    quote.destination_amount,
+    quote.destinationAmount,
+    quote.destinationAmountAfterFee,
+    quote.toAmount,
+    quote.quote?.target_brl,
+    quote.quote?.destination_amount,
+    quote.quote?.destinationAmount,
+    quote.quote?.destinationAmountAfterFee,
+    quote.quote?.toAmount,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseHumanAmount(candidate);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return NaN;
+}
+
+function estimatedBrlOffRampFeeParts(destinationBrl: number) {
+  if (!Number.isFinite(destinationBrl) || destinationBrl <= 0) {
+    return { providerFee: NaN, appFee: NaN, totalFee: NaN };
+  }
+  const providerFee = destinationBrl * (ETHERFUSE_TESTNET_FEE_BPS / 10000);
+  const appFee = Math.max(destinationBrl * (clientTtsTransactionFeeBps() / 10000), clientTtsTransactionMinBrl());
+  return {
+    providerFee,
+    appFee,
+    totalFee: providerFee + appFee,
+  };
+}
+
 function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null | undefined) {
   if (!quote) return null;
 
   const sourceCurrency = quoteCurrencyCode(quote.fromCurrency, "BRL");
+  const offRampTargetBrlRaw = mode === "offramp"
+    ? (quote.target_brl || quote.targetBrl || quote.destination_amount || quote.destinationAmount || quote.destinationAmountAfterFee || quote.toAmount || "")
+    : "";
   const finalConversionRequired = Boolean(quote.finalConversionRequired || quote.finalConversionSourceAmount);
   const hasFinalConversionAmount = Boolean(quote.finalAmountAfterFee || quote.userFacingToAmount || quote.requestedFinalAmount);
   const finalConversionPending = Boolean(finalConversionRequired && !hasFinalConversionAmount);
@@ -406,7 +444,9 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
       ? "BRL"
       : quoteCurrencyCode(quote.toCurrency, "BRL");
   const isTesouroOfframp = mode === "offramp" && /TESOURO/i.test(String(quote.fromCurrency || ""));
-  const destinationBeforeRaw = isTesouroOfframp
+  const destinationBeforeRaw = offRampTargetBrlRaw
+    ? offRampTargetBrlRaw
+    : isTesouroOfframp
     ? (quote.fromAmount || "")
     : finalConversionPending
       ? (quote.anchorAmountBeforeFee || quote.destinationAmountBeforeFee || quote.destinationAmount || quote.fromAmount || "")
@@ -417,6 +457,8 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     ? (quote.finalAmountAfterFee || quote.userFacingToAmount || "")
     : finalConversionPending
       ? (quote.anchorAmountAfterFee || quote.finalConversionSourceAmount || quote.destinationAmountAfterFee || quote.toAmount || "")
+    : offRampTargetBrlRaw
+      ? offRampTargetBrlRaw
     : isTesouroOfframp
       ? (quote.fromAmount || "") // TESOURO=BRL 1:1, source amount is the destination
       : (quote.destinationAmountAfterFee || quote.toAmount || "");
@@ -430,13 +472,17 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
   const backendTtsFeeCurrency = quoteCurrencyCode(quote.talkToStellarFeeCurrency, sourceCurrency);
   const providerFee = parseHumanAmount(providerFeeRaw);
   const feeBps = parseHumanAmount(quote.feeBps || ETHERFUSE_TESTNET_FEE_BPS);
+  const brlDestinationAmount = mode === "offramp" ? quoteBrlDestinationAmount(quote) : NaN;
+  const brlOffRampFeeParts = mode === "offramp" ? estimatedBrlOffRampFeeParts(brlDestinationAmount) : null;
   const hasBackendFeeBridge = Number.isFinite(backendTotalFee) && backendTotalFee >= 0 && Number.isFinite(destinationAfter);
   const inferredDestinationFee = Number.isFinite(destinationBefore) && Number.isFinite(destinationAfter)
     ? Math.max(destinationBefore - destinationAfter, 0)
     : NaN;
-  const providerFeeFromBps = Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(feeBps) && feeBps > 0
-    ? sourceAmount * (feeBps / 10000)
-    : 0;
+  const providerFeeFromBps = mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.providerFee)
+    ? brlOffRampFeeParts.providerFee
+    : Number.isFinite(sourceAmount) && sourceAmount > 0 && Number.isFinite(feeBps) && feeBps > 0
+      ? sourceAmount * (feeBps / 10000)
+      : 0;
   const feeFromGrossToNet = Number.isFinite(sourceAmount) && Number.isFinite(destinationAfter) && sourceCurrency === destinationCurrency
     ? Math.max(sourceAmount - destinationAfter, 0)
     : NaN;
@@ -447,7 +493,9 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     : Number.isFinite(providerFee) && providerFee > 0
       ? providerFee
       : providerFeeFromBps;
-  const providerFeeCurrency = Number.isFinite(providerFee) && providerFee > 0
+  const providerFeeCurrency = mode === "offramp" && Number.isFinite(providerFeeFromBps) && providerFeeFromBps > 0
+    ? "BRL"
+    : Number.isFinite(providerFee) && providerFee > 0
     ? explicitProviderFeeCurrency
     : Number.isFinite(inferredDestinationFee) && inferredDestinationFee > 0
       ? destinationCurrency
@@ -465,11 +513,17 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     ? backendTtsFee
     : Number.isFinite(feeFromGrossToNet) && feeFromGrossToNet > providerFeeAmount
       ? Math.max(feeFromGrossToNet - providerFeeAmount, 0)
+    : mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.appFee)
+      ? brlOffRampFeeParts.appFee
     : canEstimateTtsFee && Number.isFinite(sourceAmount) && sourceAmount > 0
       ? sourceAmount * (ttsTransactionFeeBps / 10000)
       : 0;
   const ttsTransactionFeePct = ttsTransactionFeeAmount > 0 ? ttsTransactionFeeBps / 100 : 0;
-  const ttsTransactionFeeCurrency = Number.isFinite(backendTtsFee) ? backendTtsFeeCurrency : sourceCurrency;
+  const ttsTransactionFeeCurrency = Number.isFinite(backendTtsFee)
+    ? backendTtsFeeCurrency
+    : mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.appFee)
+      ? "BRL"
+      : sourceCurrency;
   const sameCurrencyBridge = sourceCurrency === destinationCurrency && Number.isFinite(sourceAmount) && sourceAmount > 0;
   const grossComparableAmount = sameCurrencyBridge
     ? sourceAmount
@@ -480,7 +534,9 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
     ? providerFeeAmount
     : providerFeeAmount;
   const ttsFeeInDestination = sameCurrencyBridge ? ttsTransactionFeeAmount : 0;
-  const netDestinationAmount = hasBackendFeeBridge && Number.isFinite(destinationAfter)
+  const netDestinationAmount = mode === "offramp" && Number.isFinite(brlDestinationAmount) && brlDestinationAmount > 0
+    ? brlDestinationAmount
+    : hasBackendFeeBridge && Number.isFinite(destinationAfter)
     ? destinationAfter
     : sameCurrencyBridge && Number.isFinite(grossComparableAmount)
     ? Math.max(0, grossComparableAmount - providerFeeInDestination - ttsFeeInDestination)
@@ -1240,7 +1296,18 @@ export default function PixRampClient({
   const feeAdjustedAutoPayDisplayAmount = feeAdjustedAutoPayAmount
     ? formatRampAsset(feeAdjustedAutoPayAmount, feeAdjustedAutoPayAsset)
     : autoPayDisplayAmount;
-  const offRampQuote = temporaryOffRampTestResult?.quote || offRampPreviewPayload?.quote;
+  const offRampQuote = useMemo(() => {
+    const sourcePayload = temporaryOffRampTestResult || offRampPreviewPayload;
+    const quotePayload = sourcePayload?.quote;
+    if (!quotePayload) return null;
+    return {
+      ...quotePayload,
+      target_brl: quotePayload.target_brl || sourcePayload?.target_brl || sourcePayload?.destination_amount,
+      destination_amount: quotePayload.destination_amount || sourcePayload?.destination_amount || sourcePayload?.target_brl,
+      source_amount: quotePayload.source_amount || sourcePayload?.source_amount,
+      source_asset_code: quotePayload.source_asset_code || sourcePayload?.source_asset_code,
+    };
+  }, [offRampPreviewPayload, temporaryOffRampTestResult]);
   const offRampInsufficientBalance = Boolean(rampMode === "offramp" && isInsufficientBalanceText(error));
   const offRampAlternativeAsset = useMemo(() => {
     const candidates = ["USDC", "CETES", "XLM", "BRL"].filter((asset) => asset !== offRampInputAsset);
@@ -3480,6 +3547,14 @@ export default function PixRampClient({
                     sourceCaption={L("valor inicial", "starting amount")}
                     destinationCaption={L("chega no seu PIX", "arrives in your PIX")}
                   />
+                ) : offRampInputAsset !== "BRL" ? (
+                  <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-tts-deep">
+                    <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Conversão em reais", "BRL conversion")}</p>
+                    <p className="mt-2 text-lg font-black">{L("Calcule para ver quanto chega no PIX.", "Calculate to see how much arrives in PIX.")}</p>
+                    <p className="mt-1 text-xs font-bold text-tts-muted">
+                      {L("A taxa estimada usa o valor convertido em reais.", "The estimated fee uses the converted BRL amount.")}
+                    </p>
+                  </div>
                 ) : (
                   <EtherfuseMeasuredFeeNotice
                     mode="offramp"
