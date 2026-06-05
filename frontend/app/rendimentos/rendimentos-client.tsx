@@ -7,6 +7,8 @@ import {
   ArrowRightLeft,
   ArrowUpFromLine,
   BadgeCheck,
+  BarChart3,
+  CalendarDays,
   CheckCircle2,
   Coins,
   FileCheck2,
@@ -70,6 +72,7 @@ type InvestmentRow = {
   history: PositionHistoryState;
 };
 type YieldSuccessNotice = { action: "deposit" | "withdraw"; reviewedAmount: string; reviewedAsset: string; vaultAmount?: string; vaultAsset?: string; hash?: string; };
+type AnalysisWindow = "daily" | "weekly";
 
 const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: string }> = {
   USDC: { namePt: "Dólares", nameEn: "Dollars", short: "USD" },
@@ -117,6 +120,10 @@ const RETURN_PERIODS = [
   { key: "6m", years: 0.5, labelPt: "6 meses", labelEn: "6 months" },
   { key: "12m", years: 1, labelPt: "12 meses", labelEn: "12 months" },
 ];
+const ANALYSIS_WINDOWS: Array<{ key: AnalysisWindow; days: number; labelPt: string; labelEn: string; detailPt: string; detailEn: string }> = [
+  { key: "daily", days: 1, labelPt: "Diário", labelEn: "Daily", detailPt: "Últimas 24h", detailEn: "Last 24h" },
+  { key: "weekly", days: 7, labelPt: "Semanal", labelEn: "Weekly", detailPt: "Últimos 7 dias", detailEn: "Last 7 days" },
+];
 function periodReturnPercent(ratePercent: number, years: number) {
   const annualRate = Math.max(0, ratePercent) / 100;
   if (annualRate <= 0) return 0;
@@ -128,6 +135,18 @@ function formatReturnPercent(value: number, language: AppLanguage) {
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
   return `+${formatted}%`;
+}
+function formatSignedAmount(value: number, profile: { short: string }, language: AppLanguage) {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${formatAmount(Math.abs(value), language)} ${profile.short}`;
+}
+function formatSignedPercent(value: number, language: AppLanguage) {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  const formatted = new Intl.NumberFormat(isPortuguese(language) ? "pt-BR" : "en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(Number.isFinite(value) ? value : 0));
+  return `${sign}${formatted}%`;
 }
 function ReturnPeriodGrid({ language, rate }: { language: AppLanguage; rate: number }) {
   return (
@@ -226,6 +245,31 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
     date: shiftDate(daysAgo),
     value: Math.max(0, currentAmount),
   }));
+}
+
+function sortedHistoryPoints(history: PositionHistoryState | undefined) {
+  return [...(history?.points || [])]
+    .filter((point) => Number.isFinite(Date.parse(String(point.date || ""))))
+    .sort((a, b) => Date.parse(String(a.date || "")) - Date.parse(String(b.date || "")));
+}
+
+function periodAnalysisForRow(row: InvestmentRow, windowKey: AnalysisWindow) {
+  const windowOption = ANALYSIS_WINDOWS.find((item) => item.key === windowKey) || ANALYSIS_WINDOWS[0];
+  const cutoff = Date.now() - windowOption.days * 24 * 60 * 60 * 1000;
+  const history = sortedHistoryPoints(row.history);
+  const inWindow = history.filter((point) => Date.parse(String(point.date || "")) >= cutoff);
+  const previousPoint = [...history].reverse().find((point) => Date.parse(String(point.date || "")) < cutoff);
+  const baselinePoint = inWindow[0] || previousPoint;
+  const baseline = baselinePoint ? normalizeDecimal(baselinePoint.amount) : row.amount;
+  const change = row.amount - baseline;
+  const changePercent = baseline > 0 ? (change / baseline) * 100 : row.amount > 0 ? 100 : 0;
+  const lastPoint = history[history.length - 1];
+  return {
+    change,
+    changePercent,
+    pointCount: inWindow.length + 1,
+    lastPoint,
+  };
 }
 
 function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
@@ -831,6 +875,8 @@ function PortfolioOverview({ language, rows, isTestnet }: {
   isTestnet: boolean;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>("daily");
+  const activeWindow = ANALYSIS_WINDOWS.find((item) => item.key === analysisWindow) || ANALYSIS_WINDOWS[0];
   return (
     <section className="border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -845,40 +891,85 @@ function PortfolioOverview({ language, rows, isTestnet }: {
       </div>
 
       <div className="mt-5 border border-tts-border bg-tts-bg p-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Linhas da carteira", "Portfolio lines")}</p>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-tts-confirm" />
+              <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Análise por período", "Period analysis")}</p>
+            </div>
             <p className="mt-1 text-sm font-semibold text-tts-muted">
-              {L("Posição real por ativo. Cada cartão mostra também o caminho estimado.", "Real position by asset. Each card also shows the growth path.")}
+              {L("Compare a variação recente por ativo e veja quantos pontos entraram na leitura.", "Compare recent movement by asset and see how many points fed the read.")}
             </p>
           </div>
-          <span className="rounded-full border border-tts-border px-3 py-1 text-[11px] font-bold text-tts-muted">
-            {isTestnet ? L("Testnet", "Testnet") : L("Atual", "Live")}
-          </span>
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-tts-border bg-tts-surface p-1">
+            {ANALYSIS_WINDOWS.map((item) => {
+              const active = item.key === analysisWindow;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setAnalysisWindow(item.key)}
+                  className={[
+                    "min-w-28 px-3 py-2 text-left transition",
+                    active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-bg",
+                  ].join(" ")}
+                  aria-pressed={active}
+                >
+                  <span className="block text-xs font-black">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
+                  <span className={active ? "block text-[10px] font-semibold text-tts-surface/75" : "block text-[10px] font-semibold text-tts-muted"}>
+                    {isPortuguese(language) ? item.detailPt : item.detailEn}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          {rows.map((row) => (
-            <div key={row.code} className="rounded-2xl border border-tts-border bg-tts-surface p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-black text-tts-deep">{row.profile.short}</p>
-                  <p className="text-xs font-semibold text-tts-muted">{profileName(row.profile, language)}</p>
+
+        <div className="mt-4 overflow-hidden border border-tts-border bg-tts-surface">
+          <div className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-2 text-[10px] font-black uppercase tracking-wide text-tts-muted md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
+            <span>{L("Ativo", "Asset")}</span>
+            <span>{L("Atual", "Current")}</span>
+            <span>{L("Variação", "Change")}</span>
+            <span className="hidden md:block">{L("Pontos", "Points")}</span>
+            <span className="hidden md:block">{L("Último movimento", "Last movement")}</span>
+          </div>
+          {rows.map((row) => {
+            const analysis = periodAnalysisForRow(row, activeWindow.key);
+            const positive = analysis.change > 0.0000001;
+            const negative = analysis.change < -0.0000001;
+            const tone = positive ? "text-tts-confirm" : negative ? "text-tts-error" : "text-tts-muted";
+            return (
+              <div key={row.code} className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-3 last:border-b-0 md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-tts-deep">{row.profile.short}</p>
+                  <p className="truncate text-xs font-semibold text-tts-muted">{profileName(row.profile, language)}</p>
                 </div>
-                <p className="text-xs font-black text-tts-confirm">{formatReturnPercent(periodReturnPercent(row.rate, 1), language)}</p>
+                <div>
+                  <p className="text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
+                  <p className="text-[10px] font-semibold text-tts-muted">{isTestnet ? L("Testnet", "Testnet") : L("Rede ativa", "Live")}</p>
+                </div>
+                <div>
+                  <p className={`text-sm font-black ${tone}`}>{formatSignedAmount(analysis.change, row.profile, language)}</p>
+                  <p className={`text-[10px] font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</p>
+                </div>
+                <div className="hidden md:block">
+                  <p className="text-sm font-black text-tts-deep">{analysis.pointCount}</p>
+                  <p className="text-[10px] font-semibold text-tts-muted">{isPortuguese(language) ? activeWindow.detailPt : activeWindow.detailEn}</p>
+                </div>
+                <div className="hidden min-w-0 md:block">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0 text-tts-muted" />
+                    <p className="truncate text-xs font-bold text-tts-deep">
+                      {analysis.lastPoint ? formatChartDate(analysis.lastPoint.date, language) : L("Sem histórico", "No history")}
+                    </p>
+                  </div>
+                  <p className="mt-0.5 truncate text-[10px] font-semibold text-tts-muted">
+                    {analysis.lastPoint?.action ? L(analysis.lastPoint.action === "deposit" ? "Aplicação" : "Resgate", analysis.lastPoint.action === "deposit" ? "Deposit" : "Withdraw") : L("Saldo atual", "Current balance")}
+                  </p>
+                </div>
               </div>
-              <div className="mt-2">
-                <InvestmentLineChart
-                  data={buildPositionLinePoints(row.history, row.amount, language)}
-                  profile={row.profile}
-                  language={language}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                <span className="font-semibold text-tts-muted">{L("Atual", "Current")}</span>
-                <span className="font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
