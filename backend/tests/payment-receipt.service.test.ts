@@ -261,8 +261,9 @@ describe('PaymentReceiptService', () => {
       contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou no seu PIX.',
     });
 
-    expect(receipt).toContain('Resumo: PIX enviado ao seu PIX.');
+    expect(receipt).toContain('Resumo: PIX enviado à chave.');
     expect(receipt).not.toContain('Retirada via PIX concluída');
+    expect(receipt).not.toContain('Liquidação: confirmada');
   });
 
   it('shows the real PIX off-ramp fee from quote fee fields', async () => {
@@ -276,7 +277,7 @@ describe('PaymentReceiptService', () => {
       destinationAmount: '50',
       destinationAssetCode: 'BRL',
       status: 'completed',
-      contextMessage: 'PIX enviado ao seu PIX.',
+      contextMessage: 'PIX enviado à chave.',
       quote: {
         direction: 'offramp',
         source_amount: '50.25',
@@ -287,10 +288,11 @@ describe('PaymentReceiptService', () => {
       },
     });
 
-    expect(receipt).toContain('Resumo: PIX enviado ao seu PIX.');
+    expect(receipt).toContain('Resumo: PIX enviado à chave.');
     expect(receipt).toContain('Taxa: R$ 0.25');
     expect(receipt).not.toContain('Taxa: indisponível');
     expect(receipt).not.toContain('Taxa: indisponivel');
+    expect(receipt).not.toContain('Liquidação: confirmada');
   });
 
   it('infers the PIX off-ramp fee from debited and received BRL amounts', async () => {
@@ -304,7 +306,7 @@ describe('PaymentReceiptService', () => {
       destinationAmount: '50',
       destinationAssetCode: 'BRL',
       status: 'completed',
-      contextMessage: 'PIX enviado ao seu PIX.',
+      contextMessage: 'PIX enviado à chave.',
       quote: {
         direction: 'offramp',
       },
@@ -313,6 +315,7 @@ describe('PaymentReceiptService', () => {
     expect(receipt).toContain('Taxa: R$ 0.25');
     expect(receipt).not.toContain('Taxa: indisponível');
     expect(receipt).not.toContain('Taxa: indisponivel');
+    expect(receipt).not.toContain('Liquidação: confirmada');
   });
 
   it('uses the concise external callback for normal contact transfers', async () => {

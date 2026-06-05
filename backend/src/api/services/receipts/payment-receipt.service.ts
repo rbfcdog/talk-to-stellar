@@ -590,8 +590,8 @@ export class PaymentReceiptService {
       .replace(/\.env/gi, '')
       .trim();
 
-    if (/retirada via pix conclu[ií]da|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
-      return 'PIX enviado ao seu PIX.';
+    if (/retirada via pix conclu[ií]da|pix enviado ao seu pix|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
+      return 'PIX enviado à chave.';
     }
     if (/pix.*recebid|depositad/i.test(normalized)) {
       return 'PIX recebido.';
@@ -1038,7 +1038,7 @@ export class PaymentReceiptService {
   }
 
   private static settlementLine(_settlementMs?: number | null): string {
-    return 'Liquidação: confirmada';
+    return '';
   }
 
   private static timeLine(completedAt?: string | null): string {
