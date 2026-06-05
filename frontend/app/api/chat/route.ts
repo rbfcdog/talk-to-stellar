@@ -23,6 +23,7 @@ const getAgentApiUrl = () => {
 };
 
 const AGENT_API_URL = getAgentApiUrl();
+const AGENT_API_TIMEOUT_MS = 30000;
 
 const getAgentMessagesUrl = (sessionId: string, limit = 50) => {
   const queryUrl = new URL(AGENT_API_URL);
@@ -42,6 +43,37 @@ function isExpectedSessionAuthFailure(status: number, body: string): boolean {
     normalized.includes("sessão expirou") ||
     normalized.includes("invalid or expired session")
   );
+}
+
+function localizedChatFallback(language: string) {
+  return String(language || "").toLowerCase().startsWith("en")
+    ? "I could not get a complete response right now. Try again in a few seconds."
+    : "Não consegui obter uma resposta completa agora. Tente novamente em alguns segundos.";
+}
+
+function extractAgentReply(data: any, language: string) {
+  const candidates = [
+    data?.message,
+    data?.content,
+    data?.response_message,
+    data?.result?.message,
+    data?.result?.content,
+    data?.result?.response_message,
+  ];
+
+  for (const candidate of candidates) {
+    const text = String(candidate || "").trim();
+    if (text) return text;
+  }
+
+  const creationUrl = String(data?.creationUrl || data?.creation_url || "").trim();
+  if (creationUrl) {
+    return String(language || "").toLowerCase().startsWith("en")
+      ? `Open this link to continue:\n${creationUrl}`
+      : `Abra este link para continuar:\n${creationUrl}`;
+  }
+
+  return localizedChatFallback(language);
 }
 
 /**
@@ -111,19 +143,22 @@ export async function POST(req: Request) {
       `next_${crypto.createHash("sha256").update(JSON.stringify(dataToSend)).digest("hex")}`;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    const agentApiResponse = await fetch(AGENT_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": idempotencyKey,
-        ...forwardSessionHeaders,
-      },
-      body: JSON.stringify(dataToSend),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const timeout = setTimeout(() => controller.abort(), AGENT_API_TIMEOUT_MS);
+    let agentApiResponse: Response;
+    try {
+      agentApiResponse = await fetch(AGENT_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+          ...forwardSessionHeaders,
+        },
+        body: JSON.stringify(dataToSend),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!agentApiResponse.ok) {
       const errorText = await agentApiResponse.text();
@@ -143,10 +178,7 @@ export async function POST(req: Request) {
     }
 
     const agentApiData = await agentApiResponse.json();
-    const botResponse =
-      agentApiData?.message ||
-      agentApiData?.result?.message ||
-      "No valid response received from the agent API.";
+    const botResponse = extractAgentReply(agentApiData, requestLanguage);
 
     const response = NextResponse.json({
       content: botResponse,

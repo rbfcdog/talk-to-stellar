@@ -23,6 +23,7 @@
     "stellar:first-tx": "ts-node scripts/first-testnet-transaction.ts",
     "stellar:setup-xlm-usdc-liquidity": "ts-node scripts/setup-xlm-usdc-liquidity.ts",
     "stellar:debug-path-quotes": "ts-node scripts/debug-path-quotes.ts",
+    "stellar:setup-admin-fee-wallet": "ts-node scripts/setup-admin-fee-wallet.ts",
     "stellar:mainnet:readiness": "ts-node scripts/stellar-mainnet-readiness.ts",
     "stellar:mainnet:readiness:strict": "ts-node scripts/stellar-mainnet-readiness.ts --strict",
     "stellar:mainnet:audit": "ts-node scripts/stellar-mainnet-audit.ts",

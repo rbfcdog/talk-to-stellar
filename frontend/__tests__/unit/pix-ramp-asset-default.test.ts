@@ -20,6 +20,15 @@ describe("PIX asset defaults", () => {
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
   });
 
+  it("treats BRL PIX withdrawals as exact receive amounts, not gross debit amounts", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain('const offRampExactReceiveBrl = Boolean(rampMode === "offramp" && (offRampFiatAmount.trim() || offRampInputAsset === "BRL"));');
+    expect(text).toContain('const targetBrlAmount = normalizeHumanAmount((offRampFiatAmount || (offRampInputAsset === "BRL" ? offRampAmount : "")).trim());');
+    expect(text).toContain('offRampInputAsset === "BRL" ? "" : offRampAmount.trim()');
+    expect(text).toContain('target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined');
+  });
+
   it("does not copy exact XLM/CETES receive targets into the BRL PIX amount field", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
 

@@ -22,6 +22,9 @@ describe('AnchorService off-ramp balance validation', () => {
     process.env = { ...originalEnv };
     process.env.STELLAR_NETWORK = 'TESTNET';
     process.env.USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+    process.env.ETHERFUSE_ONRAMP_FEE_BPS = '20';
+    process.env.TALKTOSTELLAR_SPREAD_BPS = '30';
+    process.env.TALKTOSTELLAR_SPREAD_MIN_BRL = '0.05';
     delete process.env.TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY;
     jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({
       sandbox: true,
@@ -75,6 +78,188 @@ describe('AnchorService off-ramp balance validation', () => {
     })).rejects.toThrow(/Saldo insuficiente/);
 
     expect(StellarService.getAccountBalance).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts BRL withdrawals when the wallet balance is held in the TESOURO settlement asset', async () => {
+    const tesouroIssuer = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+    (StellarService.getAccountBalance as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          asset_type: 'credit_alphanum12',
+          asset_code: 'TESOURO',
+          asset_issuer: tesouroIssuer,
+          balance: '100.0000000',
+        },
+      ])
+      .mockResolvedValue([
+        {
+          asset_type: 'credit_alphanum12',
+          asset_code: 'TESOURO',
+          asset_issuer: tesouroIssuer,
+          balance: '49.7500000',
+        },
+      ]);
+    jest.spyOn(AnchorService as any, 'createCustomerForSession').mockResolvedValue({
+      customer: {
+        id: 'customer-brl',
+        kycStatus: 'not_started',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    const quoteSpy = jest.spyOn(AnchorService as any, 'getQuoteForSession').mockResolvedValue({
+      quote: {
+        id: 'quote-brl',
+        fromAmount: '50.2500000',
+        toAmount: '50.0000000',
+      },
+    });
+    const createSpy = jest.spyOn(AnchorService as any, 'createOffRampForSession').mockResolvedValue({
+      transaction: {
+        id: 'sandbox-offramp-brl',
+        customerId: 'customer-brl',
+        quoteId: 'quote-brl',
+        status: 'pending',
+        fromAmount: '50.2500000',
+        fromCurrency: 'TESOURO',
+        toAmount: '50.0000000',
+        toCurrency: 'BRL',
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        signableTransaction: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      operation_id: 'op-brl',
+    });
+    jest.spyOn(AnchorService as any, 'getOffRampStatus')
+      .mockResolvedValueOnce({
+        ready_to_sign: true,
+        transaction: {
+          id: 'sandbox-offramp-brl',
+          status: 'pending',
+        },
+      })
+      .mockResolvedValue({
+        ready_to_sign: true,
+        transaction: {
+          id: 'sandbox-offramp-brl',
+          status: 'completed',
+        },
+      });
+    const submitSpy = jest.spyOn(AnchorService as any, 'submitOffRampForSession').mockResolvedValue({
+      success: true,
+      hash: 'sandbox-offramp-brl-hash',
+      order_id: 'sandbox-offramp-brl',
+    });
+
+    const result = await AnchorService.runTemporarySandboxOffRampTest({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      pin: '1234',
+      amount: '50.00',
+      target_brl: '50.00',
+      source_asset_code: 'BRL',
+      amount_currency: 'BRL',
+      pix_key: 'user@example.com',
+    });
+
+    expect(result.source_amount).toBe('50.25');
+    expect(result.source_asset_code).toBe('TESOURO');
+    expect(result.target_brl).toBe('50.00');
+    expect(result.amount_tesouro).toBe('50.25');
+    expect(result.submitted).toBe(true);
+    expect(result.balance_delta).toEqual([
+      expect.objectContaining({
+        asset_code: 'TESOURO',
+        before: '100.0000000',
+        after: '49.7500000',
+        delta: '-50.25',
+      }),
+    ]);
+    expect(quoteSpy).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'offramp',
+      amount: '50.25',
+      from_currency: expect.stringContaining('TESOURO'),
+      to_currency: 'BRL',
+    }));
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
+      amount: '50.25',
+      source_amount: '50.25',
+      source_asset_code: 'TESOURO',
+      target_brl: '50.00',
+      force_sandbox_mock: true,
+    }));
+    expect(submitSpy).toHaveBeenCalledWith(expect.objectContaining({
+      order_id: 'sandbox-offramp-brl',
+      pin: '1234',
+    }));
+  });
+
+  it('does not report off-ramp success when the debit submission fails', async () => {
+    const tesouroIssuer = 'GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+    (StellarService.getAccountBalance as jest.Mock).mockResolvedValue([
+      {
+        asset_type: 'credit_alphanum12',
+        asset_code: 'TESOURO',
+        asset_issuer: tesouroIssuer,
+        balance: '100.0000000',
+      },
+    ]);
+    jest.spyOn(AnchorService as any, 'createCustomerForSession').mockResolvedValue({
+      customer: {
+        id: 'customer-brl',
+        kycStatus: 'not_started',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    jest.spyOn(AnchorService as any, 'getQuoteForSession').mockResolvedValue({
+      quote: {
+        id: 'quote-brl',
+        fromAmount: '50.2500000',
+        toAmount: '50.0000000',
+      },
+    });
+    jest.spyOn(AnchorService as any, 'createOffRampForSession').mockResolvedValue({
+      transaction: {
+        id: 'sandbox-offramp-brl',
+        customerId: 'customer-brl',
+        quoteId: 'quote-brl',
+        status: 'pending',
+        fromAmount: '50.2500000',
+        fromCurrency: 'TESOURO',
+        toAmount: '50.0000000',
+        toCurrency: 'BRL',
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        signableTransaction: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      operation_id: 'op-brl',
+    });
+    jest.spyOn(AnchorService as any, 'getOffRampStatus').mockResolvedValue({
+      ready_to_sign: true,
+      transaction: {
+        id: 'sandbox-offramp-brl',
+        status: 'pending',
+      },
+    });
+    jest.spyOn(AnchorService as any, 'submitOffRampForSession').mockResolvedValue({
+      success: false,
+      error: 'Sandbox PIX settlement is not configured in this test environment.',
+      order_id: 'sandbox-offramp-brl',
+    });
+
+    await expect(AnchorService.runTemporarySandboxOffRampTest({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      pin: '1234',
+      amount: '50.00',
+      target_brl: '50.00',
+      source_asset_code: 'BRL',
+      amount_currency: 'BRL',
+      pix_key: 'user@example.com',
+    })).rejects.toThrow(/Sandbox PIX settlement is not configured/);
   });
 
   it('quotes source XLM from the requested BRL receive amount instead of treating BRL as the source amount', async () => {

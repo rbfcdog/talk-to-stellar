@@ -281,7 +281,7 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("function restartOnRampCheckout()");
     expect(text).toContain("const canPrepareOnRampPix = Boolean(");
     expect(text).toContain("createOnRampIdempotencyKey = buildIdempotencyKey(`create-onramp:${executionIntentId}:${quoteForOrder?.id || \"no-quote\"}`)");
-    expect(text).toContain('quoteExpired\n                    ? L("Continuar", "Continue")');
+    expect(text).toContain('quoteExpired\n                    ? L("Gerar novo PIX", "Create new PIX")');
     expect(text).toContain('disabled={!canPrepareOnRampPix}');
     expect(text).toContain('L("Economia nesta rota", "Savings on this route")');
     expect(text).toContain('L("Economia estimada", "Estimated savings")');

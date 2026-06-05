@@ -68,11 +68,51 @@ export class PaymentReceiptService {
     return normalized;
   }
 
+  private static userFacingCounterpartyLabel(value?: string | null): string {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/\betherfuse\b|anchor|provedor|provider|sandbox|testnet|devnet/i.test(raw)) {
+      if (/pix/i.test(raw)) return 'PIX';
+      return 'TalkToStellar';
+    }
+    return raw;
+  }
+
+  private static sanitizeUserFacingText(value?: string | null): string {
+    return String(value || '')
+      .split('\n')
+      .map((line) => {
+        if (/https?:\/\//i.test(line)) return line;
+        return line
+          .replace(/PIX\s+Etherfuse/gi, 'PIX')
+          .replace(/\bEtherfuse\b/gi, 'PIX')
+          .replace(/\banchor\b/gi, 'serviço')
+          .replace(/\bprovider\b/gi, 'serviço')
+          .replace(/\bprovedor\b/gi, 'serviço')
+          .replace(/\bsandbox\b/gi, '')
+          .replace(/\btestnet\b/gi, '')
+          .replace(/\bdevnet\b/gi, '')
+          .replace(/\s{2,}/g, ' ')
+          .trimEnd();
+      })
+      .join('\n')
+      .trim();
+  }
+
   static buildHostedReceiptUrl(txHash?: string | null): string {
     const hash = String(txHash || '').trim();
     if (!hash) return '';
     const normalizedBase = this.getFrontendBaseUrl();
     return `${normalizedBase}/api/external/receipts/${encodeURIComponent(hash)}`;
+  }
+
+  private static receiptFallbackReference(input: PaymentReceiptInput, operationId: string, dedupeKey: string): string {
+    return String(
+      input.hash ||
+      operationId ||
+      dedupeKey ||
+      `${input.sessionId}:${input.type}:${input.destinationAmount}:${input.destinationAssetCode}:${input.completedAt || ''}`
+    ).trim();
   }
 
   private static getFrontendBaseUrl() {
@@ -203,7 +243,7 @@ export class PaymentReceiptService {
         sourceAssetCode: input.sourceAssetCode || null,
         feeDisplay: input.feeDisplay || null,
         contextMessage: input.contextMessage || null,
-        counterpartyLabel: input.counterpartyLabel || null,
+        counterpartyLabel: this.userFacingCounterpartyLabel(input.counterpartyLabel) || null,
         counterpartyKey: input.counterpartyKey || null,
         completedAt: input.completedAt || null,
       },
@@ -227,15 +267,18 @@ export class PaymentReceiptService {
       logger.warn(`[receipt] failed to create receipt link: ${message}`);
     }
 
-    const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash);
+    const fallbackReference = this.receiptFallbackReference(input, operationId, explicitDedupeKey);
+    const receiptUrl = viewerUrl || this.buildHostedReceiptUrl(input.hash || fallbackReference);
     const appendReceiptLink = (value: string): string => {
-      const base = String(value || '').trim();
+      const base = String(value || '')
+        .replace(/(?:^|\n)\s*(?:Comprovante|Receipt):\s*(?:\n|$)/gi, '\n')
+        .trim();
       if (!base || !receiptUrl || base.includes(receiptUrl)) return base;
       return `${base}\nComprovante: ${receiptUrl}`;
     };
     const textWithLink = appendReceiptLink(text);
     const savingsFirstDeliveryText = appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(input, receiptUrl));
-    const externalDeliveryBase = String(input.externalDeliveryText || '').trim();
+    const externalDeliveryBase = this.sanitizeUserFacingText(input.externalDeliveryText);
     const externalDeliveryText = savingsFirstDeliveryText || appendReceiptLink(externalDeliveryBase || text);
 
     try {
@@ -440,7 +483,7 @@ export class PaymentReceiptService {
       '━━━━━━━━━━━━━━',
       '',
       `📊 Ver histórico: ${historyUrl}`,
-      `📄 Comprovante PDF: ${receiptUrl || 'indisponível'}`,
+      `📄 Comprovante: ${receiptUrl}`,
     ].join('\n');
   }
 
@@ -477,7 +520,7 @@ export class PaymentReceiptService {
     const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
-    const counterparty = String(input.counterpartyLabel || '').trim();
+    const counterparty = this.userFacingCounterpartyLabel(input.counterpartyLabel);
     const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
     const counterpartyKeyLine = this.counterpartyKeyLine(input.counterpartyKey);
     const hasConversion = sourceAssetCode !== destinationAssetCode;
@@ -540,6 +583,10 @@ export class PaymentReceiptService {
       .replace(/\btestnet\b/gi, '')
       .replace(/\bsandbox\b/gi, '')
       .replace(/\bdevnet\b/gi, '')
+      .replace(/\betherfuse\b/gi, 'PIX')
+      .replace(/\banchor\b/gi, '')
+      .replace(/\bprovider\b/gi, '')
+      .replace(/\bprovedor\b/gi, '')
       .replace(/\.env/gi, '')
       .trim();
 

@@ -1114,6 +1114,27 @@ export class AgentGraph {
     return `${this.getFrontendBaseUrl()}/pay-anyone${qs ? `?${qs}` : ''}`;
   }
 
+  private recoverPaymentLinkFieldsFromMessage(text: string): { amount: string; assetCode: string; receiveAssetCode: string } {
+    const normalized = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    if (!amountMatch) {
+      return { amount: '', assetCode: '', receiveAssetCode: '' };
+    }
+
+    const amount = normalizeHumanAmountText(amountMatch[1]);
+    const amountIndex = amountMatch.index ?? 0;
+    const context = normalized.slice(Math.max(0, amountIndex - 24), amountIndex + amountMatch[0].length + 48);
+    const assetMatch = context.match(/\b(r\$|brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|cetes|xlm|lumens?)\b/);
+    const receiveMatch = normalized.match(/\b(?:receber|receba|chegar|entre|entrar)\s+(?:em|como)\s+(r\$|brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|cetes|xlm|lumens?)\b/);
+    const assetCode = this.assetCodeFromTextToken(assetMatch?.[1]) || '';
+    const receiveAssetCode = this.assetCodeFromTextToken(receiveMatch?.[1]) || '';
+
+    return { amount, assetCode, receiveAssetCode };
+  }
+
   private extractAmountFollowUpFromText(text: string): string | undefined {
     const normalized = this.normalizeTextForIntent(text);
     const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
@@ -1357,11 +1378,13 @@ export class AgentGraph {
       }
       if (intent.direction === 'offramp') {
         url.searchParams.set('source_asset', intent.asset_code);
-        url.searchParams.set('source_amount', intent.amount);
       }
       if (intent.direction === 'offramp' && intent.amount_currency === 'BRL') {
         url.searchParams.set('fiat_amount', intent.amount);
+        url.searchParams.set('target_brl', intent.amount);
         url.searchParams.set('fiat_currency', 'BRL');
+      } else if (intent.direction === 'offramp') {
+        url.searchParams.set('source_amount', intent.amount);
       }
     }
     const email = String(state.session_data?.email || state.session_data?.user_id || '').trim();
@@ -1521,10 +1544,15 @@ export class AgentGraph {
       state.response_message = await this.getOnboardingOrLoginMessage(state, this.shouldPreferLogin(state));
     } else {
       const route = (state.action_params as any)?.llm_route || {};
+      const recovered = String(route.amount || '').trim()
+        ? { amount: '', assetCode: '', receiveAssetCode: '' }
+        : this.recoverPaymentLinkFieldsFromMessage(state.current_input);
+      const routeAssetCode = this.normalizeAgentAssetCode(route.asset_code || '');
+      const routeReceiveAssetCode = this.normalizeAgentAssetCode(route.dest_asset_code || route.receive_asset_code || '');
       const llmParsed = {
-        amount: String(route.amount || '').trim(),
-        asset_code: this.normalizeAgentAssetCode(route.asset_code || 'USDC') || 'USDC',
-        receive_asset_code: this.normalizeAgentAssetCode(route.dest_asset_code || route.asset_code || 'USDC') || 'USDC',
+        amount: String(route.amount || recovered.amount || '').trim(),
+        asset_code: routeAssetCode || recovered.assetCode || 'USDC',
+        receive_asset_code: routeReceiveAssetCode || recovered.receiveAssetCode || routeAssetCode || recovered.assetCode || 'USDC',
         recipient_query: String(route.recipient_query || '').trim(),
       };
       const amountInfo = this.normalizePaymentAmountAndAsset(

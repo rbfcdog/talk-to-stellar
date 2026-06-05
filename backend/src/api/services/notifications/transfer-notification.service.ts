@@ -91,6 +91,31 @@ export type ExternalChannelImageNotification = {
 export class TransferNotificationService {
   private static agentRepo = new AgentRepository(supabase);
 
+  private static normalizeReceiptLinkCopy(text: string, fallbackUrl?: string | null): string {
+    const url = String(fallbackUrl || '').trim();
+    let normalized = String(text || '').replace(/\r\n/g, '\n').trim();
+    if (!normalized) return '';
+
+    normalized = normalized.replace(
+      /((?:Comprovante|Receipt)(?:\s+PDF)?):\s*(?:\n\s*)?(?:Abrir link|Open link)?\s*(?:\n\s*)?(https?:\/\/[^\s]+)/gi,
+      (_match, label, foundUrl) => `${String(label || '').replace(/\s+PDF/i, '')}: ${String(foundUrl || '').replace(/[.,;]+$/, '')}`,
+    );
+
+    if (url) {
+      normalized = normalized.replace(
+        /((?:Comprovante|Receipt)(?:\s+PDF)?):\s*(?:\n\s*)?(?:Abrir link|Open link)?\s*(?=\n|$)/gi,
+        (_match, label) => `${String(label || '').replace(/\s+PDF/i, '')}: ${url}`,
+      );
+    }
+
+    normalized = normalized
+      .replace(/(?:^|\n)\s*(?:Comprovante|Receipt)(?:\s+PDF)?:\s*(?:Abrir link|Open link)?\s*(?=\n|$)/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return normalized;
+  }
+
   private static normalizeLanguage(value?: string | null): 'pt-BR' | 'en' {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'en' || normalized.startsWith('en-') || normalized.includes('english')) return 'en';
@@ -232,6 +257,7 @@ export class TransferNotificationService {
 
   static async notifyExternalChannelMessage(input: ExternalChannelMessageNotification): Promise<ExternalChannelMessageDeliveryReport> {
     const sessionId = String(input.sessionId || '').trim();
+    const text = this.normalizeReceiptLinkCopy(input.text, input.buttonUrl);
     const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
     const session = sessionId ? await this.safeGetSession(sessionId) : null;
     const userId = String(input.userId || session?.user_id || '').trim();
@@ -240,11 +266,11 @@ export class TransferNotificationService {
       ...(sessionId || userId ? await this.findExternalMappings(sessionId, userId) : []),
     ]);
     const [, whatsapp] = await Promise.all([
-      this.sendTelegramToMappings(mappings, input.text, {
+      this.sendTelegramToMappings(mappings, text, {
         buttonText: input.buttonText,
         buttonUrl: input.buttonUrl,
       }),
-      this.sendWhatsAppToMappings(mappings, session?.phone_number, input.text),
+      this.sendWhatsAppToMappings(mappings, session?.phone_number, text),
     ]);
     return { whatsapp };
   }

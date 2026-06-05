@@ -353,8 +353,8 @@ export default function ConfirmConversionClient({
               {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
             </div>
             <div className="space-y-2 md:space-y-4">
-              <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
-                {T(feedbackLanguage, "Confirme a troca de moeda", "Confirm this conversion")}
+	              <h1 className="max-w-xl text-2xl font-bold tracking-normal text-tts-deep md:text-3xl">
+	                {T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
               </h1>
               <p className="tts-mobile-soft-hide max-w-2xl text-sm leading-6 text-tts-muted md:block">
                 {T(feedbackLanguage, "Confira os valores e digite seu PIN para concluir na sua conta.", "Check the details and enter your PIN to complete it in your account.")}
@@ -405,16 +405,24 @@ export default function ConfirmConversionClient({
 
           <section className="tts-mobile-flow-card tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
             <form className={`${status === "submitting" || status === "done" ? "hidden md:block" : "block"} space-y-4`} onSubmit={handleSubmit}>
-              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-surface p-4 text-sm text-tts-deep">
-                <p className="font-black text-tts-deep">{T(feedbackLanguage, "Resumo", "Summary")}</p>
-                <p className="mt-2 text-tts-deep">{T(feedbackLanguage, "Debitar", "Debit")}: {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
-                <p className="text-tts-deep">{T(feedbackLanguage, "Receber", "Receive")}: {formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
-                <p className="mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
+	              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-3 text-sm text-tts-deep">
+	                <p className="tts-field-label font-black text-tts-deep">{T(feedbackLanguage, "Confira os valores", "Review values")}</p>
+	                <div className="mt-3 grid gap-2">
+	                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Sai da conta", "Leaves account")}</p>
+	                    <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
+	                  </div>
+	                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
+	                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Entra na conta", "Enters account")}</p>
+	                    <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
+	                  </div>
+	                </div>
+	                <p className="tts-mobile-soft-hide mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
                 {showEstimatedFee && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: {estimatedFeeDisplay}</p>
+	                  <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-                  <p className="text-tts-deep">{T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.")}</p>
+	                  <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.")}</p>
                 )}
                 {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                   <p className="text-tts-confirm">
@@ -435,7 +443,7 @@ export default function ConfirmConversionClient({
               )}
 
               <div className="space-y-2">
-                <label htmlFor="pin" className="text-sm font-medium text-tts-deep">PIN</label>
+	                <label htmlFor="pin" className="tts-field-label text-sm font-black text-tts-deep">PIN</label>
                 <input
                   id="pin"
                   value={pin}
@@ -444,7 +452,7 @@ export default function ConfirmConversionClient({
                   inputMode="numeric"
                   maxLength={8}
                   placeholder={T(feedbackLanguage, "Digite seu PIN", "Enter your PIN")}
-                  className="w-full border border-tts-border bg-tts-surface px-4 py-3 text-sm text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
+	                  className="tts-fill-field w-full border-2 border-tts-border bg-tts-surface px-4 py-4 text-lg font-black text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
                 />
               </div>
 
@@ -452,7 +460,7 @@ export default function ConfirmConversionClient({
 	                <button
 	                  type="submit"
 	                  disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
-                  className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-3 text-sm font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+	                  className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-4 text-base font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
                 >
 	                  {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
 	                </button>
