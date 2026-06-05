@@ -44,6 +44,7 @@ interface BuildPathPaymentInput {
   destAsset: AssetInput;
   destAmount: string;
   sourceAsset: AssetInput;
+  quote?: PathPaymentQuote;
 }
 
 interface PathPaymentQuoteInput extends BuildPathPaymentInput {}
@@ -805,7 +806,7 @@ export class StellarService {
         try {
             const { sourcePublicKey, destination, destAsset, destAmount, sourceAsset } = input;
 
-            const quote = await this.quotePathPayment(input);
+            const quote = input.quote || await this.quotePathPayment(input);
             const destAssetObj = createAsset(destAsset);
             const sourceAssetObj = createAsset(sourceAsset);
 

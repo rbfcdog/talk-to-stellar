@@ -483,7 +483,9 @@ export class FinancialController {
         dest_asset_code: destAsset.code,
         dest_asset_issuer: destAsset.issuer,
         quote: quoteWithExpiry,
+        conversion_mode: useStrictReceive ? 'strict_receive' : 'strict_send',
       }, {
+        conversion_mode: useStrictReceive ? 'strict_receive' : 'strict_send',
         return_to: String(req.body?.return_to || req.body?.returnTo || '').trim() || null,
         return_source: String(req.body?.return_source || req.body?.returnSource || req.body?.from || req.body?.origin || '').trim() || null,
         estimated_fee_display: unifiedFee.display,

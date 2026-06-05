@@ -177,8 +177,23 @@ function compactQuote(quote?: any) {
   if (!quote || typeof quote !== 'object') return null;
   return {
     sourceAmount: quote.sourceAmount || undefined,
+    effectiveSourceAmount: quote.effectiveSourceAmount || undefined,
+    sourceMax: quote.sourceMax || undefined,
+    pathSourceAmount: quote.pathSourceAmount || undefined,
+    pathSourceMax: quote.pathSourceMax || undefined,
     destinationAmount: quote.destinationAmount || undefined,
+    destinationMin: quote.destinationMin || undefined,
     networkFeeXlm: quote.networkFeeXlm || undefined,
+    platformFee: quote.platformFee
+      ? {
+          enabled: Boolean(quote.platformFee.enabled),
+          feeAmount: quote.platformFee.feeAmount || undefined,
+          feeAssetCode: quote.platformFee.feeAssetCode || undefined,
+          grossSourceAmount: quote.platformFee.grossSourceAmount || undefined,
+          netSourceAmount: quote.platformFee.netSourceAmount || undefined,
+          treasuryPublicKey: quote.platformFee.treasuryPublicKey || undefined,
+        }
+      : undefined,
     fee_display: quote.fee_display || undefined,
     fee_usdc: quote.fee_usdc || undefined,
     fee_brl: quote.fee_brl || undefined,
@@ -1039,6 +1054,7 @@ export class ExternalService {
     dest_asset_code: string;
     dest_asset_issuer?: string;
     quote?: any;
+    conversion_mode?: 'strict_send' | 'strict_receive' | string;
     nonce?: string;
   }, extra = {}) {
     const sourceAssetCode = normalizeAssetCode(payload.source_asset_code || 'XLM');
@@ -1059,6 +1075,7 @@ export class ExternalService {
       dest_amount: payload.dest_amount,
       dest_asset_code: destAssetCode,
       dest_asset_issuer: destAssetIssuer || null,
+      conversion_mode: payload.conversion_mode || (payload.source_amount ? 'strict_send' : 'strict_receive'),
       quote: compactQuote(payload.quote),
       nonce: payload.nonce || uuidv4(),
       ...compactedExtra,
@@ -1082,6 +1099,7 @@ export class ExternalService {
         dest_amount: payload.dest_amount,
         dest_asset_code: destAssetCode,
         dest_asset_issuer: destAssetIssuer || null,
+        conversion_mode: payload.conversion_mode || (payload.source_amount ? 'strict_send' : 'strict_receive'),
       },
     });
     const returnTo = String((compactedExtra as any).return_to || (compactedExtra as any).returnTo || '').trim();
@@ -1118,6 +1136,7 @@ export class ExternalService {
     dest_asset_code: string;
     dest_asset_issuer?: string;
     quote?: any;
+    conversion_mode?: 'strict_send' | 'strict_receive' | string;
     nonce?: string;
   }, extra = {}) {
     const externalContext = await this.resolveExternalLinkContext(payload.session_id, payload.owner_id);

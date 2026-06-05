@@ -116,15 +116,21 @@ describe("UX copy guardrails", () => {
     expect(financialRouter).toContain("conversion-confirmation");
   });
 
-  it("keeps conversion rates focused on the selected pair", () => {
+  it("keeps conversion amounts single-sourced from the confirmation quote", () => {
     const text = source("app/convert/convert-client.tsx");
 
-    expect(text).toContain('L("Cotação selecionada", "Selected quote")');
-    expect(text).toContain("selectedRateCell");
+    expect(text).toContain('L("Confirmação segura", "Secure confirmation")');
+    expect(text).toContain("A próxima tela calcula e trava os valores finais antes do PIN.");
+    expect(text).toContain('L("Definido na confirmação", "Set in confirmation")');
     expect(text).toContain('L("Par selecionado", "Selected pair")');
-    expect(text).toContain('L("Taxa", "Rate")');
-    expect(text).not.toContain("Matriz 4x4");
-    expect(text).not.toContain("4x4 matrix");
+    expect(text).toContain('L("Valor final", "Final amount")');
+    expect(text).not.toContain("selectedRateCell");
+    expect(text).not.toContain("conversion-matrix");
+    expect(text).not.toContain("numericAmount *");
+    expect(text).not.toContain('L("Cotação selecionada", "Selected quote")');
+    expect(text).not.toContain('L("Taxa", "Rate")');
+    expect(text).not.toContain('L("Saldo de origem", "Source balance")');
+    expect(text).not.toContain('L("Sai da conta", "Leaves account")');
     expect(text).not.toContain('L("De / Para", "From / To")');
     expect(text).not.toContain("min-w-[640px]");
   });
