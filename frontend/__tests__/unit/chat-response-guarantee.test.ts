@@ -32,4 +32,12 @@ describe("web chat response guarantee", () => {
     expect(routeText).toContain("localizedChatFallback");
     expect(routeText).not.toContain("No valid response received from the agent API.");
   });
+
+  it("does not clear the browser session for logout confirmation links", () => {
+    const chatText = source("components/chat/chat-window.tsx");
+
+    expect(chatText).toContain("const isCompletedLogoutResponse = (message: string)");
+    expect(chatText).toContain("if (isCompletedLogoutResponse(botResponse))");
+    expect(chatText).not.toContain('String(action || "").toLowerCase() === "logout_wallet"');
+  });
 });
