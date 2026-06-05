@@ -3650,7 +3650,7 @@ export default function PixRampClient({
                 <div className="mt-6 space-y-4">
                     <div className="rounded-2xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-normal text-tts-gold">Status</p>
-                      <p className="mt-1 text-lg font-black">{temporaryOffRampTestResult.final_transaction?.status || "processing"}</p>
+                      <p className="mt-1 text-lg font-black">{statusLabel(temporaryOffRampTestResult.final_transaction?.status || "processing", language)}</p>
                     </div>
                     <div className="rounded-2xl bg-tts-bg/60 p-4">
                       <p className="text-xs font-bold uppercase tracking-normal text-tts-gold">{L("Saiu da conta", "Left account")}</p>
