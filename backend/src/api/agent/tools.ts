@@ -2889,20 +2889,82 @@ function yieldCurrencyCode(assetCode: unknown): string {
   return display === 'USDC' ? 'USD' : display;
 }
 
+const YIELD_CONTRACT_DECIMALS = 7;
+const YIELD_CONTRACT_SCALE = BigInt(10) ** BigInt(YIELD_CONTRACT_DECIMALS);
+
+function normalizeYieldNumberText(value: unknown): string {
+  return String(value ?? '').trim().replace(/\s+/g, '').replace(',', '.');
+}
+
+function decimalYieldAmount(value: unknown): string {
+  const raw = normalizeYieldNumberText(value);
+  if (!/^\d+(\.\d+)?$/.test(raw)) return '';
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '';
+}
+
+function yieldAmountFromContractUnits(value: unknown): string {
+  const raw = normalizeYieldNumberText(value);
+  if (!/^\d+$/.test(raw)) return decimalYieldAmount(value);
+  const units = BigInt(raw);
+  if (units <= BigInt(0)) return '';
+  const whole = units / YIELD_CONTRACT_SCALE;
+  const fraction = (units % YIELD_CONTRACT_SCALE)
+    .toString()
+    .padStart(YIELD_CONTRACT_DECIMALS, '0')
+    .replace(/0+$/, '');
+  return fraction ? `${whole.toString()}.${fraction}` : whole.toString();
+}
+
+function yieldAmountFromUnitArray(value: unknown): string {
+  if (!Array.isArray(value)) return yieldAmountFromContractUnits(value);
+  let total = BigInt(0);
+  for (const item of value) {
+    const raw = normalizeYieldNumberText(item);
+    if (/^\d+$/.test(raw)) total += BigInt(raw);
+  }
+  return total > BigInt(0) ? yieldAmountFromContractUnits(total.toString()) : '';
+}
+
 function extractYieldBalanceAmount(value: any): string {
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  const candidates = [
+  if (value === null || value === undefined) return '0';
+  if (typeof value === 'string' || typeof value === 'number') {
+    return yieldAmountFromContractUnits(value) || '0';
+  }
+  if (Array.isArray(value)) {
+    return yieldAmountFromUnitArray(value) || '0';
+  }
+
+  const decimalCandidates = [
+    value?.amount_decimal,
+    value?.amountDecimal,
+    value?.balance_decimal,
+    value?.balanceDecimal,
+    value?.display_amount,
+    value?.displayAmount,
+  ];
+  const decimalFound = decimalCandidates
+    .map((candidate) => decimalYieldAmount(candidate))
+    .find((candidate) => Number(candidate) > 0);
+  if (decimalFound) return decimalFound;
+
+  const unitCandidates = [
+    value?.underlying_balance,
+    value?.underlyingBalance,
+    value?.underlying_balances,
+    value?.underlyingBalances,
+    value?.asset_balance,
+    value?.assetBalance,
     value?.balance,
     value?.amount,
     value?.total,
-    value?.underlying_balance,
-    value?.underlyingBalance,
-    value?.asset_balance,
-    value?.assetBalance,
     value?.shares,
+    value?.dfTokens,
   ];
-  const found = candidates.find((candidate) => String(candidate || '').trim());
-  return String(found || '0');
+  const unitFound = unitCandidates
+    .map((candidate) => yieldAmountFromUnitArray(candidate))
+    .find((candidate) => Number(candidate) > 0);
+  return unitFound || '0';
 }
 
 async function executeGetYieldOptions(input: any): Promise<string> {

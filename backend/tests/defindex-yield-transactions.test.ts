@@ -157,7 +157,7 @@ describe('Defindex yield transaction flows', () => {
   ] as const)('checks yield balance for %s through the configured vault', async (assetCode, vaultAddress) => {
     const balanceSpy = jest.spyOn(DefindexYieldService, 'getVaultBalance').mockResolvedValue({
       dfTokens: '123',
-      assetBalance: '12.3',
+      underlyingBalance: [700000000],
     });
 
     const result = await AnchorService.getDefindexYieldBalanceForSession({
@@ -168,6 +168,7 @@ describe('Defindex yield transaction flows', () => {
 
     expect(result.success).toBe(true);
     expect(result.vault).toMatchObject({ asset_code: assetCode, vault_address: vaultAddress });
+    expect(result.balance).toMatchObject({ amount_decimal: '70' });
     expect(balanceSpy).toHaveBeenCalledWith(vaultAddress, SESSION_CONTEXT.publicKey, 'testnet');
   });
 
