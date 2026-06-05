@@ -362,6 +362,86 @@ describe('ExternalFinalizeController', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
+  it('sets a PIN on an existing browser email session instead of creating a duplicate account', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_onboard',
+      provider: 'web',
+      provider_user_id: 'browser-123',
+    });
+
+    finalizeSupabaseFromMock.mockImplementation((table: string) => {
+      const chain = createSupabaseChain(table);
+      if (table === 'agent_sessions') {
+        chain.then = (resolve: any, reject: any) =>
+          Promise.resolve({
+            data: [{
+              session_id: 'existing-session',
+              user_id: 'google-user@example.com',
+              email: 'google-user@example.com',
+              session_token: 'old-session-token',
+              public_key: testPublicKey,
+              phone_number: '+5511999999999',
+              pix_key: 'google-user@example.com',
+              password_hash: null,
+              session_password_hash: null,
+              created_at: '2026-06-01T00:00:00.000Z',
+              last_activity: '2026-06-01T00:00:00.000Z',
+            }],
+            error: null,
+          }).then(resolve, reject);
+      }
+      return chain;
+    });
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'existing-session',
+      public_key: testPublicKey,
+      vault_secret_id: 'vault-secret-id-1',
+      name: 'Google Wallet',
+      pix_key: 'google-user@example.com',
+    });
+
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    const req = {
+      body: {
+        token: 'signed-token',
+        name: 'Google User',
+        email: 'google-user@example.com',
+        pin: '1234',
+        browser_id: 'browser-123',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeStoreSecretMock).not.toHaveBeenCalled();
+    expect(finalizeSaveSessionMock).toHaveBeenCalledWith('existing-session', expect.objectContaining({
+      user_id: 'google-user@example.com',
+      email: 'google-user@example.com',
+      public_key: testPublicKey,
+      password_hash: expect.any(String),
+      session_password_hash: expect.any(String),
+      email_verification_source: 'google_pin_setup',
+    }));
+    expect(finalizeCreateMappingMock).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'web',
+      provider_user_id: 'browser-123',
+      session_id: 'existing-session',
+      user_id: 'google-user@example.com',
+    }));
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      sessionId: 'existing-session',
+      userId: 'google-user@example.com',
+      publicKey: testPublicKey,
+    }));
+  });
+
   it('confirms USDC payment with XLM source path payment', async () => {
     const crypto = require('crypto');
     const jwt = require('jsonwebtoken');

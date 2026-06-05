@@ -618,6 +618,28 @@ async function detectIdentityCollision(input: {
   return null;
 }
 
+function sessionHasPin(session: any): boolean {
+  return Boolean(
+    String(session?.session_password_hash || '').trim() ||
+    String(session?.password_hash || '').trim()
+  );
+}
+
+async function findPinlessSessionByEmail(email: string): Promise<any | null> {
+  const normalizedEmail = normalizeEmailForCompare(email);
+  if (!normalizedEmail) return null;
+
+  const { data, error } = await supabase
+    .from('agent_sessions')
+    .select('session_id, user_id, email, session_token, public_key, phone_number, pix_key, password_hash, session_password_hash, created_at, last_activity, updated_at')
+    .eq('email', normalizedEmail)
+    .order('updated_at', { ascending: false })
+    .limit(5);
+
+  if (error) throw error;
+  return ((data || []) as any[]).find((session) => !sessionHasPin(session)) || null;
+}
+
 function isValidStellarPublicKey(value?: string) {
   if (!value) return false;
   try {
@@ -3189,6 +3211,130 @@ export default class ExternalFinalizeController {
             publicKey: String((lockedWallet as any)?.public_key || ''),
             walletName: String((lockedWallet as any)?.name || `Wallet for ${String((lockedSession as any)?.user_id || identityLock.userId || '')}`),
           });
+        }
+      }
+
+      if (isBrowserProvider && normalizedEmail) {
+        const pinlessSession = await findPinlessSessionByEmail(normalizedEmail);
+        const pinlessSessionId = String(pinlessSession?.session_id || '').trim();
+        if (pinlessSessionId) {
+          const existingWallet = await walletRepo.getWalletBySession(pinlessSessionId).catch(() => null);
+          const existingPublicKey = String((existingWallet as any)?.public_key || (pinlessSession as any)?.public_key || '').trim();
+          if (existingPublicKey) {
+            const existingUserId = String((pinlessSession as any)?.user_id || normalizedEmail).trim();
+            const emailConfirmed = await ensureEmailConfirmation(req, res, {
+              email: normalizedEmail,
+              purpose: 'create_account',
+              language,
+              metadata: {
+                provider,
+                provider_user_id,
+                token_hash: tokenHash,
+                session_id: pinlessSessionId,
+                user_id: existingUserId,
+                browser_id: browserId || null,
+              },
+            });
+            if (!emailConfirmed) return;
+
+            const onboardingReservation = await reserveOnboardingFinalization({
+              tokenHash,
+              provider: String(provider),
+              providerUserId: String(provider_user_id),
+              data: {
+                name: name || null,
+                email: email || null,
+                phone_number: normalizedPhoneNumber || null,
+                cpf: normalizedCpf || null,
+                browser_id: browserId || null,
+                pin_setup_for_existing_email: true,
+              },
+            });
+            if (!onboardingReservation.ok) {
+              return res.status(onboardingReservation.status).json(onboardingReservation.body);
+            }
+            onboardingReservationTokenHash = tokenHash;
+
+            const mergedPhone = normalizePhoneForCompare((pinlessSession as any)?.phone_number)
+              ? (pinlessSession as any)?.phone_number
+              : (normalizedPhoneNumber || (pinlessSession as any)?.phone_number);
+            const pixKey = String((pinlessSession as any)?.pix_key || '').trim() ||
+              ContactSeedService.derivePixKey(existingUserId, {
+                email: normalizedEmail || undefined,
+                phoneNumber: mergedPhone || undefined,
+                cpf: normalizedCpf || undefined,
+                name: name || undefined,
+              });
+            const sessionToken = uuidv4();
+            const now = new Date().toISOString();
+            await agentRepo.saveSession(pinlessSessionId, {
+              ...(pinlessSession as any),
+              user_id: existingUserId,
+              email: normalizedEmail,
+              session_token: sessionToken,
+              public_key: existingPublicKey,
+              phone_number: mergedPhone || undefined,
+              pix_key: pixKey,
+              password_hash: pinHash,
+              session_password_hash: pinHash,
+              email_verified: true,
+              email_verified_at: now,
+              email_verification_source: 'google_pin_setup',
+              created_at: (pinlessSession as any)?.created_at || now,
+              last_activity: now,
+            } as any);
+
+            if (existingWallet) {
+              await walletRepo.saveWallet({
+                ...(existingWallet as any),
+                session_id: pinlessSessionId,
+                public_key: existingPublicKey,
+                name: (existingWallet as any)?.name || name || `Wallet for ${existingUserId}`,
+                pix_key: (existingWallet as any)?.pix_key || pixKey,
+              } as any);
+            }
+
+            if (browserId) {
+              await externalRepo.createMapping({
+                provider: 'web',
+                provider_user_id: browserId,
+                session_id: pinlessSessionId,
+                user_id: existingUserId,
+                data: {
+                  name: name || null,
+                  email: normalizedEmail || null,
+                  phone_number: normalizedPhoneNumber || null,
+                  cpf: normalizedCpf || null,
+                  pin_setup_for_existing_email: true,
+                },
+              });
+            }
+
+            await clearAgentLoginState(pinlessSessionId);
+
+            void configureWalletAssetsAndContacts({
+              userId: existingUserId,
+              publicKey: existingPublicKey,
+              vaultSecretId: (existingWallet as any)?.vault_secret_id,
+              sessionId: pinlessSessionId,
+            });
+
+            const responseBody = {
+              success: true,
+              alreadyCompleted: true,
+              message: 'PIN criado com sucesso. Conta existente pronta para uso.',
+              sessionId: pinlessSessionId,
+              sessionToken,
+              userId: existingUserId,
+              publicKey: existingPublicKey,
+              walletName: String((existingWallet as any)?.name || name || `Wallet for ${existingUserId}`),
+              transferKey: pixKey,
+              pixKey,
+            };
+            await completeOnboardingFinalization(tokenHash, responseBody, 200);
+            onboardingReservationTokenHash = null;
+            return res.status(200).json(responseBody);
+          }
         }
       }
 
