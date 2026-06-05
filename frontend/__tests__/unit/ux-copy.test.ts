@@ -373,6 +373,8 @@ describe("UX copy guardrails", () => {
 
     expect(reviewText).toContain("const actionableOption = selectedOption;");
     expect(reviewText).toContain("selectedAvailableDisplay");
+    expect(reviewText).toContain("Saldo disponível");
+    expect(reviewText).toContain("Available balance");
     expect(reviewText).toContain("Disponível:");
     expect(reviewText).toContain("Insufficient balance");
     expect(reviewText).toContain("href={returnsHref}");
@@ -381,8 +383,15 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain('view: "returns"');
     expect(reviewText).toContain("CurrentInvestmentsPage");
     expect(reviewText).toContain("PortfolioOverview");
-    expect(reviewText).toContain("Distribuição");
+    expect(reviewText).toContain("RETURN_PERIODS");
+    expect(reviewText).toContain("Rentabilidade por período");
+    expect(reviewText).toContain("Returns by period");
+    expect(reviewText).toContain("30 dias");
+    expect(reviewText).toContain("6 meses");
+    expect(reviewText).toContain("12 meses");
     expect(reviewText).toContain("Rentabilidade");
+    expect(reviewText).not.toContain("Maior posição");
+    expect(reviewText).not.toContain("Largest position");
     expect(reviewText).not.toContain("Simulação");
     expect(reviewText).not.toContain("Somente consulta");
     expect(reviewText).toContain("Confirmar investimento");

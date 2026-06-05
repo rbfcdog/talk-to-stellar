@@ -90,6 +90,23 @@ function sparklineValues(baseAmount: number, ratePercent: number) {
   const rate = Math.max(0.01, ratePercent / 100);
   return Array.from({ length: 8 }, (_, i) => base * (1 + rate * (i / 7)));
 }
+const RETURN_PERIODS = [
+  { key: "30d", years: 30 / 365, labelPt: "30 dias", labelEn: "30 days" },
+  { key: "6m", years: 0.5, labelPt: "6 meses", labelEn: "6 months" },
+  { key: "12m", years: 1, labelPt: "12 meses", labelEn: "12 months" },
+];
+function periodReturnPercent(ratePercent: number, years: number) {
+  const annualRate = Math.max(0, ratePercent) / 100;
+  if (annualRate <= 0) return 0;
+  return (Math.pow(1 + annualRate, years) - 1) * 100;
+}
+function formatReturnPercent(value: number, language: AppLanguage) {
+  const formatted = new Intl.NumberFormat(isPortuguese(language) ? "pt-BR" : "en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+  return `+${formatted}%`;
+}
 function normalizeUiAssetCode(value: unknown) {
   const code = String(value || "").trim().toUpperCase().split(":")[0];
   if (!code) return "";
@@ -606,9 +623,7 @@ function PortfolioOverview({ language, rows, isTestnet }: {
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const activeRows = rows.filter((row) => row.amount > 0);
-  const maxAmount = Math.max(...rows.map((row) => row.amount), 1);
-  const strongest = [...activeRows].sort((a, b) => b.amount - a.amount)[0];
-  const fallbackPosition = rows[0];
+  const visibleRows = rows.length ? rows : activeRows;
   return (
     <section className="border border-tts-border bg-tts-surface p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -622,29 +637,51 @@ function PortfolioOverview({ language, rows, isTestnet }: {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-[0.8fr_1.2fr]">
-        <div className="border border-tts-border bg-tts-bg p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Maior posição", "Largest position")}</p>
-          <p className="mt-2 text-xl font-bold text-tts-deep">
-            {strongest ? formatPositionAmount(strongest.amount, strongest.profile, language) : fallbackPosition ? formatPositionAmount(0, fallbackPosition.profile, language) : "0"}
-          </p>
+      <div className="mt-5 border border-tts-border bg-tts-bg p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Rentabilidade por período", "Returns by period")}</p>
+            <p className="mt-1 text-sm font-semibold text-tts-muted">
+              {L("Estimativa anualizada por ativo.", "Annualized estimate by asset.")}
+            </p>
+          </div>
+          <span className="rounded-full border border-tts-border px-3 py-1 text-[11px] font-bold text-tts-muted">
+            {isTestnet ? L("Testnet", "Testnet") : L("Atual", "Live")}
+          </span>
         </div>
-
-        <div className="border border-tts-border bg-tts-bg p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Distribuição", "Distribution")}</p>
-          <div className="mt-3 space-y-2">
-            {rows.map((row) => (
-              <div key={row.code}>
-                <div className="mb-1 flex items-center justify-between gap-3 text-xs font-bold text-tts-muted">
-                  <span>{row.profile.short}</span>
+        <div className="mt-4 space-y-3">
+          {visibleRows.map((row) => (
+            <div key={row.code} className="rounded-2xl border border-tts-border bg-tts-surface p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-tts-deep">{row.profile.short}</p>
+                  <p className="text-xs font-semibold text-tts-muted">{profileName(row.profile, language)}</p>
+                </div>
+                <p className="text-sm font-black text-tts-confirm">
+                  {formatReturnPercent(periodReturnPercent(row.rate, 1), language)}
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {RETURN_PERIODS.map((period) => {
+                  const value = periodReturnPercent(row.rate, period.years);
+                  return (
+                    <div key={period.key} className="rounded-xl bg-tts-bg px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">
+                        {isPortuguese(language) ? period.labelPt : period.labelEn}
+                      </p>
+                      <p className="mt-1 text-sm font-black text-tts-deep">{formatReturnPercent(value, language)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              {row.amount > 0 && (
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-tts-muted">
+                  <span>{L("Posição", "Position")}</span>
                   <span>{formatPositionAmount(row.amount, row.profile, language)}</span>
                 </div>
-                <div className="h-2 bg-tts-border">
-                  <div className="h-full bg-tts-confirm" style={{ width: `${Math.max(row.amount > 0 ? 8 : 0, (row.amount / maxAmount) * 100)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -765,6 +802,20 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
               className={`flex-1 py-2.5 text-sm font-bold text-center transition ${action === "withdraw" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}>
               <ArrowUpFromLine className="inline h-4 w-4 mr-1.5" />{L("Retirar", "Withdraw")}
             </button>
+          </div>
+
+          <div className="rounded-2xl border border-tts-border bg-tts-bg p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">
+                  {L("Saldo disponível", "Available balance")}
+                </p>
+                <p className="mt-1 text-2xl font-black text-tts-deep">{selectedAvailableDisplay}</p>
+              </div>
+              <span className="rounded-full border border-tts-border bg-tts-surface px-3 py-1 text-xs font-black text-tts-muted">
+                {selectedProfile.short}
+              </span>
+            </div>
           </div>
 
           <div>
