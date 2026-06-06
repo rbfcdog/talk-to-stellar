@@ -20,6 +20,7 @@ against the current TalkToStellar codebase.
 | `payout-adapter-contract.md` | Provider-agnostic payout adapter contract, execution boundaries, and status refresh behavior. |
 | `30-day-execution-plan.md` | Practical execution plan to close the remaining SOW gaps in a 30-day sprint. |
 | `risk-and-compliance-notes.md` | Explicit boundaries around sandbox behavior, mocks, testnet, mainnet validation, payout providers, and regulated activity. |
+| `usd-5000-delivery-readiness.md` | Final technical and reviewer checklist for the USD 5,000 scoped delivery. |
 
 ## Audit Method
 

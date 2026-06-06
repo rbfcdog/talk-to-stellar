@@ -3,10 +3,10 @@ import { proxyBackendApi } from "@/lib/backend-proxy";
 
 export async function GET(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const params = await context.params;
-  return proxyBackendApi(req, "api/transfers", params.path || []);
+  return proxyBackendApi(req, "api/transfers", params.path || [], { forwardTransferOpsAuthorization: true });
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const params = await context.params;
-  return proxyBackendApi(req, "api/transfers", params.path || []);
+  return proxyBackendApi(req, "api/transfers", params.path || [], { forwardTransferOpsAuthorization: true });
 }

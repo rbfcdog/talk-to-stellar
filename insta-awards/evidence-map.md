@@ -70,6 +70,7 @@ POST /api/transfers/:id/payout-instruction
 POST /api/transfers/:id/payout-status-refresh
 GET  /api/transfers/:id/reconciliation
 GET  /api/transfers/:id/orchestration-log
+GET  /api/transfers/:id/workflow
 GET  /api/transfers/:id/reviewer-evidence
 GET  /api/transfers/:id
 ```
@@ -84,6 +85,8 @@ Evidence to capture:
 - Timestamp of each transition.
 - Redacted orchestration log with quote provenance, evidence status, timeline
   steps, replay markers, and correlation IDs.
+- Authoritative workflow snapshot with progress, next action, identity control,
+  and evidence readiness.
 - Reviewer-safe Week 1 package with the repository link, dashboard capture
   target, redacted transfer record, and orchestration log.
 
@@ -116,6 +119,7 @@ Evidence to capture:
 - Reconciliation panel.
 - API log panel with sensitive data redacted.
 - Week 1 reviewer strip showing all four required artifacts.
+- Backend-derived workflow status rather than duplicated frontend state logic.
 
 ## Test Evidence
 

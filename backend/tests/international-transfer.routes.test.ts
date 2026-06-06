@@ -315,6 +315,44 @@ describe('international transfer HTTP routes', () => {
       },
       orchestration_log: orchestrationLog,
     });
+    jest.spyOn(internationalTransferService, 'getWorkflow').mockResolvedValue({
+      schema_version: 1,
+      generated_at: new Date().toISOString(),
+      transfer_id: 'tr-route-1',
+      current_state: 'PAYOUT_COMPLETED',
+      terminal: true,
+      successful: true,
+      progress: {
+        completed_steps: 9,
+        total_steps: 9,
+        percent: 100,
+      },
+      evidence: {
+        quote: true,
+        pix_intent: true,
+        pix_confirmation: true,
+        stellar_settlement: true,
+        payout_instruction: true,
+        reconciliation: true,
+        ready_count: 6,
+        required_count: 6,
+      },
+      identity_control: {
+        required: false,
+        status: 'UNKNOWN',
+        payout_allowed: true,
+        risk_notes: [],
+      },
+      next_action: {
+        code: 'export_evidence',
+        label: 'Export reviewer evidence',
+        description: 'Capture the reviewer package.',
+        actor: 'reviewer',
+        requires_ops_authorization: false,
+        blocked: false,
+      },
+      steps: [],
+    });
 
     const headers = {
       'x-request-id': 'req-lifecycle-1',
@@ -440,6 +478,28 @@ describe('international transfer HTTP routes', () => {
         },
       },
     });
+
+    await expect(routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1/workflow',
+      headers,
+    })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        request_id: 'req-lifecycle-1',
+        correlation_id: 'corr-lifecycle-1',
+        workflow: {
+          transfer_id: 'tr-route-1',
+          current_state: 'PAYOUT_COMPLETED',
+          progress: {
+            percent: 100,
+          },
+          next_action: {
+            code: 'export_evidence',
+          },
+        },
+      },
+    });
   });
 
   it('blocks operator-only settlement and payout routes without ops authorization', async () => {
@@ -472,5 +532,103 @@ describe('international transfer HTTP routes', () => {
     expect(settle).not.toHaveBeenCalled();
     expect(payout).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('protects raw transfer and reconciliation reads while keeping reviewer-safe evidence public', async () => {
+    const rawTransfer = jest.spyOn(internationalTransferService, 'getTransfer').mockResolvedValue(transfer('PAYOUT_PENDING'));
+    const rawReconciliation = jest.spyOn(internationalTransferService, 'getReconciliation').mockResolvedValue({
+      transfer_id: 'tr-route-1',
+      quote_id: 'q-route-1',
+      evidence: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    const reviewer = jest.spyOn(internationalTransferService, 'getReviewerEvidence').mockResolvedValue({
+      schema_version: 1,
+      generated_at: new Date().toISOString(),
+      transfer_id: 'tr-route-1',
+      submission: {
+        title: 'PIX-to-Stellar Transfer Lifecycle Engine',
+        week: 1,
+        ready_count: 4,
+        required_count: 4,
+        status: 'ready',
+      },
+      repository: {
+        url: 'https://github.com/rbfcdog/talk-to-stellar',
+        branch: 'main',
+        evidence_map_path: 'insta-awards/evidence-map.md',
+      },
+      dashboard: {
+        path: '/institution-settlement',
+        screenshot_target: '/institution-settlement',
+      },
+      privacy: {
+        redaction_applied: true,
+        amounts_redacted: false,
+        notes: [],
+      },
+      checklist: [],
+      transfer_record: {
+        transfer_id: 'tr-route-1',
+        quote_id: 'q-route-1',
+        status: 'PAYOUT_PENDING',
+        subject: {},
+        value: {
+          source_amount_brl: '560',
+          quoted_destination_usd: '99',
+          fx_rate_brl_per_usd: '5.6',
+          fees: transfer('PAYOUT_PENDING').fees,
+        },
+        pix_funding: {},
+        stellar_settlement: { asset_code: 'USDC' },
+        payout: { destination: {} },
+        controls: {
+          same_name_required: true,
+          same_name_status: 'MATCHED',
+          identity_risk_note_count: 0,
+        },
+        reconciliation: { available: true },
+        timestamps: {
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        error_count: 0,
+      },
+      orchestration_log: {
+        generated_at: new Date().toISOString(),
+        transfer_id: 'tr-route-1',
+        quote_id: 'q-route-1',
+        current_status: 'PAYOUT_PENDING',
+        request_ids: [],
+        evidence_status: {},
+        redaction: { applied: true, notes: [] },
+        destination: {},
+        timeline: [],
+        reconciliation_summary: { available: true },
+        error_count: 0,
+        errors: [],
+      },
+    });
+
+    const rawTransferResponse = await routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1',
+    });
+    const rawReconciliationResponse = await routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1/reconciliation',
+    });
+    const reviewerResponse = await routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1/reviewer-evidence',
+    });
+
+    expect(rawTransferResponse.status).toBe(403);
+    expect(rawReconciliationResponse.status).toBe(403);
+    expect(reviewerResponse.status).toBe(200);
+    expect(rawTransfer).not.toHaveBeenCalled();
+    expect(rawReconciliation).not.toHaveBeenCalled();
+    expect(reviewer).toHaveBeenCalledTimes(1);
   });
 });

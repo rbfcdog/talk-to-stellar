@@ -77,6 +77,9 @@ function redactSensitive(value) {
       if (/_hash$|_last4$/i.test(key)) {
         return [key, item];
       }
+      if (/^(pix_payment_id|pix_order_id|provider_payout_id|order_id|payment_id)$/i.test(key)) {
+        return [key, item ? `[redacted-hash:${hashText(item)}]` : item];
+      }
       if (/secret|token|pin|password|authorization|private|seed|api[_-]?key/i.test(key)) {
         return [key, item ? '[redacted]' : item];
       }
@@ -121,7 +124,7 @@ mkdirSync(join(runDir, 'payout'), { recursive: true });
 mkdirSync(join(runDir, 'repository'), { recursive: true });
 
 const manifest = {
-  schema_version: 1,
+  schema_version: 2,
   run_id: runId,
   label,
   created_at: now.toISOString(),
@@ -203,6 +206,12 @@ const manifest = {
       path: 'logs/orchestration-log.json',
       status: 'placeholder',
       description: 'Redacted lifecycle log from GET /api/transfers/:id/orchestration-log.',
+    },
+    {
+      id: 'workflow-snapshot',
+      path: 'logs/workflow.json',
+      status: 'placeholder',
+      description: 'Authoritative lifecycle progress, identity control, evidence readiness, and next action.',
     },
   ],
   environment_checklist: envStatus([
@@ -288,7 +297,10 @@ writeJson(join(runDir, 'api', 'transcript.json'), {
     { step: 'funding-confirmation', method: 'POST', path: '/api/transfers/:id/funding-confirmation', status: 'pending', request: {}, response: {} },
     { step: 'stellar-settlement', method: 'POST', path: '/api/transfers/:id/settle-stellar', status: 'pending', request: {}, response: {} },
     { step: 'payout-instruction', method: 'POST', path: '/api/transfers/:id/payout-instruction', status: 'pending', request: {}, response: {} },
+    { step: 'payout-status', method: 'POST', path: '/api/transfers/:id/payout-status-refresh', status: 'pending', request: {}, response: {} },
     { step: 'reconciliation', method: 'GET', path: '/api/transfers/:id/reconciliation', status: 'pending', request: {}, response: {} },
+    { step: 'workflow', method: 'GET', path: '/api/transfers/:id/workflow', status: 'pending', request: {}, response: {} },
+    { step: 'reviewer-evidence', method: 'GET', path: '/api/transfers/:id/reviewer-evidence', status: 'pending', request: {}, response: {} },
   ],
 });
 writeJson(join(runDir, 'database', 'transfer.json'), { status: 'placeholder', transfer_id: transferId || null });
@@ -324,6 +336,11 @@ if (apiBase && transferId) {
       id: 'orchestration-log',
       path: `/api/transfers/${encodeURIComponent(transferId)}/orchestration-log`,
       file: join(runDir, 'logs', 'orchestration-log.json'),
+    },
+    {
+      id: 'workflow-snapshot',
+      path: `/api/transfers/${encodeURIComponent(transferId)}/workflow`,
+      file: join(runDir, 'logs', 'workflow.json'),
     },
   ];
 
@@ -381,7 +398,16 @@ if (apiBase && transferId) {
   }
 
   if (captureSummary.captures.some((capture) => capture.id === 'orchestration-log' && capture.status === 'captured')) {
-    markEvidence('logs', 'captured', 'Orchestration log captured through the lifecycle API.');
+    const workflowCaptured = captureSummary.captures.some(
+      (capture) => capture.id === 'workflow-snapshot' && capture.status === 'captured',
+    );
+    markEvidence(
+      'logs',
+      workflowCaptured ? 'captured' : 'blocked',
+      workflowCaptured
+        ? 'Orchestration log and authoritative workflow snapshot captured.'
+        : 'Orchestration log captured, but the workflow snapshot is missing.',
+    );
   }
   captureSummary.finished_at = new Date().toISOString();
   writeJson(join(runDir, 'api', 'capture-summary.json'), captureSummary);
@@ -441,14 +467,15 @@ writeFileSync(
     '3. Export the transfer and reconciliation JSON into `database/`.',
     '4. Add Stellar settlement evidence in `stellar/settlement.json`.',
     '5. Add payout adapter payload/response in `payout/instruction.json`.',
-    '6. Drop screenshots in `screenshots/` and logs in `logs/`.',
-    '7. Update `manifest.json` evidence item statuses from `placeholder` to `captured`.',
+    '6. Verify `logs/workflow.json` matches the transfer and reconciliation state.',
+    '7. Drop screenshots in `screenshots/` and logs in `logs/`.',
+    '8. Update `manifest.json` evidence item statuses from `placeholder` to `captured`.',
     apiBase && transferId
-      ? '8. API capture was attempted automatically for transfer, reconciliation and orchestration log.'
-      : '8. To capture API artifacts automatically, rerun with `--api-base=<url> --transfer-id=<id>`.',
+      ? '9. API capture was attempted automatically for transfer, reconciliation, orchestration log and workflow.'
+      : '9. To capture API artifacts automatically, rerun with `--api-base=<url> --transfer-id=<id>`.',
     dashboardBase
-      ? '9. Dashboard screenshot capture was attempted automatically.'
-      : '9. To capture the dashboard automatically, rerun with `--dashboard-url=<url>`.',
+      ? '10. Dashboard screenshot capture was attempted automatically.'
+      : '10. To capture the dashboard automatically, rerun with `--dashboard-url=<url>`.',
     '',
     'Do not include private keys, API keys, session tokens, PINs, full bank account numbers, or unredacted customer data.',
     '',

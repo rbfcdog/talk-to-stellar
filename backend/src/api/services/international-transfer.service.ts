@@ -12,9 +12,19 @@ import {
   TransferReviewerEvidence,
   TransferOrchestrationLog,
   TransferReconciliation,
+  TransferWorkflowSnapshot,
   UsdBankDestination,
 } from './international-transfer.types';
 import { InternationalTransferStateMachine } from './international-transfer-state.service';
+import {
+  buildTransferWorkflowSnapshot,
+  hasReachedTransferState,
+} from './international-transfer-lifecycle';
+import {
+  transferConflictError,
+  transferNotFoundError,
+  transferValidationError,
+} from './international-transfer.errors';
 import { PixFundingService, pixFundingService } from './pix-funding.service';
 import { SettlementEvidenceService } from './settlement-evidence.service';
 import { StellarSettlementService, stellarSettlementService } from './stellar-settlement.service';
@@ -71,24 +81,6 @@ function mergeTraceMetadata(
   };
 }
 
-const STATE_ORDER: InternationalTransferState[] = [
-  'QUOTE_CREATED',
-  'PIX_PENDING',
-  'PIX_RECEIVED',
-  'BRL_TO_USDC_PENDING',
-  'USDC_SETTLEMENT_PENDING',
-  'USDC_SETTLED',
-  'PAYOUT_INSTRUCTION_CREATED',
-  'PAYOUT_PENDING',
-  'PAYOUT_COMPLETED',
-];
-
-function hasReachedState(status: InternationalTransferState, target: InternationalTransferState): boolean {
-  const currentIndex = STATE_ORDER.indexOf(status);
-  const targetIndex = STATE_ORDER.indexOf(target);
-  return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
-}
-
 function pixFailureStatus(status: string): boolean {
   return [
     'failed',
@@ -136,9 +128,12 @@ export class InternationalTransferService {
     request_id?: string;
     correlation_id?: string;
   }): Promise<InternationalTransfer> {
-    if (!input.quote_id) throw new Error('quote_id is required.');
+    if (!input.quote_id) throw transferValidationError('quote_id_required', 'quote_id is required.');
     if (!input.payout_destination?.accountHolderName || !input.payout_destination?.country) {
-      throw new Error('payout_destination.accountHolderName and payout_destination.country are required.');
+      throw transferValidationError(
+        'payout_destination_invalid',
+        'payout_destination.accountHolderName and payout_destination.country are required.',
+      );
     }
 
     const quote = await this.quoteService.getActiveQuote(input.quote_id);
@@ -279,7 +274,7 @@ export class InternationalTransferService {
       return updated;
     }
 
-    if (hasReachedState(transfer.status, 'PIX_RECEIVED')) {
+    if (hasReachedTransferState(transfer.status, 'PIX_RECEIVED')) {
       const updated = await this.repository.updateTransfer(transfer.transfer_id, {
         pix_status: transfer.pix_status || 'completed',
         reconciliation_metadata: {
@@ -340,7 +335,7 @@ export class InternationalTransferService {
     const transfer = await this.requireTransfer(transferId);
     let current = transfer;
 
-    if (hasReachedState(current.status, 'USDC_SETTLED') && current.stellar_tx_hash) {
+    if (hasReachedTransferState(current.status, 'USDC_SETTLED') && current.stellar_tx_hash) {
       const updated = await this.repository.updateTransfer(current.transfer_id, {
         reconciliation_metadata: {
           ...mergeTraceMetadata(current.reconciliation_metadata, input, 'stellar_settlement_replayed'),
@@ -400,7 +395,7 @@ export class InternationalTransferService {
 
   async createPayoutInstruction(transferId: string, provider?: string, providerOptions: Record<string, unknown> = {}): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
-    if (hasReachedState(transfer.status, 'PAYOUT_INSTRUCTION_CREATED') && transfer.payout_instruction_id) {
+    if (hasReachedTransferState(transfer.status, 'PAYOUT_INSTRUCTION_CREATED') && transfer.payout_instruction_id) {
       const updated = await this.repository.updateTransfer(transfer.transfer_id, {
         reconciliation_metadata: {
           ...mergeTraceMetadata(transfer.reconciliation_metadata, {
@@ -412,6 +407,17 @@ export class InternationalTransferService {
       });
       await this.refreshReconciliation(updated);
       return updated;
+    }
+
+    if (transfer.same_name_payout_required && transfer.same_name_match_status !== 'MATCHED') {
+      throw transferConflictError(
+        'same_name_payout_blocked',
+        'Payout instruction blocked because the destination account holder does not match the verified route identity.',
+        {
+          same_name_match_status: transfer.same_name_match_status,
+          transfer_id: transfer.transfer_id,
+        },
+      );
     }
 
     this.assertTransition(transfer, 'PAYOUT_INSTRUCTION_CREATED');
@@ -580,13 +586,21 @@ export class InternationalTransferService {
     return SettlementEvidenceService.buildReviewerEvidence({ transfer, reconciliation });
   }
 
+  async getWorkflow(transferId: string): Promise<TransferWorkflowSnapshot> {
+    const transfer = await this.requireTransfer(transferId);
+    const reconciliation = await this.repository.getReconciliation(transferId);
+    return buildTransferWorkflowSnapshot({ transfer, reconciliation });
+  }
+
   private assertTransition(transfer: Pick<InternationalTransfer, 'status'>, next: InternationalTransferState) {
     InternationalTransferStateMachine.assertTransition(transfer.status, next);
   }
 
   private async requireTransfer(transferId: string): Promise<InternationalTransfer> {
     const transfer = await this.repository.getTransfer(transferId);
-    if (!transfer) throw new Error('International transfer not found.');
+    if (!transfer) {
+      throw transferNotFoundError('transfer_not_found', 'International transfer not found.');
+    }
     return transfer;
   }
 

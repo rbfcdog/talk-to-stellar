@@ -17,6 +17,8 @@ function statusFromError(error: any): number {
 function errorBody(error: any) {
   return {
     success: false,
+    ...(error?.code ? { code: error.code } : {}),
+    ...(error?.details ? { details: error.details } : {}),
     message: publicErrorMessage(error, 'Não consegui atualizar a rota entre instituições agora. Tente novamente em alguns segundos.'),
   };
 }
@@ -190,6 +192,7 @@ export class InternationalTransfersController {
     const context = readApiRequestContext(req);
     applyApiRequestContext(res, context);
     try {
+      if (!requireInternalOpsAuthorization(req, res, context)) return;
       const transfer = await internationalTransferService.getTransfer(String(req.params.id));
       res.status(200).json({ success: true, ...responseContext(context), transfer });
     } catch (error: any) {
@@ -201,6 +204,7 @@ export class InternationalTransfersController {
     const context = readApiRequestContext(req);
     applyApiRequestContext(res, context);
     try {
+      if (!requireInternalOpsAuthorization(req, res, context)) return;
       const reconciliation = await internationalTransferService.getReconciliation(String(req.params.id));
       res.status(200).json({ success: true, ...responseContext(context), reconciliation });
     } catch (error: any) {
@@ -235,6 +239,22 @@ export class InternationalTransfersController {
         required_count: reviewer_evidence.submission.required_count,
       });
       res.status(200).json({ success: true, ...responseContext(context), reviewer_evidence });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
+  static async getWorkflow(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      const workflow = await internationalTransferService.getWorkflow(String(req.params.id));
+      lifecycleLog('workflow_read', context, {
+        transfer_id: workflow.transfer_id,
+        current_state: workflow.current_state,
+        next_action: workflow.next_action.code,
+      });
+      res.status(200).json({ success: true, ...responseContext(context), workflow });
     } catch (error: any) {
       res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
     }

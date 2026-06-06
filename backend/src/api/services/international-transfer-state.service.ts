@@ -1,4 +1,5 @@
 import { InternationalTransferState } from './international-transfer.types';
+import { transferConflictError } from './international-transfer.errors';
 
 const ALLOWED_TRANSITIONS: Record<InternationalTransferState, InternationalTransferState[]> = {
   QUOTE_CREATED: ['PIX_PENDING', 'FAILED', 'REFUNDED'],
@@ -22,7 +23,11 @@ export class InternationalTransferStateMachine {
 
   static assertTransition(from: InternationalTransferState, to: InternationalTransferState) {
     if (!this.canTransition(from, to)) {
-      throw new Error(`Invalid international transfer state transition: ${from} -> ${to}`);
+      throw transferConflictError(
+        'invalid_transfer_transition',
+        `Invalid international transfer state transition: ${from} -> ${to}`,
+        { from, to, allowed: this.nextAllowedStates(from) },
+      );
     }
   }
 
