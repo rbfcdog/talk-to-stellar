@@ -261,6 +261,60 @@ describe('international transfer HTTP routes', () => {
       errors: [],
     };
     jest.spyOn(internationalTransferService, 'getOrchestrationLog').mockResolvedValue(orchestrationLog);
+    jest.spyOn(internationalTransferService, 'getReviewerEvidence').mockResolvedValue({
+      schema_version: 1,
+      generated_at: new Date().toISOString(),
+      transfer_id: 'tr-route-1',
+      submission: {
+        title: 'PIX-to-Stellar Transfer Lifecycle Engine',
+        week: 1,
+        ready_count: 4,
+        required_count: 4,
+        status: 'ready',
+      },
+      repository: {
+        url: 'https://github.com/rbfcdog/talk-to-stellar',
+        branch: 'main',
+        evidence_map_path: 'insta-awards/evidence-map.md',
+      },
+      dashboard: {
+        path: '/institution-settlement',
+        screenshot_target: '/institution-settlement',
+      },
+      privacy: {
+        redaction_applied: true,
+        amounts_redacted: false,
+        notes: ['Private fields are redacted.'],
+      },
+      checklist: [],
+      transfer_record: {
+        transfer_id: 'tr-route-1',
+        quote_id: 'q-route-1',
+        status: 'PAYOUT_COMPLETED',
+        subject: { sender_name_hash: 'sender-hash' },
+        value: {
+          source_amount_brl: '560',
+          quoted_destination_usd: '99',
+          fx_rate_brl_per_usd: '5.6',
+          fees: transfer('PAYOUT_COMPLETED').fees,
+        },
+        pix_funding: { status: 'completed' },
+        stellar_settlement: { asset_code: 'USDC', transaction_hash: 'stellar-hash-1' },
+        payout: { status: 'completed', destination: { account_number_last4: '6789' } },
+        controls: {
+          same_name_required: false,
+          same_name_status: 'UNKNOWN',
+          identity_risk_note_count: 0,
+        },
+        reconciliation: { available: true, metrics_valid: true },
+        timestamps: {
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        error_count: 0,
+      },
+      orchestration_log: orchestrationLog,
+    });
 
     const headers = {
       'x-request-id': 'req-lifecycle-1',
@@ -353,6 +407,35 @@ describe('international transfer HTTP routes', () => {
           },
           destination: {
             account_number_last4: '6789',
+          },
+        },
+      },
+    });
+
+    await expect(routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1/reviewer-evidence',
+      headers,
+    })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        request_id: 'req-lifecycle-1',
+        correlation_id: 'corr-lifecycle-1',
+        reviewer_evidence: {
+          transfer_id: 'tr-route-1',
+          submission: {
+            ready_count: 4,
+            required_count: 4,
+            status: 'ready',
+          },
+          privacy: {
+            redaction_applied: true,
+            amounts_redacted: false,
+          },
+          transfer_record: {
+            value: {
+              source_amount_brl: '560',
+            },
           },
         },
       },

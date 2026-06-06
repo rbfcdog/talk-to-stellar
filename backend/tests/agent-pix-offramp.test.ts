@@ -663,9 +663,9 @@ describe('Agent PIX off-ramp detection', () => {
         asset_code: 'XLM',
         recipient_query: 'Ana Silva',
       });
-      expect(result.response_message).toContain('100 XLM');
+      expect(result.response_message).toContain('100.00 XLM');
       expect(result.response_message).toContain('Ana Silva');
-      expect(result.response_message).toContain('Para mandar 100 XLM para Ana Silva via PIX');
+      expect(result.response_message).toContain('Para mandar 100.00 XLM para Ana Silva via PIX');
       expect(result.response_message).toContain('envia para Ana Silva');
       expect(result.response_message).not.toContain('receber R$ 100.00 na sua conta');
       expect(result.response_message).not.toContain('saldo entrar como US$');

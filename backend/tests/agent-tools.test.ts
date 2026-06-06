@@ -390,7 +390,7 @@ describe('Agent tool execution', () => {
       const parsed = JSON.parse(output);
 
       expect(parsed.success).toBe(true);
-      expect(parsed.message).toContain('Você enviou 10 XLM para Ana Silva.');
+      expect(parsed.message).toContain('Você enviou 10.00 XLM para Ana Silva.');
       expect(parsed.message).toContain('Comprovante: https://app.example.com/receipt/xlm');
       expect(parsed.message).not.toContain('US$ 0,00');
       expect(parsed.message).not.toContain('R$ 0,00');
@@ -475,8 +475,8 @@ describe('Agent tool execution', () => {
       expect(parsed.bridge_asset_code).toBe('USDC');
       expect(parsed.all_pairs_summary.total_pairs).toBe(16);
       expect(parsed.message).toContain('Cotação de envio pela melhor rota');
-      expect(parsed.message).toContain('100 XLM');
-      expect(parsed.message).toContain('200 CETES');
+      expect(parsed.message).toContain('100.00 XLM');
+      expect(parsed.message).toContain('200.00 CETES');
     } finally {
       quoteSpy.mockRestore();
     }
@@ -523,7 +523,7 @@ describe('Agent tool execution', () => {
       expect(parsed.message).toContain('Cotações atuais');
       expect(parsed.message).toContain('BRL/USDC: R$ 1.00 -> US$');
       expect(parsed.message).toContain('USDC/XLM: US$ 1.00 ->');
-      expect(parsed.message).toContain('CETES/XLM: 1 CETES ->');
+      expect(parsed.message).toContain('CETES/XLM: 1.00 CETES ->');
       expect(parsed.message).toContain('Conferi arbitragem direta e multi-hop');
       expect(parsed.message).not.toContain('mesmo ativo');
       expect(parsed.message).not.toContain('US$ 1.00 -> US$ 1.00');
@@ -572,7 +572,7 @@ describe('Agent tool execution', () => {
       expect(parsed.target_amount).toBe('100');
       expect(parsed.required_amount).toBe('69.82');
       expect(parsed.rate).toBeCloseTo(0.6982, 10);
-      expect(parsed.message).toContain('para receber 100 XLM');
+      expect(parsed.message).toContain('para receber 100.00 XLM');
       expect(parsed.message).toContain('R$ 69.82');
       expect(parsed.message).toContain('alvo exato');
       expect(parsed.message).not.toContain('R$ 287');

@@ -450,6 +450,44 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       'payout_instruction_replay',
       'reconciliation',
     ]));
+
+    const reviewerEvidence = await service.getReviewerEvidence(transfer.transfer_id);
+    expect(reviewerEvidence).toMatchObject({
+      schema_version: 1,
+      transfer_id: transfer.transfer_id,
+      submission: {
+        title: 'PIX-to-Stellar Transfer Lifecycle Engine',
+        week: 1,
+        ready_count: 4,
+        required_count: 4,
+        status: 'ready',
+      },
+      privacy: {
+        redaction_applied: true,
+        amounts_redacted: false,
+      },
+      transfer_record: {
+        value: {
+          source_amount_brl: '560',
+          quoted_destination_usd: '99.7',
+          fx_rate_brl_per_usd: '5.6',
+        },
+        pix_funding: {
+          status: 'completed',
+        },
+        payout: {
+          destination: {
+            account_number_last4: '6789',
+            routing_number_last4: '0021',
+          },
+        },
+      },
+    });
+    expect(reviewerEvidence.checklist).toHaveLength(4);
+    expect(reviewerEvidence.transfer_record.subject.sender_name_hash).toHaveLength(16);
+    expect(reviewerEvidence.transfer_record.subject.sender_email_hash).toHaveLength(16);
+    expect(reviewerEvidence.transfer_record.subject).not.toHaveProperty('sender_name');
+    expect(reviewerEvidence.transfer_record.payout.destination).not.toHaveProperty('accountNumber');
   });
 
   it('marks Pix funding failure events as FAILED with an error log', async () => {

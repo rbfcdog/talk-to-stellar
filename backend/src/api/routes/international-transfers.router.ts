@@ -11,6 +11,7 @@ router.post('/:id/payout-instruction', InternationalTransfersController.createPa
 router.post('/:id/payout-status-refresh', InternationalTransfersController.refreshPayoutStatus);
 router.get('/:id/reconciliation', InternationalTransfersController.getReconciliation);
 router.get('/:id/orchestration-log', InternationalTransfersController.getOrchestrationLog);
+router.get('/:id/reviewer-evidence', InternationalTransfersController.getReviewerEvidence);
 router.get('/:id', InternationalTransfersController.getTransfer);
 
 export default router;

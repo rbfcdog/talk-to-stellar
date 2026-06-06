@@ -16,6 +16,7 @@ import { supabase } from '../../config/supabase';
 import { getAssetIssuer, getStellarNetworkName, resolveConfiguredAsset } from '../../config/assets';
 import { WalletRepository } from '../repository/core/wallet.repository';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
+import { formatCustomerAssetAmount } from '../../utils/fee-display';
 import { formatQuoteTtl } from '../services/quote-expiry.service';
 import crypto from 'crypto';
 
@@ -2136,10 +2137,15 @@ export class AgentGraph {
     const n = parseHumanAmountNumber(amount);
     if (!Number.isFinite(n)) return `${amount} ${assetCode}`;
     const upper = this.toUserFacingAssetCode(assetCode);
-    if (upper === 'BRL') return `R$ ${n.toFixed(2)}`;
-    if (upper === 'USDC' || upper === 'USD') return `US$ ${n.toFixed(2)}`;
-    if (upper === 'XLM') return `${n.toFixed(7).replace(/0+$/, '').replace(/\.$/, '')} XLM`;
-    return `${n.toFixed(2)} ${upper || 'saldo'}`;
+    return formatCustomerAssetAmount(String(n), upper || 'saldo');
+  }
+
+  private formatRequiredMoneyByAsset(amount: string, assetCode: string): string {
+    const n = parseHumanAmountNumber(amount);
+    if (!Number.isFinite(n)) return `${amount} ${assetCode}`;
+    const roundedUp = Math.ceil((n - Number.EPSILON * Math.max(1, Math.abs(n))) * 100) / 100;
+    const upper = this.toUserFacingAssetCode(assetCode);
+    return formatCustomerAssetAmount(roundedUp.toFixed(2), upper || 'saldo');
   }
 
   private formatUserFacingAssetName(assetCode: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
@@ -5030,6 +5036,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       const inferredAssets = this.inferConversionAssetsFromText(state.current_input);
       let finalSourceAmount = String(llmParsed.sourceAmount || '').trim() || this.extractAmountFollowUpFromText(state.current_input) || '';
       let finalDestAmount = String(llmParsed.destAmount || '').trim();
+      const receiveExactMode = Boolean(finalDestAmount);
       const requestedSourceAssetCode = this.normalizeAgentAssetCode(llmParsed.sourceAssetCode || inferredAssets.sourceAssetCode || '');
       const requestedDestAssetCode = this.normalizeAgentAssetCode(llmParsed.destAssetCode || inferredAssets.destAssetCode || '');
       const finalSourceAssetCode = this.toSettlementAssetCode(requestedSourceAssetCode) || requestedSourceAssetCode;
@@ -5181,7 +5188,9 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
             } else {
               state.pending_conversion = undefined;
               state.success = true;
-              const sourceLabel = this.formatMoneyByAsset(finalSourceAmount, finalSourceAssetCode);
+              const sourceLabel = receiveExactMode
+                ? this.formatRequiredMoneyByAsset(finalSourceAmount, finalSourceAssetCode)
+                : this.formatMoneyByAsset(finalSourceAmount, finalSourceAssetCode);
               const destLabel = this.formatMoneyByAsset(conversionDestAmount, finalDestAssetCode);
               const language = this.getLanguage(state);
               const transparencyLine = this.formatBestRouteTransparency(toolResult, language);

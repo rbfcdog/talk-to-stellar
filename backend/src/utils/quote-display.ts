@@ -53,17 +53,17 @@ export function buildUsedQuoteLabel(input: {
   if (sourceIsReal && destinationAsset === 'USDC') {
     const rate = sourceAmount / destinationAmount;
     if (rate > 0 && rate < 2) return isEn ? 'Quote used: testnet environment; value has no real FX rate' : 'Cotação usada: ambiente testnet; valor sem câmbio real';
-    return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 US$ = R$ ${trimFixed(rate, 6)}`;
+    return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 US$ = R$ ${trimFixed(rate, 2)}`;
   }
 
   if (sourceAsset === 'USDC' && destinationIsReal) {
     const rate = destinationAmount / sourceAmount;
     if (rate > 0 && rate < 2) return isEn ? 'Quote used: testnet environment; value has no real FX rate' : 'Cotação usada: ambiente testnet; valor sem câmbio real';
-    return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 US$ = R$ ${trimFixed(rate, 6)}`;
+    return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 US$ = R$ ${trimFixed(rate, 2)}`;
   }
 
   const sourceLabel = formatCustomerAssetAmount(String(sourceAmountRaw || ''), sourceAsset);
   const destinationLabel = formatCustomerAssetAmount(String(destinationAmountRaw || ''), destinationAsset);
   const unitRate = sourceAmount / destinationAmount;
-  return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 ${displaySymbol(destinationAsset)} = ${trimFixed(unitRate, 6)} ${displaySymbol(sourceAsset)} (${sourceLabel} -> ${destinationLabel})`;
+  return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 ${displaySymbol(destinationAsset)} = ${trimFixed(unitRate, 2)} ${displaySymbol(sourceAsset)} (${sourceLabel} -> ${destinationLabel})`;
 }

@@ -624,12 +624,7 @@ function displayPairQuoteAmount(value: unknown, assetCode: unknown): string {
   const amount = parseHumanAmountNumber(value);
   const code = normalizePairQuoteAsset(assetCode);
   if (!Number.isFinite(amount)) return formatCustomerAssetAmount(String(value || '0'), code);
-  if (code === 'BRL') return `R$ ${amount.toFixed(2)}`;
-  if (code === 'USDC') return `US$ ${amount.toFixed(2)}`;
-  return formatCustomerAssetAmount(
-    amount > 0 ? amount.toFixed(7).replace(/\.?0+$/, '') : String(value || '0'),
-    code
-  );
+  return formatCustomerAssetAmount(amount > 0 ? String(amount) : String(value || '0'), code);
 }
 
 async function quoteRequiredSourceForTarget(input: {

@@ -57,8 +57,8 @@ describe('ReceiptImageService', () => {
 
     expect(svg).toContain('US$10.99');
     expect(svg).toContain('R$61.23');
-    expect(svg).toContain('1 US$ = R$ 5.567687');
-    expect(receiptText).toContain('Cotação usada: 1 US$ = R$ 5.567687');
+    expect(svg).toContain('1 US$ = R$ 5.56');
+    expect(receiptText).toContain('Cotação usada: 1 US$ = R$ 5.56');
     expect(svg).not.toContain('USDC');
     expect(svg).not.toContain('BRL');
     expect(svg).not.toContain('XLM');
