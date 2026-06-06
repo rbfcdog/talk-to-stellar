@@ -486,10 +486,40 @@ describe('TransferNotificationService', () => {
     });
 
     expect(sendTextMock).toHaveBeenCalledTimes(1);
+    const sentText = String(sendTextMock.mock.calls[0][2] || '');
+    expect(sentText).toContain('Conta conectada');
+    expect(sentText).toContain('You can switch TalkToStellar to English anytime by saying "English".');
     expect(sendTextMock).toHaveBeenCalledWith(
       'main',
       '5519981808102',
-      expect.stringContaining('Conta conectada'),
+      sentText,
+      { reliable: true }
+    );
+  });
+
+  it('adds the Portuguese language toggle hint to English welcome messages', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com', preferred_language: 'en' })),
+      saveMessageOnce: jest.fn(async () => true),
+    };
+
+    await TransferNotificationService.notifySessionWelcome({
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      userId: 'user-1',
+      provider: 'whatsapp',
+      providerUserId: '5519981808102',
+      name: 'User Example',
+      language: 'en',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    const sentText = String(sendTextMock.mock.calls[0][2] || '');
+    expect(sentText).toContain('Account connected');
+    expect(sentText).toContain('Você pode mudar o TalkToStellar para português quando quiser dizendo "Português".');
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      sentText,
       { reliable: true }
     );
   });

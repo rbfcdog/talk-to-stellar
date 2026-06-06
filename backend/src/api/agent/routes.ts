@@ -740,7 +740,12 @@ function formatStartupBalanceLine(balance: any, index: number): string {
   return `${index + 1}. ${label}: ${amount}`;
 }
 
-async function buildSessionStartMessage(sessionId: string, publicKey: string): Promise<string> {
+async function buildSessionStartMessage(
+  sessionId: string,
+  publicKey: string,
+  languageInput?: string | null
+): Promise<string> {
+  const language = normalizeLanguage(languageInput);
   const balanceLines: string[] = [];
 
   try {
@@ -749,7 +754,7 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
     if (balanceResult?.success && Array.isArray(balanceResult.balances)) {
       balanceLines.push(
         '',
-        'Resumo rápido da sua conta:',
+        localized(language, 'Resumo rápido da sua conta:', 'Quick account summary:'),
         balanceResult.balances
           .map((balance: any, index: number) => formatStartupBalanceLine(balance, index))
           .join('\n')
@@ -759,18 +764,37 @@ async function buildSessionStartMessage(sessionId: string, publicKey: string): P
     // Startup copy must not expose account preparation, Friendbot, Horizon, or provider errors.
   }
 
-  return [
-    'Tudo finalizado. Sua conta está pronta para começar.',
-    ...balanceLines,
-    '',
-    'Roteiro inicial recomendado:',
-    '1. Traga dinheiro: digite "colocar 100 reais via PIX". A tela mostra QR, taxa por fora e valor final antes do PIN.',
-    '2. Confira se entrou: digite "saldo".',
-    '3. Faça algo com o saldo: digite "converter 50 reais para dólar", "enviar 10 XLM para Ana" ou "ver rendimentos".',
-    '4. Acompanhe tudo depois: digite "histórico" para ver operações e comprovantes.',
-    '',
-    'Para começar agora, mande: "colocar 100 reais via PIX". Nada movimenta dinheiro sem confirmação e PIN.',
-  ].join('\n');
+  return localized(
+    language,
+    [
+      'Tudo finalizado. Sua conta está pronta para começar.',
+      ...balanceLines,
+      '',
+      'Roteiro inicial recomendado:',
+      '1. Traga dinheiro: digite "colocar 100 reais via PIX". A tela mostra QR, taxa por fora e valor final antes do PIN.',
+      '2. Confira se entrou: digite "saldo".',
+      '3. Faça algo com o saldo: digite "converter 50 reais para dólar", "enviar 10 XLM para Ana" ou "ver rendimentos".',
+      '4. Acompanhe tudo depois: digite "histórico" para ver operações e comprovantes.',
+      '',
+      'Para começar agora, mande: "colocar 100 reais via PIX". Nada movimenta dinheiro sem confirmação e PIN.',
+      '',
+      'You can switch TalkToStellar to English anytime by saying "English".',
+    ].join('\n'),
+    [
+      'All set. Your account is ready to start.',
+      ...balanceLines,
+      '',
+      'Recommended first steps:',
+      '1. Bring money in: type "add 100 reais with PIX". The screen shows QR, outside fee, and final amount before PIN.',
+      '2. Check that it arrived: type "balance".',
+      '3. Do something with the balance: type "convert 50 reais to dollars", "send 10 XLM to Ana", or "see investments".',
+      '4. Track everything later: type "history" to see operations and receipts.',
+      '',
+      'To start now, send: "add 100 reais with PIX". No money moves without confirmation and PIN.',
+      '',
+      'Você pode mudar o TalkToStellar para português quando quiser dizendo "Português".',
+    ].join('\n')
+  );
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -1370,7 +1394,11 @@ export function createAgentRoutes(
       let responseMessages = messages;
 
       if (messages.length === 0 && sessionData.public_key) {
-        const startupMessage = await buildSessionStartMessage(session_id, sessionData.public_key);
+        const startupMessage = await buildSessionStartMessage(
+          session_id,
+          sessionData.public_key,
+          languageFromSession(sessionData) || 'pt-BR'
+        );
         await repository.saveMessageOnce(session_id, 'assistant', startupMessage, `session_intro:${session_id}`);
         responseMessages = await repository.getMessages(session_id, limit);
       }
