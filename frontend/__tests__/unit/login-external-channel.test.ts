@@ -57,6 +57,16 @@ describe("external channel login", () => {
     expect(createText).toContain("disabled={Boolean(lockedWhatsAppPhoneNumber)}");
   });
 
+  it("uses a session-linked setup page for create-account Passkey QR", () => {
+    const createText = source("app/create-account/create-account-client.tsx");
+
+    expect(createText).toContain('new URL(`${window.location.origin}/setup-passkey`)');
+    expect(createText).toContain('purpose: "create_account_passkey_qr"');
+    expect(createText).toContain("session_id: result.sessionId");
+    expect(createText).not.toContain('new URL(`${window.location.origin}/login`)');
+    expect(createText).not.toContain("setPasskeyQrTargetUrl(passkeySetupRedirectUrl)");
+  });
+
   it("syncs language toggles to the backend preference endpoint", () => {
     const i18nText = source("lib/i18n.tsx");
     const routeText = source("app/api/chat/language/route.ts");

@@ -347,9 +347,9 @@ export default function CreateAccountClient({
           setPasskeyQrTargetUrl(String(payload.url))
           return
         }
-        setPasskeyQrTargetUrl(passkeySetupRedirectUrl)
+        setPasskeyQrTargetUrl("")
       } catch {
-        if (!cancelled) setPasskeyQrTargetUrl(passkeySetupRedirectUrl)
+        if (!cancelled) setPasskeyQrTargetUrl("")
       }
     }
 
