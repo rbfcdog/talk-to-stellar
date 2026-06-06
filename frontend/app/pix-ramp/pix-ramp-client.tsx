@@ -499,7 +499,8 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
         : NaN;
   const ttsTransactionFeeBps = clientTtsTransactionFeeBps();
   const canEstimateTtsFee = sourceCurrency === "BRL" || sourceCurrency === "USDC";
-  const ttsTransactionFeeAmount = Number.isFinite(backendTtsFee)
+  const hasBackendTtsFee = Number.isFinite(backendTtsFee) && backendTtsFee > 0;
+  const ttsTransactionFeeAmount = hasBackendTtsFee
     ? backendTtsFee
     : Number.isFinite(feeFromGrossToNet) && feeFromGrossToNet > providerFeeAmount
       ? Math.max(feeFromGrossToNet - providerFeeAmount, 0)
@@ -509,7 +510,7 @@ function buildRampFeeBridgeEstimate(mode: RampMode, quote: RampResponse | null |
       ? sourceAmount * (ttsTransactionFeeBps / 10000)
       : 0;
   const ttsTransactionFeePct = ttsTransactionFeeAmount > 0 ? ttsTransactionFeeBps / 100 : 0;
-  const ttsTransactionFeeCurrency = Number.isFinite(backendTtsFee)
+  const ttsTransactionFeeCurrency = hasBackendTtsFee
     ? backendTtsFeeCurrency
     : mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.appFee)
       ? "BRL"
@@ -1011,6 +1012,7 @@ export default function PixRampClient({
   const pixFeedbackKeysRef = useRef<Set<string>>(new Set());
   const recipientValidationKeyRef = useRef("");
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
+  const offRampPreviewKeyRef = useRef("");
   const localIntentNonceRef = useRef("");
   if (!localIntentNonceRef.current) localIntentNonceRef.current = createLocalIntentNonce();
   const pageSavingsSeedRef = useRef("");
@@ -1287,6 +1289,24 @@ export default function PixRampClient({
       source_asset_code: quotePayload.source_asset_code || sourcePayload?.source_asset_code,
     };
   }, [offRampPreviewPayload, temporaryOffRampTestResult]);
+  const offRampPreviewInputKey = stableHash(JSON.stringify([
+    "offramp-preview",
+    atomicIntentKey,
+    offRampInputValue,
+    offRampFiatAmount,
+    offRampInputAsset,
+    normalizedOffRampPixKey,
+    rampEmail,
+  ]));
+  const hasOffRampPreviewInputs = Boolean(
+    rampMode === "offramp" &&
+    queryReady &&
+    sessionReady &&
+    canResolveWallet &&
+    normalizeHumanAmount(offRampInputValue) &&
+    normalizedOffRampPixKey &&
+    !operationLocked
+  );
   const offRampInsufficientBalance = Boolean(rampMode === "offramp" && isInsufficientBalanceText(error));
   const offRampAlternativeAsset = useMemo(() => {
     const candidates = ["USDC", "CETES", "XLM", "BRL"].filter((asset) => asset !== offRampInputAsset);
@@ -2335,6 +2355,27 @@ export default function PixRampClient({
 	      setLoading("");
     }
   }
+
+  useEffect(() => {
+    if (rampMode !== "offramp") {
+      offRampPreviewKeyRef.current = "";
+      return;
+    }
+    if (!hasOffRampPreviewInputs) return;
+    if (offRampQuote || temporaryOffRampTestResult) return;
+    if (loading) return;
+    if (offRampPreviewKeyRef.current === offRampPreviewInputKey) return;
+
+    offRampPreviewKeyRef.current = offRampPreviewInputKey;
+    void run("Previewing PIX withdrawal", previewOffRampFees);
+  }, [
+    hasOffRampPreviewInputs,
+    loading,
+    offRampPreviewInputKey,
+    offRampQuote,
+    rampMode,
+    temporaryOffRampTestResult,
+  ]);
 
   function markOperationCompleted() {
     setOperationLocked(true);
@@ -3476,6 +3517,7 @@ export default function PixRampClient({
                     aria-label={L("Chave PIX de destino", "Destination PIX key")}
                     onChange={(event) => {
                       setOffRampPixKey(event.target.value);
+                      setOffRampPreviewPayload(null);
                       setTemporaryOffRampTestResult(null);
                     }}
                   />
@@ -3508,17 +3550,16 @@ export default function PixRampClient({
                   {L("Voltar", "Back")}
                 </button>
                 <div className="rounded-xl border border-tts-gold bg-tts-gold-bg p-4 md:mt-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Antes do PIN", "Before PIN")}</p>
+                    {loading === "Previewing PIX withdrawal" && (
+                      <p className="mt-2 inline-flex items-center gap-2 text-xs font-black text-tts-deep">
+                        <InlineSpinner tone="cyan" />
+                        {L("Calculando retirada automaticamente", "Calculating withdrawal automatically")}
+                      </p>
+                    )}
                   </div>
-                  <button
-                    className="w-fit rounded-xl bg-tts-gold px-4 py-3 text-xs font-black uppercase tracking-normal text-tts-deep transition hover:bg-tts-gold disabled:opacity-50"
-                    disabled={!canResolveWallet || Boolean(loading) || operationLocked}
-                    onClick={() => run("Previewing PIX withdrawal", previewOffRampFees)}
-                  >
-                    {loading === "Previewing PIX withdrawal" ? <span className="inline-flex items-center gap-2"><InlineSpinner tone="cyan" />{L("Calculando", "Calculating")}</span> : L("Atualizar valor", "Update amount")}
-                  </button>
                 </div>
                 {offRampQuote ? (
                   <RampFeeBridge
@@ -3529,10 +3570,12 @@ export default function PixRampClient({
                   />
                 ) : offRampInputAsset !== "BRL" ? (
                   <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-tts-deep">
-                    <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Conversão em reais", "BRL conversion")}</p>
-                    <p className="mt-2 text-lg font-black">{L("Calcule para ver quanto chega no PIX.", "Calculate to see how much arrives in PIX.")}</p>
+                    <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Retirada em reais", "BRL withdrawal")}</p>
+                    <p className="mt-2 text-lg font-black">{L("Cotação em reais sendo preparada.", "BRL quote is being prepared.")}</p>
                     <p className="mt-1 text-xs font-bold text-tts-muted">
-                      {L("A taxa estimada usa o valor convertido em reais.", "The estimated fee uses the converted BRL amount.")}
+                      {normalizedOffRampPixKey
+                        ? L("A página calcula taxa, app fee e economia a partir do valor PIX.", "The page calculates the fee, app fee, and savings from the PIX value.")
+                        : L("Preencha a chave PIX para calcular a retirada.", "Enter the PIX key to calculate the withdrawal.")}
                     </p>
                   </div>
                 ) : (
@@ -4315,7 +4358,7 @@ function MobileActionGuide({
     title = pinReady ? L("Confirme a retirada", "Confirm withdrawal") : L("Digite o PIN", "Enter PIN");
     detail = hasQuote
       ? L("Confira o valor, digite o PIN e toque em Confirmar retirada.", "Check the amount, enter PIN, and tap Confirm withdrawal.")
-      : L("Toque em Atualizar valor para conferir antes do PIN.", "Tap Update amount to review before PIN.");
+      : L("A página calcula a retirada automaticamente antes do PIN.", "The page calculates the withdrawal automatically before PIN.");
   } else if (stage === "receipt") {
     title = L("Concluído", "Done");
     detail = L("A operação finalizada aparece aqui.", "The finished operation appears here.");
@@ -4387,7 +4430,7 @@ function EtherfuseMeasuredFeeNotice({
     : ETHERFUSE_TESTNET_FEE_SAMPLE_AMOUNT_BRL;
   const ttsFeeBps = clientTtsTransactionFeeBps();
   const estimatedTtsFee = Number.isFinite(numericAmount) && numericAmount > 0
-    ? numericAmount * (ttsFeeBps / 10000)
+    ? Math.max(numericAmount * (ttsFeeBps / 10000), clientTtsTransactionMinBrl())
     : 0;
   const totalEstimatedFee = estimatedProviderFee + estimatedTtsFee;
   const traditionalFee = Number.isFinite(numericAmount) && numericAmount > 0

@@ -32,6 +32,9 @@ export type PaymentReceiptInput = {
   quote?: any;
   savings?: {
     estimatedSavings?: number | string | null;
+    estimatedTraditionalFee?: number | string | null;
+    actualFee?: number | string | null;
+    grossAmountBrl?: number | string | null;
     savingsPercentage?: number | string | null;
     comparisonMethod?: string | null;
   } | null;
@@ -343,13 +346,15 @@ export class PaymentReceiptService {
     const language = await this.resolveReceiptLanguage(input);
     const localizedInput = { ...input, language };
     const text = await this.buildReceiptText(localizedInput);
-    const cumulativeSavingsText = await this.cumulativeSavingsLine(localizedInput);
     let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
     const explicitDedupeKey = String(input.dedupeKey || '').trim();
     const receiptDedupeKey = explicitDedupeKey
       ? `receipt:${explicitDedupeKey}`
       : `receipt:${input.sessionId}:${operationId || input.hash || `${input.type}:${input.destinationAmount}:${input.destinationAssetCode}`}`;
+
+    await this.persistReceiptSavingsEvent(localizedInput, receiptDedupeKey, operationId);
+    const cumulativeSavingsText = await this.cumulativeSavingsLine(localizedInput);
 
     try {
       viewerUrl = await this.createReceiptLink(localizedInput);
@@ -458,6 +463,89 @@ export class PaymentReceiptService {
           attempts: whatsapp.attempts,
         })}`
       );
+    }
+  }
+
+  private static async persistReceiptSavingsEvent(input: PaymentReceiptInput, receiptDedupeKey: string, operationId: string): Promise<void> {
+    if (!input.userId || !this.shouldShowReceiptEconomics(input)) return;
+
+    try {
+      const fee = await this.resolveFeeBreakdown(input);
+      const savingsRecord = (input.savings || {}) as Record<string, unknown>;
+      const grossBrl = this.toPositiveNumber(
+        savingsRecord.grossAmountBrl ||
+        savingsRecord.gross_amount_brl ||
+        this.estimateReceiptBrlAmount(input, fee)
+      );
+      const actualFee = this.toPositiveNumber(
+        savingsRecord.actualFee ||
+        savingsRecord.actual_fee ||
+        fee.actualFeeBrl
+      );
+      const payloadSavings = this.toPositiveNumber(
+        savingsRecord.estimatedSavings ||
+        savingsRecord.estimated_savings
+      );
+      const estimatedTraditionalFee = this.toPositiveNumber(
+        savingsRecord.estimatedTraditionalFee ||
+        savingsRecord.estimated_traditional_fee ||
+        (payloadSavings > 0 && actualFee > 0 ? actualFee + payloadSavings : 0)
+      ) || (grossBrl > 0 ? grossBrl * EconomyEngineService.traditionalFeePct() : 0);
+      const estimatedSavings = payloadSavings > 0
+        ? payloadSavings
+        : Math.max(0, estimatedTraditionalFee - actualFee);
+      if (!Number.isFinite(estimatedSavings) || estimatedSavings <= 0) return;
+
+      const savingsPercentage = this.toPositiveNumber(
+        savingsRecord.savingsPercentage ||
+        savingsRecord.savings_percentage
+      ) || (estimatedTraditionalFee > 0 ? (estimatedSavings / estimatedTraditionalFee) * 100 : 0);
+      const operationReference = this.receiptFallbackReference(input, operationId, receiptDedupeKey);
+      const createdAt = String(input.completedAt || '').trim() || new Date().toISOString();
+      const eventPayload = {
+        user_id: input.userId,
+        event_type: 'savings_estimated',
+        title: 'Economia estimada em taxa',
+        description: `Estimativa de economia de R$ ${estimatedSavings.toFixed(2)} nesta operação.`,
+        amount: Number(estimatedSavings.toFixed(2)),
+        currency: 'BRL',
+        status: 'info',
+        icon: 'piggy-bank',
+        semantic_color: 'teal',
+        metadata_json: {
+          source: 'payment_receipt',
+          session_id: input.sessionId,
+          payment_hash: String(input.hash || '').trim() || null,
+          operation_id: operationId || null,
+          operation_reference: operationReference || null,
+          receipt_dedupe_key: receiptDedupeKey,
+          gross_amount_brl: grossBrl || null,
+          estimated_traditional_fee: estimatedTraditionalFee,
+          actual_fee: actualFee,
+          estimated_savings: estimatedSavings,
+          savings_percentage: savingsPercentage,
+          comparison_method: String(savingsRecord.comparisonMethod || savingsRecord.comparison_method || EconomyEngineService.comparisonMethod()),
+          receipt_type: input.type,
+        },
+        created_at: createdAt,
+        dedupe_key: `${input.userId}:receipt_savings:${crypto.createHash('sha256').update(receiptDedupeKey).digest('hex').slice(0, 24)}`,
+      };
+
+      const { error } = await supabase
+        .from('financial_events')
+        .upsert(eventPayload, { onConflict: 'dedupe_key' });
+
+      if (error) {
+        const message = String(error?.message || '').toLowerCase();
+        if (this.isUniqueViolation(error)) return;
+        if (message.includes('dedupe_key') || message.includes('schema cache')) {
+          await supabase.from('financial_events').insert(eventPayload);
+          return;
+        }
+        throw error;
+      }
+    } catch (error) {
+      logger.warn(`[receipt] failed to persist savings event: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -744,6 +832,7 @@ export class PaymentReceiptService {
     const shouldShow =
       this.shouldShowReceiptEconomics(input) && (
       type === 'payment_sent' ||
+      type === 'payment_received' ||
       type === 'claim_redeemed' ||
       type === 'conversion'
       );
