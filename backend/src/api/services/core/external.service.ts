@@ -9,6 +9,8 @@ import { getAssetIssuer, normalizeAssetCode } from '../../../config/assets';
 import crypto from 'crypto';
 import { getRequiredJwtSecret } from '../../../config/secrets';
 
+const SENSITIVE_SHORT_LINK_MAX_AGE_MS = 15 * 60 * 1000;
+
 function getJwtSecret() {
   return getRequiredJwtSecret();
 }
@@ -45,6 +47,30 @@ function shortCodeFromSeed(seed: string, purpose: string): string {
     .update(`${purpose}:${seed}`)
     .digest('base64url')
     .slice(0, 12);
+}
+
+function sensitiveShortLinkMaxAgeMs(purpose: unknown): number {
+  const normalized = String(purpose || '').trim().toLowerCase();
+  if (!normalized) return 0;
+  if (normalized.startsWith('pix_')) return SENSITIVE_SHORT_LINK_MAX_AGE_MS;
+  if ([
+    'payment_confirm',
+    'payment_claim',
+    'conversion_confirm',
+    'logout_confirm',
+    'external_onboard',
+    'external_login',
+    'login_entry',
+    'onboarding_generic',
+    'balance_view',
+    'transaction_history',
+    'create_account_passkey_qr',
+    'login_passkey_qr',
+    'confirm_payment_passkey_qr',
+  ].includes(normalized)) {
+    return SENSITIVE_SHORT_LINK_MAX_AGE_MS;
+  }
+  return 0;
 }
 
 function isLocalhostUrl(url: string): boolean {
@@ -401,7 +427,7 @@ export class ExternalService {
 
     const { data, error } = await this.supabase
       .from('short_links')
-      .select('url, purpose, token_hash, session_id, user_id, expires_at')
+      .select('url, purpose, token_hash, session_id, user_id, expires_at, created_at')
       .eq('code', normalized)
       .maybeSingle();
 
@@ -412,6 +438,16 @@ export class ExternalService {
     if (!data?.url) return null;
     const expiresAt = data.expires_at ? Date.parse(String(data.expires_at)) : 0;
     if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
+    const sensitiveMaxAgeMs = sensitiveShortLinkMaxAgeMs(data.purpose);
+    const createdAt = data.created_at ? Date.parse(String(data.created_at)) : 0;
+    if (
+      sensitiveMaxAgeMs > 0 &&
+      createdAt &&
+      Number.isFinite(createdAt) &&
+      Date.now() - createdAt > sensitiveMaxAgeMs
+    ) {
+      return null;
+    }
     if (await this.isShortLinkConfirmationConsumed(data)) return null;
     return {
       url: String(data.url),
