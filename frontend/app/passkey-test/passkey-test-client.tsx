@@ -170,6 +170,7 @@ export default function PasskeyTestClient() {
     platformAuthenticator: false,
   });
   const [identity, setIdentity] = useState("");
+  const [pin, setPin] = useState("");
   const [registerState, setRegisterState] = useState<StepState>({ loading: false, message: "", error: "" });
   const [authState, setAuthState] = useState<StepState>({ loading: false, message: "", error: "" });
   const [statusState, setStatusState] = useState<StepState>({ loading: false, message: "", error: "" });
@@ -179,7 +180,7 @@ export default function PasskeyTestClient() {
 
   const smartConfig = smartStatus?.config || {};
   const passkeys = Array.isArray(smartStatus?.passkeys) ? smartStatus.passkeys : [];
-  const canRegister = session.authenticated && browser.webauthn && !registerState.loading;
+  const canRegister = session.authenticated && browser.webauthn && /^\d{4,8}$/.test(pin) && !registerState.loading;
   const canAuthenticate = Boolean(identity.trim()) && browser.webauthn && !authState.loading;
   const smartAccountReady = Boolean(smartConfig.enabled && smartConfig.verifierAddress);
   const smartAccountMode = smartConfig.enabled
@@ -228,7 +229,7 @@ export default function PasskeyTestClient() {
     setRegisterState({ loading: true, message: "Preparando desafio de registro.", error: "" });
     setLastRegistration(null);
     try {
-      const initPayload = await postPasskey("register-init", {});
+      const initPayload = await postPasskey("register-init", { pin });
       if (!initPayload?.options || !initPayload?.challengeId) {
         throw new Error("Backend nao devolveu um desafio de registro valido.");
       }
@@ -397,6 +398,19 @@ export default function PasskeyTestClient() {
               value={identity}
               onChange={(event) => setIdentity(event.target.value)}
               placeholder="user@example.com"
+              className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none transition focus:border-tts-gold"
+            />
+
+            <label className="mt-5 block text-sm font-black" htmlFor="passkey-pin">
+              PIN da conta
+            </label>
+            <input
+              id="passkey-pin"
+              value={pin}
+              onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 8))}
+              inputMode="numeric"
+              type="password"
+              placeholder="1234"
               className="mt-2 min-h-12 w-full border border-tts-border bg-tts-bg px-3 text-sm font-bold text-tts-deep outline-none transition focus:border-tts-gold"
             />
 

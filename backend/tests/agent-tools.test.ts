@@ -633,6 +633,72 @@ describe('Agent tool execution', () => {
     }
   });
 
+  it('prepares a PIN-gated passkey setup link when the account has no passkey', async () => {
+    const ExternalService = require('../src/api/services/core/external.service').default;
+    const shortenSpy = jest
+      .spyOn(ExternalService.prototype, 'shortenPublicUrl')
+      .mockResolvedValueOnce('https://app.example.com/r/passkey-setup');
+
+    supabaseMock.from = jest.fn((table: string) => {
+      const query: any = {
+        select: jest.fn(() => query),
+        eq: jest.fn(() => query),
+        limit: jest.fn(() => query),
+        maybeSingle: jest.fn(async () => {
+          if (table === 'agent_sessions') {
+            return {
+              data: {
+                session_id: 'session-1',
+                user_id: 'user-1',
+                email: 'user@example.com',
+                session_token: 'session-token',
+              },
+              error: null,
+            };
+          }
+          return { data: null, error: null };
+        }),
+        then: (resolve: any, reject: any) => Promise
+          .resolve(table === 'user_passkeys' ? { data: [], error: null } : { data: [], error: null })
+          .then(resolve, reject),
+      };
+      return query;
+    });
+
+    try {
+      const output = await executeTool('prepare_passkey_setup', {
+        session_id: 'session-1',
+        session_token: 'session-token',
+        user_id: 'user-1',
+        provider: 'whatsapp',
+        provider_user_id: '5511999999999',
+        source: 'whatsapp',
+        language: 'pt-BR',
+      });
+      const parsed = JSON.parse(output);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.url).toBe('https://app.example.com/r/passkey-setup');
+      expect(parsed.message).toContain('ativar biometria');
+      expect(parsed.message).toContain('PIN');
+      expect(parsed.expires_in_minutes).toBe(15);
+      expect(shortenSpy).toHaveBeenCalledWith(expect.objectContaining({
+        purpose: 'setup_passkey_agent',
+        sessionId: 'session-1',
+        userId: 'user-1',
+        expiresInMinutes: 15,
+        url: expect.stringContaining('/setup-passkey?'),
+      }));
+      const shortenInput = shortenSpy.mock.calls[0][0] as { url: string };
+      const shortenedUrl = new URL(shortenInput.url);
+      expect(shortenedUrl.searchParams.get('mode')).toBe('agent');
+      expect(shortenedUrl.searchParams.get('require_pin')).toBe('1');
+      expect(shortenedUrl.searchParams.get('session_scope')).toBe('whatsapp');
+    } finally {
+      shortenSpy.mockRestore();
+    }
+  });
+
   it('lists yield options with user-facing currencies and no provider internals', async () => {
     const { AnchorService } = require('../src/api/services/anchor.service');
     const statusSpy = jest.spyOn(AnchorService, 'getDefindexYieldStatus').mockResolvedValueOnce({

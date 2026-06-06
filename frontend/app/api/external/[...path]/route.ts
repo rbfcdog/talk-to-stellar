@@ -30,6 +30,7 @@ const PUBLIC_SHORT_LINK_PURPOSES = new Set([
   "create_account_passkey_qr",
   "login_passkey_qr",
   "confirm_payment_passkey_qr",
+  "setup_passkey_agent",
   "send_external_wallet",
 ]);
 

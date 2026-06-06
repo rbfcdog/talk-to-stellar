@@ -2108,6 +2108,45 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "prepare_passkey_setup",
+    description: "Create a dedicated biometrics/Passkey setup page for the authenticated account when the user asks to enable biometrics. The page requires the current PIN before WebAuthn registration. Do not enroll passkeys directly in chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        session_id: {
+          type: "string",
+          description: "Current chat session ID",
+        },
+        session_token: {
+          type: "string",
+          description: "Current authenticated session token injected by the backend.",
+        },
+        user_id: {
+          type: "string",
+          description: "Current user ID, resolved from session when omitted.",
+        },
+        provider: {
+          type: "string",
+          description: "External channel provider, e.g. whatsapp or telegram, when available.",
+        },
+        provider_user_id: {
+          type: "string",
+          description: "External channel user ID when available.",
+        },
+        source: {
+          type: "string",
+          description: "Channel/source that should own the session cookie scope.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language",
+        },
+      },
+      required: ["session_id", "session_token"],
+    },
+  },
+  {
     name: "logout_session",
     description: "Logout da sessão atual do usuário, encerrando o contexto ativo da conta no chat.",
     parameters: {
@@ -2245,6 +2284,8 @@ export async function executeTool(
         return await executeRestartOnboarding(toolInput);
       case "reset_pin":
         return await executeResetPin(toolInput);
+      case "prepare_passkey_setup":
+        return await executePreparePasskeySetup(toolInput);
       case "logout_session":
         return await executeLogoutSession(toolInput);
       case "set_alert_threshold":
@@ -7396,6 +7437,143 @@ async function executeResetPin(input: any): Promise<string> {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`PIN reset error: ${errorMessage}`);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
+async function executePreparePasskeySetup(input: any): Promise<string> {
+  try {
+    const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    const sessionToken = String(input.session_token || input.sessionToken || '').trim();
+    const requestedUserId = String(input.user_id || input.userId || '').trim();
+    const provider = String(input.provider || input.external_provider || '').trim().toLowerCase();
+    const providerUserId = String(input.provider_user_id || input.providerUserId || input.external_provider_user_id || '').trim();
+    const source = normalizeToolSessionScope(input.source || input.session_source || input.sessionScope || provider);
+
+    if (!sessionId || !sessionToken) {
+      return JSON.stringify({
+        success: false,
+        error: language === 'en'
+          ? 'Sign in before setting up biometrics.'
+          : 'Entre na conta antes de configurar biometria.',
+      });
+    }
+
+    const { data: sessionRow, error: sessionError } = await supabase
+      .from('agent_sessions')
+      .select('session_id, user_id, email, session_token')
+      .eq('session_id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) {
+      throw new Error(`Failed to resolve session context: ${sessionError.message}`);
+    }
+
+    const storedSessionToken = String((sessionRow as any)?.session_token || '').trim();
+    if (!storedSessionToken || !timingSafeEqualString(storedSessionToken, sessionToken)) {
+      return JSON.stringify({
+        success: false,
+        error: language === 'en'
+          ? 'Session expired. Sign in again before setting up biometrics.'
+          : 'Sessão expirada. Entre novamente antes de configurar biometria.',
+      });
+    }
+
+    const sessionUserId = String((sessionRow as any)?.user_id || '').trim();
+    const sessionEmail = String((sessionRow as any)?.email || '').trim();
+    const normalizedRequested = requestedUserId.toLowerCase();
+    const normalizedSessionUser = sessionUserId.toLowerCase();
+    const normalizedSessionEmail = sessionEmail.toLowerCase();
+    if (
+      normalizedRequested &&
+      normalizedRequested !== normalizedSessionUser &&
+      normalizedRequested !== normalizedSessionEmail
+    ) {
+      return JSON.stringify({
+        success: false,
+        error: language === 'en'
+          ? 'This biometrics setup link cannot be created for a different account.'
+          : 'Não dá para criar biometria para uma conta diferente desta sessão.',
+      });
+    }
+
+    const resolvedUserId = sessionUserId || sessionEmail || requestedUserId;
+    if (!resolvedUserId) {
+      return JSON.stringify({
+        success: false,
+        error: language === 'en'
+          ? 'I could not identify the account for biometrics setup.'
+          : 'Não consegui identificar a conta para configurar biometria.',
+      });
+    }
+
+    let alreadyConfigured = false;
+    const existing = await supabase
+      .from('user_passkeys')
+      .select('id, credential_id')
+      .eq('user_id', resolvedUserId)
+      .limit(1);
+    if (existing.error) {
+      const errorMessage = String(existing.error.message || '').toLowerCase();
+      const tableMissing = errorMessage.includes('relation') || errorMessage.includes('schema cache') || errorMessage.includes('does not exist');
+      if (!tableMissing) throw new Error(`Failed to check biometrics: ${existing.error.message}`);
+      logger.warn('prepare_passkey_setup: user_passkeys table not available; continuing with setup link');
+    } else {
+      alreadyConfigured = Array.isArray(existing.data) && existing.data.length > 0;
+    }
+
+    if (alreadyConfigured) {
+      return JSON.stringify({
+        success: true,
+        already_configured: true,
+        user_id: resolvedUserId,
+        message: language === 'en'
+          ? 'Biometrics are already active for this account.'
+          : 'A biometria já está ativa nesta conta.',
+      });
+    }
+
+    const setupUrl = new URL('/setup-passkey', savingsFrontendBaseUrl());
+    setupUrl.searchParams.set('mode', 'agent');
+    setupUrl.searchParams.set('require_pin', '1');
+    setupUrl.searchParams.set('lang', language);
+    setupUrl.searchParams.set('next', '/chat');
+    if (source) {
+      setupUrl.searchParams.set('source', source);
+      setupUrl.searchParams.set('session_scope', source);
+    }
+    if (provider) setupUrl.searchParams.set('provider', provider);
+    if (providerUserId) setupUrl.searchParams.set('provider_user_id', providerUserId);
+
+    let finalUrl = setupUrl.toString();
+    try {
+      finalUrl = await new ExternalService(supabase as any).shortenPublicUrl({
+        url: finalUrl,
+        purpose: 'setup_passkey_agent',
+        sessionId,
+        userId: resolvedUserId,
+        expiresInMinutes: 15,
+      });
+    } catch (error) {
+      logger.warn(`[prepare-passkey-setup] failed to shorten setup link: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return JSON.stringify({
+      success: true,
+      url: finalUrl,
+      user_id: resolvedUserId,
+      expires_in_minutes: 15,
+      message: language === 'en'
+        ? `Open this secure page to enable biometrics:\n\n${finalUrl}\n\nThe page asks for your PIN before opening the phone biometric confirmation. The link is valid for 15 minutes.`
+        : `Abra esta página segura para ativar biometria:\n\n${finalUrl}\n\nA página pede seu PIN antes de abrir a confirmação biométrica do celular. O link vale 15 minutos.`,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Passkey setup preparation error: ${errorMessage}`);
     return JSON.stringify({
       success: false,
       error: errorMessage,

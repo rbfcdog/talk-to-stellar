@@ -198,6 +198,21 @@ describe('PasskeyService challenge generation', () => {
     });
   });
 
+  it('verifies the account PIN before passkey registration starts', async () => {
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
+    const { hashWalletPin } = await import('../src/utils/pin-hash');
+    mockGetSession.mockResolvedValue({
+      user_id: 'user-123',
+      email: 'user@example.com',
+      session_token: 'session-token',
+      session_password_hash: hashWalletPin('1234'),
+      last_activity: new Date().toISOString(),
+    });
+
+    await expect(PasskeyService.verifyRegistrationPin('session-123', '1234')).resolves.toEqual({ verified: true });
+    await expect(PasskeyService.verifyRegistrationPin('session-123', '9999')).rejects.toThrow('Invalid PIN');
+  });
+
   it('rejects passkey registration when the requested user differs from the session owner', async () => {
     mockGetSession.mockResolvedValue({
       user_id: 'user-123',

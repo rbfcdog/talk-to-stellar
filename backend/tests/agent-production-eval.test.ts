@@ -70,6 +70,7 @@ const routeToolByIntent: Record<IntentType, string> = {
   [IntentType.WALLET]: 'route_wallet_intent',
   [IntentType.WALLET_LOGOUT]: 'route_wallet_logout_intent',
   [IntentType.RESET_PIN]: 'route_reset_pin_intent',
+  [IntentType.PASSKEY_SETUP]: 'route_passkey_setup_intent',
   [IntentType.CONTACTS]: 'route_contacts_intent',
   [IntentType.PAYMENT]: 'route_payment_intent',
   [IntentType.PAYMENT_LINK]: 'route_payment_link_intent',
@@ -867,6 +868,35 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
+  it('routes biometrics setup requests to the passkey setup tool', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const routerInvoke = mockRouteIntent(graph, 'route_passkey_setup_intent');
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      url: 'https://app.example.com/setup-passkey?mode=agent&require_pin=1',
+      message: 'Abra esta página segura para ativar biometria:\n\nhttps://app.example.com/setup-passkey?mode=agent&require_pin=1\n\nA página pede seu PIN antes de abrir a confirmação biométrica do celular. O link vale 15 minutos.',
+    }));
+
+    const result = await graph.processInput(createState('quero ativar biometria na minha conta'));
+
+    expect(routerInvoke).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.detected_intent).toBe(IntentType.PASSKEY_SETUP);
+    expect(result.action_type).toBe(ActionType.SETUP_PASSKEY);
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_passkey_setup', expect.objectContaining({
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
+      user_id: 'eval-user',
+      language: 'pt-BR',
+    }));
+    expect(result.response_message).toContain('/setup-passkey');
+    expect(result.response_message).toContain('PIN');
+    expect(result.response_message).not.toContain('e-mail');
+    expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
   it('keeps web chat logout local so it does not disconnect WhatsApp or Telegram', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
@@ -1153,6 +1183,7 @@ describe('Agent production evals', () => {
       { name: 'reset pin invalid', input: 'meu pin nao funciona', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin security wording', input: 'preciso trocar a senha pin da conta', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin typo missing first letter', input: 'ero mudar meu pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
+      { name: 'passkey setup biometrics', input: 'quero ativar biometria na minha conta', expectedIntent: IntentType.PASSKEY_SETUP, expectedTool: 'route_passkey_setup_intent', risk: 'high' },
       { name: 'payment link create', input: 'criar link de pagamento de 50 dólares', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link receive', input: 'quero meu link para receber dinheiro', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link charge customer', input: 'gerar link pra cobrar cliente 15 usdc', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
