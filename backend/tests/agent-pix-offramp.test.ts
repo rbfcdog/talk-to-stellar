@@ -753,6 +753,55 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('resolves PIX-funded contact links when the saved contact only has an email transfer key', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent', {
+      amount: '100',
+      asset_code: 'USDC',
+      dest_asset_code: 'CETES',
+      recipient_query: 'Ana Silva',
+      language: 'en',
+    });
+    const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
+    const previousFrontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.talktostellar.test';
+    jest.spyOn(graph as any, 'fetchContacts').mockResolvedValue([
+      {
+        contact_name: 'Ana Silva',
+        pix_key: 'ana.silva@example.com',
+        stellar_public_key: null,
+      },
+    ]);
+    jest.spyOn(graph as any, 'lookupGlobalContactByEmail').mockResolvedValue({
+      contact_name: 'Ana Silva',
+      pix_key: 'ana.silva@example.com',
+      stellar_public_key: anaPublicKey,
+      session_id: 'ana-session',
+    });
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    try {
+      const state = createState('want to send 100 usdc pix to ana silva so they recieve in CETES');
+      state.action_params = { language: 'en' };
+      const result = await graph.processInput(state);
+      const url = String(result.response_message.match(/https?:\/\/\S+/)?.[0] || '');
+      const parsed = new URL(url);
+
+      expect(result.success).toBe(true);
+      expect(parsed.searchParams.get('recipient')).toBe('Ana Silva');
+      expect(parsed.searchParams.get('recipient_key')).toBe('ana.silva@example.com');
+      expect(parsed.searchParams.get('recipient_public_key')).toBe(anaPublicKey);
+      expect(parsed.searchParams.get('pay_asset')).toBe('USDC');
+      expect(parsed.searchParams.get('pay_destination_asset')).toBe('CETES');
+    } finally {
+      if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = previousFrontendUrl;
+    }
+  });
+
   it('uses conversation context to turn recipient-only PIX follow-up into exact CETES funded payment', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;

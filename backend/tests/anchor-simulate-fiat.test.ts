@@ -134,7 +134,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect(pinSpy).not.toHaveBeenCalled();
   });
 
-  it('starts PIX-funded auto-pay on the backend after PIX confirmation', async () => {
+  it('completes PIX-funded auto-pay before returning PIX confirmation', async () => {
     mockSandboxRuntime();
     mockSessionWallet();
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
@@ -179,11 +179,14 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect(result).toMatchObject({
       success: true,
       order_id: 'order-auto-pay',
-      auto_pay_status: 'processing',
+      auto_pay_status: 'completed',
+      auto_pay_result: {
+        success: true,
+        transaction_hash: 'auto-pay-transfer-hash',
+      },
       delivery_hash: 'pix-delivery-hash',
       sandbox_mock: true,
     });
-    await new Promise((resolve) => setImmediate(resolve));
     expect(submitSpy).toHaveBeenCalledWith(expect.objectContaining({
       session_id: 'session-1',
       session_token: 'token-1',

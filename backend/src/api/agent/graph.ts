@@ -2505,18 +2505,48 @@ export class AgentGraph {
       });
     }
 
-    const destination = String(
+    let destination = String(
       contact?.destination_public_key ||
       contact?.stellar_public_key ||
       contact?.public_key ||
       ''
     ).trim();
+    let resolvedContact = contact;
+
+    if (contact && !destination) {
+      const identifiers = contactIdentifiers(contact);
+      for (const identifier of identifiers) {
+        let globalContact: any | undefined;
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+          globalContact = await this.lookupGlobalContactByEmail(identifier);
+        }
+        if (!globalContact) {
+          globalContact = await this.lookupGlobalContactByPixKey(identifier);
+        }
+        const globalDestination = String(
+          globalContact?.destination_public_key ||
+          globalContact?.stellar_public_key ||
+          globalContact?.public_key ||
+          ''
+        ).trim();
+        if (!globalDestination) continue;
+        destination = globalDestination;
+        resolvedContact = {
+          ...contact,
+          ...globalContact,
+          contact_name: contact.contact_name || globalContact.contact_name,
+          pix_key: contact.pix_key || globalContact.pix_key || identifier,
+        };
+        break;
+      }
+    }
+
     if (!contact || !destination) return { destination: '', destinationName: query };
 
     return {
-      contact,
+      contact: resolvedContact,
       destination,
-      destinationName: String(contact.contact_name || contact.name || query).trim(),
+      destinationName: String(resolvedContact.contact_name || resolvedContact.name || query).trim(),
     };
   }
 

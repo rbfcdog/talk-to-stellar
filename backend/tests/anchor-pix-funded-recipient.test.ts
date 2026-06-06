@@ -23,6 +23,51 @@ function createWalletsBuilder(walletRow: any = null) {
   };
 }
 
+function createFlexibleWalletsBuilder(options: {
+  pixRow?: any;
+  sessionRow?: any;
+  publicKeyRow?: any;
+} = {}) {
+  const filters: Array<{ column: string; value: string }> = [];
+  const builder: any = {
+    select: jest.fn().mockReturnThis(),
+    ilike: jest.fn((column: string, value: string) => {
+      filters.push({ column, value });
+      return builder;
+    }),
+    eq: jest.fn((column: string, value: string) => {
+      filters.push({ column, value });
+      return builder;
+    }),
+    limit: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn(async () => {
+      const pixFilter = filters.find((filter) => filter.column === 'pix_key');
+      if (pixFilter && options.pixRow) return { data: options.pixRow, error: null };
+      return { data: null, error: null };
+    }),
+    single: jest.fn(async () => {
+      const sessionFilter = filters.find((filter) => filter.column === 'session_id');
+      if (sessionFilter && options.sessionRow) return { data: options.sessionRow, error: null };
+      const publicKeyFilter = filters.find((filter) => filter.column === 'public_key');
+      if (publicKeyFilter && options.publicKeyRow) return { data: options.publicKeyRow, error: null };
+      return { data: null, error: { code: 'PGRST116', message: 'not found' } };
+    }),
+  };
+  return builder;
+}
+
+function createAgentSessionsBuilder(sessionRow: any = null) {
+  const builder: any = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    ilike: jest.fn().mockReturnThis(),
+    order: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockResolvedValue({ data: sessionRow, error: null }),
+  };
+  return builder;
+}
+
 describe('AnchorService PIX-funded transfer recipient resolution', () => {
   const anaPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
   const originalEnv = { ...process.env };
@@ -154,6 +199,58 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       pixKey: '5595280606751',
       recipientKey: '5595280606751',
       sessionId: 'recipient-session',
+    });
+  });
+
+  it('resolves a saved contact that only has email/PIX metadata through the recipient session wallet', async () => {
+    jest.spyOn(supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'contacts') {
+        return createContactsBuilder([
+          {
+            id: 421,
+            contact_name: 'Ana Silva',
+            stellar_public_key: null,
+            pix_key: 'ana.silva@example.com',
+            phone_number: null,
+          },
+        ]) as any;
+      }
+      if (table === 'wallets') {
+        return createFlexibleWalletsBuilder({
+          sessionRow: {
+            session_id: 'recipient-session',
+            user_id: 'ana-user',
+            public_key: anaPublicKey,
+            vault_secret_id: 'recipient-vault',
+            pix_key: 'ana.silva@example.com',
+          },
+        }) as any;
+      }
+      if (table === 'agent_sessions') {
+        return createAgentSessionsBuilder({
+          session_id: 'recipient-session',
+          user_id: 'ana-user',
+          email: 'ana.silva@example.com',
+        }) as any;
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const recipient = await (AnchorService as any).resolveTransferRecipient(
+      'owner-user',
+      'Ana Silva',
+      {
+        preferredKey: 'ana.silva@example.com',
+      }
+    );
+
+    expect(recipient).toMatchObject({
+      publicKey: anaPublicKey,
+      displayName: 'Ana Silva',
+      pixKey: 'ana.silva@example.com',
+      recipientKey: 'ana.silva@example.com',
+      sessionId: 'recipient-session',
+      vaultSecretId: 'recipient-vault',
     });
   });
 
