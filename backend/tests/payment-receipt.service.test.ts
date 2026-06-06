@@ -1,5 +1,6 @@
 import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
 import { TransferNotificationService } from '../src/api/services/transfer-notification.service';
+import { EconomyEngineService } from '../src/api/services/economy-engine.service';
 import { supabase } from '../src/config/supabase';
 
 describe('PaymentReceiptService', () => {
@@ -545,10 +546,10 @@ describe('PaymentReceiptService', () => {
         user_id: 'user-savings-persist',
       }), { onConflict: 'dedupe_key' });
       expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
-        content: expect.stringContaining('Economia acumulada da conta: R$ 18.01 em relação a métodos tradicionais.'),
+        content: expect.stringContaining('Economia acumulada da conta: R$ 18,01 em relação a métodos tradicionais.'),
       }));
       expect(saveSpy).not.toHaveBeenCalledWith(expect.objectContaining({
-        content: expect.stringContaining('Economia acumulada da conta: R$ 0.00'),
+        content: expect.stringContaining('Economia acumulada da conta: R$ 0'),
       }));
     } finally {
       (PaymentReceiptService as any).agentRepo = originalRepo;
@@ -557,6 +558,106 @@ describe('PaymentReceiptService', () => {
       saveSpy.mockRestore();
       notifySpy.mockRestore();
     }
+  });
+
+  it('does not save a zero cumulative savings message when persisted savings are absent', async () => {
+    const calcSpy = jest.spyOn(EconomyEngineService, 'calculateIdentity').mockResolvedValue({
+      period: 'lifetime',
+      operationCount: 0,
+      countryCount: 0,
+      operationAmountBrl: 0,
+      estimatedTraditionalFee: 0,
+      actualFee: 0,
+      estimatedSavings: 0,
+      savingsPercentage: 0,
+      effectiveSavingsRate: 0,
+      comparisonMethod: 'traditional_providers_average_1_25pct',
+      message: '',
+    });
+    const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockResolvedValue('https://talk-to-stellar-owxg.vercel.app/receipt/no-savings');
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(true);
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: { attempted: true, delivered: 1, recipients: 1, instances: ['TalkToStellar'], attempts: [] },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_sent',
+      sessionId: 'session-no-savings',
+      userId: 'user-no-savings',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'Seu PIX',
+      sourceAmount: '62.64',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '62.51',
+      destinationAssetCode: 'BRL',
+      feeBrl: '0.13',
+      hash: 'tx-no-savings',
+      quote: { direction: 'offramp' },
+      contextMessage: 'PIX enviado à chave.',
+    });
+
+    expect(saveSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringMatching(/Economia acumulada da conta:.*0|Account lifetime savings:.*0/),
+    }));
+
+    calcSpy.mockRestore();
+    createSpy.mockRestore();
+    saveSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
+  it('uses English copy for cumulative savings when receipt language is English', async () => {
+    const calcSpy = jest.spyOn(EconomyEngineService, 'calculateIdentity').mockResolvedValue({
+      period: 'lifetime',
+      operationCount: 1,
+      countryCount: 0,
+      operationAmountBrl: 450.09,
+      estimatedTraditionalFee: 20.25,
+      actualFee: 2.24,
+      estimatedSavings: 18.01,
+      savingsPercentage: 88.94,
+      effectiveSavingsRate: 4,
+      comparisonMethod: 'traditional_providers_average_4_5pct',
+      message: '',
+    });
+    const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockResolvedValue('https://talk-to-stellar-owxg.vercel.app/receipt/en-savings');
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(true);
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: { attempted: true, delivered: 1, recipients: 1, instances: ['TalkToStellar'], attempts: [] },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-en-savings',
+      userId: 'user-en-savings',
+      language: 'en',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX',
+      sourceAmount: '450.09',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '100',
+      destinationAssetCode: 'USDC',
+      feeBrl: '2.24',
+      hash: 'tx-en-savings',
+      quote: { direction: 'onramp' },
+    });
+
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining('Account lifetime savings:'),
+    }));
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining('vs traditional methods.'),
+    }));
+    expect(saveSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining('Economia acumulada da conta'),
+    }));
+
+    calcSpy.mockRestore();
+    createSpy.mockRestore();
+    saveSpy.mockRestore();
+    notifySpy.mockRestore();
   });
 
   it('falls back to the agent state language for English external receipts', async () => {
