@@ -189,6 +189,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       provider: 'whatsapp',
       provider_user_id: '+5519997624114',
       order_id: 'sandbox-pix-order',
+      dedupe_key: 'pix-funded-autopay:page-1',
     } as any);
 
     expect(result).toMatchObject({
@@ -209,6 +210,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       destinationAmount: '100',
       destinationAssetCode: 'CETES',
       externalDeliveryText: expect.stringContaining('PIX confirmado e transferencia enviada.'),
+      dedupeKey: 'pix-funded-autopay:page-1',
     }));
     const receiptInput = receiptSpy.mock.calls[0][0] as any;
     expect(receiptInput.externalDeliveryText).toContain('Valor: 100 CETES');

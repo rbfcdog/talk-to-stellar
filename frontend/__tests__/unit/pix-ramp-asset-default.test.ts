@@ -126,6 +126,8 @@ describe("PIX asset defaults", () => {
     expect(text).toContain('const source = shortLinkCode || queryString || localIntentNonceRef.current || "pix-ramp";');
     expect(text).toContain("const pageSavingsSeed = pageSavingsSeedRef.current;");
     expect(text).toContain("savingsSeed={pageSavingsSeed}");
+    expect(text).toContain("auto_pay_dedupe_key: transferFlow ? pageSavingsSeed : undefined");
+    expect(text).toContain("dedupe_key: `pix-funded-autopay:${pageSavingsSeed}`");
     expect(text).not.toContain("savingsSeed={currentOnRampIntentId}");
   });
 

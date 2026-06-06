@@ -2791,6 +2791,7 @@ export default function PixRampClient({
         auto_pay_amount: feeAdjustedAutoPayAmount || autoPaySourceAmount || autoPayAmount || undefined,
         auto_pay_asset_code: settlementAssetCode(autoPaySourceAsset || autoPayAsset || targetAsset),
         auto_pay_destination_asset_code: autoPayDestinationAsset ? settlementAssetCode(autoPayDestinationAsset) : undefined,
+        auto_pay_dedupe_key: transferFlow ? pageSavingsSeed : undefined,
       }, "POST", authForOrder, createOnRampIdempotencyKey);
       if (payload?.quote) {
         setQuotePayload(payload);
@@ -2956,6 +2957,7 @@ export default function PixRampClient({
       pin,
       wallet_pin: pin,
       walletPin: pin,
+      dedupe_key: `pix-funded-autopay:${pageSavingsSeed}`,
     }, "POST", auth, buildIdempotencyKey(`pix-funded-transfer:${operationId || orderId || executionIntentId}`));
     setPixFundedTransferResult(payload);
     return payload;

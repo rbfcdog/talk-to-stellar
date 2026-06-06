@@ -168,6 +168,8 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   autoPayAssetCode?: string;
   auto_pay_destination_asset_code?: string;
   autoPayDestinationAssetCode?: string;
+  auto_pay_dedupe_key?: string;
+  autoPayDedupeKey?: string;
   bank_account_id?: string;
   bankAccountId?: string;
   memo?: string;
@@ -269,6 +271,8 @@ interface PixFundedTransferInput extends RampSessionInput {
   orderId?: string;
   operation_id?: string;
   operationId?: string;
+  dedupe_key?: string;
+  dedupeKey?: string;
 }
 
 interface TrustlineResult {
@@ -1203,6 +1207,7 @@ export class AnchorService {
   private static sandboxMockOnRampOrders = new Map<string, SandboxMockOnRampOrder>();
   private static sandboxMockOffRampOrders = new Map<string, SandboxMockOffRampOrder>();
   private static sandboxPostConversionLocks = new Map<string, Promise<SandboxMockOnRampOrder>>();
+  private static sandboxAutoPayLocks = new Map<string, Promise<Record<string, unknown> | null>>();
 
   static getTesouroIssuer(): string {
     return getAssetIssuer('TESOURO') || ETHERFUSE_TESOURO_ISSUER;
@@ -4331,6 +4336,7 @@ export class AnchorService {
       input.autoPayDestinationAssetCode,
       autoPayAssetCode,
     ));
+    const autoPayDedupeKey = coalesceString(input.auto_pay_dedupe_key, input.autoPayDedupeKey);
     const externalProvider = externalChannelProvider(input);
     const externalProviderUserId = externalChannelProviderUserId(input);
     const language = rampInputLanguage(input);
@@ -4714,6 +4720,7 @@ export class AnchorService {
       auto_pay_amount: autoPayAmount || undefined,
       auto_pay_asset_code: autoPayAfterRamp ? autoPayAssetCode : undefined,
       auto_pay_destination_asset_code: autoPayAfterRamp ? autoPayDestinationAssetCode : undefined,
+      auto_pay_dedupe_key: autoPayAfterRamp ? autoPayDedupeKey || undefined : undefined,
       payment_instructions: transaction.paymentInstructions,
       sandbox_mock: Boolean((transaction as OnRampTransaction & { sandbox_mock?: boolean }).sandbox_mock),
       upstream_error: (transaction as OnRampTransaction & { upstream_error?: string }).upstream_error,
@@ -5756,25 +5763,151 @@ export class AnchorService {
       throw apiError('Auto-pay after PIX is missing amount, asset, or recipient.', 400);
     }
 
-    return this.submitPixFundedTransferForSession({
-      session_id: context.sessionId,
-      session_token: context.sessionToken,
-      pin: coalesceString(input.pin, input.wallet_pin, input.walletPin),
-      wallet_pin: coalesceString(input.wallet_pin, input.pin, input.walletPin),
-      walletPin: coalesceString(input.walletPin, input.wallet_pin, input.pin),
-      amount,
-      asset_code: sourceAssetCode,
-      source_asset_code: sourceAssetCode,
-      destination_asset_code: destinationAssetCode || sourceAssetCode,
+    const explicitDedupeKey = coalesceString(operationContext.auto_pay_dedupe_key);
+    const autoPayDedupeKey = explicitDedupeKey || [
+      context.sessionId,
+      context.userId,
       recipient,
-      recipient_name: recipient,
-      order_id: coalesceString(input.order_id, input.orderId, record.transaction.id),
-      operation_id: coalesceString(input.operation_id, input.operationId, record.operationId),
-      language: coalesceString(operationContext.language, input.language),
-      provider: coalesceString(operationContext.external_provider, input.provider, input.external_provider),
-      provider_user_id: coalesceString(operationContext.external_provider_user_id, input.provider_user_id, input.external_provider_user_id),
-      source: coalesceString(operationContext.external_source, input.source),
-    } as any);
+      amount,
+      sourceAssetCode,
+      destinationAssetCode || sourceAssetCode,
+      coalesceString(operationContext.external_provider, input.provider, input.external_provider),
+      coalesceString(operationContext.external_provider_user_id, input.provider_user_id, input.external_provider_user_id),
+    ].map((part) => String(part || '').trim().toLowerCase()).join(':');
+    const receiptDedupeKey = explicitDedupeKey
+      ? `pix-funded-autopay:${explicitDedupeKey}`
+      : `pix-funded-autopay:${stableHex(autoPayDedupeKey).slice(0, 24)}`;
+    const lockKey = `${context.userId}:${receiptDedupeKey}`;
+    const autoPayResultContext = operationContext.auto_pay_result && typeof operationContext.auto_pay_result === 'object'
+      ? operationContext.auto_pay_result as Record<string, unknown>
+      : {};
+    const existingReceiptUrl = coalesceString(
+      operationContext.auto_pay_receipt_url,
+      operationContext.auto_pay_transfer_receipt_url,
+      autoPayResultContext.receipt_url,
+    );
+    if (coalesceString(operationContext.auto_pay_status) === 'completed' || existingReceiptUrl) {
+      return {
+        success: true,
+        skipped_duplicate: true,
+        receipt_url: existingReceiptUrl || undefined,
+        transaction_hash: coalesceString(operationContext.auto_pay_transfer_hash) || undefined,
+      };
+    }
+
+    const alreadyCompleted = await this.findCompletedAutoPayByDedupeKey(context.userId, autoPayDedupeKey);
+    if (alreadyCompleted) {
+      await this.persistSandboxOnRampContext(record, {
+        auto_pay_status: 'completed',
+        auto_pay_skipped_duplicate: true,
+        auto_pay_duplicate_of_operation_id: alreadyCompleted.operation_id,
+        auto_pay_receipt_url: alreadyCompleted.receipt_url || undefined,
+        auto_pay_transfer_hash: alreadyCompleted.transaction_hash || undefined,
+        auto_pay_dedupe_key: autoPayDedupeKey,
+      });
+      return {
+        success: true,
+        skipped_duplicate: true,
+        receipt_url: alreadyCompleted.receipt_url || undefined,
+        transaction_hash: alreadyCompleted.transaction_hash || undefined,
+      };
+    }
+
+    const existingLock = this.sandboxAutoPayLocks.get(lockKey);
+    if (existingLock) return existingLock;
+
+    const runAutoPay = (async () => {
+      await this.persistSandboxOnRampContext(record, {
+        auto_pay_status: 'processing',
+        auto_pay_started_at: new Date().toISOString(),
+        auto_pay_dedupe_key: autoPayDedupeKey,
+      });
+      const result = await this.submitPixFundedTransferForSession({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        pin: coalesceString(input.pin, input.wallet_pin, input.walletPin),
+        wallet_pin: coalesceString(input.wallet_pin, input.pin, input.walletPin),
+        walletPin: coalesceString(input.walletPin, input.wallet_pin, input.pin),
+        amount,
+        asset_code: sourceAssetCode,
+        source_asset_code: sourceAssetCode,
+        destination_asset_code: destinationAssetCode || sourceAssetCode,
+        recipient,
+        recipient_name: recipient,
+        order_id: coalesceString(input.order_id, input.orderId, record.transaction.id),
+        operation_id: coalesceString(input.operation_id, input.operationId, record.operationId),
+        language: coalesceString(operationContext.language, input.language),
+        provider: coalesceString(operationContext.external_provider, input.provider, input.external_provider),
+        provider_user_id: coalesceString(operationContext.external_provider_user_id, input.provider_user_id, input.external_provider_user_id),
+        source: coalesceString(operationContext.external_source, input.source),
+        dedupe_key: receiptDedupeKey,
+      } as any);
+      await this.persistSandboxOnRampContext(record, {
+        auto_pay_status: result?.success ? 'completed' : 'failed',
+        auto_pay_completed_at: result?.success ? new Date().toISOString() : undefined,
+        auto_pay_receipt_url: coalesceString(result?.receipt_url) || undefined,
+        auto_pay_transfer_hash: coalesceString(result?.transaction_hash) || undefined,
+        auto_pay_result: result || undefined,
+        auto_pay_dedupe_key: autoPayDedupeKey,
+      });
+      return result || null;
+    })();
+
+    this.sandboxAutoPayLocks.set(lockKey, runAutoPay);
+    try {
+      return await runAutoPay;
+    } finally {
+      this.sandboxAutoPayLocks.delete(lockKey);
+    }
+  }
+
+  private static async findCompletedAutoPayByDedupeKey(
+    userId: string,
+    autoPayDedupeKey: string,
+  ): Promise<{ operation_id?: string; receipt_url?: string; transaction_hash?: string } | null> {
+    if (!userId || !autoPayDedupeKey) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('operations')
+        .select('id, context, created_at')
+        .eq('user_id', userId)
+        .eq('type', 'PIX_ONRAMP')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.warn('[ramp] Could not check duplicate auto-pay operations:', error.message);
+        return null;
+      }
+
+      for (const row of (data || []) as Array<Record<string, unknown>>) {
+        const context = parseOperationContext(row.context);
+        if (coalesceString(context.auto_pay_dedupe_key) !== autoPayDedupeKey) continue;
+        const autoPayResult = context.auto_pay_result && typeof context.auto_pay_result === 'object'
+          ? context.auto_pay_result as Record<string, unknown>
+          : {};
+        const receiptUrl = coalesceString(
+          context.auto_pay_receipt_url,
+          context.auto_pay_transfer_receipt_url,
+          autoPayResult.receipt_url,
+        );
+        const transactionHash = coalesceString(
+          context.auto_pay_transfer_hash,
+          autoPayResult.transaction_hash,
+        );
+        if (coalesceString(context.auto_pay_status) !== 'completed' && !receiptUrl && !transactionHash) continue;
+        return {
+          operation_id: coalesceString(row.id),
+          receipt_url: receiptUrl || undefined,
+          transaction_hash: transactionHash || undefined,
+        };
+      }
+    } catch (error) {
+      console.warn('[ramp] Could not check duplicate auto-pay operations:', debugErrorMessage(error));
+    }
+
+    return null;
   }
 
   private static async findSandboxLedgerAdjustmentOperations(
@@ -8014,6 +8147,7 @@ export class AnchorService {
       `We chose the best route for this conversion: ${route.selected}. ${route.reason}`
     );
     const displayAmount = formatDisplayAmount(destinationAmount, destinationAsset.code);
+    const explicitReceiptDedupeKey = coalesceString(input.dedupe_key, input.dedupeKey);
     const externalDeliveryText = [
       rampText(language, 'PIX confirmado e transferencia enviada.', 'PIX confirmed and transfer sent.'),
       `${rampText(language, 'Valor', 'Amount')}: ${displayAmount}`,
@@ -8038,6 +8172,7 @@ export class AnchorService {
         status: 'completed',
         contextMessage: routeContext,
         externalDeliveryText,
+        dedupeKey: explicitReceiptDedupeKey || undefined,
       });
     } catch (error) {
       console.warn('[ramp] Could not send PIX-funded transfer receipt:', debugErrorMessage(error));
@@ -8059,6 +8194,7 @@ export class AnchorService {
           hash: result.hash || null,
           status: 'completed',
           contextMessage: routeContext,
+          dedupeKey: explicitReceiptDedupeKey ? `${explicitReceiptDedupeKey}:recipient` : undefined,
         });
       } catch (error) {
         console.warn('[ramp] Could not send recipient PIX-funded transfer receipt:', debugErrorMessage(error));

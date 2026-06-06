@@ -138,6 +138,8 @@ describe('AnchorService sandbox PIX confirmation', () => {
     mockSandboxRuntime();
     mockSessionWallet();
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
+    jest.spyOn(AnchorService as any, 'findCompletedAutoPayByDedupeKey').mockResolvedValue(null);
+    jest.spyOn(AnchorService as any, 'persistSandboxOnRampContext').mockResolvedValue(undefined);
     const submitSpy = jest.spyOn(AnchorService, 'submitPixFundedTransferForSession').mockResolvedValue({
       success: true,
       transaction_hash: 'auto-pay-transfer-hash',
@@ -161,6 +163,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
         language: 'en',
         external_provider: 'whatsapp',
         external_provider_user_id: '5575496918127',
+        auto_pay_dedupe_key: 'page-original-intent',
       },
       deliveryHash: 'pix-delivery-hash',
     });
@@ -180,6 +183,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       delivery_hash: 'pix-delivery-hash',
       sandbox_mock: true,
     });
+    await new Promise((resolve) => setImmediate(resolve));
     expect(submitSpy).toHaveBeenCalledWith(expect.objectContaining({
       session_id: 'session-1',
       session_token: 'token-1',
@@ -195,6 +199,63 @@ describe('AnchorService sandbox PIX confirmation', () => {
       language: 'en',
       provider: 'whatsapp',
       provider_user_id: '5575496918127',
+      dedupe_key: expect.stringMatching(/^pix-funded-autopay:/),
+    }));
+  });
+
+  it('skips backend auto-pay when a regenerated quote already completed the same page flow', async () => {
+    mockSandboxRuntime();
+    const submitSpy = jest.spyOn(AnchorService, 'submitPixFundedTransferForSession').mockResolvedValue({
+      success: true,
+      transaction_hash: 'should-not-run',
+    } as any);
+    jest.spyOn(AnchorService as any, 'findCompletedAutoPayByDedupeKey').mockResolvedValue({
+      operation_id: 'operation-original',
+      receipt_url: 'https://talktostellar.com/receipt/original',
+      transaction_hash: 'auto-pay-original-hash',
+    });
+    const persistSpy = jest.spyOn(AnchorService as any, 'persistSandboxOnRampContext').mockResolvedValue(undefined);
+
+    const result = await (AnchorService as any).submitAutoPayAfterRamp({
+      transaction: {
+        id: 'order-regenerated',
+        status: 'completed',
+        toAmount: '100',
+        toCurrency: 'USDC',
+      },
+      operationId: 'operation-regenerated',
+      finalAmount: '100',
+      finalAssetCode: 'USDC',
+      operationContext: {
+        auto_pay_after_ramp: true,
+        auto_pay_recipient: 'Ana Silva',
+        auto_pay_amount: '100',
+        auto_pay_asset_code: 'USDC',
+        auto_pay_destination_asset_code: 'CETES',
+        auto_pay_dedupe_key: 'page-original-intent',
+        language: 'en',
+        external_provider: 'whatsapp',
+        external_provider_user_id: '5575496918127',
+      },
+    }, { pin: '1234' }, {
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      skipped_duplicate: true,
+      receipt_url: 'https://talktostellar.com/receipt/original',
+      transaction_hash: 'auto-pay-original-hash',
+    });
+    expect(submitSpy).not.toHaveBeenCalled();
+    expect(persistSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      auto_pay_status: 'completed',
+      auto_pay_skipped_duplicate: true,
+      auto_pay_duplicate_of_operation_id: 'operation-original',
+      auto_pay_dedupe_key: 'page-original-intent',
     }));
   });
 
