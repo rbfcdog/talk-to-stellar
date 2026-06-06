@@ -4,7 +4,12 @@ import quotesRouter from '../src/api/routes/quotes.router';
 import transfersRouter from '../src/api/routes/international-transfers.router';
 import { brlUsdQuoteService } from '../src/api/services/brl-usd-quote.service';
 import { internationalTransferService } from '../src/api/services/international-transfer.service';
-import { InternationalTransfer, InternationalTransferQuote, TransferReconciliation } from '../src/api/services/international-transfer.types';
+import {
+  InternationalTransfer,
+  InternationalTransferQuote,
+  TransferOrchestrationLog,
+  TransferReconciliation,
+} from '../src/api/services/international-transfer.types';
 
 function app() {
   const server = express();
@@ -205,6 +210,57 @@ describe('international transfer HTTP routes', () => {
       updated_at: new Date().toISOString(),
     };
     jest.spyOn(internationalTransferService, 'getReconciliation').mockResolvedValue(reconciliation);
+    const orchestrationLog: TransferOrchestrationLog = {
+      generated_at: new Date().toISOString(),
+      transfer_id: 'tr-route-1',
+      quote_id: 'q-route-1',
+      current_status: 'PAYOUT_COMPLETED',
+      correlation_id: 'corr-lifecycle-1',
+      request_ids: ['req-lifecycle-1'],
+      quote_provenance: quote().provenance,
+      evidence_status: {
+        quote: 'captured',
+        pix_funding: 'captured',
+        stellar_settlement: 'real_testnet',
+        payout_instruction: 'captured',
+        reconciliation: 'captured',
+      },
+      redaction: {
+        applied: true,
+        notes: ['Destination account numbers are redacted.'],
+      },
+      destination: {
+        account_holder_hash: 'holder-hash',
+        account_holder_type: 'business',
+        country: 'US',
+        account_number_last4: '6789',
+      },
+      timeline: [
+        {
+          step: 'quote_created',
+          state: 'QUOTE_CREATED',
+          status: 'completed',
+          summary: 'Quote created.',
+        },
+        {
+          step: 'reconciliation',
+          state: 'PAYOUT_COMPLETED',
+          status: 'captured',
+          summary: 'Reconciliation available.',
+        },
+      ],
+      reconciliation_summary: {
+        available: true,
+        metrics_valid: true,
+        final_payout_status: 'completed',
+        stellar_tx_hash: 'stellar-hash-1',
+        payout_instruction_id: 'payout-instruction-1',
+      },
+      next_action: 'done',
+      error_count: 0,
+      errors: [],
+    };
+    jest.spyOn(internationalTransferService, 'getOrchestrationLog').mockResolvedValue(orchestrationLog);
 
     const headers = {
       'x-request-id': 'req-lifecycle-1',
@@ -273,6 +329,31 @@ describe('international transfer HTTP routes', () => {
         reconciliation: {
           transfer_id: 'tr-route-1',
           stellar_tx_hash: 'stellar-hash-1',
+        },
+      },
+    });
+
+    await expect(routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1/orchestration-log',
+      headers,
+    })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        request_id: 'req-lifecycle-1',
+        correlation_id: 'corr-lifecycle-1',
+        orchestration_log: {
+          transfer_id: 'tr-route-1',
+          current_status: 'PAYOUT_COMPLETED',
+          evidence_status: {
+            stellar_settlement: 'real_testnet',
+          },
+          redaction: {
+            applied: true,
+          },
+          destination: {
+            account_number_last4: '6789',
+          },
         },
       },
     });

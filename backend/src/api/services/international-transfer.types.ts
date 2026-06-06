@@ -170,3 +170,61 @@ export type TransferReconciliation = {
   created_at: string;
   updated_at: string;
 };
+
+export type OrchestrationEvidenceState =
+  | 'missing'
+  | 'pending'
+  | 'captured'
+  | 'failed'
+  | 'mock'
+  | 'sandbox'
+  | 'real_testnet'
+  | 'real_mainnet';
+
+export type TransferOrchestrationLogEntry = {
+  step: string;
+  state: string;
+  status: 'pending' | 'completed' | 'failed' | 'replayed' | 'captured';
+  at?: string;
+  summary: string;
+  references?: Record<string, unknown>;
+};
+
+export type TransferOrchestrationLog = {
+  generated_at: string;
+  transfer_id: string;
+  quote_id: string;
+  current_status: InternationalTransferState;
+  correlation_id?: string;
+  request_ids: string[];
+  quote_provenance?: QuoteProvenance;
+  evidence_status: Record<string, OrchestrationEvidenceState>;
+  redaction: {
+    applied: true;
+    notes: string[];
+  };
+  destination: {
+    account_holder_hash?: string;
+    account_holder_type?: string;
+    country?: string;
+    provider_label?: string;
+    bank_name?: string;
+    account_number_last4?: string;
+    routing_number_last4?: string;
+  };
+  timeline: TransferOrchestrationLogEntry[];
+  reconciliation_summary: {
+    available: boolean;
+    metrics_valid?: boolean;
+    final_payout_status?: PayoutStatus;
+    stellar_tx_hash?: string;
+    payout_instruction_id?: string;
+  };
+  next_action?: string;
+  error_count: number;
+  errors: Array<{
+    at?: string;
+    stage?: string;
+    message: string;
+  }>;
+};

@@ -350,6 +350,7 @@ export default function InternationalTransferClient() {
   const [quote, setQuote] = useState<any>(null);
   const [transfer, setTransfer] = useState<any>(null);
   const [reconciliation, setReconciliation] = useState<any>(null);
+  const [orchestrationLog, setOrchestrationLog] = useState<any>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [events, setEvents] = useState<EventEntry[]>([
     {
@@ -644,6 +645,7 @@ export default function InternationalTransferClient() {
       quote: redactSensitive(quote),
       transfer: redactSensitive(transfer),
       reconciliation: redactSensitive(reconciliation),
+      orchestration_log: redactSensitive(orchestrationLog),
       events,
       api_logs: logs,
     };
@@ -658,6 +660,7 @@ export default function InternationalTransferClient() {
     setQuote(null);
     setTransfer(null);
     setReconciliation(null);
+    setOrchestrationLog(null);
     setLogs([]);
     setError("");
     setCopied(false);
@@ -761,6 +764,7 @@ export default function InternationalTransferClient() {
     setQuote(payload.quote);
     setTransfer(null);
     setReconciliation(null);
+    setOrchestrationLog(null);
     return payload.quote;
   }
 
@@ -788,6 +792,7 @@ export default function InternationalTransferClient() {
       });
       setTransfer(payload.transfer);
       setReconciliation(null);
+      setOrchestrationLog(null);
       return payload.transfer;
     } catch (routeError) {
       if (!isExpiredQuoteError(routeError)) throw routeError;
@@ -805,6 +810,7 @@ export default function InternationalTransferClient() {
       });
       setTransfer(retryPayload.transfer);
       setReconciliation(null);
+      setOrchestrationLog(null);
       setError("");
       return retryPayload.transfer;
     }
@@ -883,6 +889,13 @@ export default function InternationalTransferClient() {
     return payload.reconciliation;
   }
 
+  async function loadOrchestrationLog(currentTransfer = transfer) {
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    const payload = await callApi("Load orchestration log", "GET", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/orchestration-log`);
+    setOrchestrationLog(payload.orchestration_log);
+    return payload.orchestration_log;
+  }
+
   async function runSandboxFlow() {
 	    pushEvent("Payment-backed route started", "Running quote, institution route creation and PIX funding intent without local confirmation.", "info");
     try {
@@ -898,6 +911,7 @@ export default function InternationalTransferClient() {
       const settled = await settleStellar(funded);
       const payout = await createPayoutInstruction(settled);
       await loadReconciliation(payout);
+      await loadOrchestrationLog(payout);
 	      pushEvent("Ops route complete", "The ops-only confirmation path completed. Keep this out of user-facing sessions.", "ok");
 	    } catch (flowError: any) {
 	      pushEvent("Payment-backed route stopped", flowError?.message || String(flowError), "error");
@@ -1134,6 +1148,10 @@ export default function InternationalTransferClient() {
             <ActionButton onClick={() => loadReconciliation()} disabled={Boolean(busy || !transfer)} variant="light">
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               Reconciliation
+            </ActionButton>
+            <ActionButton onClick={() => loadOrchestrationLog()} disabled={Boolean(busy || !transfer)} variant="light">
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              Orchestration log
             </ActionButton>
             <div className="grid grid-cols-2 gap-3">
               <ActionButton onClick={copyDebugBundle} disabled={Boolean(busy)} variant="light">
@@ -1506,7 +1524,7 @@ export default function InternationalTransferClient() {
             </div>
           </section>
 
-          <section className="grid gap-5 lg:grid-cols-3">
+          <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-tts-border bg-tts-surface p-4 text-tts-deep shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-tts-deep" aria-hidden="true" />
@@ -1527,6 +1545,13 @@ export default function InternationalTransferClient() {
                 <h2 className="text-base font-bold">Reconciliation</h2>
               </div>
               <pre className="max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(reconciliation))}</pre>
+            </div>
+            <div className="rounded-xl border border-tts-border bg-tts-surface p-4 text-tts-deep shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-tts-deep" aria-hidden="true" />
+                <h2 className="text-base font-bold">Orchestration log</h2>
+              </div>
+              <pre className="max-h-[360px] overflow-auto rounded-xl bg-tts-bg p-3 text-xs leading-5 text-tts-deep">{pretty(redactSensitive(orchestrationLog))}</pre>
             </div>
           </section>
 
