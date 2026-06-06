@@ -1,7 +1,7 @@
 import { AnchorService } from '../src/api/services/anchor.service';
 import { PixFundingService } from '../src/api/services/pix-funding.service';
 import { StellarSettlementService } from '../src/api/services/stellar-settlement.service';
-import { getPayoutProviderAdapter } from '../src/api/services/usd-payout-adapters';
+import { CircleCompatibilityAdapter, getPayoutProviderAdapter } from '../src/api/services/usd-payout-adapters';
 
 describe('mock policy hardening', () => {
   const originalEnv = process.env;
@@ -75,5 +75,42 @@ describe('mock policy hardening', () => {
       code: 'mock_disabled',
       statusCode: 409,
     });
+  });
+
+  it('keeps Wise-labeled destinations metadata-only even when real provider execution is enabled', async () => {
+    process.env.ENABLE_REAL_PAYOUT_EXECUTION = 'true';
+    process.env.CIRCLE_API_KEY = 'circle-test-key';
+    process.env.CIRCLE_PAYOUT_CREATE_URL = 'https://circle.example.test/payouts';
+    const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'should-not-be-used' }),
+    } as any);
+
+    const instruction = await new CircleCompatibilityAdapter().createPayoutInstruction({
+      transferId: 'tr-wise-metadata',
+      amountUsd: '10',
+      destination: {
+        accountHolderName: 'Wise USD Details',
+        accountHolderType: 'individual',
+        bankName: 'Wise US Inc',
+        routingNumber: '084009519',
+        accountNumber: '123456789',
+        accountType: 'checking',
+        country: 'US',
+        providerLabel: 'wise',
+      },
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(instruction.provider_name).toBe('circle');
+    expect(instruction.status).toBe('pending');
+    expect(instruction.metadata).toMatchObject({
+      mode: 'wise_metadata_only',
+      wise_api_integration: false,
+      wise_integration_mode: 'metadata_only_no_wise_api',
+      destination_provider_label: 'wise',
+      real_execution_enabled: false,
+    });
+    expect((instruction.metadata as any).provider_payload.destination.provider_label).toBe('wise');
   });
 });

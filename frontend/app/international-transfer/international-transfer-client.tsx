@@ -1021,7 +1021,7 @@ export default function InternationalTransferClient() {
               onChange={setProviderLabel}
               options={[
                 { value: "other", label: "Other" },
-                { value: "wise", label: "USD account" },
+                { value: "wise", label: "Wise details only" },
                 { value: "mercury", label: "Mercury" },
                 { value: "revolut", label: "Revolut" },
               ]}

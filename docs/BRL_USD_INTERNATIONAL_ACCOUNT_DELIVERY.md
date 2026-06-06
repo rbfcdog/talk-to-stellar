@@ -4,7 +4,7 @@ This layer extends TalkToStellar with a transfer rail for:
 
 `BRL funding via Pix -> USDC settlement on Stellar -> USD payout instruction to an international bank account`
 
-The destination is modeled generically as an international USD bank account. Wise, Mercury and Revolut are only examples of account providers that may expose USD account details.
+The destination is modeled generically as an international USD bank account. Wise, Mercury and Revolut are only examples of account providers that may expose USD account details. Wise is metadata-only for this sprint: there is no Wise API adapter, no Wise payout integration, and no claim that Wise receives funds from this prototype.
 
 ## Architecture Overview
 
@@ -16,7 +16,7 @@ New backend modules:
 - `StellarSettlementService`: creates or mocks USDC Stellar settlement evidence.
 - `SettlementEvidenceService`: builds reconciliation records.
 - `PayoutProviderAdapter`: generic USD payout provider interface.
-- `MockUsdPayoutAdapter`, `EtherfusePixOffRampAdapter`, `CircleCompatibilityAdapter`, `BridgeCompatibilityAdapter`: payout adapter implementations.
+- `MockUsdPayoutAdapter`, `EtherfusePixOffRampAdapter`, `CircleCompatibilityAdapter`, `BridgeCompatibilityAdapter`: payout adapter implementations. Wise remains destination metadata only.
 
 Frontend testing surface:
 
@@ -46,9 +46,10 @@ Failure states:
 ## What Is Sandboxed
 
 - USD bank payout/off-ramp proof defaults to sandbox behavior. `PAYOUT_PROVIDER=etherfuse` prepares an Etherfuse off-ramp proof payload by default and only executes the sandbox proof if the request includes session credentials, wallet PIN and `run_etherfuse_offramp_test=true`.
-- `PAYOUT_PROVIDER=mock` still creates a pure mock USD destination instruction.
+- `PAYOUT_PROVIDER=mock` is ops-only and creates a pure mock USD destination instruction only when mock policy allows it.
 - Circle and Bridge adapters prepare provider-shaped payout payloads but do not execute a bank payout unless `ENABLE_REAL_PAYOUT_EXECUTION=true` and provider create URL/API key are explicitly configured.
-- If Stellar settlement secrets or destination account are missing, the settlement layer creates mock evidence and marks that no real money moved.
+- Wise-labeled destinations are forced to `wise_metadata_only` and do not execute a provider API call, even if real provider execution flags are enabled.
+- If Stellar settlement secrets or destination account are missing, settlement fails unless ops-only mock settlement is explicitly enabled.
 - Mainnet settlement does not execute unless `ENABLE_MAINNET_SETTLEMENT_VALIDATION=true` and the amount is below `MAX_MAINNET_VALIDATION_AMOUNT_USD`.
 
 ## Environment
