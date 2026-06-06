@@ -168,6 +168,9 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("enqueueWebChatFeedback");
     expect(text).toContain("A mensagem final é enviada ao canal de origem.");
     expect(text).toContain("Payment sent successfully");
+    expect(text).toContain("hasExplicitReturnTarget");
+    expect(text).toContain("if (hasExplicitReturnTarget) return");
+    expect(text).toContain("{!hasExplicitReturnTarget && <p className=\"text-xs text-tts-muted\">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>}");
   });
 
   it("closes the external send screen after successful confirmation", () => {

@@ -244,6 +244,10 @@ export default function ConfirmPaymentClient({
     ),
     [searchParams, validation?.payload, token, language]
   )
+  const hasExplicitReturnTarget = useMemo(
+    () => Boolean(String(validation?.payload?.return_to || validation?.payload?.returnTo || queryReturnTo || "").trim()),
+    [validation?.payload, queryReturnTo]
+  )
 
   useEffect(() => {
     if (tokenFromUrl) {
@@ -358,8 +362,9 @@ export default function ConfirmPaymentClient({
 
   useEffect(() => {
     if (status !== "done") return
+    if (hasExplicitReturnTarget) return
     closeIntermediatePage()
-  }, [status])
+  }, [hasExplicitReturnTarget, status])
 
   useEffect(() => {
     if (status === "ready") {
@@ -842,7 +847,7 @@ export default function ConfirmPaymentClient({
                     {returnTarget.label}
                   </a>
                   {returnMessage && <p>{returnMessage}</p>}
-                  <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+                  {!hasExplicitReturnTarget && <p className="text-xs text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>}
                 </motion.div>
               )}
               {status === "error" && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-tts-error">{visibleError}</motion.p>}
