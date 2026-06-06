@@ -398,6 +398,29 @@ export class AgentGraph {
     return null;
   }
 
+  private normalizeIntentText(text: string): string {
+    return String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private detectsPasskeySetupText(text: string): boolean {
+    const normalized = this.normalizeIntentText(text);
+    if (!normalized) return false;
+
+    const hasBiometricTarget = /\b(biometria|biometrico|biometricos|biometric|biometrics|passkey|passkeys|pass key|face id|touch id|fingerprint|digital|impressao digital|webauthn)\b/.test(normalized);
+    if (!hasBiometricTarget) return false;
+
+    const hasSetupVerb = /\b(ativar|habilitar|configurar|definir|criar|cadastrar|adicionar|registrar|arrumar|corrigir|consertar|usar|colocar|enable|activate|setup|set up|configure|define|create|add|register|fix|turn on|use|set)\b/.test(normalized);
+    const hasMissingSetupWording = /\b(nao tenho|sem|falta|faltando|preciso)\b.{0,80}\b(biometria|biometrico|biometric|biometrics|passkey|passkeys|pass key|face id|touch id|fingerprint|digital|impressao digital|webauthn)\b/.test(normalized);
+
+    return hasSetupVerb || hasMissingSetupWording;
+  }
+
   private extractToolCalls(response: any): Array<{ id?: string; name: string; args?: Record<string, any> }> {
     const calls = response?.tool_calls || response?.additional_kwargs?.tool_calls || [];
     logger.debug(`[extractToolCalls] Raw tool_calls: ${JSON.stringify(calls)}`);
@@ -3536,6 +3559,11 @@ When calling the selected route tool:
   ): Promise<IntentType> {
     this.lastIntentRouterFailure = null;
     this.lastIntentRouteCandidate = null;
+    if (this.detectsPasskeySetupText(message)) {
+      logger.info('[Agent] Deterministic route selected passkey setup intent');
+      return IntentType.PASSKEY_SETUP;
+    }
+
     if (!this.shouldUseLlmIntentRouter()) {
       const reason = 'Intent router skipped because no production OpenAI key is configured';
       if (process.env.NODE_ENV !== 'test') {
@@ -5187,6 +5215,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         IntentType.PRICE_QUOTE,
         IntentType.PIX,
         IntentType.YIELD,
+        IntentType.PASSKEY_SETUP,
       ]);
 
       if (!hasActiveWallet && !onboardingIntents.has(state.detected_intent)) {

@@ -7542,6 +7542,9 @@ async function executePreparePasskeySetup(input: any): Promise<string> {
     setupUrl.searchParams.set('require_pin', '1');
     setupUrl.searchParams.set('lang', language);
     setupUrl.searchParams.set('next', '/chat');
+    if (sessionUserId) setupUrl.searchParams.set('user_id', sessionUserId);
+    else if (sessionEmail) setupUrl.searchParams.set('email', sessionEmail);
+    else if (requestedUserId) setupUrl.searchParams.set('user_id', requestedUserId);
     if (source) {
       setupUrl.searchParams.set('source', source);
       setupUrl.searchParams.set('session_scope', source);
@@ -7566,6 +7569,8 @@ async function executePreparePasskeySetup(input: any): Promise<string> {
       success: true,
       url: finalUrl,
       user_id: resolvedUserId,
+      already_configured: false,
+      setup_requires_pin: true,
       expires_in_minutes: 15,
       message: language === 'en'
         ? `Open this secure page to enable biometrics:\n\n${finalUrl}\n\nThe page asks for your PIN before opening the phone biometric confirmation. The link is valid for 15 minutes.`
