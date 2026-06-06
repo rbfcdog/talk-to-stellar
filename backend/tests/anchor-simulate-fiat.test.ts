@@ -830,9 +830,10 @@ describe('AnchorService sandbox PIX confirmation', () => {
     }));
   });
 
-  it('does not submit TESOURO delivery when the user wallet cannot be prepared to receive it', async () => {
+  it('falls back to sandbox ledger when the user wallet cannot be prepared to receive TESOURO', async () => {
     mockSandboxRuntime();
     process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/trustline-fallback');
     jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
       success: false,
       existing: false,
@@ -869,16 +870,23 @@ describe('AnchorService sandbox PIX confirmation', () => {
 
     const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
-    expect(record.transaction.status).toBe('failed');
-    expect(record.deliveryError).toContain('preparar sua conta para receber reais');
+    expect(record.transaction.status).toBe('completed');
+    expect(record.deliveryError).toBeUndefined();
+    expect(record.deliveryHash).toMatch(/^sandbox-ledger-/);
+    expect((record.transaction as any).sandbox_ledger_settlement).toBe(true);
     expect(paymentSpy).not.toHaveBeenCalled();
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      destinationAmount: '100.0000000',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+    }));
   });
 
-  it('does not complete BRL on-ramp when TESOURO submit succeeds but wallet balance does not change', async () => {
+  it('falls back to sandbox ledger when TESOURO submit succeeds but wallet balance does not change', async () => {
     mockSandboxRuntime();
     process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     process.env.SANDBOX_SETTLEMENT_BALANCE_POLL_MS = '0';
-    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/should-not-send');
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/no-delta-fallback');
     jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([
       {
         asset_code: 'TESOURO',
@@ -918,10 +926,93 @@ describe('AnchorService sandbox PIX confirmation', () => {
 
     const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
-    expect(record.transaction.status).toBe('failed');
-    expect(record.deliveryError).toContain('wallet balance did not increase');
-    expect(record.deliveryError).toContain('Detected delta: 0');
-    expect(receiptSpy).not.toHaveBeenCalled();
+    expect(record.transaction.status).toBe('completed');
+    expect(record.deliveryError).toBeUndefined();
+    expect(record.deliveryHash).toMatch(/^sandbox-ledger-/);
+    expect((record.transaction as any).sandbox_ledger_settlement).toBe(true);
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      destinationAmount: '100.0000000',
+      destinationAssetCode: 'BRL',
+      status: 'completed',
+    }));
+  });
+
+  it('falls back to exact sandbox ledger receive when USDC conversion cannot settle on-chain', async () => {
+    mockSandboxRuntime();
+    process.env.TESOURO_DISTRIBUTOR_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/usdc-fallback');
+    jest.spyOn(AnchorService as any, 'ensureIssuedAssetTrustline').mockResolvedValue({
+      success: true,
+      existing: true,
+      asset_code: 'USDC',
+      asset_issuer: usdcIssuer,
+    });
+    const strictReceiveSpy = jest.spyOn(StellarService, 'submitStrictReceivePaymentFromSecret').mockResolvedValue({
+      success: false,
+      error: 'path unavailable',
+    } as any);
+    const strictSendSpy = jest.spyOn(StellarService, 'submitStrictSendPaymentFromSecret');
+    const orderId = 'sandbox-pix-usdc-exact-fallback';
+
+    (AnchorService as any).sandboxMockOnRampOrders.set(orderId, {
+      transaction: {
+        id: orderId,
+        status: 'pending',
+        fromAmount: '450.75',
+        fromCurrency: 'BRL',
+        toAmount: '',
+        toCurrency: `USDC:${usdcIssuer}`,
+        stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+        paymentInstructions: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sandbox_mock: true,
+      },
+      userId: 'user-1',
+      sessionId: 'session-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sourceAmountBrl: '450.75',
+      destinationAmount: '449.41',
+      finalAssetCode: 'USDC',
+      finalAssetIssuer: usdcIssuer,
+      desiredFinalAmount: '100',
+      desiredFinalAssetCode: 'USDC',
+      operationId: 'operation-usdc-exact-fallback',
+      operationContext: {
+        desired_final_amount: '100',
+        desired_final_asset_code: 'USDC',
+        destination_amount_anchor: '449.41',
+        source_amount_brl: '450.75',
+      },
+    });
+
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
+
+    expect(strictReceiveSpy).toHaveBeenCalled();
+    expect(strictSendSpy).not.toHaveBeenCalled();
+    expect(record.transaction.status).toBe('completed');
+    expect(record.deliveryError).toBeUndefined();
+    expect(record.deliveryHash).toMatch(/^sandbox-ledger-/);
+    expect(record.finalAmount).toBe('100.0000000');
+    expect((record.transaction as any).toAmount).toBe('100.0000000');
+    expect((record.transaction as any).toCurrency).toContain('USDC');
+    expect((record.transaction as any).sandbox_ledger_settlement).toBe(true);
+    expect((record.transaction as any).auto_conversion).toMatchObject({
+      required: true,
+      status: 'completed',
+      source_asset_code: 'TESOURO',
+      source_amount: '449.4100000',
+      destination_asset_code: 'USDC',
+      destination_amount: '100.0000000',
+      mode: 'sandbox_anchor_only',
+    });
+    expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sourceAmount: '450.75',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '100.0000000',
+      destinationAssetCode: 'USDC',
+      status: 'completed',
+    }));
   });
 
   it('registers sandbox off-ramp fallback orders so submitting debits the wallet', async () => {
@@ -1495,5 +1586,131 @@ describe('AnchorService sandbox PIX confirmation', () => {
       hash: 'sandbox-xlm-usdc-hash',
       status: 'completed',
     }));
+  });
+
+  it('turns failed provider sandbox on-ramp status into exact ledger completion', async () => {
+    mockSandboxRuntime();
+    const providerOrder = {
+      id: 'provider-onramp-failed',
+      status: 'failed',
+      fromAmount: '450.75',
+      fromCurrency: 'BRL',
+      toAmount: '449.41',
+      toCurrency: `USDC:${usdcIssuer}`,
+      stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      paymentInstructions: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue({
+      getOnRampTransaction: jest.fn().mockResolvedValue(providerOrder),
+    });
+    jest.spyOn(OperationRepository, 'findById').mockResolvedValue({
+      id: 'op-provider-failed',
+      user_id: 'user-1',
+      status: 'PENDING',
+      amount: 450.75,
+      source_session_id: 'session-1',
+      source_public_key: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      context: JSON.stringify({
+        direction: 'onramp',
+        anchor_order_id: 'provider-onramp-failed',
+        source_amount_brl: '450.75',
+        destination_amount_anchor: '449.41',
+        target_asset: `USDC:${usdcIssuer}`,
+        final_asset_code: 'USDC',
+        final_asset_issuer: usdcIssuer,
+        desired_final_amount: '100',
+        desired_final_asset_code: 'USDC',
+      }),
+    } as any);
+    jest.spyOn(OperationRepository, 'update').mockResolvedValue({} as any);
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([] as any);
+    jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/provider-fallback');
+
+    const result = await AnchorService.getOnRampStatus({
+      order_id: 'provider-onramp-failed',
+      operation_id: 'op-provider-failed',
+      trusted_internal: true,
+    });
+
+    expect(result.transaction.status).toBe('completed');
+    expect((result.transaction as any).sandbox_mock).toBe(true);
+    expect((result.transaction as any).sandbox_ledger_settlement).toBe(true);
+    expect(result.transaction.toAmount).toBe('100.0000000');
+    expect(result.transaction.toCurrency).toBe(`USDC:${usdcIssuer}`);
+    expect((result.transaction as any).auto_conversion).toMatchObject({
+      status: 'completed',
+      destination_asset_code: 'USDC',
+      destination_amount: '100.0000000',
+      mode: 'sandbox_anchor_only',
+    });
+  });
+
+  it('turns failed provider sandbox fiat simulation into ledger completion', async () => {
+    mockSandboxRuntime();
+    const providerOrder = {
+      id: 'provider-onramp-simulate-failed',
+      status: 'failed',
+      fromAmount: '450.75',
+      fromCurrency: 'BRL',
+      toAmount: '449.41',
+      toCurrency: `USDC:${usdcIssuer}`,
+      stellarAddress: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      paymentInstructions: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    jest.spyOn(AnchorService as any, 'getEtherfuseClient').mockReturnValue({
+      simulateFiatReceived: jest.fn().mockResolvedValue(500),
+      getOnRampTransaction: jest.fn().mockResolvedValue(providerOrder),
+    });
+    jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
+      sessionId: 'session-1',
+      sessionToken: 'token-1',
+      userId: 'user-1',
+      publicKey: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      sessionPinHash: 'hash',
+    });
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockReturnValue(undefined);
+    jest.spyOn(OperationRepository, 'findById').mockResolvedValue({
+      id: 'op-provider-simulate-failed',
+      user_id: 'user-1',
+      status: 'PENDING',
+      amount: 450.75,
+      source_session_id: 'session-1',
+      source_public_key: 'GBDE6FT6FN7AJOYQNR5EDHFN5PB45JDGF7VKFNZQ5AFEZV7TKVJSXN5',
+      context: JSON.stringify({
+        direction: 'onramp',
+        anchor_order_id: 'provider-onramp-simulate-failed',
+        source_amount_brl: '450.75',
+        destination_amount_anchor: '449.41',
+        target_asset: `USDC:${usdcIssuer}`,
+        final_asset_code: 'USDC',
+        final_asset_issuer: usdcIssuer,
+        desired_final_amount: '100',
+        desired_final_asset_code: 'USDC',
+      }),
+    } as any);
+    jest.spyOn(OperationRepository, 'update').mockResolvedValue({} as any);
+    jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([] as any);
+    jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/provider-simulate-fallback');
+
+    const result = await AnchorService.simulateFiatReceivedForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      order_id: 'provider-onramp-simulate-failed',
+      operation_id: 'op-provider-simulate-failed',
+      pin: '1234',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      upstream_status: 200,
+      sandbox_mock: true,
+    });
+    expect((result as any).transaction.status).toBe('completed');
+    expect((result as any).transaction.toAmount).toBe('100.0000000');
+    expect((result as any).transaction.sandbox_ledger_settlement).toBe(true);
   });
 });

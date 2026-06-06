@@ -2223,9 +2223,13 @@ export class AnchorService {
       envFlag('ETHERFUSE_SANDBOX_PIX_FALLBACK', true);
   }
 
-  private static sandboxLedgerSettlementEnabled(): boolean {
+  private static sandboxLedgerFallbackAllowed(): boolean {
     return this.sandboxPixFallbackEnabled() &&
-      envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', true) &&
+      envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', true);
+  }
+
+  private static sandboxLedgerSettlementEnabled(): boolean {
+    return this.sandboxLedgerFallbackAllowed() &&
       !coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
   }
 
@@ -2717,6 +2721,126 @@ export class AnchorService {
     return record;
   }
 
+  private static async completeSandboxOnRampWithLedgerFallback(
+    record: SandboxMockOnRampOrder,
+    destinationAmountTesouro: string,
+    reason: string,
+  ): Promise<SandboxMockOnRampOrder | null> {
+    if (!this.sandboxLedgerFallbackAllowed()) return null;
+    console.warn(`[ramp] Completing sandbox PIX on-ramp through ledger fallback: ${reason}`);
+    return this.completeSandboxOnRampWithLedgerSettlement(record, destinationAmountTesouro, reason);
+  }
+
+  private static async completeProviderOnRampWithSandboxLedgerFallback(input: {
+    transaction: OnRampTransaction;
+    operationId?: string;
+    reason: string;
+  }): Promise<SandboxMockOnRampOrder | null> {
+    if (!input.operationId || !this.sandboxLedgerFallbackAllowed()) return null;
+
+    const operation = await OperationRepository.findById(input.operationId).catch(() => null);
+    if (!operation) return null;
+
+    const context = parseOperationContext(operation.context);
+    if (context.direction !== 'onramp') return null;
+
+    const orderId = coalesceString(input.transaction.id, context.anchor_order_id, context.order_id);
+    const storedOrderId = coalesceString(context.anchor_order_id, context.order_id);
+    if (storedOrderId && orderId && storedOrderId !== orderId) return null;
+
+    const amount = coalesceString(
+      context.source_amount_brl,
+      context.amount_brl,
+      input.transaction.fromAmount,
+      operation.amount,
+    );
+    if (!amount || parseHumanAmountNumber(amount) <= 0) return null;
+
+    const finalAsset = resolveRampFinalAsset(
+      context.target_asset,
+      context.final_asset,
+      context.final_asset_code,
+      input.transaction.toCurrency,
+      this.getTesouroIdentifier(),
+    );
+    const destinationAmount = toStellarAmount(coalesceString(
+      context.destination_amount_anchor,
+      context.anchor_amount,
+      context.destination_amount,
+      input.transaction.toAmount,
+      estimateTesouroFromBrl(amount),
+    ));
+    const finalIsTesouro = sameIssuedAsset(finalAsset, { code: 'TESOURO', issuer: this.getTesouroIssuer() });
+    const finalAmount = coalesceString(context.final_amount) || (finalIsTesouro ? destinationAmount : '');
+    const postConversionAsset = coalesceString(context.post_conversion_asset_code, context.post_conversion_asset)
+      ? resolveRampFinalAsset(context.post_conversion_asset_code, context.post_conversion_asset, context.post_conversion_asset_issuer)
+      : undefined;
+    const hasPostConversion = Boolean(postConversionAsset && !sameIssuedAsset(postConversionAsset, finalAsset));
+
+    const transaction = {
+      ...input.transaction,
+      id: orderId,
+      status: 'pending' as any,
+      fromAmount: amount,
+      fromCurrency: 'BRL',
+      toAmount: finalAmount,
+      toCurrency: assetIdentifier(finalAsset),
+      stellarAddress: coalesceString(operation.source_public_key, context.public_key, input.transaction.stellarAddress),
+      paymentInstructions: input.transaction.paymentInstructions || context.payment_instructions || {},
+      sandbox_mock: true,
+      upstream_error: input.reason,
+      anchorAsset: this.getTesouroIdentifier(),
+      anchorAmount: destinationAmount,
+      finalAsset,
+      finalAmount: finalAmount || undefined,
+      desired_final_amount: coalesceString(context.desired_final_amount) || undefined,
+      desired_final_asset_code: coalesceString(context.desired_final_asset_code, context.desired_final_asset) || undefined,
+      post_conversion: hasPostConversion ? {
+        required: true,
+        status: 'pending',
+        source_asset_code: finalAsset.code,
+        source_asset_issuer: finalAsset.issuer,
+        destination_asset_code: postConversionAsset?.code,
+        destination_asset_issuer: postConversionAsset?.issuer,
+      } : undefined,
+    } as OnRampTransaction & { sandbox_mock: boolean; upstream_error?: string };
+
+    const record: SandboxMockOnRampOrder = {
+      transaction,
+      userId: operation.user_id,
+      sessionId: coalesceString(operation.source_session_id, context.session_id),
+      publicKey: transaction.stellarAddress,
+      sourceAmountBrl: amount,
+      destinationAmount,
+      finalAssetCode: finalAsset.code,
+      finalAssetIssuer: finalAsset.issuer,
+      finalAmount: finalAmount || undefined,
+      desiredFinalAmount: coalesceString(context.desired_final_amount) || undefined,
+      desiredFinalAssetCode: normalizeAssetCode(coalesceString(context.desired_final_asset_code, context.desired_final_asset, finalAsset.code)) || undefined,
+      postConversionAssetCode: hasPostConversion ? postConversionAsset?.code : undefined,
+      postConversionAssetIssuer: hasPostConversion ? postConversionAsset?.issuer : undefined,
+      operationId: input.operationId,
+      upstreamError: input.reason,
+      operationContext: {
+        ...context,
+        sandbox_mock: true,
+        upstream_error: input.reason,
+        anchor_order_id: orderId,
+        payment_instructions: transaction.paymentInstructions,
+        destination_amount_anchor: destinationAmount,
+        final_amount: finalAmount || undefined,
+        source_amount_brl: amount,
+        final_asset_code: finalAsset.code,
+        final_asset_issuer: finalAsset.issuer,
+        post_conversion_asset_code: hasPostConversion ? postConversionAsset?.code : undefined,
+        post_conversion_asset_issuer: hasPostConversion ? postConversionAsset?.issuer : undefined,
+      },
+    };
+
+    this.sandboxMockOnRampOrders.set(orderId, record);
+    return this.completeSandboxOnRampWithLedgerFallback(record, destinationAmount, input.reason);
+  }
+
   private static resolveSandboxPostConversionAsset(record: SandboxMockOnRampOrder): { code: string; issuer?: string } | null {
     const code = coalesceString(record.postConversionAssetCode, record.operationContext?.post_conversion_asset_code);
     if (!code) return null;
@@ -3066,6 +3190,12 @@ export class AnchorService {
       asset: tesouroAsset,
     });
     if (platformFee.error && platformFee.treasuryPublicKey && Number(platformFee.amount) > 0) {
+      const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+        record,
+        destinationAmountTesouro,
+        `Platform fee treasury was not ready: ${platformFee.error}`,
+      );
+      if (fallback) return fallback;
       return this.failSandboxOnRamp(record, `Não consegui preparar a carteira admin para receber a taxa do app: ${platformFee.error}`);
     }
     const platformFeeContext = platformFee.payment
@@ -3097,6 +3227,12 @@ export class AnchorService {
           vaultSecretId: record.vaultSecretId,
         }, tesouroAsset);
         if (!tesouroTrustline.success) {
+          const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+            record,
+            destinationAmountTesouro,
+            `User TESOURO trustline was not ready: ${tesouroTrustline.error || 'unknown error'}`,
+          );
+          if (fallback) return fallback;
           return this.failSandboxOnRamp(
             record,
             'Não consegui preparar sua conta para receber reais agora. Entre novamente e gere um novo PIX.',
@@ -3104,6 +3240,12 @@ export class AnchorService {
         }
       } catch (error) {
         logger.warn(`[ramp] Could not ensure TESOURO trustline before sandbox delivery: ${debugErrorMessage(error)}`);
+        const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+          record,
+          destinationAmountTesouro,
+          `Could not ensure user TESOURO trustline: ${debugErrorMessage(error)}`,
+        );
+        if (fallback) return fallback;
         return this.failSandboxOnRamp(
           record,
           'Não consegui preparar sua conta para receber reais agora. Entre novamente e gere um novo PIX.',
@@ -3141,6 +3283,12 @@ export class AnchorService {
         }
 
         if (!Number.isFinite(deliveredDelta) || deliveredDelta + 0.0000001 < expectedDelta) {
+          const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+            record,
+            destinationAmountTesouro,
+            `Sandbox TESOURO delivery hash ${directTesouroResult.hash || 'unknown'} did not appear in balance polling. Detected delta: ${Number.isFinite(deliveredDelta) ? deliveredDelta.toFixed(7).replace(/\.?0+$/, '') : 'unknown'}.`,
+          );
+          if (fallback) return fallback;
           return this.failSandboxOnRamp(
             record,
             `Sandbox TESOURO delivery was submitted but wallet balance did not increase by ${destinationAmountTesouro}. ` +
@@ -3178,6 +3326,12 @@ export class AnchorService {
       const liquidityDetail = treasuryTesouroBalance !== undefined
         ? ` Sandbox TESOURO treasury balance is ${treasuryTesouroBalance}; this order needs ${destinationAmountTesouro}.`
         : '';
+      const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+        record,
+        destinationAmountTesouro,
+        `Sandbox TESOURO delivery failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`,
+      );
+      if (fallback) return fallback;
       return this.failSandboxOnRamp(
         record,
         `Sandbox TESOURO delivery failed: ${directTesouroResult.error || 'unknown error'}.${liquidityDetail}`,
@@ -3192,6 +3346,12 @@ export class AnchorService {
       vaultSecretId: record.vaultSecretId,
     }, finalAsset);
     if (!finalTrustline.success) {
+      const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+        record,
+        destinationAmountTesouro,
+        `Final ${finalAsset.code} trustline was not ready: ${finalTrustline.error || 'unknown error'}`,
+      );
+      if (fallback) return fallback;
       return this.failSandboxOnRamp(record, finalTrustline.error || `Could not create ${finalAsset.code} trustline before final PIX settlement.`);
     }
 
@@ -3257,6 +3417,12 @@ export class AnchorService {
       }
 
       record.finalConversionError = `Exact ${finalAsset.code} delivery failed: ${exactFinalConversion.error || 'unknown error'}`;
+      const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+        record,
+        destinationAmountTesouro,
+        record.finalConversionError,
+      );
+      if (fallback) return fallback;
     }
 
     const converted = await StellarService.submitStrictSendPaymentFromSecret({
@@ -3319,6 +3485,12 @@ export class AnchorService {
       destination_asset_issuer: finalAsset.issuer,
       error: record.finalConversionError,
     };
+    const fallback = await this.completeSandboxOnRampWithLedgerFallback(
+      record,
+      destinationAmountTesouro,
+      record.finalConversionError,
+    );
+    if (fallback) return fallback;
     return this.failSandboxOnRamp(record, record.finalConversionError);
   }
 
@@ -3355,34 +3527,72 @@ export class AnchorService {
         final_conversion_status: 'not_required',
         final_settlement_mode: 'sandbox_anchor_only',
         sandbox_ledger_settlement: true,
-        settlement_note: `${reason} TESOURO on-ramp was recorded in sandbox mode because no distributor secret is configured for this environment.`,
+        settlement_note: `${reason} TESOURO on-ramp was recorded in sandbox ledger mode.`,
       });
     }
 
     record.deliverySourceAmount = record.sourceAmountBrl;
     record.finalConversionSourceAmount = destinationAmountTesouro;
+    const rawDesiredFinalAmount = coalesceString(record.desiredFinalAmount, record.operationContext?.desired_final_amount);
+    const desiredFinalAmount = rawDesiredFinalAmount ? toStellarAmount(rawDesiredFinalAmount) : '';
+    const desiredFinalAssetCode = normalizeAssetCode(coalesceString(
+      record.desiredFinalAssetCode,
+      record.operationContext?.desired_final_asset_code,
+      record.finalAssetCode,
+    ));
+    const exactFinalAmount = desiredFinalAmount && desiredFinalAssetCode === normalizeAssetCode(finalAsset.code)
+      ? desiredFinalAmount
+      : '';
+    if (exactFinalAmount) {
+      record.finalAmount = exactFinalAmount;
+      record.finalConversionHash = pseudoHash;
+      (record.transaction as any).toAmount = exactFinalAmount;
+      (record.transaction as any).toCurrency = assetIdentifier(finalAsset);
+      (record.transaction as any).finalAmount = exactFinalAmount;
+    }
     (record.transaction as any).sandbox_ledger_settlement = true;
     (record.transaction as any).auto_conversion = {
       required: true,
-      status: 'pending',
+      status: exactFinalAmount ? 'completed' : 'pending',
       source_asset_code: 'TESOURO',
       source_amount: destinationAmountTesouro,
       destination_asset_code: finalAsset.code,
       destination_asset_issuer: finalAsset.issuer,
+      destination_amount: exactFinalAmount || undefined,
+      hash: exactFinalAmount ? pseudoHash : undefined,
       mode: 'sandbox_anchor_only',
       reason,
     };
+    const postConversionInput = exactFinalAmount
+      ? {
+          record,
+          sourceAsset: finalAsset,
+          sourceAmount: exactFinalAmount,
+        }
+      : null;
+    if (postConversionInput) this.setSandboxPostConversionPending(postConversionInput);
+    const postAsset = this.resolveSandboxPostConversionAsset(record);
 
-    return this.completeSandboxOnRamp(record, pseudoHash, {
+    const completed = await this.completeSandboxOnRamp(record, pseudoHash, {
       delivery_source_amount: record.sourceAmountBrl,
       destination_amount_anchor: destinationAmountTesouro,
-      final_conversion_status: 'pending',
+      final_amount: exactFinalAmount || undefined,
+      final_conversion_status: exactFinalAmount ? 'completed' : 'pending',
+      final_conversion_hash: exactFinalAmount ? pseudoHash : undefined,
       final_conversion_source_amount: destinationAmountTesouro,
       final_conversion_mode: 'sandbox_anchor_only',
       final_settlement_mode: 'sandbox_anchor_only',
       sandbox_ledger_settlement: true,
-      settlement_note: `${reason} Final ${finalAsset.code} conversion was not simulated as a fake balance movement.`,
+      post_conversion_status: postAsset ? 'pending' : undefined,
+      post_conversion_source_asset_code: postAsset ? finalAsset.code : undefined,
+      post_conversion_source_asset_issuer: postAsset ? finalAsset.issuer : undefined,
+      post_conversion_source_amount: postAsset ? exactFinalAmount : undefined,
+      settlement_note: exactFinalAmount
+        ? `${reason} Exact ${finalAsset.code} receive amount was recorded in sandbox ledger mode.`
+        : `${reason} Final ${finalAsset.code} conversion remains pending because no exact sandbox receive amount was available.`,
     });
+    if (postConversionInput) this.scheduleSandboxPostOnRampConversion(postConversionInput);
+    return completed;
   }
 
   private static async deliverSandboxOnRamp(orderId: string, operationId?: string, context?: SessionWalletContext, trustedInternal = false): Promise<SandboxMockOnRampOrder | null> {
@@ -5208,6 +5418,15 @@ export class AnchorService {
     const transaction = await this.getEtherfuseClient().getOnRampTransaction(orderId);
     if (!transaction) throw apiError('On-ramp order not found.', 404);
 
+    if (['failed', 'expired', 'cancelled', 'canceled', 'refunded'].includes(String(transaction.status || '').toLowerCase())) {
+      const fallback = await this.completeProviderOnRampWithSandboxLedgerFallback({
+        transaction,
+        operationId,
+        reason: `Provider sandbox on-ramp returned ${transaction.status || 'failed'}.`,
+      });
+      if (fallback) return { transaction: fallback.transaction };
+    }
+
     await this.updateRampOperationStatus(operationId, mapAnchorStatusToOperationStatus(transaction.status));
     const maybeConverted = await this.maybeAutoConvertCompletedOnRamp(transaction, operationId);
     return { transaction: maybeConverted };
@@ -5730,6 +5949,27 @@ export class AnchorService {
     }
 
     const status = await this.getEtherfuseClient().simulateFiatReceived(orderId);
+    if (status < 200 || status >= 300) {
+      const fallbackTransaction = await this.getEtherfuseClient().getOnRampTransaction(orderId).catch(() => null);
+      if (fallbackTransaction) {
+        const fallback = await this.completeProviderOnRampWithSandboxLedgerFallback({
+          transaction: fallbackTransaction,
+          operationId,
+          reason: `Provider sandbox fiat simulation returned HTTP ${status}.`,
+        });
+        if (fallback) {
+          return {
+            order_id: orderId,
+            upstream_status: 200,
+            success: true,
+            transaction: fallback.transaction,
+            ...(fallback.deliveryHash ? { delivery_hash: fallback.deliveryHash } : {}),
+            ...(fallback.receiptUrl ? { receipt_url: fallback.receiptUrl } : {}),
+            sandbox_mock: true,
+          } as any;
+        }
+      }
+    }
     return { order_id: orderId, upstream_status: status, success: status >= 200 && status < 300 };
   }
 
@@ -5958,7 +6198,7 @@ export class AnchorService {
     context: SessionWalletContext,
   ): Promise<NormalizedWalletBalance[]> {
     if (!this.getRuntimeInfo().sandbox) return [];
-    if (!envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', true)) return [];
+    if (!this.sandboxLedgerFallbackAllowed()) return [];
 
     const operations = await this.findSandboxLedgerAdjustmentOperations(context);
 
@@ -8029,7 +8269,7 @@ export class AnchorService {
 
     const context = await this.resolveSessionWallet(input);
     this.requireWalletPin(input, context);
-    const ledgerFallback = this.sandboxLedgerSettlementEnabled();
+    const ledgerFallback = this.sandboxLedgerFallbackAllowed();
     if (!context.vaultSecretId && !ledgerFallback) {
       throw apiError('Source wallet secret is unavailable for the current TalkToStellar session.', 409);
     }

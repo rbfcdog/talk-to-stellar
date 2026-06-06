@@ -167,7 +167,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       vaultSecretId: '',
     });
     jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
-    jest.spyOn(AnchorService as any, 'sandboxLedgerSettlementEnabled').mockReturnValue(true);
+    jest.spyOn(AnchorService as any, 'sandboxLedgerFallbackAllowed').mockReturnValue(true);
     jest.spyOn(AnchorService as any, 'resolveTransferRecipient').mockResolvedValue({
       publicKey: anaPublicKey,
       displayName: 'Ana Silva',
