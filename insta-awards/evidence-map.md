@@ -21,6 +21,7 @@ repository locations and demo artifacts that should be captured.
 | Stellar pathfinding and payment submission | `backend/src/api/services/stellar.service.ts` |
 | Settlement evidence | `backend/src/api/services/settlement-evidence.service.ts` |
 | Payout adapters | `backend/src/api/services/usd-payout-adapters.ts` |
+| Payout adapter contract | `insta-awards/payout-adapter-contract.md`, `backend/tests/payout-adapter-contract.test.ts` |
 | Stellar transaction evidence repository | `backend/src/api/repository/stellar-transaction.repository.ts` |
 
 ## Database Evidence
@@ -66,6 +67,7 @@ POST /api/transfers/:id/pix-intent
 POST /api/transfers/:id/funding-confirmation
 POST /api/transfers/:id/settle-stellar
 POST /api/transfers/:id/payout-instruction
+POST /api/transfers/:id/payout-status-refresh
 GET  /api/transfers/:id/reconciliation
 GET  /api/transfers/:id
 ```
@@ -115,6 +117,7 @@ Primary tests:
 ```text
 backend/tests/international-transfer.routes.test.ts
 backend/tests/international-transfer.service.test.ts
+backend/tests/payout-adapter-contract.test.ts
 backend/tests/financial-conversion-reference.test.ts
 ```
 
@@ -123,6 +126,8 @@ What they prove:
 - BRL/USD quotes can be created with route/path quote data.
 - HTTP routes return request/correlation IDs and quote provenance.
 - Operator-only funding confirmation, settlement, and payout routes require ops authorization.
+- Payout adapter contract tests cover mock, Etherfuse proof, Circle compatibility, and Bridge compatibility payloads.
+- Payout status refresh updates transfer state and reconciliation evidence.
 - Same-name payout checks work.
 - Transfer lifecycle advances through quote, Pix, Stellar settlement, payout,
   and reconciliation.
@@ -202,6 +207,7 @@ Adapters and evidence:
 | Etherfuse | Prepared off-ramp proof payload or sandbox off-ramp result if credentials/PIN are provided. | Sandbox/proof only. |
 | Circle | Provider-shaped request payload and response if sandbox URL/API key are configured. | Compatibility only unless explicitly enabled. |
 | Bridge | Provider-shaped request payload and response if sandbox URL/API key are configured. | Compatibility only unless explicitly enabled. |
+| Wise-labeled destination | `wise_metadata_only` instruction metadata and no provider API execution. | Metadata/mock compatibility only. |
 
 Provider execution controls:
 
@@ -213,6 +219,7 @@ BRIDGE_API_KEY
 BRIDGE_PAYOUT_CREATE_URL
 ENABLE_REAL_PAYOUT_EXECUTION
 MOCK_USD_PAYOUT_AUTO_COMPLETE
+INTERNATIONAL_TRANSFER_OPS_SECRET
 ```
 
 ## Final Review Package Checklist

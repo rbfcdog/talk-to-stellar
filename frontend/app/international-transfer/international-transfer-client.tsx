@@ -867,6 +867,15 @@ export default function InternationalTransferClient() {
     return payload.transfer;
   }
 
+  async function refreshPayoutStatus(currentTransfer = transfer) {
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    const payload = await callApi("Refresh payout status", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/payout-status-refresh`, {}, {
+      "x-international-transfer-ops-secret": requireOpsSecret(),
+    });
+    setTransfer(payload.transfer);
+    return payload.transfer;
+  }
+
   async function loadReconciliation(currentTransfer = transfer) {
     if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
     const payload = await callApi("Load reconciliation", "GET", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/reconciliation`);
@@ -1115,6 +1124,10 @@ export default function InternationalTransferClient() {
             <ActionButton onClick={() => createPayoutInstruction()} disabled={Boolean(busy || !transfer)} variant="blue">
               <Send className="h-4 w-4" aria-hidden="true" />
               Destination
+            </ActionButton>
+            <ActionButton onClick={() => refreshPayoutStatus()} disabled={Boolean(busy || !transfer?.payout_instruction_id)} variant="light">
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Payout status
             </ActionButton>
           </div>
           <div className="mt-3 grid gap-3">
