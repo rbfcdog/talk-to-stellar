@@ -350,7 +350,13 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("(totalEstimatedFee / traditionalFee) * 100");
     expect(text).toContain("const PIX_SUCCESS_CLOSE_DELAY_MS = 900");
     expect(text).toContain("closeIntermediatePage(PIX_SUCCESS_CLOSE_DELAY_MS)");
-    expect(text).toContain('String(payload?.auto_pay_status || "").toLowerCase() === "processing"');
+    expect(text).toContain('const backendAutoPayStatus = transferFlow ? String(payload?.auto_pay_status || "").toLowerCase() : ""');
+    expect(text).toContain("const backendAutoPayResult = payload?.auto_pay_result && typeof payload.auto_pay_result === \"object\"");
+    expect(text).toContain('const backendAutoPayStarted = backendAutoPayStatus === "processing"');
+    expect(text).toContain('const backendAutoPayCompleted = backendAutoPayStatus === "completed"');
+    expect(text).toContain('const backendAutoPayFailed = backendAutoPayStatus === "failed"');
+    expect(text).toContain("if (backendConfirmedPix && backendAutoPayCompleted)");
+    expect(text).toContain("if (backendConfirmedPix && backendAutoPayFailed)");
     expect(text).toContain("if (backendConfirmedPix && backendAutoPayStarted)");
     expect(text).toContain("completedTransaction = await waitForPostConversion(completedTransaction, transferFlow ? 3 : 10)");
     expect(text).toContain("markOperationCompleted();");

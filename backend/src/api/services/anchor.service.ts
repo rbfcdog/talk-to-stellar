@@ -5925,14 +5925,28 @@ export class AnchorService {
     const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId, context, input.trusted_internal === true);
     if (mockRecord) {
       let autoPayStatus = '';
+      let autoPayResult: Record<string, unknown> | null = null;
       if (
         mockRecord.transaction.status === 'completed' &&
         Boolean(mockRecord.operationContext?.auto_pay_after_ramp)
       ) {
         autoPayStatus = 'processing';
-        void this.submitAutoPayAfterRamp(mockRecord, input, context).catch((error) => {
-          console.warn('[ramp] Could not complete PIX-funded auto-pay after ramp:', debugErrorMessage(error));
-        });
+        try {
+          autoPayResult = await this.submitAutoPayAfterRamp(mockRecord, input, context);
+          autoPayStatus = autoPayResult?.success ? 'completed' : 'failed';
+        } catch (error) {
+          autoPayStatus = 'failed';
+          const message = debugErrorMessage(error);
+          autoPayResult = { success: false, error: message };
+          await this.persistSandboxOnRampContext(mockRecord, {
+            auto_pay_status: 'failed',
+            auto_pay_error: message,
+            auto_pay_failed_at: new Date().toISOString(),
+          }).catch((persistError) => {
+            console.warn('[ramp] Could not persist PIX-funded auto-pay failure:', debugErrorMessage(persistError));
+          });
+          console.warn('[ramp] Could not complete PIX-funded auto-pay after ramp:', message);
+        }
       }
       return {
         order_id: orderId,
@@ -5940,6 +5954,7 @@ export class AnchorService {
         success: mockRecord.transaction.status === 'completed',
         transaction: mockRecord.transaction,
         ...(autoPayStatus ? { auto_pay_status: autoPayStatus } : {}),
+        ...(autoPayResult ? { auto_pay_result: autoPayResult } : {}),
         ...(mockRecord.deliveryHash ? { delivery_hash: mockRecord.deliveryHash } : {}),
         ...(mockRecord.deliverySourceAmount ? { delivery_source_amount: mockRecord.deliverySourceAmount } : {}),
         ...(mockRecord.receiptUrl ? { receipt_url: mockRecord.receiptUrl } : {}),
@@ -8053,6 +8068,180 @@ export class AnchorService {
     };
   }
 
+  private static async resolveTransferRecipientReference(reference: string, options: {
+    displayName?: string;
+    pixKey?: string;
+  } = {}): Promise<{
+    publicKey: string;
+    displayName: string;
+    pixKey?: string;
+    recipientKey?: string;
+    sessionId?: string;
+    userId?: string;
+    vaultSecretId?: string;
+  } | null> {
+    const rawReference = coalesceString(reference);
+    if (!rawReference) return null;
+
+    const displayName = coalesceString(options.displayName) || rawReference;
+    const fallbackPixKey = coalesceString(options.pixKey) || rawReference;
+    const normalizedReference = rawReference.trim().toLowerCase();
+    const emailReference = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedReference) ? normalizedReference : '';
+    const numericReference = rawReference.replace(/\D+/g, '');
+    const isValidPublicKey = (value: unknown) => /^G[A-Z2-7]{55}$/i.test(coalesceString(value));
+    const walletRepository = new WalletRepository(supabase);
+
+    const buildRecipient = async (publicKey: string, details: {
+      name?: string;
+      pixKey?: string;
+      sessionId?: string;
+      userId?: string;
+      vaultSecretId?: string;
+    } = {}) => {
+      if (!isValidPublicKey(publicKey)) return null;
+      const wallet = await walletRepository.getWalletByPublicKey(publicKey).catch(() => null);
+      return {
+        publicKey,
+        displayName: coalesceString(details.name) || displayName,
+        pixKey: coalesceString(details.pixKey, fallbackPixKey) || undefined,
+        recipientKey: coalesceString(details.pixKey, fallbackPixKey) || undefined,
+        sessionId: coalesceString(details.sessionId, wallet?.session_id) || undefined,
+        userId: coalesceString(details.userId, (wallet as any)?.user_id) || undefined,
+        vaultSecretId: coalesceString(details.vaultSecretId, wallet?.vault_secret_id) || undefined,
+      };
+    };
+
+    if (isValidPublicKey(rawReference)) {
+      return buildRecipient(rawReference, { pixKey: fallbackPixKey });
+    }
+
+    try {
+      const { data: walletByPix, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .ilike('pix_key', normalizedReference)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && isValidPublicKey(walletByPix?.public_key)) {
+        return buildRecipient(String(walletByPix.public_key), {
+          name: coalesceString(walletByPix.name, displayName),
+          pixKey: coalesceString(walletByPix.pix_key, fallbackPixKey),
+          sessionId: coalesceString(walletByPix.session_id),
+          userId: coalesceString((walletByPix as any).user_id),
+          vaultSecretId: coalesceString(walletByPix.vault_secret_id),
+        });
+      }
+    } catch {
+      // Optional account-reference lookup. Contact resolution still has explicit
+      // saved-contact/public-key fallbacks below.
+    }
+
+    const sessionRows: any[] = [];
+    const sessionLookups = [
+      ...(emailReference ? [
+        { column: 'email', value: emailReference, ilike: false },
+        { column: 'user_id', value: emailReference, ilike: false },
+      ] : []),
+      ...(numericReference.length >= 8 ? [
+        { column: 'phone_number', value: `%${numericReference.slice(-11)}%`, ilike: true },
+        { column: 'phone_number', value: `%${numericReference.slice(-10)}%`, ilike: true },
+      ] : []),
+    ];
+
+    for (const lookup of sessionLookups) {
+      try {
+        let query = supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, email, phone_number');
+        query = lookup.ilike
+          ? query.ilike(lookup.column, lookup.value)
+          : query.eq(lookup.column, lookup.value);
+        const { data, error } = await query
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) sessionRows.push(data);
+      } catch {
+        // Ignore optional lookup failures and continue with other identifiers.
+      }
+    }
+
+    for (const row of sessionRows) {
+      const sessionId = coalesceString(row?.session_id);
+      if (!sessionId) continue;
+      const wallet = await walletRepository.getWalletBySession(sessionId).catch(() => null);
+      if (!wallet?.public_key) continue;
+      return buildRecipient(wallet.public_key, {
+        name: coalesceString((wallet as any).name, displayName, row?.email, row?.user_id),
+        pixKey: coalesceString((wallet as any).pix_key, fallbackPixKey),
+        sessionId,
+        userId: coalesceString(row?.user_id),
+        vaultSecretId: coalesceString(wallet.vault_secret_id),
+      });
+    }
+
+    if (emailReference) {
+      try {
+        const { data: userByEmail, error } = await supabase
+          .from('users')
+          .select('id, email, stellar_public_key')
+          .ilike('email', emailReference)
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && isValidPublicKey((userByEmail as any)?.stellar_public_key)) {
+          return buildRecipient(String((userByEmail as any).stellar_public_key), {
+            name: coalesceString(displayName, (userByEmail as any).email),
+            pixKey: fallbackPixKey,
+            userId: coalesceString((userByEmail as any).id),
+          });
+        }
+      } catch {
+        // Continue to external-account lookup.
+      }
+    }
+
+    try {
+      const { data: mappings, error } = await supabase
+        .from('external_accounts')
+        .select('session_id, user_id, provider_user_id, data')
+        .limit(200);
+
+      if (!error) {
+        for (const mapping of mappings || []) {
+          const mappingUserId = coalesceString((mapping as any)?.user_id).toLowerCase();
+          const mappingProviderUserId = coalesceString((mapping as any)?.provider_user_id).toLowerCase();
+          const data = (mapping as any)?.data || {};
+          const dataEmail = coalesceString(data?.email).toLowerCase();
+          const dataPhone = coalesceString(data?.phone_number, data?.phone, data?.whatsapp).replace(/\D+/g, '');
+          const emailMatches = Boolean(emailReference && [mappingUserId, dataEmail].includes(emailReference));
+          const phoneMatches = Boolean(numericReference.length >= 8 && (
+            mappingProviderUserId.replace(/\D+/g, '').endsWith(numericReference.slice(-8)) ||
+            dataPhone.endsWith(numericReference.slice(-8))
+          ));
+          if (!emailMatches && !phoneMatches) continue;
+
+          const sessionId = coalesceString((mapping as any)?.session_id);
+          if (!sessionId) continue;
+          const wallet = await walletRepository.getWalletBySession(sessionId).catch(() => null);
+          if (!wallet?.public_key) continue;
+          return buildRecipient(wallet.public_key, {
+            name: coalesceString(data?.name, displayName, data?.email, (mapping as any)?.user_id),
+            pixKey: fallbackPixKey,
+            sessionId,
+            userId: coalesceString((mapping as any)?.user_id),
+            vaultSecretId: coalesceString(wallet.vault_secret_id),
+          });
+        }
+      }
+    } catch {
+      // No external-account mapping available.
+    }
+
+    return null;
+  }
+
   private static async resolveTransferRecipient(userId: string, recipientQuery: string, options: {
     preferredName?: string;
     preferredKey?: string;
@@ -8169,6 +8358,24 @@ export class AnchorService {
         userId: coalesceString((destinationWallet as any)?.user_id) || undefined,
         vaultSecretId: coalesceString(destinationWallet?.vault_secret_id) || undefined,
       };
+    }
+
+    const contactDisplayName = coalesceString(contact?.contact_name) || preferredName || query;
+    const contactPixKey = coalesceString(contact?.pix_key, contact?.phone_number, preferredKey);
+    const referenceCandidates = Array.from(new Set([
+      preferredKey,
+      contact?.pix_key,
+      contact?.phone_number,
+      query,
+    ].map((value) => coalesceString(value)).filter(Boolean)));
+
+    for (const reference of referenceCandidates) {
+      if (normalizeLookup(reference) === normalizeLookup(contactDisplayName)) continue;
+      const resolvedByReference = await this.resolveTransferRecipientReference(reference, {
+        displayName: contactDisplayName,
+        pixKey: contactPixKey || reference,
+      });
+      if (resolvedByReference?.publicKey) return resolvedByReference;
     }
 
     throw apiError(`Saved contact "${coalesceString(contact?.contact_name) || query}" does not have a Stellar destination yet. Choose another contact.`, 409);

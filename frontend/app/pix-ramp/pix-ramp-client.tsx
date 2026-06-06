@@ -2937,8 +2937,30 @@ export default function PixRampClient({
         walletPin: pin,
       }, "POST", undefined, buildIdempotencyKey(`confirm-onramp:${operationId || orderId || executionIntentId}`));
       if (payload?.transaction) setStatusPayload(payload);
-      const backendAutoPayStarted = transferFlow && String(payload?.auto_pay_status || "").toLowerCase() === "processing";
-      const backendConfirmedPix = Boolean(payload?.success === true && (isSuccessStatus(payload?.transaction?.status) || backendAutoPayStarted));
+      const backendAutoPayStatus = transferFlow ? String(payload?.auto_pay_status || "").toLowerCase() : "";
+      const backendAutoPayResult = payload?.auto_pay_result && typeof payload.auto_pay_result === "object"
+        ? payload.auto_pay_result as RampResponse
+        : null;
+      const backendAutoPayStarted = backendAutoPayStatus === "processing";
+      const backendAutoPayCompleted = backendAutoPayStatus === "completed" && Boolean(backendAutoPayResult?.success !== false);
+      const backendAutoPayFailed = backendAutoPayStatus === "failed" || backendAutoPayResult?.success === false;
+      const backendConfirmedPix = Boolean(payload?.success === true && (isSuccessStatus(payload?.transaction?.status) || backendAutoPayStarted || backendAutoPayCompleted || backendAutoPayFailed));
+      if (backendConfirmedPix && backendAutoPayCompleted) {
+        setPixFundedTransferResult(backendAutoPayResult || payload);
+        setPixFundedTransferError("");
+        setPolling(false);
+        markOperationCompleted();
+        setStep("success");
+        return;
+      }
+      if (backendConfirmedPix && backendAutoPayFailed) {
+        const autoPayError = String(backendAutoPayResult?.message || backendAutoPayResult?.error || payload?.message || payload?.error || "");
+        setPixFundedTransferError(publicRampErrorMessage(autoPayError || L("O envio automático não foi concluído.", "The automatic transfer was not completed."), language));
+        setPolling(false);
+        markOperationCompleted();
+        setStep("success");
+        return;
+      }
       if (backendConfirmedPix && backendAutoPayStarted) {
         setPolling(false);
         markOperationCompleted();
