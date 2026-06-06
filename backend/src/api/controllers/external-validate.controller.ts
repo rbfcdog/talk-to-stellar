@@ -54,6 +54,13 @@ function resolveCanonicalSessionLogin(session: any): string {
   return looksLikeEmail(sessionUserId) ? sessionUserId : ''
 }
 
+function sessionHasPinCredential(session: any): boolean {
+  return Boolean(
+    String(session?.session_password_hash || '').trim() ||
+      String(session?.password_hash || '').trim()
+  )
+}
+
 function getTokenSessionId(payload: any): string {
   return String(payload?.session_id || payload?.sessionId || '').trim()
 }
@@ -77,12 +84,12 @@ async function resolveExternalLinkedLogin(payload: any): Promise<Record<string, 
   const tokenSessionId = getTokenSessionId(payload)
   const tokenUserId = getTokenUserId(payload)
 
-  let sessionId = tokenSessionId
-  let userId = tokenUserId
-  let canonicalLogin = looksLikeEmail(tokenUserId) ? tokenUserId : ''
+  let sessionId = ''
+  let userId = ''
+  let canonicalLogin = ''
 
   const tokenSession = await getSessionSafely(tokenSessionId)
-  if (tokenSession) {
+  if (tokenSession && sessionHasPinCredential(tokenSession)) {
     sessionId = String(tokenSession?.session_id || tokenSessionId)
     userId = normalizeEmailForCompare(String(tokenSession?.user_id || tokenUserId || ''))
     canonicalLogin = resolveCanonicalSessionLogin(tokenSession) || canonicalLogin
@@ -93,23 +100,13 @@ async function resolveExternalLinkedLogin(payload: any): Promise<Record<string, 
       const mapping = await externalRepo.findByProviderAndId(provider, providerUserId)
       const mappedSessionId = String(mapping?.session_id || '').trim()
       const mappedUserId = normalizeEmailForCompare(String(mapping?.user_id || ''))
-      const mappedData = mapping?.data && typeof mapping.data === 'object' ? mapping.data as Record<string, unknown> : {}
-      const mappedEmail = normalizeEmailForCompare(String(mappedData.email || mappedData.user_id || mappedData.userId || ''))
       if (mappedSessionId) {
         const mappedSession = await getSessionSafely(mappedSessionId)
-        if (mappedSession) {
+        if (mappedSession && sessionHasPinCredential(mappedSession)) {
           sessionId = String(mappedSession?.session_id || mappedSessionId)
           userId = normalizeEmailForCompare(String(mappedSession?.user_id || mappedUserId || userId || ''))
           canonicalLogin = resolveCanonicalSessionLogin(mappedSession) || canonicalLogin
         }
-      }
-      if (!canonicalLogin && looksLikeEmail(mappedUserId)) {
-        userId = mappedUserId
-        canonicalLogin = mappedUserId
-      }
-      if (!canonicalLogin && looksLikeEmail(mappedEmail)) {
-        userId = mappedEmail
-        canonicalLogin = mappedEmail
       }
     } catch {
       // Validation should still succeed if the token is valid but mapping lookup is temporarily unavailable.

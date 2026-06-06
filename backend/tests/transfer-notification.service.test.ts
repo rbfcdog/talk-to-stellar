@@ -179,6 +179,103 @@ describe('TransferNotificationService', () => {
     );
   });
 
+  it('does not treat a plain web session phone as a WhatsApp identity', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({
+        user_id: 'user-1',
+        email: 'user@example.com',
+        phone_number: '55 19 98180-8102',
+      })),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [
+        { provider: 'web', provider_user_id: 'browser-session-1', data: {} },
+      ],
+      userMappings: [],
+    }));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: 'browser-session-1',
+      userId: 'user-1',
+      text: 'Pagamento concluido. Recibo disponivel.',
+    });
+
+    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(report.whatsapp).toMatchObject({
+      attempted: false,
+      delivered: 0,
+      recipients: 0,
+      skipped_reason: 'no_whatsapp_mapping',
+    });
+  });
+
+  it('does not treat a generic stored phone mapping as a WhatsApp identity', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [],
+      userMappings: [
+        {
+          provider: 'phone',
+          provider_user_id: '5519981808102',
+          data: { phone_number: '5519981808102' },
+        },
+      ],
+    }));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: 'browser-session-1',
+      userId: 'user-1',
+      text: 'Pagamento concluido. Recibo disponivel.',
+    });
+
+    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(report.whatsapp).toMatchObject({
+      attempted: false,
+      delivered: 0,
+      recipients: 0,
+      skipped_reason: 'no_whatsapp_mapping',
+    });
+  });
+
+  it('keeps legacy WhatsApp-origin phone mappings deliverable', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [],
+      userMappings: [
+        {
+          provider: 'phone',
+          provider_user_id: '5519981808102',
+          data: {
+            remote_jid: '5519981808102@s.whatsapp.net',
+          },
+        },
+      ],
+    }));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      sessionId: 'browser-session-1',
+      userId: 'user-1',
+      text: 'Pagamento concluido. Recibo disponivel.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Pagamento concluido. Recibo disponivel.',
+      { reliable: true }
+    );
+    expect(report.whatsapp).toMatchObject({
+      attempted: true,
+      delivered: 1,
+      recipients: 1,
+    });
+  });
+
   it('uses the saved Evolution instance from the WhatsApp mapping before env fallback', async () => {
     process.env.EVOLUTION_INSTANCE = '';
     process.env.EVOLUTION_INSTANCE_NAME = '';

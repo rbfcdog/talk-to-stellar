@@ -3060,16 +3060,163 @@ export default class ExternalFinalizeController {
       }
 
       const existingAccount = isBrowserProvider ? null : await externalRepo.findByProviderAndId(provider, provider_user_id);
+      let staleExistingExternalAccount: any = null;
       if (existingAccount?.session_id && existingAccount?.user_id) {
         const existingSession = await agentRepo.getSession(String(existingAccount.session_id));
-        const existingWallet = await walletRepo.getWalletBySession(String(existingAccount.session_id));
+        const existingWallet = existingSession
+          ? await walletRepo.getWalletBySession(String(existingAccount.session_id))
+          : null;
         if (!existingSession || !existingWallet) {
-          return res.status(409).json({
-            success: false,
-            notAssociated: true,
-            message: `Este ${providerLabel} já está vinculado a uma conta existente.`,
+          if (isPhoneProvider(provider)) {
+            staleExistingExternalAccount = existingAccount;
+            logger.warn(`[external-finalize] ignoring incomplete ${providerLabel} mapping for ${provider_user_id.slice(-6)}: missing ${!existingSession ? 'session' : 'wallet'}`);
+          } else {
+            return res.status(409).json({
+              success: false,
+              notAssociated: true,
+              message: `Este ${providerLabel} já está vinculado a uma conta existente.`,
+            });
+          }
+        } else if (isPhoneProvider(provider) && !sessionHasPin(existingSession)) {
+          const existingSessionId = String(existingAccount.session_id);
+          const existingAccountUserId = String(existingAccount.user_id || '').trim();
+          const recoveryUserId = normalizedEmail || existingAccountUserId || userId;
+          const existingLogin = resolveCanonicalSessionLogin(existingSession);
+          if (existingLogin && normalizedEmail && existingLogin !== normalizedEmail) {
+            return res.status(409).json({
+              success: false,
+              notAssociated: true,
+              message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
+            });
+          }
+
+          const collision = await detectIdentityCollision({
+            email: normalizedEmail || undefined,
+            phoneNumber: normalizedPhoneNumber || undefined,
+            cpf: normalizedCpf || undefined,
+            allowedSessionIds: [existingSessionId],
+            allowedUserIds: [existingAccountUserId, recoveryUserId],
+            phoneCollisionProviderScope: provider === 'whatsapp' ? 'whatsapp' : undefined,
           });
+          if (collision) {
+            const fieldLabel = collision.field === 'phone_number' ? 'telefone' : collision.field.toUpperCase();
+            return res.status(409).json({
+              success: false,
+              message: `Não foi possível concluir: ${fieldLabel} já está vinculado a outra conta.`,
+              collision: {
+                field: collision.field,
+                value: collision.value,
+              },
+            });
+          }
+
+          const emailConfirmed = await ensureEmailConfirmation(req, res, {
+            email: normalizedEmail || existingLogin,
+            purpose: 'create_account',
+            language,
+            metadata: {
+              provider,
+              provider_user_id,
+              token_hash: tokenHash,
+              session_id: existingSessionId,
+              user_id: recoveryUserId,
+              browser_id: browserId || null,
+              pin_setup_for_incomplete_channel_account: true,
+            },
+          });
+          if (!emailConfirmed) return;
+
+          const existingPhone = normalizePhoneForCompare((existingSession as any)?.phone_number);
+          const mergedPhone = existingPhone
+            ? (existingSession as any)?.phone_number
+            : (normalizedPhoneNumber || (existingSession as any)?.phone_number);
+          const pixKey = String((existingSession as any)?.pix_key || (existingWallet as any)?.pix_key || '').trim() ||
+            ContactSeedService.derivePixKey(recoveryUserId, {
+              email: normalizedEmail || undefined,
+              phoneNumber: mergedPhone || undefined,
+              cpf: normalizedCpf || undefined,
+              name: name || undefined,
+            });
+          const sessionToken = uuidv4();
+          const now = new Date().toISOString();
+          await agentRepo.saveSession(existingSessionId, {
+            ...existingSession,
+            user_id: recoveryUserId,
+            email: normalizedEmail || (existingSession as any)?.email || '',
+            session_token: sessionToken,
+            public_key: (existingWallet as any)?.public_key || (existingSession as any)?.public_key || '',
+            phone_number: mergedPhone,
+            pix_key: pixKey,
+            password_hash: pinHash,
+            session_password_hash: pinHash,
+            email_verified: Boolean(normalizedEmail) || Boolean((existingSession as any)?.email_verified),
+            email_verified_at: normalizedEmail ? now : (existingSession as any)?.email_verified_at,
+            email_verification_source: normalizedEmail
+              ? 'email_confirmation_create_account'
+              : (existingSession as any)?.email_verification_source,
+            created_at: (existingSession as any)?.created_at || now,
+            last_activity: now,
+          } as any);
+
+          await walletRepo.saveWallet({
+            ...(existingWallet as any),
+            session_id: existingSessionId,
+            public_key: (existingWallet as any)?.public_key,
+            name: (existingWallet as any)?.name || name || `Wallet for ${recoveryUserId}`,
+            pix_key: (existingWallet as any)?.pix_key || pixKey,
+          } as any);
+
+          await createExternalMappingsWithAliases({
+            provider,
+            provider_user_id,
+            session_id: existingSessionId,
+            user_id: recoveryUserId,
+            data: {
+              name: name || null,
+              email: email || null,
+              phone_number: normalizedPhoneNumber || null,
+              cpf: normalizedCpf || null,
+              pin_setup_for_incomplete_channel_account: true,
+              ...channelMetadata,
+            },
+          });
+
+          await clearAgentLoginState(existingSessionId);
+
+          void configureWalletAssetsAndContacts({
+            userId: recoveryUserId,
+            publicKey: (existingWallet as any)?.public_key,
+            vaultSecretId: (existingWallet as any)?.vault_secret_id,
+            sessionId: existingSessionId,
+          });
+
+          void TransferNotificationService.notifySessionWelcome({
+            sessionId: existingSessionId,
+            userId: recoveryUserId,
+            name: name || email || (existingSession as any)?.email || null,
+            provider,
+            providerUserId: provider_user_id,
+            language,
+          }).catch((welcomeError) => {
+            logger.warn(`[external-finalize] welcome notification failed for ${recoveryUserId}: ${welcomeError instanceof Error ? welcomeError.message : String(welcomeError)}`);
+          });
+
+          const responseBody = {
+            success: true,
+            alreadyCompleted: true,
+            message: 'PIN criado com sucesso. Conta do WhatsApp pronta para uso.',
+            sessionId: existingSessionId,
+            sessionToken,
+            userId: recoveryUserId,
+            publicKey: (existingWallet as any)?.public_key,
+            walletName: String((existingWallet as any)?.name || name || `Wallet for ${recoveryUserId}`),
+            transferKey: pixKey,
+            pixKey,
+          };
+          await completeOnboardingFinalization(tokenHash, responseBody, 200);
+          return res.status(200).json(responseBody);
         }
+        if (existingSession && existingWallet) {
         const existingEmail = normalizeEmailForCompare((existingSession as any)?.email);
         const existingUserId = normalizeEmailForCompare((existingSession as any)?.user_id);
         const canonicalExternalLogin = existingEmail || (looksLikeEmail(existingUserId) ? existingUserId : '');
@@ -3195,6 +3342,7 @@ export default class ExternalFinalizeController {
             publicKey: existingWallet.public_key,
             walletName: existingWallet.name || `Wallet for ${existingAccount.user_id}`,
           });
+        }
         }
       }
 
@@ -3404,6 +3552,8 @@ export default class ExternalFinalizeController {
         email: normalizedEmail || undefined,
         phoneNumber: normalizedPhoneNumber || undefined,
         cpf: normalizedCpf || undefined,
+        allowedSessionIds: staleExistingExternalAccount?.session_id ? [String(staleExistingExternalAccount.session_id)] : undefined,
+        allowedUserIds: staleExistingExternalAccount?.user_id ? [String(staleExistingExternalAccount.user_id)] : undefined,
         phoneCollisionProviderScope: provider === 'whatsapp' ? 'whatsapp' : undefined,
       });
       if (newAccountCollision) {

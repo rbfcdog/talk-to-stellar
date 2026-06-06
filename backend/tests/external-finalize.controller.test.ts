@@ -542,6 +542,88 @@ describe('ExternalFinalizeController', () => {
     }));
   });
 
+  it('sets a PIN on an incomplete WhatsApp account instead of rejecting creation', async () => {
+    const jwt = require('jsonwebtoken');
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_onboard',
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+    });
+
+    finalizeFindByProviderAndIdMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: 'existing-whatsapp-session',
+      user_id: 'external:whatsapp:5511999999999',
+      data: {
+        phone_number: '5511999999999',
+        remote_jid: '5511999999999@s.whatsapp.net',
+      },
+    });
+    finalizeGetSessionMock.mockResolvedValue({
+      session_id: 'existing-whatsapp-session',
+      user_id: 'external:whatsapp:5511999999999',
+      email: '',
+      session_token: 'old-session-token',
+      public_key: testPublicKey,
+      phone_number: '5511999999999',
+      password_hash: null,
+      session_password_hash: null,
+      created_at: '2026-06-01T00:00:00.000Z',
+      last_activity: '2026-06-01T00:00:00.000Z',
+    });
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'existing-whatsapp-session',
+      public_key: testPublicKey,
+      vault_secret_id: 'vault-secret-id-1',
+      name: 'WhatsApp Wallet',
+    });
+
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    const req = {
+      body: {
+        token: 'signed-token',
+        name: 'WhatsApp User',
+        email: 'whatsapp-user@example.com',
+        phone_number: '+55 11 99999-9999',
+        pin: '1234',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeStoreSecretMock).not.toHaveBeenCalled();
+    expect(finalizeSaveSessionMock).toHaveBeenCalledWith('existing-whatsapp-session', expect.objectContaining({
+      user_id: 'whatsapp-user@example.com',
+      email: 'whatsapp-user@example.com',
+      public_key: testPublicKey,
+      phone_number: '5511999999999',
+      password_hash: expect.any(String),
+      session_password_hash: expect.any(String),
+    }));
+    expect(finalizeSaveWalletMock).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: 'existing-whatsapp-session',
+      public_key: testPublicKey,
+    }));
+    expect(finalizeCreateMappingMock).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: 'existing-whatsapp-session',
+      user_id: 'whatsapp-user@example.com',
+    }));
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      sessionId: 'existing-whatsapp-session',
+      userId: 'whatsapp-user@example.com',
+      publicKey: testPublicKey,
+    }));
+  });
+
   it('confirms USDC payment with XLM source path payment', async () => {
     const crypto = require('crypto');
     const jwt = require('jsonwebtoken');
