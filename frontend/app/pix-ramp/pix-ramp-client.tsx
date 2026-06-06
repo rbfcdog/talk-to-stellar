@@ -1013,6 +1013,11 @@ export default function PixRampClient({
   const walletPinInputRef = useRef<HTMLInputElement | null>(null);
   const localIntentNonceRef = useRef("");
   if (!localIntentNonceRef.current) localIntentNonceRef.current = createLocalIntentNonce();
+  const pageSavingsSeedRef = useRef("");
+  if (!pageSavingsSeedRef.current) {
+    const source = shortLinkCode || queryString || localIntentNonceRef.current || "pix-ramp";
+    pageSavingsSeedRef.current = `page-${stableHash(source)}`;
+  }
   const [sessionId, setSessionId] = useState("");
   const [rampEmail, setRampEmail] = useState("");
   const [resolvedWallet, setResolvedWallet] = useState<RampResponse | null>(null);
@@ -1108,6 +1113,7 @@ export default function PixRampClient({
     autoPayDestinationAsset,
   ].join(":"))}`;
   const currentOnRampIntentId = activeOnRampIntentId || atomicIntentKey;
+  const pageSavingsSeed = pageSavingsSeedRef.current;
   const offRampInputAsset = rampMode === "offramp" ? targetAsset : "BRL";
   const offRampExactReceiveBrl = Boolean(rampMode === "offramp" && (offRampFiatAmount.trim() || offRampInputAsset === "BRL"));
   const offRampInputValue = offRampExactReceiveBrl
@@ -3737,7 +3743,7 @@ export default function PixRampClient({
                 mode="onramp"
                 amount={amountBrl}
                 language={language}
-                savingsSeed={currentOnRampIntentId}
+                savingsSeed={pageSavingsSeed}
               />
             )}
             {transferFlow && transferRecipientLabel && (
@@ -3811,7 +3817,7 @@ export default function PixRampClient({
                   mode="onramp"
                   quote={quote}
                   language={language}
-                  savingsSeed={currentOnRampIntentId}
+                  savingsSeed={pageSavingsSeed}
                 />
                 {quoteExpired && (
                   <div className="mt-4 rounded-2xl border border-tts-error bg-tts-error/10 p-4 text-sm font-bold text-tts-error sm:flex sm:items-center sm:justify-between sm:gap-4">
