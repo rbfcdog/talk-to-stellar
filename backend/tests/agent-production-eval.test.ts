@@ -1977,12 +1977,12 @@ describe('Agent production evals', () => {
             sourceAsset: { code: 'USDC', issuer: 'USDCISSUER' },
             destinationAmount: '1540.11',
             destinationAsset: { code: 'CETES', issuer: 'CETESISSUER' },
-            quote_ttl_seconds: 30,
+            quote_ttl_seconds: 900,
           },
           fee_breakdown: {
             total_fee_display: '0.00001 XLM',
           },
-          quote_ttl_seconds: 30,
+          quote_ttl_seconds: 900,
         });
       }
       if (name === 'prepare_payment_confirmation') {
@@ -2023,7 +2023,7 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('you send US$ 100.00');
     expect(result.response_message).toContain('Ana Silva receives approximately 1540.11 CETES');
     expect(result.response_message).toContain('Estimated fee: 0.00001 XLM.');
-    expect(result.response_message).toContain('Quote valid for 30 seconds.');
+    expect(result.response_message).toContain('Quote valid for 15 minutes.');
     expect(result.response_message).toContain('To confirm, open the link:');
     expect(result.response_message).toContain('/confirm-payment?token=ana-cetes');
     expect(result.response_message).not.toContain('Estimativa antes de confirmar');
