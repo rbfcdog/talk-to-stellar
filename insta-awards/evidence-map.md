@@ -113,6 +113,7 @@ Evidence to capture:
 Primary tests:
 
 ```text
+backend/tests/international-transfer.routes.test.ts
 backend/tests/international-transfer.service.test.ts
 backend/tests/financial-conversion-reference.test.ts
 ```
@@ -120,9 +121,13 @@ backend/tests/financial-conversion-reference.test.ts
 What they prove:
 
 - BRL/USD quotes can be created with route/path quote data.
+- HTTP routes return request/correlation IDs and quote provenance.
+- Operator-only funding confirmation, settlement, and payout routes require ops authorization.
 - Same-name payout checks work.
 - Transfer lifecycle advances through quote, Pix, Stellar settlement, payout,
   and reconciliation.
+- Pix failure, settlement failure, payout failure, and replayed lifecycle events
+  are explicit under tests.
 - Reconciliation metrics include route evidence and fee validation.
 - Conversion quote safety avoids using obviously distorted testnet rates.
 

@@ -71,6 +71,85 @@ class MemoryTransferRepository implements InternationalTransferRepository {
   }
 }
 
+function referenceQuote(destinationAmount = '100.0000000') {
+  return {
+    source: 'transaction_values' as const,
+    symbol: 'USDC/BRL' as const,
+    brlPerUsdc: '5.60000000',
+    usdcPerBrl: '0.17857143',
+    fetchedAt: new Date().toISOString(),
+    sourceAsset: { code: 'TESOURO', issuer: 'GTESOURO' },
+    destinationAsset: { code: 'USDC', issuer: 'GUSDC' },
+    sourceAmount: '560.0000000',
+    destinationAmount,
+    path: [],
+  };
+}
+
+function payoutDestination() {
+  return {
+    accountHolderName: 'Rodrigo Banin',
+    accountHolderType: 'individual' as const,
+    bankName: 'International USD Bank',
+    routingNumber: '021000021',
+    accountNumber: '123456789',
+    accountType: 'checking' as const,
+    country: 'US',
+    providerLabel: 'other' as const,
+  };
+}
+
+async function createPixPendingTransfer(input: {
+  repository: MemoryTransferRepository;
+  pixFunding?: any;
+  stellarSettlement?: any;
+  payoutAdapter?: any;
+}) {
+  const quoteService = new BrlUsdQuoteService({
+    repository: input.repository,
+    quoteBrlToUsdc: async () => referenceQuote(),
+  });
+  const service = new InternationalTransferService({
+    repository: input.repository,
+    quoteService,
+    pixFunding: input.pixFunding || {
+      createPixIntent: jest.fn(async () => ({
+        provider: 'etherfuse',
+        pix_payment_id: 'mock_pix_order-1',
+        pix_order_id: 'mock_pix_order-1',
+        operation_id: 'op-1',
+        status: 'pending',
+        payment_instructions: { mode: 'mock' },
+        raw: { mode: 'mock', no_real_pix_created: true },
+      })),
+    } as any,
+    stellarSettlement: input.stellarSettlement,
+    payoutAdapter: input.payoutAdapter,
+  });
+  const quote = await quoteService.createQuote({
+    brl_amount: '560',
+    user_id: 'user-1',
+    request_id: 'req-service-1',
+    correlation_id: 'corr-service-1',
+  });
+  let transfer = await service.createTransfer({
+    quote_id: quote.quote_id,
+    user_id: 'user-1',
+    sender_identity: { legal_name: 'Rodrigo Banin', email: 'rodrigo@example.com' },
+    recipient_identity: { legal_name: 'Rodrigo Banin' },
+    payout_destination: payoutDestination(),
+    request_id: 'req-transfer-1',
+    correlation_id: 'corr-service-1',
+  });
+  transfer = await service.createPixIntent(transfer.transfer_id, {
+    session_id: 'session-1',
+    session_token: 'token-1',
+    request_id: 'req-pix-1',
+    correlation_id: 'corr-service-1',
+  });
+  return { service, quoteService, quote, transfer };
+}
+
 describe('BRL -> USDC -> USD international transfer layer', () => {
   it('creates BRL/USD quote using Stellar pathfinding output', async () => {
     const repository = new MemoryTransferRepository();
@@ -101,9 +180,35 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     });
     expect((quote.metadata as any)?.fee_model).toBe('charged_on_off_ramp_transaction_fees_only');
     expect((quote.metadata as any)?.fee_breakdown?.total_charged_fee_usd).toBeDefined();
+    expect(quote.provenance).toMatchObject({
+      kind: 'live_path_quote',
+      live: true,
+      fallback: false,
+      executable: true,
+    });
+    expect((quote.metadata as any)?.quote_provenance).toMatchObject({
+      source: 'stellar_horizon_strict_send_paths',
+    });
     expect(Number(quote.estimated_usdc_amount)).toBeGreaterThan(0);
     expect(Number(quote.estimated_usd_amount)).toBeGreaterThan(0);
     expect(repository.quotes.get(quote.quote_id)).toBeDefined();
+  });
+
+  it('expires stale quotes before transfer creation can use them', async () => {
+    const repository = new MemoryTransferRepository();
+    const issuedAt = new Date('2026-06-05T12:00:00.000Z');
+    let currentTime = issuedAt;
+    const quoteService = new BrlUsdQuoteService({
+      repository,
+      now: () => currentTime,
+      quoteBrlToUsdc: async () => referenceQuote(),
+    });
+
+    const quote = await quoteService.createQuote({ brl_amount: '560', user_id: 'user-1' });
+    currentTime = new Date(issuedAt.getTime() + 301_000);
+
+    await expect(quoteService.getActiveQuote(quote.quote_id)).rejects.toThrow(/expired/i);
+    expect(repository.quotes.get(quote.quote_id)?.quote_status).toBe('EXPIRED');
   });
 
   it('flags same-name payout matches and mismatches without blocking', () => {
@@ -221,7 +326,12 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       payoutAdapter: payoutAdapter as any,
     });
 
-    const quote = await quoteService.createQuote({ brl_amount: '560', user_id: 'user-1' });
+    const quote = await quoteService.createQuote({
+      brl_amount: '560',
+      user_id: 'user-1',
+      request_id: 'req-lifecycle-quote',
+      correlation_id: 'corr-service-1',
+    });
     let transfer = await service.createTransfer({
       quote_id: quote.quote_id,
       user_id: 'user-1',
@@ -237,12 +347,16 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
         country: 'US',
         providerLabel: 'other',
       },
+      request_id: 'req-lifecycle-transfer',
+      correlation_id: 'corr-service-1',
     });
     expect(transfer.status).toBe('QUOTE_CREATED');
 
     transfer = await service.createPixIntent(transfer.transfer_id, {
       session_id: 'session-1',
       session_token: 'token-1',
+      request_id: 'req-lifecycle-pix',
+      correlation_id: 'corr-service-1',
     });
     expect(transfer.status).toBe('PIX_PENDING');
     expect(transfer.pix_order_id).toBe('mock_pix_order-1');
@@ -250,13 +364,25 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     transfer = await service.confirmSandboxFunding(transfer.transfer_id);
     expect(transfer.status).toBe('PIX_RECEIVED');
 
+    transfer = await service.confirmSandboxFunding(transfer.transfer_id);
+    expect(transfer.status).toBe('PIX_RECEIVED');
+    expect((transfer.reconciliation_metadata as any).trace.correlation_id).toBe('corr-service-1');
+
     transfer = await service.settleStellar(transfer.transfer_id);
     expect(transfer.status).toBe('USDC_SETTLED');
     expect(transfer.stellar_tx_hash).toBe('stellar-hash-1');
 
+    transfer = await service.settleStellar(transfer.transfer_id);
+    expect(transfer.status).toBe('USDC_SETTLED');
+    expect(stellarSettlement.settleUsdc).toHaveBeenCalledTimes(1);
+
     transfer = await service.createPayoutInstruction(transfer.transfer_id, 'mock');
     expect(transfer.status).toBe('PAYOUT_PENDING');
     expect(transfer.provider_payout_id).toBe('provider-payout-1');
+
+    transfer = await service.createPayoutInstruction(transfer.transfer_id, 'mock');
+    expect(transfer.status).toBe('PAYOUT_PENDING');
+    expect(payoutAdapter.createPayoutInstruction).toHaveBeenCalledTimes(1);
 
     const reconciliation = await service.getReconciliation(transfer.transfer_id);
     expect(reconciliation.pix_order_id).toBe('mock_pix_order-1');
@@ -285,5 +411,111 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       route_delta_explained_by_fees: true,
     });
     expect(evidence.metrics_valid).toBe(true);
+  });
+
+  it('marks Pix funding failure events as FAILED with an error log', async () => {
+    const repository = new MemoryTransferRepository();
+    const { service, transfer } = await createPixPendingTransfer({ repository });
+
+    const failed = await service.handlePixConfirmation({
+      transfer_id: transfer.transfer_id,
+      order_id: transfer.pix_order_id,
+      status: 'failed',
+      request_id: 'req-pix-failed',
+      correlation_id: 'corr-service-1',
+    });
+
+    expect(failed.status).toBe('FAILED');
+    expect(failed.pix_status).toBe('failed');
+    expect(failed.error_logs.at(-1)).toMatchObject({ stage: 'pix_funding' });
+    expect((failed.reconciliation_metadata as any).next_action).toBe('refund_or_retry');
+  });
+
+  it('marks Pix intent creation failures as FAILED', async () => {
+    const repository = new MemoryTransferRepository();
+    const pixFunding = {
+      createPixIntent: jest.fn(async () => {
+        throw new Error('Etherfuse Pix intent rejected');
+      }),
+    };
+    const quoteService = new BrlUsdQuoteService({
+      repository,
+      quoteBrlToUsdc: async () => referenceQuote(),
+    });
+    const service = new InternationalTransferService({
+      repository,
+      quoteService,
+      pixFunding: pixFunding as any,
+    });
+    const quote = await quoteService.createQuote({ brl_amount: '560', user_id: 'user-1' });
+    const transfer = await service.createTransfer({
+      quote_id: quote.quote_id,
+      user_id: 'user-1',
+      sender_identity: { legal_name: 'Rodrigo Banin' },
+      recipient_identity: { legal_name: 'Rodrigo Banin' },
+      payout_destination: payoutDestination(),
+    });
+
+    await expect(service.createPixIntent(transfer.transfer_id, {
+      session_id: 'session-1',
+      session_token: 'token-1',
+    })).rejects.toThrow(/Pix intent rejected/);
+    expect(repository.transfers.get(transfer.transfer_id)?.status).toBe('FAILED');
+    expect(repository.transfers.get(transfer.transfer_id)?.error_logs.at(-1)).toMatchObject({ stage: 'pix_intent' });
+  });
+
+  it('marks settlement failures as FAILED without creating mock evidence', async () => {
+    const repository = new MemoryTransferRepository();
+    const stellarSettlement = {
+      settleUsdc: jest.fn(async () => {
+        throw new Error('STELLAR_SECRET_KEY is required for real settlement');
+      }),
+    };
+    const { service, transfer } = await createPixPendingTransfer({
+      repository,
+      stellarSettlement: stellarSettlement as any,
+    });
+    const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+
+    await expect(service.settleStellar(funded.transfer_id)).rejects.toThrow(/STELLAR_SECRET_KEY/);
+    expect(repository.transfers.get(funded.transfer_id)?.status).toBe('FAILED');
+    expect(repository.transfers.get(funded.transfer_id)?.error_logs.at(-1)).toMatchObject({ stage: 'stellar_settlement' });
+  });
+
+  it('marks payout adapter failures as FAILED', async () => {
+    const repository = new MemoryTransferRepository();
+    const stellarSettlement = {
+      settleUsdc: jest.fn(async (transfer: InternationalTransfer) => ({
+        stellar_tx_hash: 'stellar-hash-1',
+        stellar_memo: 'tts-test',
+        stellar_source_account: 'GSOURCE',
+        stellar_destination_account: 'GDEST',
+        asset_code: 'USDC',
+        asset_issuer: 'GUSDC',
+        amount: transfer.quoted_usd_amount,
+        network: 'testnet',
+        status: 'submitted',
+        execution_mode: 'testnet',
+        settled_at: new Date().toISOString(),
+      })),
+    };
+    const payoutAdapter = {
+      providerName: 'etherfuse',
+      createPayoutInstruction: jest.fn(async () => {
+        throw new Error('provider rejected payout instruction');
+      }),
+      getPayoutStatus: jest.fn(async () => 'pending'),
+    };
+    const { service, transfer } = await createPixPendingTransfer({
+      repository,
+      stellarSettlement: stellarSettlement as any,
+      payoutAdapter: payoutAdapter as any,
+    });
+    const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+    const settled = await service.settleStellar(funded.transfer_id);
+
+    await expect(service.createPayoutInstruction(settled.transfer_id, 'etherfuse')).rejects.toThrow(/provider rejected/);
+    expect(repository.transfers.get(settled.transfer_id)?.status).toBe('FAILED');
+    expect(repository.transfers.get(settled.transfer_id)?.error_logs.at(-1)).toMatchObject({ stage: 'payout_instruction' });
   });
 });

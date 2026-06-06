@@ -2,6 +2,7 @@ import { supabase } from '../../config/supabase';
 import {
   InternationalTransfer,
   InternationalTransferQuote,
+  QuoteProvenance,
   TransferReconciliation,
 } from '../services/international-transfer.types';
 
@@ -35,6 +36,8 @@ function quoteToRow(quote: InternationalTransferQuote): Record<string, unknown> 
 }
 
 function rowToQuote(row: any): InternationalTransferQuote {
+  const metadata = row.metadata || {};
+  const provenance = (metadata.quote_provenance || metadata.provenance || undefined) as QuoteProvenance | undefined;
   return {
     quote_id: String(row.id),
     user_id: row.user_id || undefined,
@@ -51,7 +54,8 @@ function rowToQuote(row: any): InternationalTransferQuote {
     expires_at: String(row.expires_at),
     quote_status: row.quote_status || 'ACTIVE',
     quote_source: row.quote_source || 'stellar_pathfinding',
-    metadata: row.metadata || {},
+    provenance,
+    metadata,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };

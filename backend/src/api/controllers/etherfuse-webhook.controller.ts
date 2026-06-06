@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { timingSafeEqualString } from '../../utils/password';
 import { internationalTransferService } from '../services/international-transfer.service';
+import { applyApiRequestContext, readApiRequestContext, responseContext } from './request-context';
 
 function readBearerToken(req: Request): string {
   const auth = String(req.headers.authorization || '').trim();
@@ -29,16 +30,23 @@ function statusFromError(error: any): number {
 
 export class EtherfuseWebhookController {
   static async pix(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
     if (!webhookAuthorized(req)) {
-      return res.status(401).json({ success: false, message: 'Invalid Etherfuse webhook secret.' });
+      return res.status(401).json({ success: false, ...responseContext(context), message: 'Invalid Etherfuse webhook secret.' });
     }
 
     try {
-      const transfer = await internationalTransferService.handlePixConfirmation(req.body || {});
-      return res.status(200).json({ success: true, transfer });
+      const transfer = await internationalTransferService.handlePixConfirmation({
+        ...(req.body || {}),
+        request_id: context.request_id,
+        correlation_id: context.correlation_id,
+      });
+      return res.status(200).json({ success: true, ...responseContext(context), transfer });
     } catch (error: any) {
       return res.status(statusFromError(error)).json({
         success: false,
+        ...responseContext(context),
         message: error instanceof Error ? error.message : String(error),
       });
     }
