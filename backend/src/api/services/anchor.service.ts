@@ -35,6 +35,7 @@ import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/am
 import { verifyWalletPin } from '../../utils/pin-hash';
 import { logger } from '../../utils/logger';
 import { errorLogFields, errorLogMessage } from '../../utils/error-log';
+import { publicErrorCode } from '../../utils/public-error';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -162,6 +163,10 @@ interface CreateOnRampForSessionInput extends RampSessionInput {
   autoPayAfterRamp?: boolean;
   auto_pay_recipient?: string;
   autoPayRecipient?: string;
+  auto_pay_recipient_key?: string;
+  autoPayRecipientKey?: string;
+  auto_pay_recipient_public_key?: string;
+  autoPayRecipientPublicKey?: string;
   auto_pay_amount?: string;
   autoPayAmount?: string;
   auto_pay_asset_code?: string;
@@ -4539,6 +4544,8 @@ export class AnchorService {
     }
     const autoPayAfterRamp = Boolean(input.auto_pay_after_ramp || input.autoPayAfterRamp);
     const autoPayRecipient = coalesceString(input.auto_pay_recipient, input.autoPayRecipient);
+    const autoPayRecipientKey = coalesceString(input.auto_pay_recipient_key, input.autoPayRecipientKey);
+    const autoPayRecipientPublicKey = coalesceString(input.auto_pay_recipient_public_key, input.autoPayRecipientPublicKey);
     const autoPayAmount = coalesceString(input.auto_pay_amount, input.autoPayAmount);
     const autoPayAssetCode = normalizeAssetCode(coalesceString(input.auto_pay_asset_code, input.autoPayAssetCode, finalAsset.code));
     const autoPayDestinationAssetCode = normalizeAssetCode(coalesceString(
@@ -4927,6 +4934,8 @@ export class AnchorService {
       post_conversion_asset_issuer: postConversionAsset && !sameIssuedAsset(postConversionAsset, finalAsset) ? postConversionAsset.issuer : undefined,
       auto_pay_after_ramp: autoPayAfterRamp || undefined,
       auto_pay_recipient: autoPayRecipient || undefined,
+      auto_pay_recipient_key: autoPayAfterRamp ? autoPayRecipientKey || undefined : undefined,
+      auto_pay_recipient_public_key: autoPayAfterRamp ? autoPayRecipientPublicKey || undefined : undefined,
       auto_pay_amount: autoPayAmount || undefined,
       auto_pay_asset_code: autoPayAfterRamp ? autoPayAssetCode : undefined,
       auto_pay_destination_asset_code: autoPayAfterRamp ? autoPayDestinationAssetCode : undefined,
@@ -5937,10 +5946,20 @@ export class AnchorService {
         } catch (error) {
           autoPayStatus = 'failed';
           const message = debugErrorMessage(error);
-          autoPayResult = { success: false, error: message };
+          const code = publicErrorCode(error);
+          const statusCode = Number((error as { statusCode?: unknown; status?: unknown } | null)?.statusCode || (error as { status?: unknown } | null)?.status || 0);
+          autoPayResult = {
+            success: false,
+            error: message,
+            message,
+            code,
+            ...(Number.isFinite(statusCode) && statusCode > 0 ? { status_code: statusCode } : {}),
+          };
           await this.persistSandboxOnRampContext(mockRecord, {
             auto_pay_status: 'failed',
             auto_pay_error: message,
+            auto_pay_error_code: code,
+            auto_pay_result: autoPayResult,
             auto_pay_failed_at: new Date().toISOString(),
           }).catch((persistError) => {
             console.warn('[ramp] Could not persist PIX-funded auto-pay failure:', debugErrorMessage(persistError));
@@ -6013,6 +6032,12 @@ export class AnchorService {
       sourceAssetCode,
     ));
     const recipient = coalesceString(operationContext.auto_pay_recipient);
+    const recipientKey = coalesceString(
+      operationContext.auto_pay_recipient_key,
+      operationContext.auto_pay_recipient_email,
+      operationContext.auto_pay_recipient_pix_key,
+    );
+    const recipientPublicKey = coalesceString(operationContext.auto_pay_recipient_public_key);
 
     if (!amount || !sourceAssetCode || !recipient) {
       throw apiError('Auto-pay after PIX is missing amount, asset, or recipient.', 400);
@@ -6089,6 +6114,8 @@ export class AnchorService {
         destination_asset_code: destinationAssetCode || sourceAssetCode,
         recipient,
         recipient_name: recipient,
+        recipient_key: recipientKey || undefined,
+        recipient_public_key: recipientPublicKey || undefined,
         order_id: coalesceString(input.order_id, input.orderId, record.transaction.id),
         operation_id: coalesceString(input.operation_id, input.operationId, record.operationId),
         language: coalesceString(operationContext.language, input.language),

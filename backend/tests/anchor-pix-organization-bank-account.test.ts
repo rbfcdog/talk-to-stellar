@@ -144,6 +144,12 @@ describe('AnchorService PIX organization bank account routing', () => {
       customer_id: 'customer-1',
       amount: '10',
       final_asset: 'BRL',
+      auto_pay_after_ramp: true,
+      auto_pay_recipient: 'Ana Silva',
+      auto_pay_recipient_key: 'ana.silva@example.com',
+      auto_pay_recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
+      auto_pay_amount: '10',
+      auto_pay_asset_code: 'BRL',
       language: 'en',
     });
 
@@ -163,6 +169,10 @@ describe('AnchorService PIX organization bank account routing', () => {
     expect(persistSpy).toHaveBeenCalledWith(expect.objectContaining({
       context: expect.objectContaining({
         language: 'en',
+        auto_pay_after_ramp: true,
+        auto_pay_recipient: 'Ana Silva',
+        auto_pay_recipient_key: 'ana.silva@example.com',
+        auto_pay_recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
       }),
     }));
   });

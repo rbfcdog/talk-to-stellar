@@ -932,7 +932,7 @@ function publicRampErrorMessage(error: unknown, language: "pt-BR" | "en") {
       ? "Não consegui preparar seu PIX nesta tentativa. Toque em Ver valor final e tente confirmar novamente."
       : "I could not prepare your PIX on this attempt. Tap Show final amount and try confirming again.";
   }
-  const mapped = mapPublicError(raw, language);
+  const mapped = mapPublicError(payload || raw, language);
   const isTechnical =
     /session_id|session_token|internal authorization|backend|proxy|schema cache|could not find the table|relation .* does not exist|fetch failed|timeout|timed out|econn|etherfuse|provider/.test(normalized);
   if (isTechnical || mapped.code !== "temporary_unavailable") return mapped.message;
@@ -2835,6 +2835,8 @@ export default function PixRampClient({
         post_conversion_asset: hasPostOnRampConversion ? settlementAssetCode(postConversionAsset) : undefined,
         auto_pay_after_ramp: transferFlow && Boolean(transferRecipient),
         auto_pay_recipient: transferRecipient || undefined,
+        auto_pay_recipient_key: transferRecipientDisplayKey || undefined,
+        auto_pay_recipient_public_key: verifiedRecipientPublicKey || undefined,
         auto_pay_amount: feeAdjustedAutoPayAmount || autoPaySourceAmount || autoPayAmount || undefined,
         auto_pay_asset_code: settlementAssetCode(autoPaySourceAsset || autoPayAsset || targetAsset),
         auto_pay_destination_asset_code: autoPayDestinationAsset ? settlementAssetCode(autoPayDestinationAsset) : undefined,
@@ -2955,7 +2957,13 @@ export default function PixRampClient({
       }
       if (backendConfirmedPix && backendAutoPayFailed) {
         const autoPayError = String(backendAutoPayResult?.message || backendAutoPayResult?.error || payload?.message || payload?.error || "");
-        setPixFundedTransferError(publicRampErrorMessage(autoPayError || L("O envio automático não foi concluído.", "The automatic transfer was not completed."), language));
+        setPixFundedTransferError(publicRampErrorMessage({
+          payload: {
+            success: false,
+            ...(backendAutoPayResult?.code || payload?.code ? { code: backendAutoPayResult?.code || payload?.code } : {}),
+            message: autoPayError || L("O envio automático não foi concluído.", "The automatic transfer was not completed."),
+          },
+        }, language));
         setPolling(false);
         markOperationCompleted();
         setStep("success");
