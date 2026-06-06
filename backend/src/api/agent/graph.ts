@@ -16,6 +16,7 @@ import { supabase } from '../../config/supabase';
 import { getAssetIssuer, getStellarNetworkName, resolveConfiguredAsset } from '../../config/assets';
 import { WalletRepository } from '../repository/core/wallet.repository';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
+import { formatQuoteTtl } from '../services/quote-expiry.service';
 import crypto from 'crypto';
 
 const walletRepo = new WalletRepository(supabase as any);
@@ -2016,8 +2017,8 @@ export class AgentGraph {
     if (ttlSeconds > 0) {
       lines.push(this.text(
         language,
-        `Cotação válida por ${Math.trunc(ttlSeconds)} segundos.`,
-        `Quote valid for ${Math.trunc(ttlSeconds)} seconds.`
+        `Cotação válida por ${formatQuoteTtl(ttlSeconds, 'pt-BR')}.`,
+        `Quote valid for ${formatQuoteTtl(ttlSeconds, 'en')}.`
       ));
     }
 

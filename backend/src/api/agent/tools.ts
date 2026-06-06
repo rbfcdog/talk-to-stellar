@@ -21,7 +21,7 @@ import { AutoConversionService } from "../services/auto-conversion.service";
 import { DEFAULT_NETWORK_FEE_XLM, buildUnifiedFeeDisplay, formatCustomerAssetAmount, formatNetworkFeeForCustomer } from "../../utils/fee-display";
 import { TransferNotificationService } from "../services/transfer-notification.service";
 import { PaymentReceiptService, PaymentReceiptInput } from "../services/payment-receipt.service";
-import { attachQuoteExpiry, quoteTtlSeconds } from "../services/quote-expiry.service";
+import { attachQuoteExpiry, formatQuoteTtl, quoteTtlSeconds } from "../services/quote-expiry.service";
 import { ActivityFeedService } from "../services/activity-feed.service";
 import { FinancialInsightsService } from "../services/financial-insights.service";
 import { SmartContactsService } from "../services/smart-contacts.service";
@@ -3910,7 +3910,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
           : `Estimativa antes de confirmar: para receber ${destinationLabel}, será usado ${sourceLabel}. `) +
         `Taxa estimada: ${feeBreakdown.total_fee_display}. ` +
         `${savingsEstimate ? `Economia estimada: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+        `Cotação válida por ${formatQuoteTtl(expiringQuote.quote_ttl_seconds, 'pt-BR')}.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -4042,7 +4042,7 @@ async function executeGetBestRoute(input: any): Promise<string> {
         `Cotação atual: ${sourceLabel} vira aproximadamente ${destinationLabel}. ` +
         `Taxa estimada: ${feeBreakdown.total_fee_display}. ` +
         `${savingsEstimate ? `Economia estimada: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))} vs métodos tradicionais (${formatPercent(Number(savingsEstimate.savings_percentage_over_traditional_fee || 0))}). ` : ''}` +
-        `Cotação válida por ${expiringQuote.quote_ttl_seconds} segundos.`,
+        `Cotação válida por ${formatQuoteTtl(expiringQuote.quote_ttl_seconds, 'pt-BR')}.`,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -4522,7 +4522,7 @@ async function executePrepareConversionConfirmation(input: any): Promise<string>
         `Antes de confirmar: conversão preparada com a cotação atual e taxa estimada ${unifiedFee.display || 'indisponível'}. ` +
         `${savingsEstimate ? `Economia estimada vs métodos tradicionais: ${formatBrl(Number(savingsEstimate.estimated_savings_brl || 0))}. ` : ''}` +
         `${crossAsset && routeChain ? `Cotação entre moedas: ${routeChain}. ` : ''}` +
-        `Cotação válida por ${input.quote?.quote_ttl_seconds || quoteTtlSeconds()} segundos. ` +
+        `Cotação válida por ${formatQuoteTtl(input.quote?.quote_ttl_seconds || quoteTtlSeconds(), 'pt-BR')}. ` +
         `Para confirmar a conversão, abra:\n\n${url}`,
     });
   } catch (error) {

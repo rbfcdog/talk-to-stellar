@@ -1,9 +1,9 @@
-const DEFAULT_QUOTE_TTL_SECONDS = 30;
+const DEFAULT_QUOTE_TTL_SECONDS = 15 * 60;
 
 function configuredTtlSeconds(): number {
-  const raw = Number(process.env.QUOTE_TTL_SECONDS || DEFAULT_QUOTE_TTL_SECONDS);
-  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_QUOTE_TTL_SECONDS;
-  return Math.min(Math.max(Math.floor(raw), 5), 300);
+  // Confirmation short links are capped at 15 minutes; quote validity must match
+  // that window so stale 30-second env config cannot expire the page early.
+  return DEFAULT_QUOTE_TTL_SECONDS;
 }
 
 export function quoteTtlSeconds(): number {
@@ -54,4 +54,16 @@ export function isQuoteExpired(payload: any, now = Date.now()): boolean {
 
 export function quoteExpiryMessage(): string {
   return 'Cotação expirada. Solicite uma nova cotação para confirmar com preço atualizado.';
+}
+
+export function formatQuoteTtl(seconds: unknown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+  const parsed = Number(seconds || 0);
+  const ttlSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : quoteTtlSeconds();
+  if (ttlSeconds >= 60 && ttlSeconds % 60 === 0) {
+    const minutes = Math.floor(ttlSeconds / 60);
+    if (language === 'en') return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+    return `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+  }
+  if (language === 'en') return `${ttlSeconds} ${ttlSeconds === 1 ? 'second' : 'seconds'}`;
+  return `${ttlSeconds} ${ttlSeconds === 1 ? 'segundo' : 'segundos'}`;
 }
