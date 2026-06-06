@@ -32,7 +32,9 @@ export function buildUsedQuoteLabel(input: {
   sourceAssetCode?: string | null;
   destinationAmount?: string | number | null;
   destinationAssetCode?: string | null;
+  language?: 'pt-BR' | 'en' | string | null;
 }): string {
+  const isEn = String(input.language || '').trim().toLowerCase().startsWith('en');
   const quote = input.quote || {};
   const sourceAmountRaw = input.sourceAmount || quote.sourceAmount;
   const destinationAmountRaw = input.destinationAmount || quote.destinationAmount;
@@ -42,7 +44,7 @@ export function buildUsedQuoteLabel(input: {
   const destinationAmount = toNumber(destinationAmountRaw);
 
   if (!sourceAmount || !destinationAmount || !sourceAsset || !destinationAsset || sourceAsset === destinationAsset) {
-    return 'Cotação usada: não aplicável';
+    return isEn ? 'Quote used: not applicable' : 'Cotação usada: não aplicável';
   }
 
   const sourceIsReal = sourceAsset === 'BRL' || sourceAsset === 'TESOURO';
@@ -50,18 +52,18 @@ export function buildUsedQuoteLabel(input: {
 
   if (sourceIsReal && destinationAsset === 'USDC') {
     const rate = sourceAmount / destinationAmount;
-    if (rate > 0 && rate < 2) return 'Cotação usada: ambiente testnet; valor sem câmbio real';
-    return `Cotação usada: 1 US$ = R$ ${trimFixed(rate, 6)}`;
+    if (rate > 0 && rate < 2) return isEn ? 'Quote used: testnet environment; value has no real FX rate' : 'Cotação usada: ambiente testnet; valor sem câmbio real';
+    return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 US$ = R$ ${trimFixed(rate, 6)}`;
   }
 
   if (sourceAsset === 'USDC' && destinationIsReal) {
     const rate = destinationAmount / sourceAmount;
-    if (rate > 0 && rate < 2) return 'Cotação usada: ambiente testnet; valor sem câmbio real';
-    return `Cotação usada: 1 US$ = R$ ${trimFixed(rate, 6)}`;
+    if (rate > 0 && rate < 2) return isEn ? 'Quote used: testnet environment; value has no real FX rate' : 'Cotação usada: ambiente testnet; valor sem câmbio real';
+    return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 US$ = R$ ${trimFixed(rate, 6)}`;
   }
 
   const sourceLabel = formatCustomerAssetAmount(String(sourceAmountRaw || ''), sourceAsset);
   const destinationLabel = formatCustomerAssetAmount(String(destinationAmountRaw || ''), destinationAsset);
   const unitRate = sourceAmount / destinationAmount;
-  return `Cotação usada: 1 ${displaySymbol(destinationAsset)} = ${trimFixed(unitRate, 6)} ${displaySymbol(sourceAsset)} (${sourceLabel} -> ${destinationLabel})`;
+  return `${isEn ? 'Quote used' : 'Cotação usada'}: 1 ${displaySymbol(destinationAsset)} = ${trimFixed(unitRate, 6)} ${displaySymbol(sourceAsset)} (${sourceLabel} -> ${destinationLabel})`;
 }
