@@ -1,3 +1,5 @@
+import { safeLocalStorage } from "./browser-storage";
+
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const SESSION_CREATED_AT_KEY = "talk-to-stellar.sessionCreatedAt";
 const SESSION_LAST_SEEN_AT_KEY = "talk-to-stellar.sessionLastSeenAt";
@@ -72,19 +74,19 @@ export function scopedClientStorageKey(baseKey: string, source?: unknown): strin
 }
 
 function removeScopedAndLegacySessionSecret(key: string, source: string) {
-  localStorage.removeItem(scopedClientStorageKey(key, source));
-  if (source === "web") localStorage.removeItem(key);
+  safeLocalStorage.remove(scopedClientStorageKey(key, source));
+  if (source === "web") safeLocalStorage.remove(key);
 }
 
 function readScopedTimestamp(key: string, source: string): number {
-  const scoped = normalizeTimestamp(localStorage.getItem(scopedClientStorageKey(key, source)));
+  const scoped = normalizeTimestamp(safeLocalStorage.get(scopedClientStorageKey(key, source)));
   if (scoped || source !== "web") return scoped;
-  return normalizeTimestamp(localStorage.getItem(key));
+  return normalizeTimestamp(safeLocalStorage.get(key));
 }
 
 function writeScopedTimestamp(key: string, source: string, value: string) {
-  localStorage.setItem(scopedClientStorageKey(key, source), value);
-  if (source === "web") localStorage.setItem(key, value);
+  safeLocalStorage.set(scopedClientStorageKey(key, source), value);
+  if (source === "web") safeLocalStorage.set(key, value);
 }
 
 /** Read the server's view of the current session via /api/session. */
@@ -133,8 +135,8 @@ export function clearClientSession() {
   const source = currentClientSessionScope();
   const keys = [SESSION_ID_KEY, SESSION_TOKEN_KEY, SESSION_CREATED_AT_KEY, SESSION_LAST_SEEN_AT_KEY];
   for (const key of keys) {
-    localStorage.removeItem(scopedClientStorageKey(key, source));
-    if (source === "web") localStorage.removeItem(key);
+    safeLocalStorage.remove(scopedClientStorageKey(key, source));
+    if (source === "web") safeLocalStorage.remove(key);
   }
   const qs = source ? `?source=${encodeURIComponent(source)}` : "";
   fetch(`/api/session${qs}`, { method: "DELETE", cache: "no-store" }).catch(() => {});
@@ -153,9 +155,9 @@ export function isClientSessionExpired() {
   const source = currentClientSessionScope();
   const scopedIdKey = scopedClientStorageKey(SESSION_ID_KEY, source);
   const scopedTokenKey = scopedClientStorageKey(SESSION_TOKEN_KEY, source);
-  const legacyId = source === "web" ? localStorage.getItem(SESSION_ID_KEY) : null;
-  const legacyToken = source === "web" ? localStorage.getItem(SESSION_TOKEN_KEY) : null;
-  if (localStorage.getItem(scopedIdKey) || localStorage.getItem(scopedTokenKey) || legacyId || legacyToken) {
+  const legacyId = source === "web" ? safeLocalStorage.get(SESSION_ID_KEY) : null;
+  const legacyToken = source === "web" ? safeLocalStorage.get(SESSION_TOKEN_KEY) : null;
+  if (safeLocalStorage.get(scopedIdKey) || safeLocalStorage.get(scopedTokenKey) || legacyId || legacyToken) {
     removeScopedAndLegacySessionSecret(SESSION_ID_KEY, source);
     removeScopedAndLegacySessionSecret(SESSION_TOKEN_KEY, source);
     return false;

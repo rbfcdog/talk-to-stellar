@@ -1,5 +1,6 @@
 "use client"
 
+import { safeLocalStorage } from "@/lib/browser-storage"
 import { currentPageSessionSource, normalizeClientSessionSource } from "@/lib/session"
 
 export type WebChatFeedback = {
@@ -46,10 +47,10 @@ export function enqueueWebChatFeedback(content: string) {
   }
 
   try {
-    const current = JSON.parse(window.localStorage.getItem(WEB_CHAT_FEEDBACK_KEY) || "[]")
+    const current = JSON.parse(safeLocalStorage.get(WEB_CHAT_FEEDBACK_KEY) || "[]")
     const queue = Array.isArray(current) ? current : []
     queue.push(feedback)
-    window.localStorage.setItem(WEB_CHAT_FEEDBACK_KEY, JSON.stringify(queue.slice(-25)))
+    safeLocalStorage.set(WEB_CHAT_FEEDBACK_KEY, JSON.stringify(queue.slice(-25)))
   } catch {}
 
   try {
@@ -67,8 +68,8 @@ export function enqueueWebChatFeedback(content: string) {
 export function consumeWebChatFeedback(): WebChatFeedback[] {
   if (typeof window === "undefined") return []
   try {
-    const current = JSON.parse(window.localStorage.getItem(WEB_CHAT_FEEDBACK_KEY) || "[]")
-    window.localStorage.removeItem(WEB_CHAT_FEEDBACK_KEY)
+    const current = JSON.parse(safeLocalStorage.get(WEB_CHAT_FEEDBACK_KEY) || "[]")
+    safeLocalStorage.remove(WEB_CHAT_FEEDBACK_KEY)
     return Array.isArray(current)
       ? current.filter((item) => typeof item?.content === "string" && item.content.trim())
       : []

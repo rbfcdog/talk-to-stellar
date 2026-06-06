@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase';
+import { logger } from '../../utils/logger';
 
 export interface ConversionRule {
   id: string;
@@ -13,6 +14,11 @@ export interface ConversionRule {
   updated_at: string;
 }
 
+function throwRepositoryError(operation: string, detail: string, publicMessage: string): never {
+  logger.error(`[conversion-rule-repository] ${operation}: ${detail}`);
+  throw new Error(publicMessage);
+}
+
 export class ConversionRuleRepository {
   static async create(rule: Omit<ConversionRule, 'id' | 'created_at' | 'updated_at'>): Promise<ConversionRule> {
     const { data, error } = await supabase
@@ -22,8 +28,7 @@ export class ConversionRuleRepository {
       .single();
 
     if (error) {
-      console.error('Supabase error creating conversion rule:', error.message);
-      throw new Error(`Failed to create conversion rule: ${error.message}`);
+      throwRepositoryError('failed to create conversion rule', error.message, 'Failed to create conversion rule.');
     }
     return data;
   }
@@ -37,8 +42,7 @@ export class ConversionRuleRepository {
       .single();
 
     if (error) {
-      console.error('Supabase error updating conversion rule:', error.message);
-      throw new Error('Failed to update conversion rule.');
+      throwRepositoryError('failed to update conversion rule', error.message, 'Failed to update conversion rule.');
     }
     return data;
   }
@@ -50,8 +54,7 @@ export class ConversionRuleRepository {
       .eq('id', id);
 
     if (error) {
-      console.error('Supabase error deleting conversion rule:', error.message);
-      throw new Error('Failed to delete conversion rule.');
+      throwRepositoryError('failed to delete conversion rule', error.message, 'Failed to delete conversion rule.');
     }
   }
 
@@ -68,8 +71,7 @@ export class ConversionRuleRepository {
     const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Supabase error finding conversion rules:', error.message);
-      throw new Error('Failed to retrieve conversion rules.');
+      throwRepositoryError('failed to find conversion rules by wallet ID', error.message, 'Failed to retrieve conversion rules.');
     }
     return data || [];
   }
@@ -87,8 +89,7 @@ export class ConversionRuleRepository {
     const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Supabase error finding conversion rules:', error.message);
-      throw new Error('Failed to retrieve conversion rules.');
+      throwRepositoryError('failed to find conversion rules by session ID', error.message, 'Failed to retrieve conversion rules.');
     }
     return data || [];
   }
@@ -104,8 +105,7 @@ export class ConversionRuleRepository {
       .single();
 
     if (error && error.code !== 'PGRST116') {
-      console.error('Supabase error finding conversion rule:', error.message);
-      throw new Error('Failed to retrieve conversion rule.');
+      throwRepositoryError('failed to find conversion rule by asset pair', error.message, 'Failed to retrieve conversion rule.');
     }
     return data || null;
   }

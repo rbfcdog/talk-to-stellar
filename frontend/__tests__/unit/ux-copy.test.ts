@@ -190,10 +190,10 @@ describe("UX copy guardrails", () => {
 
     expect(text).toContain("closeIntermediatePage()");
     expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
-    expect(text).toContain('localStorage.removeItem("talk-to-stellar.browserId")');
+    expect(text).toContain('safeLocalStorage.remove("talk-to-stellar.browserId")');
     expect(chatText).toContain("const restoredSessionId = await restoreAuthenticatedBrowserSession();");
     expect(chatText).toContain("if (!cancelled && !restoredSessionId) beginExpiredBrowserSession(true);");
-    expect(chatText).toContain('localStorage.removeItem("talk-to-stellar.browserId")');
+    expect(chatText).toContain('safeLocalStorage.remove("talk-to-stellar.browserId")');
     expect(apiText).toContain("isBrowserOnlyLogout");
     expect(apiText).toContain("localOnly: true");
     expect(text).not.toContain('window.location.replace("/chat")');
@@ -495,10 +495,12 @@ describe("UX copy guardrails", () => {
     expect(reviewText).not.toContain("Com saldo");
     expect(reviewText).not.toContain("Outros saldos");
     expect(reviewText).not.toContain("Estes saldos não aparecem");
-    expect(returnsPage).toContain("resolvedView");
-    expect(returnsPage).toContain('view={resolvedView}');
-    expect(returnsPage).toContain('"application"');
-    expect(returnsPage).toContain('"returns"');
+    const returnsRenderer = source("app/rendimentos/render-rendimentos-page.tsx");
+    expect(returnsPage).toContain("renderRendimentosPage(searchParams)");
+    expect(returnsRenderer).toContain("resolvedView");
+    expect(returnsRenderer).toContain('view={resolvedView}');
+    expect(returnsRenderer).toContain('"application"');
+    expect(returnsRenderer).toContain('"returns"');
     expect(pixText).toContain("offRampInsufficientBalance");
     expect(pixText).toContain("offRampShortageOpen");
     expect(pixText).toContain("setOffRampShortageOpen(true)");

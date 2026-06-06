@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 import { mapPublicError } from "@/lib/public-errors";
 import { trackUserResearchEvent } from "@/lib/user-research";
+import { safeLocalStorage } from "@/lib/browser-storage";
 
 type Step = "quote" | "checkout" | "success";
 type TargetAsset = string;
@@ -1731,7 +1732,7 @@ export default function PixRampClient({
       })
       .catch(() => setSessionId(""))
       .finally(() => setSessionReady(true));
-    const storedName = window.localStorage.getItem("talk-to-stellar.userName") || "";
+    const storedName = safeLocalStorage.get("talk-to-stellar.userName") || "";
     if (storedName.includes("@")) setRampEmail(storedName);
   }, []);
 
@@ -1873,7 +1874,7 @@ export default function PixRampClient({
   useEffect(() => {
     if (!operationStorageKey) return;
     try {
-      if (window.localStorage.getItem(operationStorageKey) === "completed") {
+      if (safeLocalStorage.get(operationStorageKey) === "completed") {
         setOperationLocked(true);
       }
     } catch {}
@@ -2034,7 +2035,7 @@ export default function PixRampClient({
     setSessionId(nextSessionId);
     setResolvedWallet(payload);
     setWalletPublicKey(String(payload.public_key || ""));
-    window.localStorage.setItem("talk-to-stellar.userName", email);
+    safeLocalStorage.set("talk-to-stellar.userName", email);
 
     return { session_id: nextSessionId };
   }
@@ -2388,7 +2389,7 @@ export default function PixRampClient({
     scrubCompletedShortLinkUrl();
     if (!operationStorageKey) return;
     try {
-      window.localStorage.setItem(operationStorageKey, "completed");
+      safeLocalStorage.set(operationStorageKey, "completed");
     } catch {}
   }
 

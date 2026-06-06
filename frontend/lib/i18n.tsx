@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { safeLocalStorage } from "@/lib/browser-storage";
 import { currentClientSessionScope } from "@/lib/session";
 
 export type AppLanguage = "pt-BR" | "en";
@@ -242,7 +243,7 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function readStoredLanguage(): AppLanguage {
   if (typeof window === "undefined") return "pt-BR";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = safeLocalStorage.get(STORAGE_KEY);
   if (stored) return normalizeLanguage(stored);
   const cookieMatch = document.cookie.match(new RegExp(`(?:^|; )${COOKIE_KEY}=([^;]*)`));
   if (cookieMatch?.[1]) return normalizeLanguage(decodeURIComponent(cookieMatch[1]));
@@ -251,7 +252,7 @@ function readStoredLanguage(): AppLanguage {
 
 function persistLanguage(language: AppLanguage) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, language);
+  safeLocalStorage.set(STORAGE_KEY, language);
   document.cookie = `${COOKIE_KEY}=${encodeURIComponent(language)}; path=/; max-age=31536000; SameSite=Lax`;
   document.documentElement.lang = language === "pt-BR" ? "pt-BR" : "en";
 }

@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearClientSession,
   getClientSession,
+  isClientSessionExpired,
   saveClientSession,
   scopedClientStorageKey,
+  touchClientSessionActivity,
 } from '@/lib/session'
 
 describe('getClientSession', () => {
@@ -86,6 +88,28 @@ describe('getClientSession', () => {
     expect(window.localStorage.getItem(scopedClientStorageKey('talk-to-stellar.sessionCreatedAt', 'web'))).toBe('2')
     expect(window.localStorage.getItem('talk-to-stellar.sessionCreatedAt')).toBe('legacy-web')
     expect(fetchMock).toHaveBeenCalledWith('/api/session?source=whatsapp', expect.objectContaining({
+      method: 'DELETE',
+      cache: 'no-store',
+    }))
+  })
+
+  it('does not throw when localStorage is unavailable', () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ json: async () => ({}) } as Response)
+    vi.spyOn(window.localStorage.__proto__, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled')
+    })
+    vi.spyOn(window.localStorage.__proto__, 'setItem').mockImplementation(() => {
+      throw new Error('storage disabled')
+    })
+    vi.spyOn(window.localStorage.__proto__, 'removeItem').mockImplementation(() => {
+      throw new Error('storage disabled')
+    })
+
+    expect(() => saveClientSession()).not.toThrow()
+    expect(() => touchClientSessionActivity()).not.toThrow()
+    expect(() => isClientSessionExpired()).not.toThrow()
+    expect(() => clearClientSession()).not.toThrow()
+    expect(fetchMock).toHaveBeenCalledWith('/api/session?source=web', expect.objectContaining({
       method: 'DELETE',
       cache: 'no-store',
     }))

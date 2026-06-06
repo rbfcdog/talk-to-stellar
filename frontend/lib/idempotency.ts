@@ -1,3 +1,5 @@
+import { safeSessionStorage } from "./browser-storage";
+
 function stableStringify(value: unknown, seen = new WeakSet<object>()): string {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
@@ -64,9 +66,9 @@ export function getOrCreateIdempotencyKey(scope: string, payload: unknown) {
 
   try {
     const storageKey = `talk-to-stellar.idempotency.${hashString(scope)}.${key}`;
-    const existing = window.sessionStorage.getItem(storageKey);
+    const existing = safeSessionStorage.get(storageKey);
     if (existing) return existing;
-    window.sessionStorage.setItem(storageKey, key);
+    safeSessionStorage.set(storageKey, key);
   } catch {
     return key;
   }

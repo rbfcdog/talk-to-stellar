@@ -18,6 +18,7 @@ import {
   touchClientSessionActivity,
 } from "@/lib/session";
 import { buildIdempotencyKey, idempotentFetch } from "@/lib/idempotency";
+import { safeLocalStorage, safeSessionStorage } from "@/lib/browser-storage";
 import { publicErrorPayload } from "@/lib/public-errors";
 import { consumeWebChatFeedback, WEB_CHAT_FEEDBACK_CHANNEL, WEB_CHAT_FEEDBACK_EVENT, type WebChatFeedback } from "@/lib/web-feedback";
 import { Shimmer, TypingDots } from "@/components/shared/feedback";
@@ -50,12 +51,12 @@ function chatSessionStorageKey(chatId: string, source: string): string {
 
 function getStoredChatSessionId(chatId: string, source: string): string {
   if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(chatSessionStorageKey(chatId, source)) || "";
+  return safeSessionStorage.get(chatSessionStorageKey(chatId, source)) || "";
 }
 
 function setStoredChatSessionId(chatId: string, source: string, value: string) {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(chatSessionStorageKey(chatId, source), value);
+  safeSessionStorage.set(chatSessionStorageKey(chatId, source), value);
 }
 
 function getFriendlyLinkLabel(rawUrl: string, t: (key: string) => string) {
@@ -105,10 +106,10 @@ function generateBrowserId(): string {
 
 function getOrCreateBrowserId(): string {
   if (typeof window === "undefined") return "";
-  let browserId = localStorage.getItem("talk-to-stellar.browserId");
+  let browserId = safeLocalStorage.get("talk-to-stellar.browserId");
   if (!browserId) {
     browserId = generateBrowserId();
-    localStorage.setItem("talk-to-stellar.browserId", browserId);
+    safeLocalStorage.set("talk-to-stellar.browserId", browserId);
   }
   return browserId;
 }
@@ -213,7 +214,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     if (typeof window === "undefined") return "";
 
     clearClientSession();
-    if (!externalPriorityChat) localStorage.removeItem("talk-to-stellar.browserId");
+    if (!externalPriorityChat) safeLocalStorage.remove("talk-to-stellar.browserId");
     const newSessionId = generateSessionId();
     setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
     setSessionId(newSessionId);
@@ -527,7 +528,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   const resetClientSession = () => {
     if (typeof window === "undefined") return;
     clearClientSession();
-    if (!externalPriorityChat) localStorage.removeItem("talk-to-stellar.browserId");
+    if (!externalPriorityChat) safeLocalStorage.remove("talk-to-stellar.browserId");
     const newSessionId = generateSessionId();
     setStoredChatSessionId(chatId, clientSessionSource, newSessionId);
     setSessionId(newSessionId);
