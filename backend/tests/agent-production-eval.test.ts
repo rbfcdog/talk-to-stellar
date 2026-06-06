@@ -2032,6 +2032,110 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Para confirmar');
   });
 
+  it('keeps cross-asset payment quote copy in Portuguese when stored preference is Portuguese', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
+    const contactPublicKey = 'GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD';
+    mockRouteIntent(graph, 'route_payment_intent', {
+      amount: '10',
+      asset_code: 'USDC',
+      dest_asset_code: 'XLM',
+      recipient_query: 'Rodrigo Camargo',
+      language: 'en',
+    });
+
+    executeToolMock.mockImplementation(async (name: string) => {
+      if (name === 'list_contacts') {
+        return JSON.stringify({
+          success: true,
+          contacts: [
+            {
+              contact_name: 'Rodrigo Camargo',
+              stellar_public_key: contactPublicKey,
+              email: 'rodrigooobfcdog@gmail.com',
+            },
+          ],
+        });
+      }
+      if (name === 'get_balance') {
+        return JSON.stringify({
+          success: true,
+          balances: [
+            { asset: 'USDC', balance: '50.0000000' },
+          ],
+        });
+      }
+      if (name === 'get_saldo_tecnico') {
+        return JSON.stringify({
+          success: true,
+          balances: [
+            { asset: 'USDC', asset_issuer: 'USDCISSUER' },
+            { asset: 'XLM', asset_issuer: '' },
+          ],
+        });
+      }
+      if (name === 'get_best_route') {
+        return JSON.stringify({
+          success: true,
+          quote: {
+            sourceAmount: '10',
+            sourceAsset: { code: 'USDC', issuer: 'USDCISSUER' },
+            destinationAmount: '15.3002683',
+            destinationAsset: { code: 'XLM', issuer: '' },
+            quote_ttl_seconds: 900,
+          },
+          fee_breakdown: {
+            total_fee_display: '0.00001 XLM',
+          },
+          quote_ttl_seconds: 900,
+        });
+      }
+      if (name === 'prepare_payment_confirmation') {
+        return JSON.stringify({
+          success: true,
+          url: 'https://app.example.com/confirm-payment?token=rodrigo-xlm',
+        });
+      }
+
+      return JSON.stringify({ success: false, error: `unexpected tool ${name}` });
+    });
+
+    const state = createState('quero mandar 10 usdc pro rodrigooobfcdog@gmail.com receber em xlm');
+    state.action_params = {
+      ...state.action_params,
+      language: 'en',
+      preferred_language: 'pt-BR',
+      external_provider: 'whatsapp',
+      external_provider_user_id: '5575496918127',
+      external_source: 'whatsapp',
+    };
+
+    const result = await graph.processInput(state);
+
+    expect(result.detected_intent).toBe(IntentType.PAYMENT);
+    expect(result.action_type).toBe(ActionType.BUILD_PAYMENT);
+    expect(result.success).toBe(true);
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_payment_confirmation', expect.objectContaining({
+      language: 'pt-BR',
+      provider: 'whatsapp',
+      provider_user_id: '5575496918127',
+      source: 'whatsapp',
+      source_amount: '10',
+      source_asset_code: 'USDC',
+      amount: '15.3002683',
+      asset_code: 'XLM',
+    }));
+    expect(result.response_message).toContain('Estimativa antes de confirmar');
+    expect(result.response_message).toContain('você envia US$ 10.00');
+    expect(result.response_message).toContain('Rodrigo Camargo recebe aproximadamente 15.3002683 XLM');
+    expect(result.response_message).toContain('Taxa estimada: 0.00001 XLM.');
+    expect(result.response_message).toContain('Cotação válida por 15 minutos.');
+    expect(result.response_message).toContain('Para confirmar, abra o link:');
+    expect(result.response_message).not.toContain('Estimate before confirmation');
+    expect(result.response_message).not.toContain('Estimated fee');
+    expect(result.response_message).not.toContain('To confirm');
+  });
+
   it('routes PIX send wording through the product intent router instead of generic help', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;

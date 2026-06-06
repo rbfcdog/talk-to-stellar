@@ -52,7 +52,7 @@ jest.mock('../src/api/services/transfer-notification.service', () => ({
   },
 }));
 
-function createRepository(sessions: Record<string, any>) {
+function createRepository(sessions: Record<string, any>, states: Record<string, any> = {}) {
   return {
     getSession: jest.fn(async (sessionId: string) => sessions[sessionId] || null),
     saveSession: jest.fn(async (sessionId: string, data: any) => {
@@ -66,8 +66,10 @@ function createRepository(sessions: Record<string, any>) {
     clearSession: jest.fn(async (sessionId: string) => {
       delete sessions[sessionId];
     }),
-    getState: jest.fn(async () => null),
-    saveState: jest.fn(async () => undefined),
+    getState: jest.fn(async (sessionId: string) => states[sessionId] || null),
+    saveState: jest.fn(async (state: any) => {
+      states[state.session_id] = state;
+    }),
     getMessages: jest.fn(async () => []),
     saveMessage: jest.fn(async () => undefined),
     deletePrivateKeyMessages: jest.fn(async () => undefined),
@@ -281,6 +283,72 @@ describe('agent Telegram identity binding', () => {
             session_token: 'linked-token',
             language: 'en',
             preferred_language: 'en',
+          }),
+        })
+      );
+    });
+  });
+
+  it('keeps WhatsApp responses in the stored account language instead of stale runtime language', async () => {
+    const linkedSessionId = '36363636-3636-4636-8636-363636363636';
+    const repository = createRepository(
+      {
+        [linkedSessionId]: {
+          user_id: 'whatsapp@example.com',
+          email: 'whatsapp@example.com',
+          session_token: 'linked-token',
+          password_hash: 'hashed-pin',
+          public_key: 'G'.padEnd(56, 'P'),
+          language: 'en',
+          last_activity: new Date().toISOString(),
+        },
+      },
+      {
+        [linkedSessionId]: {
+          session_id: linkedSessionId,
+          action_params: {
+            language: 'en',
+          },
+        },
+      }
+    );
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: linkedSessionId,
+      user_id: 'whatsapp@example.com',
+      data: {
+        language: 'en',
+        preferred_language: 'pt-BR',
+      },
+    });
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'quero mandar 100 cetes pra fora da conta',
+          language: 'en',
+          session_id: linkedSessionId,
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(processInputMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: linkedSessionId,
+          action_params: expect.objectContaining({
+            external_provider: 'whatsapp',
+            external_provider_user_id: '5511999999999',
+            session_token: 'linked-token',
+            language: 'pt-BR',
+            preferred_language: 'pt-BR',
           }),
         })
       );
