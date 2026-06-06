@@ -184,6 +184,34 @@ describe('ShortLinkController security validation', () => {
     expect(updateEq).toHaveBeenCalledWith('session_id', 'session-1');
   });
 
+  it('does not expose session tokens from include_session without trusted proxy authorization', async () => {
+    mockResolveShortLinkRecord.mockResolvedValue({
+      url: 'https://app.example.com/pix-ramp?source=whatsapp&session_scope=whatsapp',
+      purpose: 'pix_onramp',
+      session_id: 'session-1',
+      user_id: 'user-1',
+    });
+
+    const req = createRequest(
+      {},
+      {},
+      { code: 'abc123' },
+      { include_session: '1' }
+    );
+    const res = createResponse();
+
+    await ShortLinkController.resolve(req, res);
+
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      url: 'https://app.example.com/pix-ramp?source=whatsapp&session_scope=whatsapp',
+      purpose: 'pix_onramp',
+      session_source: 'whatsapp',
+    });
+  });
+
   it('expires a short link when the frontend consumes it after completion', async () => {
     mockResolveShortLinkRecord.mockResolvedValue({
       url: 'https://app.example.com/pix-ramp?short_link_code=abc123',

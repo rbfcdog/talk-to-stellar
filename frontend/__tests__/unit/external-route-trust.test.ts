@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { POST } from "@/app/api/external/[...path]/route";
+import { GET, POST } from "@/app/api/external/[...path]/route";
 
 describe("/api/external public proxy trust boundary", () => {
   const previousBackendUrl = process.env.BACKEND_URL;
@@ -64,5 +64,28 @@ describe("/api/external public proxy trust boundary", () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.headers).toMatchObject({ "x-short-link-proxy-secret": "short-link-secret" });
     expect(init.headers).not.toHaveProperty("x-internal-api-secret");
+  });
+
+  it("does not attach trust headers when a browser resolves a short link with include_session", async () => {
+    process.env.BACKEND_URL = "https://backend.test";
+    process.env.INTERNAL_API_SECRET = "internal-secret";
+    process.env.SHORT_LINK_PROXY_SECRET = "short-link-secret";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        url: "https://app.test/pix-ramp?source=whatsapp",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }) as any,
+    );
+
+    const request = new NextRequest("https://app.test/api/external/short-links/abc123?include_session=1");
+
+    await GET(request, { params: Promise.resolve({ path: ["short-links", "abc123"] }) });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).not.toHaveProperty("x-internal-api-secret");
+    expect(init.headers).not.toHaveProperty("x-short-link-proxy-secret");
   });
 });

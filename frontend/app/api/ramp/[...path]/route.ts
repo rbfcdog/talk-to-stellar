@@ -44,9 +44,7 @@ function trustedRampSandboxHeaders(req: NextRequest): Record<string, string> {
   if (!expected) return {};
 
   const provided = String(
-    req.headers.get("x-ramp-sandbox-secret") ||
-      req.headers.get("x-internal-api-secret") ||
-      "",
+    req.headers.get("x-ramp-sandbox-secret") || "",
   ).trim();
   if (!provided || !timingSafeEqualString(expected, provided)) return {};
   return { "X-Ramp-Sandbox-Secret": expected };
