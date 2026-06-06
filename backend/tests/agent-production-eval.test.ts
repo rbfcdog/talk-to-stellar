@@ -99,6 +99,7 @@ type RouterEvalCase = {
   expectedDestAssetCode?: string;
   expectedQuoteMode?: 'market_price' | 'send_exact';
   expectedAllQuotes?: boolean;
+  deterministic?: boolean;
 };
 
 function flattenMessageContent(value: any): string {
@@ -868,7 +869,7 @@ describe('Agent production evals', () => {
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 
-  it('routes biometrics setup requests to the passkey setup tool', async () => {
+  it('routes biometrics setup requests to the passkey setup tool without the LLM router', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'production prompt') as any;
     const routerInvoke = mockRouteIntent(graph, 'route_passkey_setup_intent');
@@ -879,9 +880,10 @@ describe('Agent production evals', () => {
       message: 'Abra esta página segura para ativar biometria:\n\nhttps://app.example.com/setup-passkey?mode=agent&require_pin=1\n\nA página pede seu PIN antes de abrir a confirmação biométrica do celular. O link vale 15 minutos.',
     }));
 
-    const result = await graph.processInput(createState('quero ativar biometria na minha conta'));
+    const result = await graph.processInput(createState('quero definir a biometria na minha conta'));
 
-    expect(routerInvoke).toHaveBeenCalled();
+    expect(routerInvoke).not.toHaveBeenCalled();
+    expect(graph.llm.bindTools).not.toHaveBeenCalled();
     expect(result.success).toBe(true);
     expect(result.detected_intent).toBe(IntentType.PASSKEY_SETUP);
     expect(result.action_type).toBe(ActionType.SETUP_PASSKEY);
@@ -895,6 +897,36 @@ describe('Agent production evals', () => {
     expect(result.response_message).toContain('PIN');
     expect(result.response_message).not.toContain('e-mail');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
+  });
+
+  it('recognizes biometrics setup even when the LLM router is disabled', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'production prompt') as any;
+    graph.llm = {
+      bindTools: jest.fn(),
+      invoke: jest.fn(),
+    };
+
+    executeToolMock.mockResolvedValue(JSON.stringify({
+      success: true,
+      url: 'https://app.example.com/setup-passkey?mode=agent&require_pin=1',
+      message: 'Abra esta página segura para ativar biometria:\n\nhttps://app.example.com/setup-passkey?mode=agent&require_pin=1\n\nA página pede seu PIN antes de abrir a confirmação biométrica do celular. O link vale 15 minutos.',
+    }));
+
+    const result = await graph.processInput(createState('cadastrar digital na conta'));
+
+    expect(graph.llm.bindTools).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.detected_intent).toBe(IntentType.PASSKEY_SETUP);
+    expect(result.action_type).toBe(ActionType.SETUP_PASSKEY);
+    expect(executeToolMock).toHaveBeenCalledWith('prepare_passkey_setup', expect.objectContaining({
+      session_id: 'eval-session',
+      session_token: 'eval-session-token',
+      user_id: 'eval-user',
+      language: 'pt-BR',
+    }));
+    expect(result.response_message).toContain('/setup-passkey');
+    expect(result.response_message).toContain('PIN');
   });
 
   it('keeps web chat logout local so it does not disconnect WhatsApp or Telegram', async () => {
@@ -1183,7 +1215,7 @@ describe('Agent production evals', () => {
       { name: 'reset pin invalid', input: 'meu pin nao funciona', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin security wording', input: 'preciso trocar a senha pin da conta', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
       { name: 'reset pin typo missing first letter', input: 'ero mudar meu pin', expectedIntent: IntentType.RESET_PIN, risk: 'high' },
-      { name: 'passkey setup biometrics', input: 'quero ativar biometria na minha conta', expectedIntent: IntentType.PASSKEY_SETUP, expectedTool: 'route_passkey_setup_intent', risk: 'high' },
+      { name: 'passkey setup biometrics', input: 'quero ativar biometria na minha conta', expectedIntent: IntentType.PASSKEY_SETUP, expectedTool: 'route_passkey_setup_intent', risk: 'high', deterministic: true },
       { name: 'payment link create', input: 'criar link de pagamento de 50 dólares', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link receive', input: 'quero meu link para receber dinheiro', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
       { name: 'payment link charge customer', input: 'gerar link pra cobrar cliente 15 usdc', expectedIntent: IntentType.PAYMENT_LINK, risk: 'medium' },
@@ -1227,6 +1259,7 @@ describe('Agent production evals', () => {
       expectedDestAssetCode,
       expectedQuoteMode,
       expectedAllQuotes,
+      deterministic = false,
     }) => {
       const graph = new AgentGraph(createRepository() as any, 'live-openai-key', 'production prompt') as any;
       const expectedTool = caseExpectedTool || routeToolByIntent[expectedIntent];
@@ -1268,6 +1301,11 @@ describe('Agent production evals', () => {
       const detected = await graph.detectIntent(input);
 
       expect(detected).toBe(expectedIntent);
+      if (deterministic) {
+        expect(routerInvoke).not.toHaveBeenCalled();
+        expect(graph.llm.bindTools).not.toHaveBeenCalled();
+        return;
+      }
       expect(routeArgs.needs_clarification).toBe(needsClarification);
       expect(routeArgs.language).toBe(language);
       expect(routeArgs.risk).toBe(risk);
@@ -1508,10 +1546,9 @@ describe('Agent production evals', () => {
     const result = await graph.processInput(createState('quero ver meu sald9'));
 
     expect(result.detected_intent).toBe(IntentType.BALANCE);
-    expect(executeToolMock).toHaveBeenCalledWith('get_balance', expect.objectContaining({
-      session_id: 'eval-session',
-    }));
-    expect(result.response_message).toContain('XLM: 2.0000000');
+    expect(executeToolMock).not.toHaveBeenCalledWith('get_balance', expect.anything());
+    expect(result.response_message).toContain('Abra seu saldo aqui:');
+    expect(result.response_message).toContain('PIN');
     expect(result.response_message).not.toContain('Posso ajudar com sua conta TalkToStellar');
   });
 

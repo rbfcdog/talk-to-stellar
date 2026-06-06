@@ -638,6 +638,7 @@ describe('Agent tool execution', () => {
     const shortenSpy = jest
       .spyOn(ExternalService.prototype, 'shortenPublicUrl')
       .mockResolvedValueOnce('https://app.example.com/r/passkey-setup');
+    const originalSupabaseFrom = supabaseMock.from;
 
     supabaseMock.from = jest.fn((table: string) => {
       const query: any = {
@@ -681,6 +682,8 @@ describe('Agent tool execution', () => {
       expect(parsed.url).toBe('https://app.example.com/r/passkey-setup');
       expect(parsed.message).toContain('ativar biometria');
       expect(parsed.message).toContain('PIN');
+      expect(parsed.already_configured).toBe(false);
+      expect(parsed.setup_requires_pin).toBe(true);
       expect(parsed.expires_in_minutes).toBe(15);
       expect(shortenSpy).toHaveBeenCalledWith(expect.objectContaining({
         purpose: 'setup_passkey_agent',
@@ -693,8 +696,10 @@ describe('Agent tool execution', () => {
       const shortenedUrl = new URL(shortenInput.url);
       expect(shortenedUrl.searchParams.get('mode')).toBe('agent');
       expect(shortenedUrl.searchParams.get('require_pin')).toBe('1');
+      expect(shortenedUrl.searchParams.get('user_id')).toBe('user-1');
       expect(shortenedUrl.searchParams.get('session_scope')).toBe('whatsapp');
     } finally {
+      supabaseMock.from = originalSupabaseFrom;
       shortenSpy.mockRestore();
     }
   });
