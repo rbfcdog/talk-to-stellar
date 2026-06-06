@@ -26,11 +26,11 @@
 
 | SOW requirement | Current implementation | Status | Remaining gap |
 | --- | --- | --- | --- |
-| Provider-agnostic payout adapter interface | `PayoutProviderAdapter` exists. | Implemented | Document adapter contract and add provider contract tests. |
+| Provider-agnostic payout adapter interface | `PayoutProviderAdapter` exists and `payout-adapter-contract.md` documents the contract. | Implemented | Keep provider-specific snapshots current as adapters evolve. |
 | Payout destination metadata | Transfer types and payloads store account holder, bank, routing, account, type, country, provider label. | Implemented | Add stricter validation and masking rules for reviewer logs. |
 | Same-name account alignment checks | `IdentityAlignmentService` sets `MATCHED`, `MISMATCHED`, or `UNKNOWN` with risk notes. | Implemented | Add reviewer-facing explanation and hard blocking mode for required same-name routes. |
 | Payout reference IDs | Adapters return provider instruction/reference IDs and store them on transfer records. | Implemented | Add examples for each adapter in evidence docs. |
-| Payout status tracking | Adapter interface exposes status; transfer stores provider status. | Partial | Add scheduled polling or webhook ingestion for provider payout updates. |
+| Payout status tracking | Adapter interface exposes status; `POST /api/transfers/:id/payout-status-refresh` updates transfer and reconciliation status. | Partial | Add scheduled polling or provider webhook ingestion after a sandbox provider is selected. |
 | Settlement evidence attachment | `StellarTransactionRepository` and transfer service attach Stellar settlement evidence. | Implemented | Run a configured testnet proof and capture transaction hash. |
 | Mock or sandbox provider responses | Mock adapter and Etherfuse sandbox/proof adapter exist. | Implemented | Clearly label mock/sandbox in UI and evidence package. |
 | Circle compatibility | `CircleCompatibilityAdapter` builds provider-shaped payload and optionally POSTs when enabled. | Partial | Needs real sandbox credentials or documented dry-run output for evidence. |

@@ -165,6 +165,27 @@ export class InternationalTransfersController {
     }
   }
 
+  static async refreshPayoutStatus(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      if (!requireInternalOpsAuthorization(req, res, context)) return;
+      const transfer = await internationalTransferService.refreshPayoutStatus(String(req.params.id), {
+        request_id: context.request_id,
+        correlation_id: context.correlation_id,
+      });
+      lifecycleLog('payout_status_refreshed', context, {
+        transfer_id: transfer.transfer_id,
+        status: transfer.status,
+        payout_status: transfer.payout_status,
+        payout_instruction_id: transfer.payout_instruction_id,
+      });
+      res.status(200).json({ success: true, ...responseContext(context), transfer });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
   static async getTransfer(req: Request, res: Response) {
     const context = readApiRequestContext(req);
     applyApiRequestContext(res, context);

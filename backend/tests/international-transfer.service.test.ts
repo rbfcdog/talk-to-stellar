@@ -518,4 +518,111 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     expect(repository.transfers.get(settled.transfer_id)?.status).toBe('FAILED');
     expect(repository.transfers.get(settled.transfer_id)?.error_logs.at(-1)).toMatchObject({ stage: 'payout_instruction' });
   });
+
+  it('refreshes payout status and moves completed payouts to terminal success', async () => {
+    const repository = new MemoryTransferRepository();
+    const stellarSettlement = {
+      settleUsdc: jest.fn(async (transfer: InternationalTransfer) => ({
+        stellar_tx_hash: 'stellar-hash-1',
+        stellar_memo: 'tts-test',
+        stellar_source_account: 'GSOURCE',
+        stellar_destination_account: 'GDEST',
+        asset_code: 'USDC',
+        asset_issuer: 'GUSDC',
+        amount: transfer.quoted_usd_amount,
+        network: 'testnet',
+        status: 'submitted',
+        execution_mode: 'testnet',
+        settled_at: new Date().toISOString(),
+      })),
+    };
+    const payoutInstruction: PayoutInstruction = {
+      payout_instruction_id: 'payout-instruction-refresh',
+      provider_name: 'etherfuse',
+      provider_payout_id: 'provider-payout-refresh',
+      status: 'pending',
+      amount_usd: '99',
+      currency: 'USD',
+      created_at: new Date().toISOString(),
+      metadata: { mode: 'etherfuse_sandbox_payload_prepared' },
+      destination: payoutDestination(),
+    };
+    const payoutAdapter = {
+      providerName: 'etherfuse',
+      createPayoutInstruction: jest.fn(async () => payoutInstruction),
+      getPayoutStatus: jest.fn(async () => 'completed'),
+    };
+    const { service, transfer } = await createPixPendingTransfer({
+      repository,
+      stellarSettlement: stellarSettlement as any,
+      payoutAdapter: payoutAdapter as any,
+    });
+    const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+    const settled = await service.settleStellar(funded.transfer_id);
+    const pending = await service.createPayoutInstruction(settled.transfer_id, 'etherfuse');
+
+    const completed = await service.refreshPayoutStatus(pending.transfer_id, {
+      request_id: 'req-payout-refresh',
+      correlation_id: 'corr-service-1',
+    });
+
+    expect(payoutAdapter.getPayoutStatus).toHaveBeenCalledWith('provider-payout-refresh');
+    expect(completed.status).toBe('PAYOUT_COMPLETED');
+    expect(completed.payout_status).toBe('completed');
+    expect(completed.payout_completed_at).toBeDefined();
+    expect((completed.reconciliation_metadata as any).payout_status_refresh).toMatchObject({
+      provider: 'etherfuse',
+      provider_payout_id: 'provider-payout-refresh',
+      status: 'completed',
+    });
+    const reconciliation = await service.getReconciliation(completed.transfer_id);
+    expect(reconciliation.final_payout_status).toBe('completed');
+  });
+
+  it('refreshes failed payout status into FAILED with reconciliation evidence', async () => {
+    const repository = new MemoryTransferRepository();
+    const stellarSettlement = {
+      settleUsdc: jest.fn(async (transfer: InternationalTransfer) => ({
+        stellar_tx_hash: 'stellar-hash-1',
+        stellar_memo: 'tts-test',
+        asset_code: 'USDC',
+        asset_issuer: 'GUSDC',
+        amount: transfer.quoted_usd_amount,
+        network: 'testnet',
+        status: 'submitted',
+        execution_mode: 'testnet',
+        settled_at: new Date().toISOString(),
+      })),
+    };
+    const payoutAdapter = {
+      providerName: 'bridge',
+      createPayoutInstruction: jest.fn(async () => ({
+        payout_instruction_id: 'payout-instruction-failed',
+        provider_name: 'bridge',
+        provider_payout_id: 'provider-payout-failed',
+        status: 'pending',
+        amount_usd: '99',
+        currency: 'USD',
+        created_at: new Date().toISOString(),
+        metadata: { mode: 'sandbox' },
+        destination: payoutDestination(),
+      })),
+      getPayoutStatus: jest.fn(async () => 'failed'),
+    };
+    const { service, transfer } = await createPixPendingTransfer({
+      repository,
+      stellarSettlement: stellarSettlement as any,
+      payoutAdapter: payoutAdapter as any,
+    });
+    const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+    const settled = await service.settleStellar(funded.transfer_id);
+    const pending = await service.createPayoutInstruction(settled.transfer_id, 'bridge');
+
+    const failed = await service.refreshPayoutStatus(pending.transfer_id);
+
+    expect(failed.status).toBe('FAILED');
+    expect(failed.payout_status).toBe('failed');
+    expect(failed.error_logs.at(-1)).toMatchObject({ stage: 'payout_status' });
+    expect((failed.reconciliation_metadata as any).next_action).toBe('refund_or_manual_review');
+  });
 });

@@ -145,7 +145,12 @@ Use the buttons in this order:
    - Creates a USD payout instruction through the selected adapter.
    - Default provider is `etherfuse`.
 
-7. `Reconciliation`
+7. `Payout status`
+   - Calls `POST /api/transfers/:id/payout-status-refresh`.
+   - Requires `INTERNATIONAL_TRANSFER_OPS_SECRET` in `Execution credentials`.
+   - Calls the selected adapter status method and updates transfer/reconciliation state.
+
+8. `Reconciliation`
    - Calls `GET /api/transfers/:id/reconciliation`.
    - Returns the linked quote ID, Pix reference, Stellar tx hash/memo, payout instruction ID, provider payout ID, and final payout status.
 
@@ -228,7 +233,10 @@ curl -s -X POST http://localhost:3001/api/webhooks/etherfuse/pix \
 ### 4.5 Attach Stellar Settlement Evidence
 
 ```bash
-curl -s -X POST http://localhost:3001/api/transfers/TRANSFER_ID/settle-stellar | jq
+curl -s -X POST http://localhost:3001/api/transfers/TRANSFER_ID/settle-stellar \
+  -H "Content-Type: application/json" \
+  -H "X-International-Transfer-Ops-Secret: YOUR_OPS_SECRET" \
+  -d '{}' | jq
 ```
 
 ### 4.6 Create USD Payout Instruction
@@ -236,10 +244,20 @@ curl -s -X POST http://localhost:3001/api/transfers/TRANSFER_ID/settle-stellar |
 ```bash
 curl -s -X POST http://localhost:3001/api/transfers/TRANSFER_ID/payout-instruction \
   -H "Content-Type: application/json" \
-  -d '{ "provider": "mock" }' | jq
+  -H "X-International-Transfer-Ops-Secret: YOUR_OPS_SECRET" \
+  -d '{ "provider": "etherfuse" }' | jq
 ```
 
-### 4.7 Get Reconciliation
+### 4.7 Refresh Payout Status
+
+```bash
+curl -s -X POST http://localhost:3001/api/transfers/TRANSFER_ID/payout-status-refresh \
+  -H "Content-Type: application/json" \
+  -H "X-International-Transfer-Ops-Secret: YOUR_OPS_SECRET" \
+  -d '{}' | jq
+```
+
+### 4.8 Get Reconciliation
 
 ```bash
 curl -s http://localhost:3001/api/transfers/TRANSFER_ID/reconciliation | jq

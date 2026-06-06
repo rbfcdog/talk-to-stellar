@@ -422,7 +422,9 @@ that provider sandbox credentials are currently configured in deployment.
 
 Partially implemented.
 
-Adapters expose status methods, but a full recurring payout polling service or
+Adapters expose status methods, and
+`POST /api/transfers/:id/payout-status-refresh` can refresh a transfer and its
+reconciliation record on demand. A full recurring payout polling service or
 provider webhook ingestion layer for destination payout status is not complete
 as an operational subsystem.
 

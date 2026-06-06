@@ -479,6 +479,82 @@ export class InternationalTransferService {
     }
   }
 
+  async refreshPayoutStatus(transferId: string, providerOptions: Record<string, unknown> = {}): Promise<InternationalTransfer> {
+    const transfer = await this.requireTransfer(transferId);
+    if (!transfer.payout_provider || !transfer.provider_payout_id || !transfer.payout_instruction_id) {
+      throw new Error('Payout instruction reference is required before refreshing payout status.');
+    }
+
+    const trace = {
+      request_id: String(providerOptions.request_id || providerOptions.requestId || '').trim(),
+      correlation_id: String(providerOptions.correlation_id || providerOptions.correlationId || '').trim(),
+    };
+    const adapter = this.payoutAdapter || getPayoutProviderAdapter(transfer.payout_provider);
+    const status = await adapter.getPayoutStatus(transfer.provider_payout_id);
+    const refreshedAt = now();
+    const metadata = transfer.reconciliation_metadata || {};
+    const existingInstruction = metadata.payout_instruction as PayoutInstruction | undefined;
+    const instruction: PayoutInstruction = {
+      payout_instruction_id: transfer.payout_instruction_id,
+      provider_name: transfer.payout_provider,
+      provider_payout_id: transfer.provider_payout_id,
+      status,
+      destination: transfer.payout_destination,
+      amount_usd: transfer.quoted_usd_amount,
+      currency: 'USD',
+      created_at: existingInstruction?.created_at || transfer.updated_at || transfer.created_at,
+      metadata: {
+        ...(existingInstruction?.metadata || {}),
+        payout_status_refreshed_at: refreshedAt,
+        previous_payout_status: transfer.payout_status,
+        ...requestTrace(trace),
+      },
+    };
+
+    let nextState = transfer.status;
+    const errorLogs = [...(transfer.error_logs || [])];
+    if (status === 'completed' && transfer.status !== 'PAYOUT_COMPLETED' && transfer.status !== 'FAILED' && transfer.status !== 'REFUNDED') {
+      this.assertTransition(transfer, 'PAYOUT_COMPLETED');
+      nextState = 'PAYOUT_COMPLETED';
+    }
+    if ((status === 'failed' || status === 'cancelled') && transfer.status !== 'FAILED' && transfer.status !== 'REFUNDED') {
+      this.assertTransition(transfer, 'FAILED');
+      nextState = 'FAILED';
+      errorLogs.push({
+        at: refreshedAt,
+        stage: 'payout_status',
+        message: `Payout provider status refreshed as ${status}.`,
+      });
+    }
+
+    const updated = await this.repository.updateTransfer(transfer.transfer_id, {
+      status: nextState,
+      payout_status: status,
+      payout_completed_at: status === 'completed'
+        ? (transfer.payout_completed_at || refreshedAt)
+        : transfer.payout_completed_at,
+      error_logs: errorLogs,
+      reconciliation_metadata: {
+        ...mergeTraceMetadata(metadata, trace, 'payout_status_refreshed'),
+        payout_instruction: instruction,
+        payout_status_refresh: {
+          provider: adapter.providerName,
+          provider_payout_id: transfer.provider_payout_id,
+          status,
+          refreshed_at: refreshedAt,
+        },
+        next_action: status === 'completed'
+          ? 'done'
+          : status === 'failed' || status === 'cancelled'
+            ? 'refund_or_manual_review'
+            : 'poll_payout_status',
+      },
+    });
+
+    await this.refreshReconciliation(updated, { payout: instruction });
+    return updated;
+  }
+
   async getTransfer(transferId: string): Promise<InternationalTransfer> {
     return this.requireTransfer(transferId);
   }

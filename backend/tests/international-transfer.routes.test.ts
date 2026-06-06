@@ -186,6 +186,12 @@ describe('international transfer HTTP routes', () => {
       payout_instruction_id: 'payout-instruction-1',
       provider_payout_id: 'provider-payout-1',
     });
+    jest.spyOn(internationalTransferService, 'refreshPayoutStatus').mockResolvedValue({
+      ...transfer('PAYOUT_COMPLETED'),
+      payout_instruction_id: 'payout-instruction-1',
+      provider_payout_id: 'provider-payout-1',
+      payout_status: 'completed',
+    });
     const reconciliation: TransferReconciliation = {
       transfer_id: 'tr-route-1',
       quote_id: 'q-route-1',
@@ -249,6 +255,13 @@ describe('international transfer HTTP routes', () => {
     })).resolves.toMatchObject({ status: 201, body: { transfer: { status: 'PAYOUT_PENDING' } } });
 
     await expect(routeRequest({
+      method: 'POST',
+      path: '/api/transfers/tr-route-1/payout-status-refresh',
+      headers,
+      body: {},
+    })).resolves.toMatchObject({ status: 200, body: { transfer: { status: 'PAYOUT_COMPLETED', payout_status: 'completed' } } });
+
+    await expect(routeRequest({
       method: 'GET',
       path: '/api/transfers/tr-route-1/reconciliation',
       headers,
@@ -268,6 +281,7 @@ describe('international transfer HTTP routes', () => {
   it('blocks operator-only settlement and payout routes without ops authorization', async () => {
     const settle = jest.spyOn(internationalTransferService, 'settleStellar').mockResolvedValue(transfer('USDC_SETTLED'));
     const payout = jest.spyOn(internationalTransferService, 'createPayoutInstruction').mockResolvedValue(transfer('PAYOUT_PENDING'));
+    const refresh = jest.spyOn(internationalTransferService, 'refreshPayoutStatus').mockResolvedValue(transfer('PAYOUT_PENDING'));
 
     const settlement = await routeRequest({
       method: 'POST',
@@ -281,10 +295,18 @@ describe('international transfer HTTP routes', () => {
       headers: { 'x-request-id': 'req-deny-2' },
       body: { provider: 'etherfuse' },
     });
+    const refreshResponse = await routeRequest({
+      method: 'POST',
+      path: '/api/transfers/tr-route-1/payout-status-refresh',
+      headers: { 'x-request-id': 'req-deny-3' },
+      body: {},
+    });
 
     expect(settlement.status).toBe(403);
     expect(payoutResponse.status).toBe(403);
+    expect(refreshResponse.status).toBe(403);
     expect(settle).not.toHaveBeenCalled();
     expect(payout).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

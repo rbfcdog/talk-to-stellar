@@ -8,6 +8,7 @@ router.post('/:id/pix-intent', InternationalTransfersController.createPixIntent)
 router.post('/:id/funding-confirmation', InternationalTransfersController.confirmSandboxFunding);
 router.post('/:id/settle-stellar', InternationalTransfersController.settleStellar);
 router.post('/:id/payout-instruction', InternationalTransfersController.createPayoutInstruction);
+router.post('/:id/payout-status-refresh', InternationalTransfersController.refreshPayoutStatus);
 router.get('/:id/reconciliation', InternationalTransfersController.getReconciliation);
 router.get('/:id', InternationalTransfersController.getTransfer);
 
