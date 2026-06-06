@@ -151,7 +151,10 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("PIX atualizado");
     expect(text).toContain("Volte ao PIX para continuar.");
     expect(text).toContain("Use o botão abaixo para voltar ao PIX e concluir a retirada.");
-    expect(text).toContain("href={returnTarget.href}");
+    expect(text).toContain("mergeReturnTargetParams");
+    expect(text).toContain("source_amount: nextDestinationAmount");
+    expect(text).toContain('stay_open: "1"');
+    expect(text).toContain("href={pixReturnHref}");
     expect(text).not.toContain("Voltar ao chat");
     expect(text).not.toContain("Back to chat");
     expect(text).not.toContain('buildActionUrl("/chat"');

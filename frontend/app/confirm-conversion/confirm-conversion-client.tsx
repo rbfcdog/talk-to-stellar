@@ -131,6 +131,34 @@ function isPixReturnTarget(target: ReturnTarget) {
   )
 }
 
+function isPixOffRampReturnTarget(target: ReturnTarget) {
+  const source = String(target?.source || "").toLowerCase()
+  const href = String(target?.href || "").toLowerCase()
+  if (source.includes("offramp") || source.includes("pix-off")) return true
+  try {
+    const url = new URL(String(target?.href || ""), "https://talktostellar.local")
+    return url.pathname === "/pix-off" || (url.pathname === "/pix-ramp" && url.searchParams.get("mode") === "offramp")
+  } catch {
+    return href.includes("/pix-off")
+  }
+}
+
+function mergeReturnTargetParams(href: string, params: Record<string, unknown>) {
+  const raw = String(href || "").trim()
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return raw
+  try {
+    const url = new URL(raw, "https://talktostellar.local")
+    if (url.origin !== "https://talktostellar.local") return raw
+    for (const [key, value] of Object.entries(params)) {
+      const text = String(value ?? "").trim()
+      if (text) url.searchParams.set(key, text)
+    }
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return raw
+  }
+}
+
 function buildActionUrl(path: string, params: Record<string, unknown>) {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -249,6 +277,7 @@ export default function ConfirmConversionClient({
     fallbackSource: "convert",
   })
   const pixReturnTarget = isPixReturnTarget(returnTarget)
+  const pixOffRampReturnTarget = pixReturnTarget && isPixOffRampReturnTarget(returnTarget)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -314,6 +343,20 @@ export default function ConfirmConversionClient({
   const destAmount = String(payload.dest_amount || payload.destAmount || "")
   const nextDestinationAssetCode = normalizeAssetCode(result?.transferDetails?.destinationAssetCode || destAssetCode || "")
   const nextDestinationAmount = String(result?.transferDetails?.destinationAmount || destAmount || "")
+  const pixReturnHref = pixReturnTarget
+    ? mergeReturnTargetParams(returnTarget.href, {
+      stay_open: "1",
+      ...(pixOffRampReturnTarget
+        ? {
+          amount: nextDestinationAmount,
+          source_amount: nextDestinationAmount,
+          source_asset: nextDestinationAssetCode,
+          asset: nextDestinationAssetCode,
+          currency: nextDestinationAssetCode,
+        }
+        : {}),
+    })
+    : returnTarget.href
   const keepEarningUrl = buildActionUrl("/review", {
     asset: nextDestinationAssetCode,
     amount: nextDestinationAmount,
@@ -564,7 +607,7 @@ export default function ConfirmConversionClient({
                     </div>
                   </div>
                   <a
-                    href={returnTarget.href}
+                    href={pixReturnHref}
                     className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-4 py-4 text-sm font-black text-tts-deep transition hover:bg-tts-confirm/90"
                   >
                     {returnTarget.label}
