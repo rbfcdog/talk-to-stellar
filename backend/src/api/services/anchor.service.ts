@@ -2225,7 +2225,7 @@ export class AnchorService {
 
   private static sandboxLedgerSettlementEnabled(): boolean {
     return this.sandboxPixFallbackEnabled() &&
-      envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', false) &&
+      envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', true) &&
       !coalesceString(process.env.TESOURO_DISTRIBUTOR_SECRET);
   }
 
@@ -5958,7 +5958,7 @@ export class AnchorService {
     context: SessionWalletContext,
   ): Promise<NormalizedWalletBalance[]> {
     if (!this.getRuntimeInfo().sandbox) return [];
-    if (!envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', false)) return [];
+    if (!envFlag('ALLOW_SANDBOX_LEDGER_SETTLEMENT', true)) return [];
 
     const operations = await this.findSandboxLedgerAdjustmentOperations(context);
 

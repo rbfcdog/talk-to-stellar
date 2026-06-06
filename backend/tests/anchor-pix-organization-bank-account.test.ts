@@ -167,10 +167,10 @@ describe('AnchorService PIX organization bank account routing', () => {
     }));
   });
 
-  it('does not generate a sandbox PIX QR when TESOURO settlement is not configured', async () => {
+  it('does not generate a sandbox PIX QR when sandbox ledger settlement is explicitly disabled', async () => {
     mockSandboxRuntime();
     delete process.env.TESOURO_DISTRIBUTOR_SECRET;
-    delete process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT;
+    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'false';
 
     const anchor = {
       getQuote: jest.fn(),

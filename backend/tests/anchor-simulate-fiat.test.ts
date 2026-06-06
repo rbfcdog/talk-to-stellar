@@ -461,8 +461,9 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect((record.transaction as any).auto_conversion.destination_amount).toBeUndefined();
   });
 
-  it('does not complete BRL on-ramp without a TESOURO distributor by default', async () => {
+  it('does not complete BRL on-ramp when sandbox ledger mode is explicitly disabled', async () => {
     mockSandboxRuntime();
+    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'false';
     const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/should-not-send');
     const orderId = 'sandbox-pix-brl-no-distributor-default';
 
@@ -498,9 +499,8 @@ describe('AnchorService sandbox PIX confirmation', () => {
     expect(receiptSpy).not.toHaveBeenCalled();
   });
 
-  it('completes BRL on-ramp in sandbox ledger mode when no distributor secret is configured', async () => {
+  it('completes BRL on-ramp in default sandbox ledger mode when no distributor secret is configured', async () => {
     mockSandboxRuntime();
-    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'true';
     jest.spyOn(StellarService, 'getAccountBalance').mockResolvedValue([] as any);
     const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/brl-sandbox-ledger');
     const orderId = 'sandbox-pix-brl-no-distributor';
@@ -552,7 +552,6 @@ describe('AnchorService sandbox PIX confirmation', () => {
 
   it('shows completed sandbox ledger BRL on-ramps in wallet balances', async () => {
     mockSandboxRuntime();
-    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'true';
     jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
       sessionId: 'session-1',
       sessionToken: 'token-1',
@@ -604,8 +603,9 @@ describe('AnchorService sandbox PIX confirmation', () => {
     });
   });
 
-  it('does not expose sandbox ledger adjustments as balance unless explicitly enabled', async () => {
+  it('does not expose sandbox ledger adjustments as balance when explicitly disabled', async () => {
     mockSandboxRuntime();
+    process.env.ALLOW_SANDBOX_LEDGER_SETTLEMENT = 'false';
     jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
       sessionId: 'session-1',
       sessionToken: 'token-1',
