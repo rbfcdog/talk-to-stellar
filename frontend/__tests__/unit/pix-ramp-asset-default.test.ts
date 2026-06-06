@@ -41,9 +41,17 @@ describe("PIX asset defaults", () => {
     expect(text).toContain('target_brl: quotePayload.target_brl || sourcePayload?.target_brl || sourcePayload?.destination_amount');
     expect(text).toContain('destination_amount: quotePayload.destination_amount || sourcePayload?.destination_amount || sourcePayload?.target_brl');
     expect(text).toContain('const offRampPreviewInputKey = stableHash(JSON.stringify([');
+    expect(text).toContain('const offRampFeePreviewBrlAmount = offRampExactReceiveBrl || offRampInputAsset === "BRL"');
+    expect(text).toContain('const hasOffRampFeePreviewBrlAmount = Boolean(normalizeHumanAmount(offRampFeePreviewBrlAmount));');
+    expect(text).toContain(') : hasOffRampFeePreviewBrlAmount ? (');
+    expect(text).toContain('amount={offRampFeePreviewBrlAmount}');
     expect(text).toContain('void run("Previewing PIX withdrawal", previewOffRampFees);');
     expect(text).toContain('Calculando retirada automaticamente');
-    expect(text).toContain('A página calcula taxa, app fee e economia a partir do valor PIX.');
+    expect(text).toContain('A taxa aparece automaticamente pelo valor PIX.');
+    expect(text).not.toContain('Cotação em reais sendo preparada.');
+    expect(text).not.toContain('BRL quote is being prepared.');
+    expect(text).not.toContain('Retirada em reais');
+    expect(text).not.toContain('BRL withdrawal');
     expect(text).not.toContain('Calcule para ver quanto chega no PIX.');
     expect(text).not.toContain('A taxa estimada usa o valor convertido em reais.');
     expect(text).not.toContain('L("Atualizar valor", "Update amount")');

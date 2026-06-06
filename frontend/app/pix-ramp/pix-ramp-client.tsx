@@ -1133,6 +1133,10 @@ export default function PixRampClient({
     (offRampInputAsset === "BRL" ? (offRampFiatAmount || offRampAmount) : "")
   );
   const offRampPixTargetDisplay = offRampPixTargetAmount ? formatMoney(offRampPixTargetAmount) : "Calculando BRL";
+  const offRampFeePreviewBrlAmount = offRampExactReceiveBrl || offRampInputAsset === "BRL"
+    ? offRampInputValue
+    : offRampPixTargetAmount;
+  const hasOffRampFeePreviewBrlAmount = Boolean(normalizeHumanAmount(offRampFeePreviewBrlAmount));
   const exactOnRampReceiveTarget = Boolean(rampMode === "onramp" && desiredReceiveAsset && desiredReceiveAsset === targetAsset);
   const editingOnRampReceiveTarget = Boolean(rampMode === "onramp" && (targetAsset === "BRL" || exactOnRampReceiveTarget));
   const desiredFinalAmount = rampMode === "onramp"
@@ -3568,23 +3572,23 @@ export default function PixRampClient({
                     language={language}
                     savingsSeed={`${offRampInputAsset}:${offRampAmount}:${rampEmail}`}
                   />
-                ) : offRampInputAsset !== "BRL" ? (
-                  <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-tts-deep">
-                    <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Retirada em reais", "BRL withdrawal")}</p>
-                    <p className="mt-2 text-lg font-black">{L("Cotação em reais sendo preparada.", "BRL quote is being prepared.")}</p>
-                    <p className="mt-1 text-xs font-bold text-tts-muted">
-                      {normalizedOffRampPixKey
-                        ? L("A página calcula taxa, app fee e economia a partir do valor PIX.", "The page calculates the fee, app fee, and savings from the PIX value.")
-                        : L("Preencha a chave PIX para calcular a retirada.", "Enter the PIX key to calculate the withdrawal.")}
-                    </p>
-                  </div>
-                ) : (
+                ) : hasOffRampFeePreviewBrlAmount ? (
                   <EtherfuseMeasuredFeeNotice
                     mode="offramp"
-                    amount={offRampInputAsset === "BRL" ? offRampFiatAmount : offRampAmount}
+                    amount={offRampFeePreviewBrlAmount}
                     language={language}
-                    savingsSeed={`${offRampInputAsset}:${offRampAmount}:${rampEmail}`}
+                    savingsSeed={`${offRampInputAsset}:${offRampFeePreviewBrlAmount}:${rampEmail}`}
                   />
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4 text-tts-deep">
+                    <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{L("Estimativa PIX", "PIX estimate")}</p>
+                    <p className="mt-2 text-lg font-black">{L("A taxa aparece automaticamente pelo valor PIX.", "The fee appears automatically from the PIX value.")}</p>
+                    <p className="mt-1 text-xs font-bold text-tts-muted">
+                      {normalizedOffRampPixKey
+                        ? L("Assim que o valor em reais estiver disponível, mostramos retirada, app fee e economia aqui.", "As soon as the BRL value is available, withdrawal fee, app fee, and savings show here.")
+                        : L("Preencha a chave PIX para preparar a retirada.", "Enter the PIX key to prepare the withdrawal.")}
+                    </p>
+                  </div>
                 )}
               </div>
 	              <label className="tts-field-label mt-5 block text-sm font-black text-tts-deep">{L("Digite o PIN", "Enter PIN")}</label>
