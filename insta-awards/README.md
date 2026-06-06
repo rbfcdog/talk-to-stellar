@@ -18,6 +18,7 @@ against the current TalkToStellar codebase.
 | `evidence-map.md` | Where reviewers can find code, routes, database tables, tests, screenshots, logs, transaction evidence, and demo artifacts. |
 | `evidence-framework.md` | Reusable framework and generator for reviewer evidence run folders. |
 | `payout-adapter-contract.md` | Provider-agnostic payout adapter contract, execution boundaries, and status refresh behavior. |
+| `week-2-reviewer-package.md` | Week 2 payout coordination evidence, persistence, and reviewer flow. |
 | `30-day-execution-plan.md` | Practical execution plan to close the remaining SOW gaps in a 30-day sprint. |
 | `risk-and-compliance-notes.md` | Explicit boundaries around sandbox behavior, mocks, testnet, mainnet validation, payout providers, and regulated activity. |
 | `usd-5000-delivery-readiness.md` | Final technical and reviewer checklist for the USD 5,000 scoped delivery. |
@@ -57,6 +58,8 @@ The repository already contains most of the foundation required for the SOW:
 - An international transfer lifecycle engine.
 - Transfer state persistence and reconciliation records.
 - Provider-agnostic payout adapter interfaces.
+- Dedicated payout instruction/event persistence, signed provider events, and
+  normalized status history.
 - A reviewer/demo UI for institution-style transfer routing.
 - Backend unit tests covering the core institutional transfer flow.
 
@@ -64,7 +67,6 @@ The main remaining work is not the basic architecture. The remaining work is
 hardening and evidence:
 
 - Prove or sandbox-validate at least one payout-provider compatibility path.
-- Add stronger payout status polling/webhook behavior.
 - Generate a clean reviewer evidence package with logs, screenshots, API
   walkthroughs, and transaction hashes where real testnet settlement is
   configured.

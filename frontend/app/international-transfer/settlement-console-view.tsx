@@ -170,44 +170,82 @@ function stepIcon(step: WorkflowStep) {
 
 function EvidenceStrip({ console }: { console: Console }) {
   const ready = console.artifacts.filter((item) => item.ready).length;
+  const payoutReady = console.payoutArtifacts.filter((item) => item.ready).length;
   return (
-    <section
-      data-testid="week-one-evidence"
-      data-evidence-status={`${ready}/4`}
-      className="border-b border-tts-border bg-tts-surface"
-    >
-      <div className="mx-auto grid w-full max-w-7xl lg:grid-cols-[250px_minmax(0,1fr)]">
-        <div className="flex items-center justify-between gap-3 border-b border-tts-border px-4 py-4 lg:border-b-0 lg:border-r sm:px-6">
-          <div>
-            <p className="text-xs font-bold uppercase text-tts-gold">Week 1 evidence</p>
-            <p className="mt-1 text-sm font-black text-tts-deep">{ready}/4 artifacts available</p>
-          </div>
-          <Status tone={ready === 4 ? "success" : "warning"}>{ready === 4 ? "ready" : "open"}</Status>
-        </div>
-        <div className="grid sm:grid-cols-2 xl:grid-cols-4">
-          {console.artifacts.map((item, index) => (
-            <div
-              key={item.id}
-              className={`grid min-w-0 grid-cols-[24px_minmax(0,1fr)_18px] items-center gap-2 px-4 py-3 ${
-                index > 0 ? "border-t border-tts-border sm:border-l sm:border-t-0" : ""
-              } ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}
-            >
-              {item.id === "repository" ? <GitBranch className="h-4 w-4 text-tts-muted" /> :
-                item.id === "dashboard_screenshot" ? <Building2 className="h-4 w-4 text-tts-muted" /> :
-                  item.id === "orchestration_logs" ? <ListChecks className="h-4 w-4 text-tts-muted" /> :
-                    <FileJson className="h-4 w-4 text-tts-muted" />}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-tts-deep">{item.label}</p>
-                <p className="truncate font-mono text-xs text-tts-muted">{item.detail}</p>
-              </div>
-              {item.ready
-                ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" />
-                : <AlertTriangle className="h-4 w-4 text-tts-gold" />}
+    <>
+      <section
+        data-testid="week-one-evidence"
+        data-evidence-status={`${ready}/4`}
+        className="border-b border-tts-border bg-tts-surface"
+      >
+        <div className="mx-auto grid w-full max-w-7xl lg:grid-cols-[250px_minmax(0,1fr)]">
+          <div className="flex items-center justify-between gap-3 border-b border-tts-border px-4 py-4 lg:border-b-0 lg:border-r sm:px-6">
+            <div>
+              <p className="text-xs font-bold uppercase text-tts-gold">Week 1 evidence</p>
+              <p className="mt-1 text-sm font-black text-tts-deep">{ready}/4 artifacts available</p>
             </div>
-          ))}
+            <Status tone={ready === 4 ? "success" : "warning"}>{ready === 4 ? "ready" : "open"}</Status>
+          </div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+            {console.artifacts.map((item, index) => (
+              <div
+                key={item.id}
+                className={`grid min-w-0 grid-cols-[24px_minmax(0,1fr)_18px] items-center gap-2 px-4 py-3 ${
+                  index > 0 ? "border-t border-tts-border sm:border-l sm:border-t-0" : ""
+                } ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}
+              >
+                {item.id === "repository" ? <GitBranch className="h-4 w-4 text-tts-muted" /> :
+                  item.id === "dashboard_screenshot" ? <Building2 className="h-4 w-4 text-tts-muted" /> :
+                    item.id === "orchestration_logs" ? <ListChecks className="h-4 w-4 text-tts-muted" /> :
+                      <FileJson className="h-4 w-4 text-tts-muted" />}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-tts-deep">{item.label}</p>
+                  <p className="truncate font-mono text-xs text-tts-muted">{item.detail}</p>
+                </div>
+                {item.ready
+                  ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" />
+                  : <AlertTriangle className="h-4 w-4 text-tts-gold" />}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+      <section
+        data-testid="week-two-evidence"
+        data-evidence-status={`${payoutReady}/4`}
+        className="border-b border-tts-border bg-tts-bg"
+      >
+        <div className="mx-auto grid w-full max-w-7xl lg:grid-cols-[250px_minmax(0,1fr)]">
+          <div className="flex items-center justify-between gap-3 border-b border-tts-border px-4 py-3 lg:border-b-0 lg:border-r sm:px-6">
+            <div>
+              <p className="text-xs font-bold uppercase text-tts-confirm">Week 2 evidence</p>
+              <p className="mt-1 text-sm font-black text-tts-deep">{payoutReady}/4 payout artifacts</p>
+            </div>
+            <Status tone={payoutReady === 4 ? "success" : "warning"}>{payoutReady === 4 ? "ready" : "open"}</Status>
+          </div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+            {(console.payoutArtifacts.length ? console.payoutArtifacts : [
+              { id: "adapter_interface_code", label: "Adapter Interface Code", detail: "available", ready: true },
+              { id: "stellar_transaction_hash", label: "Stellar Transaction Hash", detail: "waiting", ready: false },
+              { id: "circle_bridge_compatibility", label: "Circle / Bridge Compatibility", detail: "available", ready: true },
+              { id: "payout_coordination_record", label: "Payout Coordination Record", detail: "waiting", ready: false },
+            ]).map((item, index) => (
+              <div key={item.id} className={`grid min-w-0 grid-cols-[24px_minmax(0,1fr)_18px] items-center gap-2 px-4 py-3 ${index ? "border-t border-tts-border sm:border-l sm:border-t-0" : ""}`}>
+                {item.id === "adapter_interface_code" ? <Code2 className="h-4 w-4 text-tts-muted" /> :
+                  item.id === "stellar_transaction_hash" ? <Network className="h-4 w-4 text-tts-muted" /> :
+                    item.id === "circle_bridge_compatibility" ? <GitBranch className="h-4 w-4 text-tts-muted" /> :
+                      <FileJson className="h-4 w-4 text-tts-muted" />}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-tts-deep">{item.label}</p>
+                  <p className="truncate font-mono text-xs text-tts-muted">{item.detail}</p>
+                </div>
+                {item.ready ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" /> : <CircleDot className="h-4 w-4 text-tts-muted" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -553,6 +591,85 @@ function Evidence({ console }: { console: Console }) {
   );
 }
 
+function PayoutCoordination({ console }: { console: Console }) {
+  const evidence = console.payoutEvidence;
+  const history = Array.isArray(evidence?.status_history) ? evidence.status_history : [];
+  return (
+    <div>
+      <section className="grid border-b border-tts-border lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="px-4 py-5 sm:px-6">
+          <p className="text-xs font-bold uppercase text-tts-confirm">USD delivery coordination</p>
+          <h2 className="mt-1 text-lg font-black text-tts-deep">{evidence?.provider?.display_name || "Select and create a payout instruction"}</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              ["Stellar evidence", evidence?.settlement?.stellar_tx_hash ? "attached" : "waiting"],
+              ["Same-name control", evidence ? (evidence.identity_control?.payout_allowed ? "pass" : "blocked") : "waiting"],
+              ["Payout instruction", evidence?.instruction?.status || "waiting"],
+            ].map(([label, value]) => (
+              <div key={label} className="border-y border-tts-border py-3">
+                <p className="text-xs font-bold uppercase text-tts-muted">{label}</p>
+                <p className="mt-2 font-mono text-sm font-black text-tts-deep">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="border-t border-tts-border bg-tts-bg px-4 py-5 lg:border-l lg:border-t-0 sm:px-6">
+          <p className="text-xs font-bold uppercase text-tts-muted">Execution boundary</p>
+          <p className="mt-2 text-base font-black text-tts-deep">{evidence?.execution_mode || evidence?.provider?.execution_mode || "not created"}</p>
+          <p className="mt-2 text-sm leading-6 text-tts-muted">
+            {evidence?.provider?.notes?.[0] || "Provider execution remains disabled until its credentials and execution flag are configured."}
+          </p>
+        </div>
+      </section>
+
+      <section className="border-b border-tts-border">
+        <div className="px-4 py-4 sm:px-6">
+          <p className="text-xs font-bold uppercase text-tts-muted">Provider readiness</p>
+          <h3 className="mt-1 text-base font-black text-tts-deep">Adapter capability matrix</h3>
+        </div>
+        <div className="overflow-x-auto border-t border-tts-border">
+          <div className="min-w-[780px]">
+            <div className="grid grid-cols-[190px_120px_100px_110px_110px_minmax(180px,1fr)] bg-tts-bg px-4 py-2 text-xs font-bold uppercase text-tts-muted sm:px-6">
+              <span>Provider</span><span>Mode</span><span>Configured</span><span>Status poll</span><span>Webhook</span><span>Blockers</span>
+            </div>
+            {console.payoutProviders.map((provider) => (
+              <div key={provider.provider_name} className="grid grid-cols-[190px_120px_100px_110px_110px_minmax(180px,1fr)] border-t border-tts-border px-4 py-3 text-sm sm:px-6">
+                <span className="font-black text-tts-deep">{provider.display_name}</span>
+                <span className="font-mono text-xs text-tts-muted">{provider.execution_mode}</span>
+                <span>{provider.configured ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" /> : <CircleDot className="h-4 w-4 text-tts-muted" />}</span>
+                <span>{provider.supports.status_polling ? "available" : "not configured"}</span>
+                <span>{provider.supports.webhooks ? "signed" : "not configured"}</span>
+                <span className="truncate text-xs text-tts-muted">{provider.blockers.join(" ") || "No adapter blockers."}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="border-b border-tts-border px-4 py-5 lg:border-b-0 lg:border-r sm:px-6">
+          <p className="text-xs font-bold uppercase text-tts-muted">Normalized status history</p>
+          <div className="mt-4 grid gap-0">
+            {history.length ? history.map((item: Record<string, any>, index: number) => (
+              <div key={`${item.provider_event_id || item.observed_at}_${index}`} className="grid grid-cols-[92px_110px_minmax(0,1fr)] border-t border-tts-border py-3 text-sm first:border-t-0">
+                <span className="font-mono text-xs text-tts-muted">{item.source}</span>
+                <span className="font-bold text-tts-deep">{item.status}</span>
+                <span className="truncate font-mono text-xs text-tts-muted">{item.observed_at}</span>
+              </div>
+            )) : <p className="text-sm text-tts-muted">Create a payout instruction to begin the provider event history.</p>}
+          </div>
+        </div>
+        <div className="min-w-0 px-4 py-5 sm:px-6">
+          <p className="text-xs font-bold uppercase text-tts-muted">Reviewer-safe coordination record</p>
+          <pre className="mt-4 max-h-[460px] overflow-auto bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
+            {pretty(redactSensitive(evidence))}
+          </pre>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ApiActivity({ console }: { console: Console }) {
   return (
     <div className="grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
@@ -677,6 +794,7 @@ export default function SettlementConsoleView() {
             <div className="flex">
               {([
                 ["overview", "Overview", Route],
+                ["payout", "USD payout", WalletCards],
                 ["evidence", "Evidence", ShieldCheck],
                 ["api", "API activity", Code2],
               ] as const).map(([value, label, Icon]) => (
@@ -707,6 +825,7 @@ export default function SettlementConsoleView() {
           </nav>
 
           {tab === "overview" ? <Overview console={console} /> : null}
+          {tab === "payout" ? <PayoutCoordination console={console} /> : null}
           {tab === "evidence" ? <Evidence console={console} /> : null}
           {tab === "api" ? <ApiActivity console={console} /> : null}
 

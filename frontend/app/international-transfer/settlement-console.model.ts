@@ -188,6 +188,44 @@ export function evidenceRows(
   ];
 }
 
+export function payoutEvidenceRows(payoutEvidence: JsonRecord | null) {
+  const checklist = Array.isArray(payoutEvidence?.checklist) ? payoutEvidence.checklist : [];
+  if (!checklist.length) {
+    return [
+      {
+        id: "adapter_interface_code",
+        label: "Adapter Interface Code",
+        detail: "backend payout contract",
+        ready: true,
+      },
+      {
+        id: "stellar_transaction_hash",
+        label: "Stellar Transaction Hash",
+        detail: "waiting",
+        ready: false,
+      },
+      {
+        id: "circle_bridge_compatibility",
+        label: "Circle / Bridge Compatibility",
+        detail: "provider adapters",
+        ready: true,
+      },
+      {
+        id: "payout_coordination_record",
+        label: "Payout Coordination Record",
+        detail: "waiting",
+        ready: false,
+      },
+    ];
+  }
+  return checklist.map((item: JsonRecord) => ({
+    id: text(item.id),
+    label: text(item.label),
+    detail: compact(item.artifact, 34),
+    ready: item.ready === true,
+  }));
+}
+
 export function createCorrelationId() {
   return `instawards_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
 }

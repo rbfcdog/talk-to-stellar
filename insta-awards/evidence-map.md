@@ -21,6 +21,7 @@ repository locations and demo artifacts that should be captured.
 | Stellar pathfinding and payment submission | `backend/src/api/services/stellar.service.ts` |
 | Settlement evidence | `backend/src/api/services/settlement-evidence.service.ts` |
 | Payout adapters | `backend/src/api/services/usd-payout-adapters.ts` |
+| Payout coordination | `backend/src/api/services/usd-payout-coordination.service.ts` |
 | Payout adapter contract | `insta-awards/payout-adapter-contract.md`, `backend/tests/payout-adapter-contract.test.ts` |
 | Stellar transaction evidence repository | `backend/src/api/repository/stellar-transaction.repository.ts` |
 
@@ -30,6 +31,7 @@ Migration:
 
 ```text
 backend/migrations/20260520_00_international_usd_transfers.sql
+backend/migrations/20260606_00_usd_payout_coordination.sql
 ```
 
 Tables:
@@ -38,6 +40,8 @@ Tables:
 international_transfer_quotes
 international_transfers
 international_transfer_reconciliations
+international_payout_instructions
+international_payout_events
 ```
 
 Reviewer evidence to export:
@@ -68,6 +72,9 @@ POST /api/transfers/:id/funding-confirmation
 POST /api/transfers/:id/settle-stellar
 POST /api/transfers/:id/payout-instruction
 POST /api/transfers/:id/payout-status-refresh
+POST /api/transfers/payout-events/:provider
+GET  /api/transfers/payout-providers
+GET  /api/transfers/:id/payout-evidence
 GET  /api/transfers/:id/reconciliation
 GET  /api/transfers/:id/orchestration-log
 GET  /api/transfers/:id/workflow
@@ -119,6 +126,7 @@ Evidence to capture:
 - Reconciliation panel.
 - API log panel with sensitive data redacted.
 - Week 1 reviewer strip showing all four required artifacts.
+- Week 2 payout strip and USD payout coordination tab showing all four required artifacts.
 - Backend-derived workflow status rather than duplicated frontend state logic.
 
 ## Test Evidence
@@ -226,8 +234,13 @@ Provider execution controls:
 PAYOUT_PROVIDER
 CIRCLE_API_KEY
 CIRCLE_PAYOUT_CREATE_URL
+CIRCLE_PAYOUT_STATUS_URL
+CIRCLE_PAYOUT_WEBHOOK_SECRET
 BRIDGE_API_KEY
 BRIDGE_PAYOUT_CREATE_URL
+BRIDGE_PAYOUT_STATUS_URL
+BRIDGE_PAYOUT_WEBHOOK_SECRET
+PAYOUT_WEBHOOK_SECRET
 ENABLE_REAL_PAYOUT_EXECUTION
 MOCK_USD_PAYOUT_AUTO_COMPLETE
 INTERNATIONAL_TRANSFER_OPS_SECRET

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  payoutEvidenceRows,
   redactSensitive,
   routeEconomics,
 } from "@/app/international-transfer/settlement-console.model";
@@ -62,5 +63,18 @@ describe("institution settlement console model", () => {
       provider_payout_id: "[redacted]",
       amount: "100",
     });
+  });
+
+  it("maps the Week 2 payout checklist into the reviewer strip", () => {
+    expect(payoutEvidenceRows({
+      checklist: [
+        { id: "adapter_interface_code", label: "Adapter Interface Code", ready: true, artifact: "backend/src/api/services/usd-payout-adapters.ts" },
+        { id: "stellar_transaction_hash", label: "Stellar Transaction Hash", ready: false, artifact: "Awaiting settlement" },
+      ],
+    })).toEqual([
+      expect.objectContaining({ id: "adapter_interface_code", ready: true }),
+      expect.objectContaining({ id: "stellar_transaction_hash", ready: false }),
+    ]);
+    expect(payoutEvidenceRows(null).filter((item) => item.ready)).toHaveLength(2);
   });
 });

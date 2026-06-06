@@ -18,8 +18,10 @@ Contract:
 ```ts
 interface PayoutProviderAdapter {
   providerName: 'mock' | 'circle' | 'bridge' | 'etherfuse';
+  getCapabilities(): PayoutProviderCapabilities;
   createPayoutInstruction(input: CreatePayoutInput): Promise<PayoutInstruction>;
-  getPayoutStatus(providerPayoutId: string): Promise<PayoutStatus>;
+  getPayoutStatus(providerPayoutId: string): Promise<PayoutStatus | PayoutStatusObservation>;
+  normalizeWebhookEvent?(payload: Record<string, unknown>): PayoutProviderEvent | null;
   cancelPayout?(providerPayoutId: string): Promise<void>;
 }
 ```
@@ -34,6 +36,9 @@ Required instruction fields:
 - `amount_usd`
 - `currency`
 - `created_at`
+- `updated_at`
+- `execution_mode`
+- `status_history`
 - `metadata`
 
 ## Provider Modes
@@ -64,6 +69,23 @@ Requirements:
 - Calls `adapter.getPayoutStatus(provider_payout_id)`.
 - Updates `payout_status`, transfer state, and reconciliation evidence.
 
+Provider events use:
+
+```text
+POST /api/transfers/payout-events/:provider
+```
+
+The endpoint requires `x-payout-webhook-secret`, normalizes provider status,
+persists each provider event once, and applies the same lifecycle transition
+path used by polling.
+
+Provider readiness and reviewer-safe evidence use:
+
+```text
+GET /api/transfers/payout-providers
+GET /api/transfers/:id/payout-evidence
+```
+
 Status handling:
 
 | Provider status | Transfer state effect |
@@ -91,3 +113,6 @@ Capture for reviewers:
 - Initial provider status.
 - Refreshed provider status.
 - Reconciliation JSON after refresh.
+- Signed webhook event and replay result.
+- Dedicated `international_payout_instructions` and
+  `international_payout_events` records.

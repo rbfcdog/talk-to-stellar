@@ -124,7 +124,7 @@ mkdirSync(join(runDir, 'payout'), { recursive: true });
 mkdirSync(join(runDir, 'repository'), { recursive: true });
 
 const manifest = {
-  schema_version: 2,
+  schema_version: 3,
   run_id: runId,
   label,
   created_at: now.toISOString(),
@@ -150,6 +150,19 @@ const manifest = {
       { id: 'dashboard-screenshot', label: 'Dashboard screenshot', status: 'placeholder', path: 'screenshots/dashboard-week-1.png' },
       { id: 'orchestration-log', label: 'Orchestration logs', status: 'placeholder', path: 'logs/orchestration-log.json' },
       { id: 'transfer-record', label: 'Transfer record', status: 'placeholder', path: 'database/transfer.json' },
+    ],
+  },
+  week_two_award_card: {
+    title: 'USD Delivery & Payout Coordination Layer',
+    week: 2,
+    ready_count: 1,
+    required_count: 4,
+    status: 'pending',
+    evidence: [
+      { id: 'adapter-interface-code', label: 'Adapter Interface Code', status: 'captured', path: 'repository/payout-adapter-interface.json' },
+      { id: 'stellar-transaction-hash', label: 'Stellar Transaction Hash', status: 'placeholder', path: 'stellar/settlement.json' },
+      { id: 'circle-bridge-compatibility', label: 'Circle / Bridge Compatibility', status: 'placeholder', path: 'payout/providers.json' },
+      { id: 'payout-coordination-record', label: 'Payout Coordination Record', status: 'placeholder', path: 'payout/coordination.json' },
     ],
   },
   required_evidence: [
@@ -190,6 +203,18 @@ const manifest = {
       description: 'Payout adapter payload/response with account numbers and secrets redacted.',
     },
     {
+      id: 'payout-providers',
+      path: 'payout/providers.json',
+      status: 'placeholder',
+      description: 'Circle and Bridge provider readiness, execution boundaries, polling, and webhook capability.',
+    },
+    {
+      id: 'payout-coordination',
+      path: 'payout/coordination.json',
+      status: 'placeholder',
+      description: 'Reviewer-safe Week 2 payout coordination contract.',
+    },
+    {
       id: 'screenshots',
       path: 'screenshots/',
       status: 'placeholder',
@@ -228,7 +253,12 @@ const manifest = {
     'ETHERFUSE_API_KEY',
     'ETHERFUSE_SANDBOX_PIX_FALLBACK',
     'CIRCLE_PAYOUT_CREATE_URL',
+    'CIRCLE_PAYOUT_STATUS_URL',
+    'CIRCLE_PAYOUT_WEBHOOK_SECRET',
     'BRIDGE_PAYOUT_CREATE_URL',
+    'BRIDGE_PAYOUT_STATUS_URL',
+    'BRIDGE_PAYOUT_WEBHOOK_SECRET',
+    'PAYOUT_WEBHOOK_SECRET',
   ]),
   validation_commands: [
     'npm --prefix backend test -- --runInBand tests/international-transfer.service.test.ts tests/financial-conversion-reference.test.ts',
@@ -277,6 +307,17 @@ function markAwardEvidence(id, status, detail) {
     : 'pending';
 }
 
+function markWeekTwoEvidence(id, status, detail) {
+  const item = manifest.week_two_award_card.evidence.find((entry) => entry.id === id);
+  if (!item) return;
+  item.status = status;
+  if (detail) item.detail = detail;
+  manifest.week_two_award_card.ready_count = manifest.week_two_award_card.evidence.filter((entry) => entry.status === 'captured').length;
+  manifest.week_two_award_card.status = manifest.week_two_award_card.ready_count === manifest.week_two_award_card.required_count
+    ? 'ready'
+    : 'pending';
+}
+
 writeJson(join(runDir, 'manifest.json'), manifest);
 writeJson(join(runDir, 'repository', 'link.json'), {
   repository_url: repositoryUrl,
@@ -284,6 +325,13 @@ writeJson(join(runDir, 'repository', 'link.json'), {
   commit: manifest.git.commit || null,
   evidence_map: 'insta-awards/evidence-map.md',
   captured_at: now.toISOString(),
+});
+writeJson(join(runDir, 'repository', 'payout-adapter-interface.json'), {
+  status: 'captured',
+  adapter_interface: 'backend/src/api/services/usd-payout-adapters.ts',
+  coordination_service: 'backend/src/api/services/usd-payout-coordination.service.ts',
+  persistence_migration: 'backend/migrations/20260606_00_usd_payout_coordination.sql',
+  contract_test: 'backend/tests/payout-adapter-contract.test.ts',
 });
 markAwardEvidence('repository-link', 'captured', 'Repository metadata captured from git.');
 writeJson(join(runDir, 'api', 'transcript.json'), {
@@ -318,6 +366,22 @@ writeJson(join(runDir, 'payout', 'instruction.json'), {
   provider_payout_id: null,
   sensitive_fields: 'redacted',
 });
+writeJson(join(runDir, 'payout', 'providers.json'), { status: 'placeholder' });
+writeJson(join(runDir, 'payout', 'coordination.json'), { status: 'placeholder', transfer_id: transferId || null });
+
+if (apiBase) {
+  try {
+    const body = await fetchJson('/api/transfers/payout-providers');
+    writeJson(join(runDir, 'payout', 'providers.json'), body);
+    markEvidence('payout-providers', 'captured', 'Provider readiness captured.');
+    markWeekTwoEvidence('circle-bridge-compatibility', 'captured', 'Circle and Bridge compatibility readiness captured.');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeJson(join(runDir, 'payout', 'providers.json'), { status: 'blocked', message });
+    markEvidence('payout-providers', 'blocked', message);
+    markWeekTwoEvidence('circle-bridge-compatibility', 'blocked', message);
+  }
+}
 
 if (apiBase && transferId) {
   const captureSummary = {
@@ -341,6 +405,11 @@ if (apiBase && transferId) {
       id: 'workflow-snapshot',
       path: `/api/transfers/${encodeURIComponent(transferId)}/workflow`,
       file: join(runDir, 'logs', 'workflow.json'),
+    },
+    {
+      id: 'payout-coordination',
+      path: `/api/transfers/${encodeURIComponent(transferId)}/payout-evidence`,
+      file: join(runDir, 'payout', 'coordination.json'),
     },
   ];
 
@@ -380,6 +449,27 @@ if (apiBase && transferId) {
       if (capture.id === 'orchestration-log') {
         markAwardEvidence('orchestration-log', 'captured', 'Redacted lifecycle log captured.');
       }
+      if (capture.id === 'payout-coordination') {
+        const payoutEvidence = body.payload?.payout_evidence || {};
+        markWeekTwoEvidence(
+          'payout-coordination-record',
+          payoutEvidence?.instruction?.created ? 'captured' : 'blocked',
+          payoutEvidence?.instruction?.created
+            ? 'Reviewer-safe payout coordination record captured.'
+            : 'Coordination endpoint captured, but no payout instruction exists yet.',
+        );
+        if (payoutEvidence?.settlement?.stellar_tx_hash) {
+          writeJson(join(runDir, 'stellar', 'settlement.json'), {
+            captured_at: body.captured_at,
+            transaction_hash: payoutEvidence.settlement.stellar_tx_hash,
+            memo: payoutEvidence.settlement.stellar_memo || null,
+            asset_code: payoutEvidence.settlement.asset_code,
+            amount_usd: payoutEvidence.settlement.amount_usd,
+          });
+          markEvidence('stellar-evidence', 'captured', 'Stellar hash captured from payout coordination evidence.');
+          markWeekTwoEvidence('stellar-transaction-hash', 'captured', 'Stellar transaction hash attached.');
+        }
+      }
       captureSummary.captures.push({ id: capture.id, status: 'captured', path: capture.path });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -392,6 +482,9 @@ if (apiBase && transferId) {
       markEvidence(capture.id, 'blocked', message);
       if (capture.id === 'orchestration-log') {
         markAwardEvidence('orchestration-log', 'blocked', message);
+      }
+      if (capture.id === 'payout-coordination') {
+        markWeekTwoEvidence('payout-coordination-record', 'blocked', message);
       }
       captureSummary.captures.push({ id: capture.id, status: 'blocked', path: capture.path, message });
     }
@@ -415,6 +508,7 @@ if (apiBase && transferId) {
 
 if (dashboardBase) {
   const screenshotPath = join(runDir, 'screenshots', 'dashboard-week-1.png');
+  const weekTwoScreenshotPath = join(runDir, 'screenshots', 'dashboard-week-2.png');
   const target = new URL('/institution-settlement', `${dashboardBase}/`);
   if (transferId) target.searchParams.set('transfer_id', transferId);
   try {
@@ -426,9 +520,11 @@ if (dashboardBase) {
       await page.goto(target.toString(), { waitUntil: 'networkidle', timeout: 45_000 });
       await page.locator('[data-testid="week-one-evidence"]').waitFor({ state: 'visible', timeout: 15_000 });
       if (transferId) {
-        await page.locator('[data-evidence-status="4/4"]').waitFor({ state: 'visible', timeout: 15_000 });
+        await page.locator('[data-testid="week-one-evidence"][data-evidence-status="4/4"]').waitFor({ state: 'visible', timeout: 15_000 });
       }
       await page.screenshot({ path: screenshotPath, fullPage: false });
+      await page.locator('[data-testid="week-two-evidence"]').waitFor({ state: 'visible', timeout: 15_000 });
+      await page.screenshot({ path: weekTwoScreenshotPath, fullPage: true });
     } finally {
       await browser.close();
     }
@@ -461,6 +557,7 @@ writeFileSync(
     '## Fill Order',
     '',
     `Award card: \`${manifest.award_card.ready_count}/${manifest.award_card.required_count}\` artifacts captured.`,
+    `Week 2 award card: \`${manifest.week_two_award_card.ready_count}/${manifest.week_two_award_card.required_count}\` artifacts captured.`,
     '',
     '1. Run the `/institution-settlement` demo route.',
     '2. Replace `api/transcript.json` placeholders with redacted request/response payloads.',
