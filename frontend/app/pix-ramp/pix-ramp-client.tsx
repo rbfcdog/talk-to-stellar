@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
+import { formatCustomerNumber } from "@/lib/customer-amount";
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
 import { mapPublicError } from "@/lib/public-errors";
@@ -360,7 +361,7 @@ function optionalSettlementAssetCode(code: unknown) {
 function formatAsset(value: unknown, code = "BRL") {
   const numeric = parseHumanAmount(value);
   if (!Number.isFinite(numeric)) return `${value || "0"} ${code}`;
-  return `${numeric.toLocaleString("en-US", { maximumFractionDigits: 7 })} ${code}`;
+  return `${formatCustomerNumber(numeric)} ${code}`;
 }
 
 function formatRampAsset(value: unknown, code = "BRL") {

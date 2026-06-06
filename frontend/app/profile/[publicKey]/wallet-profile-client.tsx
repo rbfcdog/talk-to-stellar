@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { SecurePinGate } from "@/components/shared/secure-pin-gate"
 import { calculateAssetDistribution } from "@/lib/asset-distribution"
+import { formatCustomerNumber } from "@/lib/customer-amount"
 import { getClientSession } from "@/lib/session"
 
 type BalanceItem = {
@@ -37,19 +38,13 @@ function normalizeAssetCode(value?: string, type?: string) {
   return code
 }
 
-function formatNumber(value: number, min = 2, max = 7) {
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: min,
-    maximumFractionDigits: max,
-  }).format(value)
-}
-
 function formatBalance(raw: number, code: string) {
-  if (code === "USDC") return `US$ ${formatNumber(raw)}`
-  if (code === "TESOURO") return `R$ ${formatNumber(raw)}`
-  if (code === "CETES") return `${formatNumber(raw)} CETES`
-  if (code === "XLM") return `${formatNumber(raw)} XLM`
-  return `${formatNumber(raw)} ${code}`
+  const display = formatCustomerNumber(raw, "pt-BR")
+  if (code === "USDC") return `US$ ${display}`
+  if (code === "TESOURO") return `R$ ${display}`
+  if (code === "CETES") return `${display} CETES`
+  if (code === "XLM") return `${display} XLM`
+  return `${display} ${code}`
 }
 
 function displayAssetCode(code: string) {

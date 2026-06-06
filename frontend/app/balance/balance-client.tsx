@@ -5,6 +5,7 @@ import { ArrowRight, Eye, Loader2, RefreshCw, Wallet2 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { SecurePinGate } from "@/components/shared/secure-pin-gate";
 import { calculateAssetDistribution } from "@/lib/asset-distribution";
+import { formatCustomerNumber } from "@/lib/customer-amount";
 import { getClientSession } from "@/lib/session";
 
 type BalanceLine = {
@@ -27,19 +28,13 @@ function toNumber(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatNumber(value: number, min = 2, max = 7) {
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: min,
-    maximumFractionDigits: max,
-  }).format(value);
-}
-
 function formatAssetAmount(value: number, asset: string) {
-  if (asset === "BRL") return `R$ ${formatNumber(value, 2, 7)}`;
-  if (asset === "USDC") return `US$ ${formatNumber(value, 2, 7)}`;
-  if (asset === "CETES") return `${formatNumber(value, 2, 7)} CETES`;
-  if (asset === "XLM") return `${formatNumber(value, 2, 7)} XLM`;
-  return `${formatNumber(value, 2, 7)} ${asset}`;
+  const display = formatCustomerNumber(value, "pt-BR");
+  if (asset === "BRL") return `R$ ${display}`;
+  if (asset === "USDC") return `US$ ${display}`;
+  if (asset === "CETES") return `${display} CETES`;
+  if (asset === "XLM") return `${display} XLM`;
+  return `${display} ${asset}`;
 }
 
 function scopedPath(path: string, source?: string) {

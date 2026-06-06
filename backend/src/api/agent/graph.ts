@@ -5253,8 +5253,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
     } else {
       const brlPerUsdc = Number(toolResult.brl_per_usdc);
       const usdcPerBrl = Number(toolResult.usdc_per_brl);
-      const brlLabel = Number.isFinite(brlPerUsdc) ? brlPerUsdc.toFixed(4) : String(toolResult.brl_per_usdc);
-      const usdcLabel = Number.isFinite(usdcPerBrl) ? usdcPerBrl.toFixed(8) : String(toolResult.usdc_per_brl);
+      const brlLabel = Number.isFinite(brlPerUsdc) ? brlPerUsdc.toFixed(2) : String(toolResult.brl_per_usdc);
+      const usdcLabel = Number.isFinite(usdcPerBrl) ? usdcPerBrl.toFixed(2) : String(toolResult.usdc_per_brl);
       state.success = true;
       state.response_message = this.text(
         language,

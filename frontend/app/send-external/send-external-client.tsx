@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { SecurePinGate } from "@/components/shared/secure-pin-gate"
+import { truncateCustomerAmount } from "@/lib/customer-amount"
 import { idempotentFetch } from "@/lib/idempotency"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
@@ -74,23 +75,24 @@ function formatAmount(value: string | undefined, asset: string, language: AppLan
   const amount = parseAmount(String(value || ""))
   const locale = language === "pt-BR" ? "pt-BR" : "en-US"
   if (!Number.isFinite(amount)) return "-"
+  const displayAmount = truncateCustomerAmount(amount)
   if (asset === "USDC") {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 7,
-    }).format(amount)
+      maximumFractionDigits: 2,
+    }).format(displayAmount)
   }
   if (asset === "BRL") {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: "BRL",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 7,
-    }).format(amount)
+      maximumFractionDigits: 2,
+    }).format(displayAmount)
   }
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 7 }).format(amount)} ${asset}`
+  return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(displayAmount)} ${asset}`
 }
 
 function publicMessage(error: unknown, language: AppLanguage) {

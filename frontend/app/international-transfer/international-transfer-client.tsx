@@ -631,7 +631,7 @@ export default function InternationalTransferClient() {
       {
         label: "FX rate is valid",
         ok: quoteDelta.fxRate > 0 || backendValidation.fx_rate_positive === true,
-        detail: quoteDelta.fxRate ? `${quoteDelta.fxRate.toFixed(6)} BRL/USD` : "-",
+        detail: quoteDelta.fxRate ? `${quoteDelta.fxRate.toFixed(2)} BRL/USD` : "-",
       },
       {
         label: "Final value is non-negative",
@@ -1417,7 +1417,7 @@ export default function InternationalTransferClient() {
               <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
                 <p className="text-xs font-bold uppercase tracking-normal text-tts-muted">Before fees</p>
                 <p className="mt-2 text-xl font-black text-tts-gold">{quote ? formatCurrency(feeBreakdown.grossUsd, "USD") : "-"}</p>
-                <p className="mt-1 text-sm font-semibold text-tts-muted">{quote ? `${formatCurrency(quoteDelta.sourceBrl, "BRL")} at ${quoteDelta.fxRate.toFixed(4)} BRL/USD` : "Waiting for quote"}</p>
+                <p className="mt-1 text-sm font-semibold text-tts-muted">{quote ? `${formatCurrency(quoteDelta.sourceBrl, "BRL")} at ${quoteDelta.fxRate.toFixed(2)} BRL/USD` : "Waiting for quote"}</p>
               </div>
               <div className="rounded-xl border border-tts-gold bg-tts-surface p-3">
                 <p className="text-xs font-bold uppercase tracking-normal text-tts-gold">Fees deducted</p>

@@ -15,6 +15,7 @@ import {
   Wallet2,
 } from "lucide-react";
 import { SecurePinGate } from "@/components/shared/secure-pin-gate";
+import { formatCustomerNumber } from "@/lib/customer-amount";
 import { getClientSession } from "@/lib/session";
 
 type ApiState = {
@@ -130,10 +131,7 @@ function compactKey(value?: string | null) {
 function formatAmount(value: unknown) {
   const parsed = Number(String(value || "0"));
   if (!Number.isFinite(parsed)) return String(value || "0");
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: parsed > 0 && parsed < 1 ? 4 : 2,
-    maximumFractionDigits: 7,
-  }).format(parsed);
+  return formatCustomerNumber(parsed);
 }
 
 function isValidPublicKey(value: string) {
