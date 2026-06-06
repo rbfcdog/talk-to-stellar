@@ -8,6 +8,7 @@
     "frontend:build": "npm --prefix frontend run build",
     "backend:build": "npm --prefix backend run build",
     "env:generate": "node scripts/generate-env.mjs",
+    "instawards:evidence": "node scripts/instawards-evidence.mjs",
     "passkey:env": "node scripts/generate-passkey-env.mjs",
     "passkey:smart-account": "npm --prefix backend run passkey:smart-account --",
     "telegram:start": "npm --prefix telegram start"
