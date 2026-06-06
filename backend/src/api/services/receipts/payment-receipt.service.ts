@@ -847,13 +847,12 @@ export class PaymentReceiptService {
       const value = Number(identity?.estimatedSavings || 0);
       const language = this.normalizeReceiptLanguage(input.language);
       if (!Number.isFinite(value) || value <= 0) {
-        return language === 'en'
-          ? 'Account lifetime savings: R$ 0.00 vs traditional methods.'
-          : 'Economia acumulada da conta: R$ 0.00 em relação a métodos tradicionais.';
+        return '';
       }
+      const formatted = this.whatsappCurrency(value, 'BRL', 2, language);
       return language === 'en'
-        ? `Account lifetime savings: R$ ${value.toFixed(2)} vs traditional methods.`
-        : `Economia acumulada da conta: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
+        ? `Account lifetime savings: ${formatted} vs traditional methods.`
+        : `Economia acumulada da conta: ${formatted} em relação a métodos tradicionais.`;
     } catch (error) {
       logger.debug(`[receipt] could not load cumulative savings: ${error instanceof Error ? error.message : String(error)}`);
       return '';
