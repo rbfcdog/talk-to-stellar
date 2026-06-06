@@ -13,11 +13,17 @@ const scopedCookies = [
 
 describe("/api/ramp channel-scoped session forwarding", () => {
   const previousBackendUrl = process.env.BACKEND_URL;
+  const previousInternalSecret = process.env.INTERNAL_API_SECRET;
+  const previousSandboxSecret = process.env.RAMP_SANDBOX_INTERNAL_SECRET;
 
   afterEach(() => {
     vi.restoreAllMocks();
     if (previousBackendUrl === undefined) delete process.env.BACKEND_URL;
     else process.env.BACKEND_URL = previousBackendUrl;
+    if (previousInternalSecret === undefined) delete process.env.INTERNAL_API_SECRET;
+    else process.env.INTERNAL_API_SECRET = previousInternalSecret;
+    if (previousSandboxSecret === undefined) delete process.env.RAMP_SANDBOX_INTERNAL_SECRET;
+    else process.env.RAMP_SANDBOX_INTERNAL_SECRET = previousSandboxSecret;
   });
 
   it("forwards WhatsApp cookies on scoped GET calls even when web cookies exist", async () => {
@@ -155,5 +161,73 @@ describe("/api/ramp channel-scoped session forwarding", () => {
       pin: "1234",
       wallet_pin: "1234",
     });
+  });
+
+  it("does not upgrade browser ramp calls with internal sandbox trust", async () => {
+    process.env.BACKEND_URL = "https://backend.test";
+    process.env.INTERNAL_API_SECRET = "internal-secret";
+    process.env.RAMP_SANDBOX_INTERNAL_SECRET = "sandbox-secret";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }) as any,
+    );
+
+    const request = new NextRequest("https://app.test/api/ramp/etherfuse/simulate-fiat-received", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: scopedCookies,
+        "x-internal-api-secret": "internal-secret",
+      },
+      body: JSON.stringify({
+        session_id: "whatsapp-session",
+        session_token: "whatsapp-token",
+        order_id: "sandbox-pix-1",
+        source: "whatsapp",
+        session_scope: "whatsapp",
+      }),
+    });
+
+    await POST(request, { params: Promise.resolve({ path: ["etherfuse", "simulate-fiat-received"] }) });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).not.toHaveProperty("X-Internal-Api-Secret");
+    expect(init.headers).not.toHaveProperty("X-Ramp-Sandbox-Secret");
+  });
+
+  it("forwards only the scoped sandbox proxy secret when it matches", async () => {
+    process.env.BACKEND_URL = "https://backend.test";
+    process.env.INTERNAL_API_SECRET = "internal-secret";
+    process.env.RAMP_SANDBOX_INTERNAL_SECRET = "sandbox-secret";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }) as any,
+    );
+
+    const request = new NextRequest("https://app.test/api/ramp/etherfuse/simulate-fiat-received", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: scopedCookies,
+        "x-ramp-sandbox-secret": "sandbox-secret",
+      },
+      body: JSON.stringify({
+        session_id: "whatsapp-session",
+        session_token: "whatsapp-token",
+        order_id: "sandbox-pix-1",
+        source: "whatsapp",
+        session_scope: "whatsapp",
+      }),
+    });
+
+    await POST(request, { params: Promise.resolve({ path: ["etherfuse", "simulate-fiat-received"] }) });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toMatchObject({ "X-Ramp-Sandbox-Secret": "sandbox-secret" });
+    expect(init.headers).not.toHaveProperty("X-Internal-Api-Secret");
   });
 });

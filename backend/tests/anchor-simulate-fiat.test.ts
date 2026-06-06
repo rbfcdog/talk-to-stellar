@@ -92,6 +92,48 @@ describe('AnchorService sandbox PIX confirmation', () => {
     });
   });
 
+  it('still rejects trusted sandbox confirmation when the PIX order belongs to another session', async () => {
+    mockSandboxRuntime();
+    mockSessionWallet();
+    const pinSpy = jest.spyOn(AnchorService as any, 'requireWalletPin');
+    const orderId = 'sandbox-pix-other-session';
+
+    (AnchorService as any).sandboxMockOnRampOrders.set(orderId, {
+      transaction: {
+        id: orderId,
+        status: 'pending',
+        fromAmount: '100',
+        fromCurrency: 'BRL',
+        toAmount: '100',
+        toCurrency: 'TESOURO',
+        stellarAddress: 'GOTHERSESSIONPUBLICKEY',
+        paymentInstructions: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sandbox_mock: true,
+      },
+      userId: 'user-2',
+      sessionId: 'session-2',
+      publicKey: 'GOTHERSESSIONPUBLICKEY',
+      sourceAmountBrl: '100',
+      destinationAmount: '100',
+      finalAssetCode: 'TESOURO',
+      finalAmount: '100',
+      operationContext: {
+        source_session_id: 'session-2',
+        source_public_key: 'GOTHERSESSIONPUBLICKEY',
+      },
+    });
+
+    await expect(AnchorService.simulateFiatReceivedForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      order_id: orderId,
+      trusted_internal: true,
+    })).rejects.toMatchObject({ code: 'pix_order_forbidden' });
+    expect(pinSpy).not.toHaveBeenCalled();
+  });
+
   it('starts PIX-funded auto-pay on the backend after PIX confirmation', async () => {
     mockSandboxRuntime();
     mockSessionWallet();

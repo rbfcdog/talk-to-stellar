@@ -3383,9 +3383,10 @@ export class AnchorService {
   private static async deliverSandboxOnRamp(orderId: string, operationId?: string, context?: SessionWalletContext, trustedInternal = false): Promise<SandboxMockOnRampOrder | null> {
     const record = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (!record) return null;
-    if (!trustedInternal) {
-      if (!context) throw apiError('TalkToStellar session is required to confirm this PIX order.', 401);
+    if (context) {
       this.assertSandboxOnRampOwner(record, context);
+    } else if (!trustedInternal) {
+      throw apiError('TalkToStellar session is required to confirm this PIX order.', 401);
     }
     if (record.transaction.status === 'completed') return record;
     if (context?.vaultSecretId && !record.vaultSecretId) {
