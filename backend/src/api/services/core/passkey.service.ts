@@ -21,6 +21,7 @@ import { StellarService } from '../stellar.service';
 import { AuthService } from '../auth.service';
 import { isSessionExpired } from '../../../utils/session-expiry';
 import { getRequiredJwtSecret } from '../../../config/secrets';
+import { hashWalletPin, verifyWalletPinAgainstAny } from '../../../utils/pin-hash';
 
 const agentRepo = new AgentRepository(supabase);
 const walletRepo = new WalletRepository(supabase);
@@ -674,6 +675,38 @@ export class PasskeyService {
       sessionId,
       sessionTokenHash: hashSecret(sessionToken),
     };
+  }
+
+  static async verifyRegistrationPin(sessionId: string, pin: string) {
+    const normalizedSessionId = String(sessionId || '').trim();
+    const normalizedPin = String(pin || '').trim();
+    if (!/^\d{4,8}$/.test(normalizedPin)) {
+      throw passkeyAuthorizationError('Enter your 4 to 8 digit PIN before enabling biometrics.', 400);
+    }
+
+    const session = await agentRepo.getSession(normalizedSessionId);
+    if (!session || isSessionExpired(session)) {
+      throw passkeyAuthorizationError('Session is invalid or expired. Sign in again before registering a passkey.');
+    }
+
+    const verification = verifyWalletPinAgainstAny(normalizedPin, [
+      (session as any).session_password_hash,
+      (session as any).password_hash,
+    ]);
+    if (!verification.valid) {
+      throw passkeyAuthorizationError('Invalid PIN.', 403);
+    }
+
+    if (verification.needsRehash) {
+      const updatedHash = hashWalletPin(normalizedPin);
+      await agentRepo.saveSession(normalizedSessionId, {
+        ...(session as any),
+        password_hash: updatedHash,
+        session_password_hash: updatedHash,
+      });
+    }
+
+    return { verified: true };
   }
 
   static async generateRegistration(authorization: PasskeyRegistrationAuthorization) {

@@ -122,7 +122,12 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
   {
     intent: IntentType.RESET_PIN,
     toolName: 'route_reset_pin_intent',
-    description: 'Use when the user asks to change, reset, recover, update, alter, redefine, troubleshoot, or fix account PIN/security, even with typos such as redefimir/redefinir/uero or very short wording. PIN change/reset/recovery requests must never become general help.',
+    description: 'Use when the user asks to change, reset, recover, update, alter, redefine, troubleshoot, or fix account PIN, even with typos such as redefimir/redefinir/uero or very short wording. PIN change/reset/recovery requests must never become general help. Do not use for Passkey/biometrics setup; use route_passkey_setup_intent for that.',
+  },
+  {
+    intent: IntentType.PASSKEY_SETUP,
+    toolName: 'route_passkey_setup_intent',
+    description: 'Use when the user asks to enable, setup, configure, activate, create, add, or fix biometrics/biometria/passkey/Face ID/Touch ID/fingerprint login for the current account. The runtime opens a dedicated page that asks for PIN before WebAuthn registration.',
   },
   {
     intent: IntentType.WALLET_LOGOUT,
@@ -883,6 +888,45 @@ export class AgentGraph {
       result?.message ||
       result?.error ||
       this.text(language, 'Não consegui iniciar a troca de PIN agora.', 'I could not start the PIN change right now.')
+    );
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async handlePasskeySetupRequest(state: AgentState): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const sessionToken = String(
+      (state.action_params as any)?.session_token ||
+      state.session_data?.session_token ||
+      ''
+    ).trim();
+    const provider = String((state.action_params as any)?.external_provider || '').trim();
+    const providerUserId = String((state.action_params as any)?.external_provider_user_id || '').trim();
+    const source = String((state.action_params as any)?.external_source || provider || '').trim();
+
+    const resultRaw = await executeTool('prepare_passkey_setup', {
+      session_id: state.session_id,
+      session_token: sessionToken,
+      user_id: state.session_data?.user_id,
+      provider,
+      provider_user_id: providerUserId,
+      source,
+      language,
+    });
+
+    let result: any;
+    try {
+      result = JSON.parse(resultRaw);
+    } catch {
+      result = { success: false, error: this.text(language, 'Não consegui abrir a configuração de biometria agora.', 'I could not open biometrics setup right now.') };
+    }
+
+    state.success = Boolean(result?.success);
+    state.response_message = String(
+      result?.message ||
+      result?.error ||
+      this.text(language, 'Não consegui abrir a configuração de biometria agora.', 'I could not open biometrics setup right now.')
     );
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
@@ -3380,6 +3424,7 @@ Core rule:
 - route_general_intent is the lowest-priority route. Use it only for greetings, broad menu/help/capability questions, broad educational explanations, or non-product small talk.
 - Never use route_general_intent for balance, contacts, PIX, conversion, quote, yield/earnings, history, financial memory, PIN/security, payment, payment link, login, logout, wallet, profile, public key, or account access.
 - route_general_intent is not acceptable for money-transfer requests that combine a transfer verb, amount, asset/currency, and recipient, even when the text has typos.
+- Passkey/biometrics setup is an account security action. Route it to route_passkey_setup_intent, not route_reset_pin_intent and not route_general_intent.
 
 Structured extraction fields:
 - When the user provides a numeric amount, fill amount as a normalized decimal string.
@@ -3426,6 +3471,7 @@ Route selection guide:
 - route_history_intent: user asks for history, extrato, transactions, transações, movimentações, receipts, comprovantes, recibos, recent activity, or full history.
 - route_financial_memory_intent: user asks what nicknames/labels/preferences were saved, what the system remembers financially, savings/economy summaries, or learned payment memory.
 - route_reset_pin_intent: user asks to change, alter, reset, recover, redefine, update, fix, troubleshoot, or handle a forgotten/invalid PIN. Any PIN problem/change request routes here.
+- route_passkey_setup_intent: user asks to configure biometrics/biometria/passkey/Face ID/Touch ID/fingerprint for their account, including typo variants. This opens a setup page and must ask for PIN on the page before registering biometrics.
 - route_payment_link_intent: user asks to create, generate, open, share, charge/cobrar, receive with, or get a payment/receive link.
 - route_payment_intent: user wants to send, transfer, pay, or move money to a recipient who is not explicitly the user's own PIX/bank exit. Recipients can be person names, saved contacts, emails, phones, CPFs, keys, or external wallets. Use this even with typos when amount/asset/recipient are present or implied. Use this for "mandar 100 BRL da minha conta para Marina receber em dólar": source is BRL, destination asset is USDC, recipient is Marina. Use this for "10 USDC em XLM pra fora": source is USDC, destination asset is XLM, recipient/destination is still missing. Do not use this for "10 USDC pra fora da conta"; that is own-account PIX off-ramp.
 - route_wallet_intent: user asks for own profile, public receiving key, wallet public key, account identity, wallet setup, or wallet management that is not login/logout/PIN. Fill wallet_action.
@@ -3454,6 +3500,7 @@ Disambiguation:
 - "mandar 10 xlm/usdc/cetes/reais pra Ana Silva", emails, phone numbers, CPFs, transfer keys, or external wallets are payment, not help, unless PIX is explicitly the rail.
 - "criar/gerar link de pagamento", "link para receber", "cobrar por link", and "meu link de recebimento" are payment_link, not normal payment.
 - "mudar/trocar/alterar/redefinir/redefimir/resetar/recuperar PIN" or "PIN nao funciona" are reset_pin, not wallet, login, or help.
+- "ativar/configurar biometria", "criar passkey", "usar Face ID", "cadastrar digital", "habilitar biometria", and typo variants are passkey_setup, not reset_pin and not general help.
 - "melhor rota", "quanto custa", "preco", "taxa", "cotacao", "cotação XLM para USDC", "quanto está USDC/BRL", or bank comparison routes to price_quote unless the user is already giving a direct execution command with PIN.
 - "uero ver todas as cotacoes aqui", "quero ver todas as cotações", "mostrar tabela de câmbio", and "matriz de conversão" must use route_price_quote_intent with all_quotes=true. Do not answer with only BRL/USDC and do not use get_brl_usdc_quote for this.
 - "cotação XLM/BRL", "preço de XLM em reais", and "quanto custa 100 XLM em BRL" must use quote_mode=market_price because the user wants the BRL price to receive/buy XLM. Do not answer with the sell quote XLM -> BRL unless the user says converter/vender/mandar XLM para BRL.
@@ -3463,6 +3510,7 @@ Disambiguation:
 - A typo-heavy command still routes to the intended product action. Do not downgrade it to general.
 - Normal payment routing: when the user wants to send, pay, transfer, or move money to another person, contact, email, CPF, phone, key, or external wallet without PIX as the rail, route_payment_intent.
 - PIN/security requests are account actions, never generic help.
+- Passkey/biometrics setup requests are account actions, never generic help.
 
 Clarification behavior:
 - If the route is clear but details are missing, call the specific route with needs_clarification=true instead of route_general_intent.
@@ -5272,6 +5320,10 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         return await this.handlePinResetRequest(state);
       }
 
+      if (state.action_type === ActionType.SETUP_PASSKEY) {
+        return await this.handlePasskeySetupRequest(state);
+      }
+
       if (state.action_type === ActionType.GET_BALANCE) {
         return await this.handleBalanceCheck(state);
       }
@@ -5402,6 +5454,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       [IntentType.WALLET]: ActionType.CREATE_WALLET,
       [IntentType.WALLET_LOGOUT]: ActionType.LOGOUT_WALLET,
       [IntentType.RESET_PIN]: ActionType.RESET_PIN,
+      [IntentType.PASSKEY_SETUP]: ActionType.SETUP_PASSKEY,
       [IntentType.CONTACTS]: ActionType.LIST_CONTACTS,
       [IntentType.PAYMENT]: ActionType.BUILD_PAYMENT,
       [IntentType.PAYMENT_LINK]: ActionType.CREATE_PAYMENT_LINK,

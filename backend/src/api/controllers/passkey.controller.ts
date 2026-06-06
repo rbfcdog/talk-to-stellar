@@ -30,6 +30,7 @@ export default class PasskeyController {
         sessionId: readSessionId(req),
         sessionToken: readSessionToken(req),
       });
+      await PasskeyService.verifyRegistrationPin(authorization.sessionId, String(req.body?.pin || ''));
 
       const result = await PasskeyService.generateRegistration(authorization);
       return res.status(200).json({ success: true, userId: authorization.userId, ...result });

@@ -870,6 +870,8 @@ export default function CreateAccountClient({
         body: JSON.stringify({
           user_id: userId,
           session_id: sessionId,
+          pin,
+          ...tokenSessionContext,
         }),
       })
       const initPayload = await initRes.json().catch(() => ({}))
@@ -935,6 +937,7 @@ export default function CreateAccountClient({
           session_id: prepared.sessionId,
           challenge_id: prepared.challengeId,
           credential,
+          ...tokenSessionContext,
         }),
       })
       const completePayload = await completeRes.json()

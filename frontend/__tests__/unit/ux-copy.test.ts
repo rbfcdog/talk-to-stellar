@@ -253,6 +253,18 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("Testar passkey e OpenZeppelin");
   });
 
+  it("requires PIN before the dedicated biometrics setup page starts Passkey registration", () => {
+    const setupText = source("app/setup-passkey/setup-passkey-client.tsx");
+    const backendControllerText = source("../backend/src/api/controllers/passkey.controller.ts");
+    const backendServiceText = source("../backend/src/api/services/core/passkey.service.ts");
+
+    expect(setupText).toContain("PIN da conta");
+    expect(setupText).toContain("pin: cleanedPin");
+    expect(setupText).toContain("Digite seu PIN");
+    expect(backendControllerText).toContain("verifyRegistrationPin");
+    expect(backendServiceText).toContain("verifyWalletPinAgainstAny");
+  });
+
   it("keeps login QR as a phone-generated code flow for desktop sign-in", () => {
     const loginText = source("app/login/login-client.tsx");
     const passkeyProxyText = source("app/api/passkeys/[...path]/route.ts");
