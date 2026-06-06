@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { errorLogMessage } from '../../utils/error-log';
+import { logger } from '../../utils/logger';
 import { AuditRepository } from '../repository/audit.repository';
 
 export interface AuditRequest extends Request {
@@ -7,14 +9,23 @@ export interface AuditRequest extends Request {
   auditIpAddress?: string;
 }
 
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const normalized = value.trim();
+    if (normalized) return normalized;
+  }
+  return undefined;
+}
+
 /**
  * Middleware to extract session and user agent info for audit logging
  */
 export function auditMiddleware(req: AuditRequest, res: Response, next: NextFunction) {
   // Extract session ID from header or query
-  const sessionId = (req.get('x-session-id') || req.query.session_id || req.get('authorization')) as string;
+  const sessionId = firstString(req.get('x-session-id'), req.query.session_id);
   const userAgent = req.get('user-agent');
-  const ipAddress = req.ip || req.connection.remoteAddress;
+  const ipAddress = req.ip || req.socket.remoteAddress;
 
   if (sessionId) {
     req.auditSession = sessionId;
@@ -31,19 +42,19 @@ export function auditMiddleware(req: AuditRequest, res: Response, next: NextFunc
 export async function logAuditEvent(
   sessionId: string | undefined,
   eventType: string,
-  metadata: any = {},
+  metadata: Record<string, unknown> = {},
   ipAddress?: string,
   userAgent?: string
 ) {
   if (!sessionId) {
-    console.warn('Audit log called without session_id');
+    logger.warn('[audit] log event called without session_id');
     return;
   }
 
   try {
     await AuditRepository.logEvent(sessionId, eventType, metadata, ipAddress, userAgent);
   } catch (error) {
-    console.error('Failed to log audit event:', error instanceof Error ? error.message : String(error));
+    logger.error(`[audit] failed to log event: ${errorLogMessage(error)}`);
     // Don't throw - audit logging failures should not break the app
   }
 }

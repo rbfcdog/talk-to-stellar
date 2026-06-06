@@ -2,6 +2,7 @@ import {
   BridgeCompatibilityAdapter,
   CircleCompatibilityAdapter,
   EtherfusePixOffRampAdapter,
+  getPayoutProviderAdapter,
   MockUsdPayoutAdapter,
 } from '../src/api/services/usd-payout-adapters';
 
@@ -107,7 +108,9 @@ describe('PayoutProviderAdapter contract', () => {
         real_execution_enabled: false,
       },
     });
-    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[configured]');
+    expect((instruction.metadata as any).provider_payload.destination.account_holder_name).toBe('[REDACTED]');
+    expect((instruction.metadata as any).provider_payload.destination.routing_number).toBe('[REDACTED_LAST4:0021]');
+    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[REDACTED_LAST4:6789]');
     expect((instruction.metadata as any).provider_payload.destination.provider_label).toBe('other');
   });
 
@@ -131,8 +134,48 @@ describe('PayoutProviderAdapter contract', () => {
         destination_provider_label: 'mercury',
       },
     });
-    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[configured]');
-    expect((instruction.metadata as any).provider_payload.destination.iban).toBe('[configured]');
+    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[REDACTED_LAST4:6789]');
+    expect((instruction.metadata as any).provider_payload.destination.iban).toBe('[REDACTED]');
+  });
+
+  it('sends executable destination details while persisting only redacted evidence', async () => {
+    process.env.ENABLE_REAL_PAYOUT_EXECUTION = 'true';
+    process.env.CIRCLE_API_KEY = 'circle-test-key';
+    process.env.CIRCLE_PAYOUT_CREATE_URL = 'https://circle.example.test/payouts';
+    const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        id: 'circle-payout-live-1',
+        status: 'pending',
+        destination: {
+          account_number: '123456789',
+          routing_number: '021000021',
+        },
+      }),
+    } as any);
+
+    const instruction = await new CircleCompatibilityAdapter().createPayoutInstruction(baseInput);
+
+    const request = fetchSpy.mock.calls[0][1] as RequestInit;
+    const sentPayload = JSON.parse(String(request.body));
+    expect(sentPayload.destination).toMatchObject({
+      account_holder_name: 'Destination USD Institution LLC',
+      account_number: '123456789',
+      routing_number: '021000021',
+    });
+    expect(instruction).toMatchObject({
+      provider_name: 'circle',
+      provider_payout_id: 'circle-payout-live-1',
+      execution_mode: 'live_api',
+    });
+    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[REDACTED_LAST4:6789]');
+    expect((instruction.metadata as any).provider_response.destination.account_number).toBe('[REDACTED_LAST4:6789]');
+    expect((instruction.status_history?.[0].evidence as any).destination.account_number).toBe('[REDACTED_LAST4:6789]');
+  });
+
+  it('rejects unknown payout adapters instead of falling back to mock', () => {
+    expect(() => getPayoutProviderAdapter('typo-provider')).toThrow(/unsupported payout provider/i);
   });
 
   it('reports provider readiness and normalizes signed provider events', () => {

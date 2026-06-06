@@ -628,15 +628,16 @@ function PayoutCoordination({ console }: { console: Console }) {
           <h3 className="mt-1 text-base font-black text-tts-deep">Adapter capability matrix</h3>
         </div>
         <div className="overflow-x-auto border-t border-tts-border">
-          <div className="min-w-[780px]">
-            <div className="grid grid-cols-[190px_120px_100px_110px_110px_minmax(180px,1fr)] bg-tts-bg px-4 py-2 text-xs font-bold uppercase text-tts-muted sm:px-6">
-              <span>Provider</span><span>Mode</span><span>Configured</span><span>Status poll</span><span>Webhook</span><span>Blockers</span>
+          <div className="min-w-[900px]">
+            <div className="grid grid-cols-[190px_120px_100px_100px_110px_110px_minmax(180px,1fr)] bg-tts-bg px-4 py-2 text-xs font-bold uppercase text-tts-muted sm:px-6">
+              <span>Provider</span><span>Mode</span><span>Configured</span><span>Execution</span><span>Status poll</span><span>Webhook</span><span>Blockers</span>
             </div>
             {console.payoutProviders.map((provider) => (
-              <div key={provider.provider_name} className="grid grid-cols-[190px_120px_100px_110px_110px_minmax(180px,1fr)] border-t border-tts-border px-4 py-3 text-sm sm:px-6">
+              <div key={provider.provider_name} className="grid grid-cols-[190px_120px_100px_100px_110px_110px_minmax(180px,1fr)] border-t border-tts-border px-4 py-3 text-sm sm:px-6">
                 <span className="font-black text-tts-deep">{provider.display_name}</span>
                 <span className="font-mono text-xs text-tts-muted">{provider.execution_mode}</span>
                 <span>{provider.configured ? <CheckCircle2 className="h-4 w-4 text-tts-confirm" /> : <CircleDot className="h-4 w-4 text-tts-muted" />}</span>
+                <span>{provider.execution_enabled ? <Status tone="success">enabled</Status> : <Status tone="neutral">disabled</Status>}</span>
                 <span>{provider.supports.status_polling ? "available" : "not configured"}</span>
                 <span>{provider.supports.webhooks ? "signed" : "not configured"}</span>
                 <span className="truncate text-xs text-tts-muted">{provider.blockers.join(" ") || "No adapter blockers."}</span>
@@ -801,6 +802,7 @@ export default function SettlementConsoleView() {
                 <button
                   key={value}
                   type="button"
+                  data-testid={`tab-${value}`}
                   onClick={() => setTab(value)}
                   className={`inline-flex h-12 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 text-xs font-bold transition sm:gap-2 sm:px-3 sm:text-sm ${
                     tab === value
@@ -825,7 +827,7 @@ export default function SettlementConsoleView() {
           </nav>
 
           {tab === "overview" ? <Overview console={console} /> : null}
-          {tab === "payout" ? <PayoutCoordination console={console} /> : null}
+          {tab === "payout" ? <div data-testid="payout-coordination-panel"><PayoutCoordination console={console} /></div> : null}
           {tab === "evidence" ? <Evidence console={console} /> : null}
           {tab === "api" ? <ApiActivity console={console} /> : null}
 

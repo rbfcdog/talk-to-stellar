@@ -14,6 +14,7 @@ import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Fingerprint } from "lucide-react"
+import { decodeJwtPayload } from "@/lib/jwt"
 
 type FinalizeResponse = {
   success: boolean
@@ -55,18 +56,6 @@ function extractTokenFromUrl(url: string): string {
     return String(parsed.searchParams.get("token") || "")
   } catch {
     return ""
-  }
-}
-
-function decodeJwtPayload(token: string): any {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return {}
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
-    return JSON.parse(atob(padded))
-  } catch {
-    return {}
   }
 }
 
