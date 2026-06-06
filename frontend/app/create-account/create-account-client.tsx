@@ -166,6 +166,35 @@ function normalizePhoneDigits(value?: unknown): string {
   return String(value || "").replace(/\D+/g, "")
 }
 
+function formatCpfInput(value: string): string {
+  const digits = normalizePhoneDigits(value).slice(0, 11)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+}
+
+function formatInternationalPhoneInput(value: string): string {
+  const trimmed = String(value || "").trim()
+  const hasPlus = trimmed.startsWith("+")
+  const digits = normalizePhoneDigits(trimmed).slice(0, 15)
+  if (!digits) return hasPlus ? "+" : ""
+
+  const brazilInput = digits.startsWith("55") || (!hasPlus && digits.length <= 11)
+  if (brazilInput) {
+    const local = digits.startsWith("55") ? digits.slice(2, 13) : digits.slice(0, 11)
+    const prefix = hasPlus || digits.startsWith("55") ? "+55 " : ""
+    const area = local.slice(0, 2)
+    const firstSize = local.length > 10 ? 5 : 4
+    const first = local.slice(2, 2 + firstSize)
+    const second = local.slice(2 + firstSize, 2 + firstSize + 4)
+    return `${prefix}${area ? `(${area}` : ""}${area.length === 2 ? ") " : ""}${first}${second ? `-${second}` : ""}`.trim()
+  }
+
+  const grouped = digits.match(/.{1,3}/g)?.join(" ") || digits
+  return hasPlus ? `+${grouped}` : grouped
+}
+
 export default function CreateAccountClient({
   initialToken = '',
   initialValidation = null,
@@ -183,6 +212,7 @@ export default function CreateAccountClient({
   const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/chat"
   const forceNewAccount = searchParams.get("force_new") === "1" || searchParams.get("new_account") === "1"
   const isClaimPaymentContext = searchParams.get("context") === "claim-payment" || nextPath.startsWith("/claim-payment")
+  const isGoogleLoginContext = searchParams.get("context") === "google-login" || searchParams.get("provider") === "google"
 
   const [token, setToken] = useState(tokenFromUrl)
   const [name, setName] = useState("")
@@ -229,22 +259,23 @@ export default function CreateAccountClient({
   const submitLocked = status === "submitting" || status === "done" || submitLockRef.current
   const passkeyButtonDisabled = Boolean(passkeyUnavailableReason) || passkeyStatus === "preparing" || passkeyStatus === "registering" || passkeyStatus === "done"
   const isTelegramContext = String(tokenPayload?.provider || "").trim().toLowerCase() === "telegram"
-  const passkeyLoginEmail = useMemo(() => {
+  const passkeySetupEmail = useMemo(() => {
     const candidates = [email, result?.userId]
     for (const candidate of candidates) {
       if (looksLikeEmail(candidate)) return String(candidate || "").trim().toLowerCase()
     }
     return ""
   }, [email, result?.userId])
-  const passkeyLoginRedirectUrl = useMemo(() => {
+  const passkeySetupRedirectUrl = useMemo(() => {
     if (!PASSKEY_ENROLLMENT_ENABLED) return ""
-    if (typeof window === "undefined" || !passkeyLoginEmail) return ""
-    const url = new URL(`${window.location.origin}/login`)
-    url.searchParams.set("auth", "passkey")
-    url.searchParams.set("email", passkeyLoginEmail)
+    if (typeof window === "undefined" || !result?.success || !result?.sessionId || !result?.userId) return ""
+    const url = new URL(`${window.location.origin}/setup-passkey`)
+    url.searchParams.set("user_id", result.userId)
+    if (passkeySetupEmail) url.searchParams.set("email", passkeySetupEmail)
     url.searchParams.set("lang", language)
+    if (rawNextPath && rawNextPath !== "/chat") url.searchParams.set("next", rawNextPath)
     return url.toString()
-  }, [language, passkeyLoginEmail])
+  }, [language, passkeySetupEmail, rawNextPath, result?.sessionId, result?.success, result?.userId])
   const passkeyQrImageUrl = useMemo(() => {
     if (!passkeyQrTargetUrl) return ""
     return `https://quickchart.io/qr?size=320&margin=2&ecLevel=Q&format=png&text=${encodeURIComponent(passkeyQrTargetUrl)}`
@@ -293,7 +324,7 @@ export default function CreateAccountClient({
   useEffect(() => {
     let cancelled = false
     async function preparePasskeyQr() {
-      if (!passkeyLoginRedirectUrl) {
+      if (!passkeySetupRedirectUrl || !result?.sessionId) {
         setPasskeyQrTargetUrl("")
         return
       }
@@ -303,9 +334,11 @@ export default function CreateAccountClient({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            url: passkeyLoginRedirectUrl,
+            url: passkeySetupRedirectUrl,
             purpose: "create_account_passkey_qr",
-            expires_in_hours: 6,
+            session_id: result.sessionId,
+            user_id: result.userId || undefined,
+            expires_in_minutes: 15,
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -314,9 +347,9 @@ export default function CreateAccountClient({
           setPasskeyQrTargetUrl(String(payload.url))
           return
         }
-        setPasskeyQrTargetUrl(passkeyLoginRedirectUrl)
+        setPasskeyQrTargetUrl(passkeySetupRedirectUrl)
       } catch {
-        if (!cancelled) setPasskeyQrTargetUrl(passkeyLoginRedirectUrl)
+        if (!cancelled) setPasskeyQrTargetUrl(passkeySetupRedirectUrl)
       }
     }
 
@@ -324,7 +357,7 @@ export default function CreateAccountClient({
     return () => {
       cancelled = true
     }
-  }, [passkeyLoginRedirectUrl])
+  }, [passkeySetupRedirectUrl, result?.sessionId, result?.userId])
 
   function redirectToUsed(customMessage?: string) {
     const params = new URLSearchParams()
@@ -394,15 +427,25 @@ export default function CreateAccountClient({
       browserId = generateBrowserId()
       localStorage.setItem("talk-to-stellar.browserId", browserId)
     }
+    const googleProviderUserId = String(
+      tokenPayload?.provider_user_id ||
+        searchParams.get("provider_user_id") ||
+        email ||
+        emailFromUrl ||
+        "",
+    ).trim().toLowerCase()
+    const recoveryProvider = isGoogleLoginContext && googleProviderUserId ? "google" : "web"
+    const recoveryProviderUserId = recoveryProvider === "google" ? googleProviderUserId : browserId
     const response = await fetch(`/api/external/check-account`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
       body: JSON.stringify({
-        provider: "web",
-        provider_user_id: browserId,
+        provider: recoveryProvider,
+        provider_user_id: recoveryProviderUserId,
         force_new_account: forceNewAccount,
         language,
+        ...(recoveryProvider === "google" ? { email: googleProviderUserId, source: "google" } : {}),
       }),
     })
     const payload = await response.json().catch(() => ({}))
@@ -493,7 +536,7 @@ export default function CreateAccountClient({
 
   useEffect(() => {
     if (!lockedWhatsAppPhoneNumber) return
-    setPhoneNumber(lockedWhatsAppPhoneNumber)
+    setPhoneNumber(formatInternationalPhoneInput(lockedWhatsAppPhoneNumber))
   }, [lockedWhatsAppPhoneNumber])
 
   useEffect(() => {
@@ -1047,10 +1090,11 @@ export default function CreateAccountClient({
           <span className="text-xs font-medium text-tts-deep">{L("Telefone", "Phone")}</span>
           <Input
             value={phoneNumber}
-            onChange={(event) => setPhoneNumber(event.target.value)}
+            onChange={(event) => setPhoneNumber(formatInternationalPhoneInput(event.target.value))}
             type="tel"
             disabled={Boolean(lockedWhatsAppPhoneNumber)}
             placeholder="+55 11 99999-9999"
+            autoComplete="tel"
           />
         </label>
 
@@ -1058,9 +1102,10 @@ export default function CreateAccountClient({
           <span className="text-xs font-medium text-tts-deep">CPF</span>
           <Input
             value={cpf}
-            onChange={(event) => setCpf(event.target.value)}
+            onChange={(event) => setCpf(formatCpfInput(event.target.value))}
             type="text"
             inputMode="numeric"
+            maxLength={14}
             placeholder="000.000.000-00"
           />
         </label>

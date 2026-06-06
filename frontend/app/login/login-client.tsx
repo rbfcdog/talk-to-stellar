@@ -342,7 +342,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           body: JSON.stringify({
             url: mobileRedirectUrl,
             purpose: "login_passkey_qr",
-            expires_in_hours: 6,
+            expires_in_minutes: 15,
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -880,8 +880,13 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             const params = new URLSearchParams()
             const googleEmail = String(payload?.email || payload?.user_id || "").trim()
             const googleName = String(payload?.display_name || payload?.name || "").trim()
+            const googleToken = String(payload?.token || "").trim()
             if (googleEmail) params.set("email", googleEmail)
             if (googleName) params.set("name", googleName)
+            if (googleToken) params.set("token", googleToken)
+            params.set("provider", "google")
+            if (googleEmail) params.set("provider_user_id", googleEmail)
+            params.set("source", "google")
             params.set("force_new", "1")
             params.set("context", "google-login")
             if (nextPath) params.set("next", nextPath)

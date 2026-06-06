@@ -224,6 +224,13 @@ interface PreviewOffRampForSessionInput extends RampSessionInput {
   customerId?: string;
 }
 
+interface RampOrderStatusInput extends RampSessionInput {
+  order_id?: string;
+  orderId?: string;
+  operation_id?: string;
+  operationId?: string;
+}
+
 interface ExternalBankAccountInput extends RampSessionInput {}
 
 interface SubmitOffRampForSessionInput extends RampSessionInput {
@@ -1718,6 +1725,84 @@ export class AnchorService {
       throw apiError('PIN inválido. Tente novamente.', 401, 'invalid_pin');
     }
     return pin;
+  }
+
+  private static assertRampOwnerMatches(input: {
+    sessionId?: unknown;
+    userId?: unknown;
+    publicKey?: unknown;
+    operationContext?: Record<string, unknown>;
+  }, context: SessionWalletContext): void {
+    const operationContext = input.operationContext || {};
+    const ownerSessionId = coalesceString(
+      input.sessionId,
+      operationContext.source_session_id,
+      operationContext.session_id,
+      operationContext.sessionId,
+    );
+    const ownerUserId = coalesceString(input.userId, operationContext.user_id, operationContext.userId);
+    const ownerPublicKey = coalesceString(
+      input.publicKey,
+      operationContext.source_public_key,
+      operationContext.public_key,
+      operationContext.publicKey,
+    );
+
+    if (ownerSessionId && ownerSessionId === context.sessionId) return;
+    if (ownerUserId && ownerUserId === context.userId) return;
+    if (ownerPublicKey && ownerPublicKey === context.publicKey) return;
+
+    throw apiError('Esta operação PIX não pertence à sessão atual.', 403, 'pix_order_forbidden');
+  }
+
+  private static assertSandboxOnRampOwner(record: SandboxMockOnRampOrder, context: SessionWalletContext): void {
+    this.assertRampOwnerMatches({
+      sessionId: record.sessionId,
+      userId: record.userId,
+      publicKey: record.publicKey,
+      operationContext: record.operationContext,
+    }, context);
+  }
+
+  private static assertSandboxOffRampOwner(record: SandboxMockOffRampOrder, context: SessionWalletContext): void {
+    this.assertRampOwnerMatches({
+      sessionId: record.sessionId,
+      userId: record.userId,
+      publicKey: record.publicKey,
+    }, context);
+  }
+
+  private static async requireRampOperationOwner(
+    operationId: string | undefined,
+    context: SessionWalletContext,
+    expectedOrderId: string,
+    expectedDirection: 'onramp' | 'offramp',
+  ): Promise<void> {
+    if (!operationId) {
+      throw apiError('operation_id is required to check this PIX order.', 400, 'missing_operation_id');
+    }
+
+    const operation = await OperationRepository.findById(operationId);
+    if (!operation) {
+      throw apiError('PIX operation not found.', 404, 'pix_operation_not_found');
+    }
+
+    const operationContext = parseOperationContext(operation.context);
+    const storedOrderId = coalesceString(operationContext.anchor_order_id, operationContext.order_id);
+    const storedDirection = coalesceString(operationContext.direction);
+    if (expectedOrderId && storedOrderId && storedOrderId !== expectedOrderId) {
+      throw apiError('Esta operação PIX não corresponde ao pedido informado.', 403, 'pix_order_forbidden');
+    }
+    if (storedDirection && storedDirection !== expectedDirection) {
+      throw apiError('Esta operação PIX não corresponde ao tipo de pedido informado.', 403, 'pix_order_forbidden');
+    }
+
+    this.assertRampOwnerMatches({
+      sessionId: operation.source_session_id,
+      userId: operation.user_id,
+      publicKey: operation.source_public_key,
+      operationContext,
+    }, context);
   }
 
   static async verifySessionPin(input: RampSessionInput): Promise<{
@@ -3295,9 +3380,13 @@ export class AnchorService {
     });
   }
 
-  private static async deliverSandboxOnRamp(orderId: string, operationId?: string, context?: SessionWalletContext): Promise<SandboxMockOnRampOrder | null> {
+  private static async deliverSandboxOnRamp(orderId: string, operationId?: string, context?: SessionWalletContext, trustedInternal = false): Promise<SandboxMockOnRampOrder | null> {
     const record = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (!record) return null;
+    if (!trustedInternal) {
+      if (!context) throw apiError('TalkToStellar session is required to confirm this PIX order.', 401);
+      this.assertSandboxOnRampOwner(record, context);
+    }
     if (record.transaction.status === 'completed') return record;
     if (context?.vaultSecretId && !record.vaultSecretId) {
       record.vaultSecretId = context.vaultSecretId;
@@ -5084,11 +5173,17 @@ export class AnchorService {
     }
   }
 
-  static async getOnRampStatus(orderId: string, operationId?: string): Promise<{
+  static async getOnRampStatus(input: RampOrderStatusInput): Promise<{
     transaction: OnRampTransaction;
   }> {
+    const orderId = coalesceString(input.order_id, input.orderId);
+    const operationId = coalesceString(input.operation_id, input.operationId);
+    if (!orderId) throw apiError('order_id is required.', 400);
+    const trustedInternal = input.trusted_internal === true;
+    const context = trustedInternal ? null : await this.resolveSessionWallet(input);
     const mockRecord = await this.hydrateSandboxOnRampFromOperation(orderId, operationId);
     if (mockRecord) {
+      if (context) this.assertSandboxOnRampOwner(mockRecord, context);
       const finalMockRecord = await this.finishSandboxPostOnRampConversionIfPending(mockRecord);
       await this.updateRampOperationStatus(
         operationId || finalMockRecord.operationId,
@@ -5101,6 +5196,7 @@ export class AnchorService {
       throw apiError('Sandbox on-ramp order not found. Generate a new PIX checkout or pass the operation_id returned when the checkout was created.', 404);
     }
 
+    if (context) await this.requireRampOperationOwner(operationId, context, orderId, 'onramp');
     const transaction = await this.getEtherfuseClient().getOnRampTransaction(orderId);
     if (!transaction) throw apiError('On-ramp order not found.', 404);
 
@@ -5413,12 +5509,18 @@ export class AnchorService {
     };
   }
 
-  static async getOffRampStatus(orderId: string, operationId?: string): Promise<{
+  static async getOffRampStatus(input: RampOrderStatusInput): Promise<{
     transaction: OffRampTransaction;
     ready_to_sign: boolean;
   }> {
+    const orderId = coalesceString(input.order_id, input.orderId);
+    const operationId = coalesceString(input.operation_id, input.operationId);
+    if (!orderId) throw apiError('order_id is required.', 400);
+    const trustedInternal = input.trusted_internal === true;
+    const context = trustedInternal ? null : await this.resolveSessionWallet(input);
     const mockRecord = this.sandboxMockOffRampOrders.get(orderId);
     if (mockRecord) {
+      if (context) this.assertSandboxOffRampOwner(mockRecord, context);
       await this.updateRampOperationStatus(
         operationId || mockRecord.operationId,
         mapAnchorStatusToOperationStatus(mockRecord.transaction.status),
@@ -5429,6 +5531,7 @@ export class AnchorService {
       };
     }
 
+    if (context) await this.requireRampOperationOwner(operationId, context, orderId, 'offramp');
     const transaction = await this.getEtherfuseClient().getOffRampTransaction(orderId);
     if (!transaction) throw apiError('Off-ramp order not found.', 404);
 
@@ -5592,7 +5695,7 @@ export class AnchorService {
     const operationId = coalesceString(input.operation_id, input.operationId);
     if (!orderId) throw apiError('order_id is required.', 400);
 
-    const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId, context);
+    const mockRecord = await this.deliverSandboxOnRamp(orderId, operationId, context, input.trusted_internal === true);
     if (mockRecord) {
       let autoPayStatus = '';
       if (
@@ -7231,7 +7334,12 @@ export class AnchorService {
     let finalTransaction: OnRampTransaction | undefined = orderResult.transaction;
     for (let attempt = 0; attempt < 6; attempt += 1) {
       await sleep(1500);
-      const statusResult = await this.getOnRampStatus(orderResult.transaction.id, orderResult.operation_id);
+      const statusResult = await this.getOnRampStatus({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        order_id: orderResult.transaction.id,
+        operation_id: orderResult.operation_id,
+      });
       finalTransaction = statusResult.transaction;
       if (isTerminalRampStatus(finalTransaction.status)) {
         break;
@@ -7414,10 +7522,20 @@ export class AnchorService {
       force_sandbox_mock: true,
     });
 
-    let statusResult = await this.getOffRampStatus(orderResult.transaction.id, orderResult.operation_id);
+    let statusResult = await this.getOffRampStatus({
+      session_id: context.sessionId,
+      session_token: context.sessionToken,
+      order_id: orderResult.transaction.id,
+      operation_id: orderResult.operation_id,
+    });
     for (let attempt = 0; attempt < 6 && !statusResult.ready_to_sign; attempt += 1) {
       await sleep(1500);
-      statusResult = await this.getOffRampStatus(orderResult.transaction.id, orderResult.operation_id);
+      statusResult = await this.getOffRampStatus({
+        session_id: context.sessionId,
+        session_token: context.sessionToken,
+        order_id: orderResult.transaction.id,
+        operation_id: orderResult.operation_id,
+      });
     }
 
     let submitResult: { success: boolean; hash?: string; error?: string; order_id: string } | undefined;
@@ -7442,7 +7560,12 @@ export class AnchorService {
 
       for (let attempt = 0; attempt < 6; attempt += 1) {
         await sleep(1500);
-        const nextStatus = await this.getOffRampStatus(orderResult.transaction.id, orderResult.operation_id);
+        const nextStatus = await this.getOffRampStatus({
+          session_id: context.sessionId,
+          session_token: context.sessionToken,
+          order_id: orderResult.transaction.id,
+          operation_id: orderResult.operation_id,
+        });
         finalTransaction = nextStatus.transaction;
         if (isTerminalRampStatus(finalTransaction.status)) {
           break;

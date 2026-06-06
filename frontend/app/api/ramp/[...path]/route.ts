@@ -32,6 +32,26 @@ function isDefindexPath(path: string[]) {
   return path.join("/").startsWith("defindex/yield");
 }
 
+function timingSafeEqualString(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function trustedRampSandboxHeaders(req: NextRequest): Record<string, string> {
+  const expected = String(process.env.RAMP_SANDBOX_INTERNAL_SECRET || "").trim();
+  if (!expected) return {};
+
+  const provided = String(
+    req.headers.get("x-ramp-sandbox-secret") ||
+      req.headers.get("x-internal-api-secret") ||
+      "",
+  ).trim();
+  if (!provided || !timingSafeEqualString(expected, provided)) return {};
+  return { "X-Ramp-Sandbox-Secret": expected };
+}
+
 function truncateLogBody(text: string, max = 900) {
   const normalized = String(text || "").replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -50,7 +70,6 @@ async function proxy(req: NextRequest, path: string[]) {
   const body = augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
-  const internalSecret = process.env.RAMP_SANDBOX_INTERNAL_SECRET || process.env.INTERNAL_API_SECRET || "";
   const session = readSessionCookies(req, requestSource);
 
   const init: RequestInit = {
@@ -60,7 +79,7 @@ async function proxy(req: NextRequest, path: string[]) {
       "Idempotency-Key": idempotencyKey,
       "X-Request-Id": requestId,
       ...buildSessionHeaders(req, requestSource),
-      ...(internalSecret ? { "X-Internal-Api-Secret": internalSecret } : {}),
+      ...trustedRampSandboxHeaders(req),
       ...(req.headers.get("x-wallet-pin") ? { "X-Wallet-Pin": req.headers.get("x-wallet-pin") || "" } : {}),
       ...(req.headers.get("x-talktostellar-wallet-pin") ? { "X-TalkToStellar-Wallet-Pin": req.headers.get("x-talktostellar-wallet-pin") || "" } : {}),
     },

@@ -47,6 +47,8 @@ describe("/api/ramp channel-scoped session forwarding", () => {
       "X-Session-Id": "whatsapp-session",
       "X-Session-Token": "whatsapp-token",
     });
+    expect(init.headers).not.toHaveProperty("X-Internal-Api-Secret");
+    expect(init.headers).not.toHaveProperty("X-Ramp-Sandbox-Secret");
     expect(init.body).toBeUndefined();
   });
 

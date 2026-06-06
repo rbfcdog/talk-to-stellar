@@ -561,7 +561,7 @@ export default function ConfirmPaymentClient({
             purpose: "confirm_payment_passkey_qr",
             session_id: String(tokenPayload?.session_id || tokenPayload?.sessionId || "").trim() || undefined,
             user_id: String(tokenPayload?.owner_id || tokenPayload?.ownerId || tokenPayload?.user_id || tokenPayload?.userId || "").trim() || undefined,
-            expires_in_hours: 6,
+            expires_in_minutes: 15,
           }),
         })
         const payload = await response.json().catch(() => ({}))

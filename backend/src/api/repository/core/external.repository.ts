@@ -29,10 +29,9 @@ export function normalizeExternalProviderUserId(provider: string, providerUserId
 
 export function externalProviderAliases(provider: string): string[] {
   const normalizedProvider = normalizeExternalProvider(provider);
-  if (!isPhoneProvider(normalizedProvider)) {
-    return normalizedProvider ? [normalizedProvider] : [];
-  }
-  return ['whatsapp', 'phone'];
+  if (normalizedProvider === 'whatsapp') return ['whatsapp', 'phone'];
+  if (normalizedProvider === 'phone') return ['phone'];
+  return normalizedProvider ? [normalizedProvider] : [];
 }
 
 function externalRowData(row: Pick<ExternalAccountRow, 'data'>): Record<string, unknown> {
@@ -76,7 +75,7 @@ export function externalRowMatchesProvider(row: Pick<ExternalAccountRow, 'provid
   if (requestedProvider === 'whatsapp') {
     return rowProvider === 'whatsapp' || (rowProvider === 'phone' && externalRowHasWhatsAppOrigin(row));
   }
-  return rowProvider === 'phone' || rowProvider === 'whatsapp';
+  return rowProvider === 'phone';
 }
 
 function rowHasOwner(row: ExternalAccountRow): boolean {

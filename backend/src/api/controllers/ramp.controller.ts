@@ -277,7 +277,11 @@ export class RampController {
     try {
       const orderId = String(req.params.orderId || req.query.order_id || req.query.orderId || '').trim();
       const operationId = String(req.query.operation_id || req.query.operationId || '').trim() || undefined;
-      const result = await AnchorService.getOnRampStatus(orderId, operationId);
+      const result = await AnchorService.getOnRampStatus({
+        ...requestInput(req),
+        order_id: orderId,
+        operation_id: operationId,
+      });
       res.status(200).json({ success: true, ...result });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });
@@ -306,7 +310,11 @@ export class RampController {
     try {
       const orderId = String(req.params.orderId || req.query.order_id || req.query.orderId || '').trim();
       const operationId = String(req.query.operation_id || req.query.operationId || '').trim() || undefined;
-      const result = await AnchorService.getOffRampStatus(orderId, operationId);
+      const result = await AnchorService.getOffRampStatus({
+        ...requestInput(req),
+        order_id: orderId,
+        operation_id: operationId,
+      });
       res.status(200).json({ success: true, ...result });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: errorMessage(error) });

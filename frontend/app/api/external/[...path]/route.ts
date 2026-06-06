@@ -25,7 +25,7 @@ function getBackendBaseUrl() {
   return fromPublic.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
 }
 
-const PUBLIC_SHORT_LINK_PATHS = ["/create-account", "/login", "/confirm-payment", "/send-external"];
+const PUBLIC_SHORT_LINK_PATHS = ["/create-account", "/login", "/confirm-payment", "/send-external", "/setup-passkey"];
 const PUBLIC_SHORT_LINK_PURPOSES = new Set([
   "create_account_passkey_qr",
   "login_passkey_qr",
@@ -154,8 +154,8 @@ async function proxy(req: NextRequest, path: string[]) {
   if (inboundIdempotencyKey) {
     headers["Idempotency-Key"] = inboundIdempotencyKey;
   }
-  if (process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET) {
-    headers["x-internal-api-secret"] = process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "";
+  if (isShortLinkCreate && (process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET)) {
+    headers["x-short-link-proxy-secret"] = process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "";
   }
 
   const init: RequestInit = {
