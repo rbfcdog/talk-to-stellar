@@ -17,6 +17,7 @@ Backend:
 - Operator-authorized USD payout instruction adapter at `POST /api/transfers/:id/payout-instruction`.
 - Reconciliation report at `GET /api/transfers/:id/reconciliation`.
 - Etherfuse proof, Circle compatibility, Bridge compatibility, and ops-only mock payout adapters.
+- Wise is destination metadata only. There is no Wise API adapter and no Wise payout execution in this sprint.
 
 Frontend:
 
@@ -99,6 +100,7 @@ NEXT_PUBLIC_BACKEND_URL=https://your-backend-service.up.railway.app
 
 Do not proxy provider webhook secrets through the browser. Real Etherfuse callbacks must call the backend webhook route with the provider secret. Local funding confirmation uses the operator-only transfer endpoint and requires `INTERNATIONAL_TRANSFER_OPS_SECRET`.
 The reviewer UI only sends that ops secret when an operator types it into `Execution credentials`; it is not injected by the public frontend proxy.
+If the destination account profile is `wise`, payout adapters keep it as metadata-only and return `wise_metadata_only`; they do not call Wise or execute a provider payout to Wise details.
 
 ## 3. How To Test From The Frontend
 

@@ -59,6 +59,23 @@ function readBoolean(value: unknown): boolean {
   return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+}
+
+function destinationCompatibilityMetadata(destination: UsdBankDestination): Record<string, unknown> {
+  const providerLabel = readText(destination.providerLabel || 'other').toLowerCase();
+  return omitUndefined({
+    destination_provider_label: providerLabel || 'other',
+    wise_api_integration: false,
+    wise_integration_mode: providerLabel === 'wise' ? 'metadata_only_no_wise_api' : undefined,
+  });
+}
+
+function isWiseDestination(destination: UsdBankDestination): boolean {
+  return readText(destination.providerLabel).toLowerCase() === 'wise';
+}
+
 export class MockUsdPayoutAdapter implements PayoutProviderAdapter {
   providerName: PayoutProviderName = 'mock';
 
@@ -76,6 +93,7 @@ export class MockUsdPayoutAdapter implements PayoutProviderAdapter {
       transfer_id: input.transferId,
       stellar_tx_hash: input.stellarTxHash,
       stellar_memo: input.stellarMemo,
+      ...destinationCompatibilityMetadata(input.destination),
     });
   }
 
@@ -104,12 +122,16 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
         swift_bic: input.destination.swiftBic,
         iban: input.destination.iban ? '[configured]' : undefined,
         country: input.destination.country,
+        provider_label: input.destination.providerLabel,
       },
       source_reference: {
         stellar_tx_hash: input.stellarTxHash,
         stellar_memo: input.stellarMemo,
       },
-      metadata: input.metadata || {},
+      metadata: {
+        ...(input.metadata || {}),
+        ...destinationCompatibilityMetadata(input.destination),
+      },
     };
   }
 
@@ -119,12 +141,24 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
     const realExecution = shouldExecuteRealPayouts();
     const providerPayload = this.buildProviderPayload(input);
 
+    if (isWiseDestination(input.destination)) {
+      return createInstruction(input, this.providerName, {
+        mode: 'wise_metadata_only',
+        provider_api_key_present: Boolean(apiKey),
+        real_execution_enabled: false,
+        provider_payload: providerPayload,
+        ...destinationCompatibilityMetadata(input.destination),
+        note: 'Wise is destination metadata only for this sprint. No Wise API, ACH, wire, or provider payout was executed.',
+      });
+    }
+
     if (!apiKey || !createUrl || !realExecution) {
       return createInstruction(input, this.providerName, {
         mode: 'sandbox',
         provider_api_key_present: Boolean(apiKey),
         real_execution_enabled: realExecution,
         provider_payload: providerPayload,
+        ...destinationCompatibilityMetadata(input.destination),
         note: `${this.providerName} compatibility adapter prepared the payout payload but did not execute a bank payout.`,
       });
     }
@@ -153,6 +187,7 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
       created_at: now(),
       metadata: {
         mode: 'live_api',
+        ...destinationCompatibilityMetadata(input.destination),
         provider_response: payload,
       },
     };
@@ -234,6 +269,7 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
           order_id: result.transaction?.id,
           final_status: result.final_transaction?.status,
           balance_delta: result.balance_delta,
+          ...destinationCompatibilityMetadata(input.destination),
           note: 'PIX withdrawal proof was executed as the proof leg. No USD bank payout claim is made.',
         },
       };
@@ -257,6 +293,7 @@ export class EtherfusePixOffRampAdapter implements PayoutProviderAdapter {
         country: input.destination.country,
         provider_label: input.destination.providerLabel,
       },
+      ...destinationCompatibilityMetadata(input.destination),
       note: 'PIX withdrawal adapter prepared the proof payload. Send session_id, session_token, wallet_pin and run_etherfuse_offramp_test=true to execute the controlled withdrawal test.',
     });
   }

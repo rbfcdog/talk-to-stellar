@@ -35,7 +35,7 @@
 | Mock or sandbox provider responses | Mock adapter and Etherfuse sandbox/proof adapter exist. | Implemented | Clearly label mock/sandbox in UI and evidence package. |
 | Circle compatibility | `CircleCompatibilityAdapter` builds provider-shaped payload and optionally POSTs when enabled. | Partial | Needs real sandbox credentials or documented dry-run output for evidence. |
 | Bridge compatibility | `BridgeCompatibilityAdapter` builds provider-shaped payload and optionally POSTs when enabled. | Partial | Needs real sandbox credentials or documented dry-run output for evidence. |
-| Wise-compatible payout systems | Destination metadata can represent Wise-compatible USD account details. | Partial | No production Wise integration. This is instruction compatibility only. |
+| Wise-compatible payout systems | Destination metadata can represent Wise-compatible USD account details, and adapters force `wise_metadata_only` for Wise-labeled destinations. | Partial | No Wise API integration or payout execution. This remains metadata/mock compatibility only for now. |
 
 ## Deliverable 3: End-to-End Transfer Routing Demonstration
 
