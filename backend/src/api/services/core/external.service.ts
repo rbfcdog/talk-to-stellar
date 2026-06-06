@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { ExternalRepository, externalProviderAliases, normalizeExternalProvider, normalizeExternalProviderUserId } from '../../repository/core/external.repository';
+import { ExternalRepository, externalProviderAliases, isPhoneProvider, normalizeExternalProvider, normalizeExternalProviderUserId } from '../../repository/core/external.repository';
 import { ContactRepository } from '../../repository/contact.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Keypair } from '@stellar/stellar-sdk';
@@ -498,7 +498,9 @@ export class ExternalService {
   private async recoverExternalAccountFromFinalization(provider: string, providerUserId: string) {
     const normalizedProvider = normalizeExternalProvider(provider);
     const normalizedProviderUserId = normalizeExternalProviderUserId(normalizedProvider, providerUserId);
-    const providers = externalProviderAliases(normalizedProvider);
+    const providers = isPhoneProvider(normalizedProvider)
+      ? [normalizedProvider]
+      : externalProviderAliases(normalizedProvider);
     if (!normalizedProviderUserId || providers.length === 0) return null;
 
     const { data, error } = await this.supabase

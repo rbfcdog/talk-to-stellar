@@ -435,7 +435,8 @@ export class TransferNotificationService {
 
   private static normalizeDeliveryProvider(provider: string, providerUserId?: string | null): string {
     const normalizedProvider = String(provider || '').trim().toLowerCase();
-    if (['telegram', 'whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(normalizedProvider)) {
+    if (normalizedProvider === 'phone') return 'whatsapp';
+    if (['telegram', 'whatsapp', 'evolution', 'whatsapp_evolution'].includes(normalizedProvider)) {
       return normalizedProvider;
     }
 
@@ -680,14 +681,45 @@ export class TransferNotificationService {
     }
   }
 
+  private static isWhatsAppDeliveryMapping(mapping: ExternalMapping): boolean {
+    const provider = String(mapping.provider || '').trim().toLowerCase();
+    if (['whatsapp', 'evolution', 'whatsapp_evolution'].includes(provider)) return true;
+    if (provider !== 'phone') return false;
+
+    const data = mapping.data || {};
+    const sourceCandidates = [
+      data.provider,
+      data.external_provider,
+      data.externalProvider,
+      data.source,
+      data.external_source,
+      data.externalSource,
+      data.channel,
+      data.session_source,
+      data.sessionSource,
+    ]
+      .map((value) => String(value || '').trim().toLowerCase())
+      .filter(Boolean);
+
+    if (sourceCandidates.some((value) => value.includes('whatsapp') || value.includes('evolution'))) return true;
+
+    const jid = String(data.remote_jid || data.remoteJid || data.jid || '').trim().toLowerCase();
+    if (jid.includes('whatsapp') || jid.includes('@s.whatsapp.net')) return true;
+
+    return Boolean(
+      String(data.whatsapp_number || data.whatsappNumber || '').trim() ||
+        String(data.evolution_instance || data.evolutionInstance || data.evolution_instance_id || data.evolutionInstanceId || '').trim()
+    );
+  }
+
   private static async sendWhatsAppToMappings(
     mappings: ExternalMapping[],
     sessionPhoneNumber: string | undefined,
     text: string
   ): Promise<WhatsAppDeliveryReport> {
     const whatsappMappings = mappings
-      .filter((mapping) => ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(String(mapping.provider || '').toLowerCase()));
-    if (whatsappMappings.length === 0 && !sessionPhoneNumber) {
+      .filter((mapping) => this.isWhatsAppDeliveryMapping(mapping));
+    if (whatsappMappings.length === 0) {
       return {
         attempted: false,
         delivered: 0,
@@ -709,7 +741,7 @@ export class TransferNotificationService {
       mapping.data?.remoteJid,
       mapping.data?.jid,
     ]);
-    if (sessionPhoneNumber) phones.push(sessionPhoneNumber);
+    if (sessionPhoneNumber && whatsappMappings.length > 0) phones.push(sessionPhoneNumber);
 
     const phoneDigits = Array.from(new Set(
       phones
