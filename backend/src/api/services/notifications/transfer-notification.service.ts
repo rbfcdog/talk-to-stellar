@@ -155,7 +155,8 @@ export class TransferNotificationService {
         `3) Faça a primeira ação: digite "converter 50 reais para dólar", "enviar 10 XLM para Ana" ou "ver rendimentos".\n` +
         `4) Depois acompanhe tudo: digite "histórico" para ver operações e comprovantes.\n\n` +
         `Se você só quiser começar rápido, mande: "colocar 100 reais via PIX".\n` +
-        `Nada movimenta dinheiro sem abrir a tela de confirmação e digitar seu PIN.`,
+        `Nada movimenta dinheiro sem abrir a tela de confirmação e digitar seu PIN.\n\n` +
+        `You can switch TalkToStellar to English anytime by saying "English".`,
       `${greeting}\n` +
         `Account connected.\n\n` +
         `Recommended first steps:\n` +
@@ -164,7 +165,8 @@ export class TransferNotificationService {
         `3) Try your first action: type "convert 50 reais to dollars", "send 10 XLM to Ana", or "see investments".\n` +
         `4) Track everything: type "history" to see operations and receipts.\n\n` +
         `If you want the fastest start, send: "add 100 reais with PIX".\n` +
-        `No money moves without opening the confirmation screen and entering your PIN.`
+        `No money moves without opening the confirmation screen and entering your PIN.\n\n` +
+        `Você pode mudar o TalkToStellar para português quando quiser dizendo "Português".`
     );
 
     try {
