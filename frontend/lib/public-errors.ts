@@ -30,6 +30,15 @@ function extractErrorMessage(error: unknown) {
   }
 }
 
+function extractErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") return "";
+  const value = error as Record<string, unknown>;
+  const payload = value.payload && typeof value.payload === "object"
+    ? value.payload as Record<string, unknown>
+    : null;
+  return String(payload?.code || value.code || "").trim().toLowerCase();
+}
+
 function normalizeMessage(message: string) {
   return message
     .normalize("NFD")
@@ -44,10 +53,39 @@ export function createSupportCode(prefix = "TTS") {
   return `${prefix}-${stamp}-${suffix}`;
 }
 
+const explicitErrorCopy = {
+  quote_expired: ["A estimativa expirou. Gere uma nova estimativa para continuar.", "The estimate expired. Create a new estimate to continue."],
+  link_expired: ["Esse link expirou ou já foi usado. Peça um novo link no chat.", "This link expired or was already used. Request a new link in chat."],
+  session_expired: ["Sua sessão expirou. Entre novamente para continuar.", "Your session expired. Sign in again to continue."],
+  setup_unavailable: ["Este ambiente ainda está finalizando uma configuração. Tente novamente em alguns segundos.", "This environment is still finishing setup. Try again in a few seconds."],
+  identity_conflict: ["Já existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.", "An account already exists with this information. Sign in to the existing account or use another email, phone, or CPF."],
+  account_preparing: ["Sua conta ainda está sendo preparada. Tente novamente em alguns segundos.", "Your account is still being prepared. Try again in a few seconds."],
+  missing_pin: ["Digite o PIN da conta para confirmar.", "Enter the account PIN to confirm."],
+  invalid_pin: ["Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again."],
+  insufficient_balance: ["Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.", "Insufficient balance. Add funds with PIX and try again."],
+  recipient_not_found: ["Esse destinatário não está nos seus contatos salvos. Digite \"contatos\" no chat e escolha uma pessoa salva antes de gerar o PIX.", "This recipient is not in your saved contacts. Type \"contacts\" in chat and choose a saved person before creating PIX."],
+  recipient_asset_not_ready: ["O destinatário ainda não está pronto para receber esse ativo. Peça para a pessoa entrar na conta TalkToStellar e ativar o ativo; depois gere um novo link.", "The recipient is not ready to receive this asset yet. Ask them to sign in and activate the asset, then create a new link."],
+  pix_account_not_ready: ["Sua conta PIX está sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.", "Your PIX account is being prepared. Wait a few seconds and tap Generate PIX again."],
+  pix_sandbox_settlement_unavailable: ["O PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.", "The testnet PIX flow is still finishing setup. Try again in a few seconds."],
+  service_timeout: ["A operação demorou demais. Tente novamente em alguns segundos; se o PIX já foi pago, consulte o status antes de gerar outro.", "The operation took too long. Try again in a few seconds; if PIX was already paid, check the status before creating another one."],
+  execution_unavailable: ["Não consegui enviar essa transação agora. Nenhum valor saiu da conta. Gere uma nova confirmação e tente novamente.", "I could not submit this transaction right now. No funds left the account. Create a new confirmation and try again."],
+  conversion_route_unavailable: ["Não consegui encontrar uma rota segura para essa conversão agora. Tente novamente em alguns segundos ou escolha outro valor.", "I could not find a safe route for this conversion right now. Try again in a few seconds or choose another amount."],
+  provider_unavailable: ["O serviço de pagamento não respondeu agora. Tente novamente em alguns segundos.", "The payment service did not respond right now. Try again in a few seconds."],
+} as const;
+
 /** Map a raw backend/network error into a stable code + localized user-safe message. */
 export function mapPublicError(error: unknown, language?: string) {
   const raw = extractErrorMessage(error);
+  const explicitCode = extractErrorCode(error);
   const normalized = normalizeMessage(raw);
+
+  const explicitCopy = explicitErrorCopy[explicitCode as keyof typeof explicitErrorCopy];
+  if (explicitCopy) {
+    return {
+      code: explicitCode,
+      message: copy(language, explicitCopy[0], explicitCopy[1]),
+    };
+  }
 
   if (/(quote|cotacao|cotação).*(expired|expirad)|not active:\s*expired/.test(normalized)) {
     return {

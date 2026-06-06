@@ -128,6 +128,8 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("autoPayDestinationAsset !== autoPayDisplaySourceAsset");
     expect(text).toContain("formatRampAsset(autoPayDisplaySourceAmount, autoPayDisplaySourceAsset)");
     expect(text).toContain("friendlyAssetName(autoPayDestinationAsset, language)");
+    expect(text).toContain("auto_pay_recipient_key: transferRecipientDisplayKey || undefined");
+    expect(text).toContain("auto_pay_recipient_public_key: verifiedRecipientPublicKey || undefined");
     expect(text).toContain("auto_pay_destination_asset_code: autoPayDestinationAsset ? settlementAssetCode(autoPayDestinationAsset) : undefined");
     expect(text).toContain("destination_asset_code: requestedDestinationAsset");
   });

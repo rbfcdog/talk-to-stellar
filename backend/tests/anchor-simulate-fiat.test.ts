@@ -157,6 +157,8 @@ describe('AnchorService sandbox PIX confirmation', () => {
       operationContext: {
         auto_pay_after_ramp: true,
         auto_pay_recipient: 'Ana Silva',
+        auto_pay_recipient_key: 'ana.silva@example.com',
+        auto_pay_recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
         auto_pay_amount: '100',
         auto_pay_asset_code: 'USDC',
         auto_pay_destination_asset_code: 'CETES',
@@ -197,12 +199,78 @@ describe('AnchorService sandbox PIX confirmation', () => {
       destination_asset_code: 'CETES',
       recipient: 'Ana Silva',
       recipient_name: 'Ana Silva',
+      recipient_key: 'ana.silva@example.com',
+      recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
       order_id: 'order-auto-pay',
       operation_id: 'operation-auto-pay',
       language: 'en',
       provider: 'whatsapp',
       provider_user_id: '5575496918127',
       dedupe_key: expect.stringMatching(/^pix-funded-autopay:/),
+    }));
+  });
+
+  it('returns structured auto-pay errors after PIX confirmation', async () => {
+    mockSandboxRuntime();
+    mockSessionWallet();
+    jest.spyOn(AnchorService as any, 'requireWalletPin').mockImplementation(() => undefined);
+    jest.spyOn(AnchorService as any, 'findCompletedAutoPayByDedupeKey').mockResolvedValue(null);
+    const persistSpy = jest.spyOn(AnchorService as any, 'persistSandboxOnRampContext').mockResolvedValue(undefined);
+    const recipientError = Object.assign(
+      new Error('Recipient "Ana Silva" was not found in your saved contacts.'),
+      { code: 'recipient_not_found', statusCode: 404 },
+    );
+    jest.spyOn(AnchorService, 'submitPixFundedTransferForSession').mockRejectedValue(recipientError);
+    jest.spyOn(AnchorService as any, 'deliverSandboxOnRamp').mockResolvedValue({
+      transaction: {
+        id: 'order-auto-pay-failed',
+        status: 'completed',
+        toAmount: '100',
+        toCurrency: 'USDC',
+      },
+      operationId: 'operation-auto-pay-failed',
+      finalAmount: '100',
+      finalAssetCode: 'USDC',
+      operationContext: {
+        auto_pay_after_ramp: true,
+        auto_pay_recipient: 'Ana Silva',
+        auto_pay_recipient_key: 'ana.silva@example.com',
+        auto_pay_recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
+        auto_pay_amount: '100',
+        auto_pay_asset_code: 'USDC',
+        auto_pay_destination_asset_code: 'CETES',
+        language: 'en',
+      },
+      deliveryHash: 'pix-delivery-hash',
+    });
+
+    const result = await AnchorService.simulateFiatReceivedForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      order_id: 'order-auto-pay-failed',
+      operation_id: 'operation-auto-pay-failed',
+      pin: '1234',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      order_id: 'order-auto-pay-failed',
+      auto_pay_status: 'failed',
+      auto_pay_result: {
+        success: false,
+        code: 'recipient_not_found',
+        status_code: 404,
+        message: 'Recipient "Ana Silva" was not found in your saved contacts.',
+      },
+      sandbox_mock: true,
+    });
+    expect(persistSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      auto_pay_status: 'failed',
+      auto_pay_error_code: 'recipient_not_found',
+      auto_pay_result: expect.objectContaining({
+        success: false,
+        code: 'recipient_not_found',
+      }),
     }));
   });
 
@@ -232,6 +300,8 @@ describe('AnchorService sandbox PIX confirmation', () => {
       operationContext: {
         auto_pay_after_ramp: true,
         auto_pay_recipient: 'Ana Silva',
+        auto_pay_recipient_key: 'ana.silva@example.com',
+        auto_pay_recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
         auto_pay_amount: '100',
         auto_pay_asset_code: 'USDC',
         auto_pay_destination_asset_code: 'CETES',
