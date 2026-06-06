@@ -27,6 +27,24 @@ function buildFeeDisplay(feeBrl: number, feeUsdc: number): string {
   return parts.join(' / ');
 }
 
+function truncateDecimalText(value: unknown, decimals: number): string | null {
+  const raw = String(value ?? '').trim().replace(',', '.');
+  const match = raw.match(/^([+-]?)(\d+)(?:\.(\d*))?$/);
+  if (match) {
+    const sign = match[1] === '-' ? '-' : '';
+    const whole = String(Number(match[2]));
+    const fraction = String(match[3] || '').padEnd(decimals, '0').slice(0, decimals);
+    const isZero = Number(whole) === 0 && !/[1-9]/.test(fraction);
+    return `${isZero ? '' : sign}${whole}${decimals ? `.${fraction}` : ''}`;
+  }
+
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return null;
+  const factor = 10 ** decimals;
+  const epsilon = Number.EPSILON * Math.max(1, Math.abs(numeric)) * factor;
+  return (Math.trunc((numeric + Math.sign(numeric || 1) * epsilon) * factor) / factor).toFixed(decimals);
+}
+
 export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeDisplay> {
   const fee = Number(String(feeXlm || DEFAULT_NETWORK_FEE_XLM).replace(',', '.'));
   if (!Number.isFinite(fee) || fee < 0) {
@@ -45,18 +63,15 @@ export async function formatNetworkFeeForCustomer(feeXlm?: string): Promise<FeeD
 
 export function formatCustomerAssetAmount(amount?: string, assetCode?: string): string {
   const code = String(assetCode || '').trim().toUpperCase().replace(/^USD$/, 'USDC');
-  const value = Number(String(amount || '').replace(',', '.'));
-  const formatQuantity = (quantity: number) =>
-    quantity.toFixed(7).replace(/\.?0+$/, '');
+  const displayAmount = truncateDecimalText(amount, 2);
 
-  if (!Number.isFinite(value)) return 'valor indisponível';
-  const truncated = Math.trunc(value * 100) / 100;
-  if (code === 'BRL' || code === 'TESOURO') return `R$ ${truncated.toFixed(2)}`;
-  if (code === 'USDC') return `US$ ${truncated.toFixed(2)}`;
-  if (code === 'EURC' || code === 'EUR') return `${truncated.toFixed(2)} CETES`;
-  if (code === 'XLM') return `${formatQuantity(value)} XLM`;
+  if (displayAmount === null) return 'valor indisponível';
+  if (code === 'BRL' || code === 'TESOURO') return `R$ ${displayAmount}`;
+  if (code === 'USDC') return `US$ ${displayAmount}`;
+  if (code === 'EURC' || code === 'EUR') return `${displayAmount} CETES`;
+  if (code === 'XLM') return `${displayAmount} XLM`;
 
-  return `${formatQuantity(value)} ${code}`;
+  return `${displayAmount} ${code}`;
 }
 
 export function buildUnifiedFeeDisplay(input: {

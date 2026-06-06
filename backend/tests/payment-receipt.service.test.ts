@@ -58,7 +58,7 @@ describe('PaymentReceiptService', () => {
 
     expect(receipt).toContain('Você converteu R$ 500.00 para US$ 89.12 e enviou para João.');
     expect(receipt).toContain('Status: concluído');
-    expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.610412');
+    expect(receipt).toContain('Cotação usada: 1 US$ = R$ 5.61');
     expect(receipt).not.toContain('Taxa:');
     expect(receipt).not.toContain('Taxa estimada em métodos tradicionais:');
     expect(receipt).not.toContain('Economia estimada:');
@@ -85,10 +85,10 @@ describe('PaymentReceiptService', () => {
       completedAt: '2026-06-05T22:51:38.000Z',
     });
 
-    expect(receipt).toContain('You converted US$ 10.00 to 15.3002683 XLM and sent it to Rodrigo Camargo.');
+    expect(receipt).toContain('You converted US$ 10.00 to 15.30 XLM and sent it to Rodrigo Camargo.');
     expect(receipt).toContain('Key: rodrigooobfcdog@gmail.com');
     expect(receipt).toContain('Status: completed');
-    expect(receipt).toContain('Quote used: 1 XLM = 0.653583 US$ (US$ 10.00 -> 15.3002683 XLM)');
+    expect(receipt).toContain('Quote used: 1 XLM = 0.65 US$ (US$ 10.00 -> 15.30 XLM)');
     expect(receipt).toContain('Time:');
     expect(receipt).toContain(`Operation ID: ${operationId}`);
     expect(receipt).toContain('Receipt saved in your history.');

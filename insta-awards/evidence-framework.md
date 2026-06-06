@@ -26,6 +26,16 @@ Optional IDs can be attached when known:
 npm run instawards:evidence -- --run-id demo-001 --quote-id quote_123 --transfer-id transfer_123
 ```
 
+To produce the four Week 1 award-card artifacts from a running local stack:
+
+```bash
+npm run instawards:evidence -- \
+  --run-id week-1-reviewer \
+  --api-base=http://localhost:3001 \
+  --dashboard-url=http://localhost:3000 \
+  --transfer-id=tr_brl_usd_123
+```
+
 The script creates:
 
 | Path | Purpose |
@@ -37,6 +47,9 @@ The script creates:
 | `stellar/settlement.json` | Real testnet, sandbox, or mock settlement evidence. |
 | `payout/instruction.json` | Payout adapter payload/response with sensitive fields redacted. |
 | `logs/orchestration-log.json` | Redacted lifecycle log from the orchestration API when `--api-base` and `--transfer-id` are provided. |
+| `repository/link.json` | Repository URL, main branch, commit, and evidence-map path. |
+| `database/reviewer-evidence.json` | Complete reviewer-safe response from `GET /api/transfers/:id/reviewer-evidence`. |
+| `screenshots/dashboard-week-1.png` | Automated dashboard capture when `--dashboard-url` is provided. |
 | `screenshots/` | Screenshots from `/institution-settlement`. |
 | `logs/` | Redacted backend/frontend logs with correlation IDs. |
 
@@ -79,6 +92,11 @@ Before sharing an evidence run, remove or mask:
 - Full phone numbers unless explicitly safe for demo.
 - Personal email addresses unless they are controlled demo accounts.
 - Raw provider payloads that contain customer identifiers.
+
+Transaction amounts should remain visible in reviewer evidence when they are
+demo, sandbox, or explicitly approved test values. Amounts, rates, and fees are
+needed to verify reconciliation math. Redact them only when the amount itself
+is confidential. Always redact identity, account, credential, and session data.
 
 ## First Build Target
 

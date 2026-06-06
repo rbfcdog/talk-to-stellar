@@ -1668,7 +1668,7 @@ describe('Agent production evals', () => {
       destination: contactPublicKey,
       destination_name: 'Ana Silva',
     }));
-    expect(result.response_message).toContain('10 XLM');
+    expect(result.response_message).toContain('10.00 XLM');
     expect(result.response_message).toContain('Ana Silva');
     expect(result.response_message).toContain('/confirm-payment?');
     expect(result.response_message).toContain('Gerei o link de confirmação com a cotação atual');
@@ -2148,7 +2148,7 @@ describe('Agent production evals', () => {
           quote: {
             sourceAmount: '10',
             sourceAsset: { code: 'USDC', issuer: 'USDCISSUER' },
-            destinationAmount: '15.3002683',
+            destinationAmount: '15.3254281',
             destinationAsset: { code: 'XLM', issuer: '' },
             quote_ttl_seconds: 900,
           },
@@ -2190,12 +2190,13 @@ describe('Agent production evals', () => {
       source: 'whatsapp',
       source_amount: '10',
       source_asset_code: 'USDC',
-      amount: '15.3002683',
+      amount: '15.3254281',
       asset_code: 'XLM',
     }));
     expect(result.response_message).toContain('Estimativa antes de confirmar');
     expect(result.response_message).toContain('você envia US$ 10.00');
-    expect(result.response_message).toContain('Rodrigo Camargo recebe aproximadamente 15.3002683 XLM');
+    expect(result.response_message).toContain('Rodrigo Camargo recebe aproximadamente 15.32 XLM');
+    expect(result.response_message).not.toContain('15.3254281 XLM');
     expect(result.response_message).toContain('Taxa estimada: 0.00001 XLM.');
     expect(result.response_message).toContain('Cotação válida por 15 minutos.');
     expect(result.response_message).toContain('Para confirmar, abra o link:');
@@ -2348,7 +2349,7 @@ describe('Agent production evals', () => {
       expect(result.response_message).toContain('flow=fund_and_convert');
       expect(result.response_message).toContain('post_conversion_asset=USDC');
       expect(result.response_message).toContain('convert_to_asset=USDC');
-      expect(result.response_message).toContain('100 XLM');
+      expect(result.response_message).toContain('100.00 XLM');
       expect(result.response_message).toContain('converter para USDC');
       expect(result.response_message).not.toContain('Ana Silva');
       expect(result.response_message).not.toContain('US$ 100.00');

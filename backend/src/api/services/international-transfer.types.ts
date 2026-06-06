@@ -228,3 +228,103 @@ export type TransferOrchestrationLog = {
     message: string;
   }>;
 };
+
+export type ReviewerEvidenceStatus = 'ready' | 'pending' | 'blocked';
+
+export type ReviewerEvidenceChecklistItem = {
+  id: 'repository' | 'dashboard_screenshot' | 'orchestration_logs' | 'transfer_record';
+  label: string;
+  status: ReviewerEvidenceStatus;
+  artifact: string;
+  detail: string;
+};
+
+export type ReviewerTransferRecord = {
+  transfer_id: string;
+  quote_id: string;
+  status: InternationalTransferState;
+  subject: {
+    user_id_hash?: string;
+    institution_id_hash?: string;
+    sender_name_hash?: string;
+    sender_email_hash?: string;
+    sender_country?: string;
+    sender_type?: string;
+    recipient_name_hash?: string;
+    recipient_country?: string;
+    recipient_type?: string;
+  };
+  value: {
+    source_amount_brl: string;
+    quoted_destination_usd: string;
+    fx_rate_brl_per_usd: string;
+    fees: TransferFeeBreakdown;
+  };
+  pix_funding: {
+    status?: string;
+    order_reference_hash?: string;
+    payment_reference_hash?: string;
+    received_at?: string;
+  };
+  stellar_settlement: {
+    asset_code: string;
+    network?: string;
+    execution_mode?: string;
+    transaction_hash?: string;
+    memo?: string;
+    settled_at?: string;
+  };
+  payout: {
+    provider?: string;
+    instruction_id?: string;
+    provider_reference_hash?: string;
+    status?: string;
+    destination: TransferOrchestrationLog['destination'];
+  };
+  controls: {
+    same_name_required: boolean;
+    same_name_status: SameNameMatchStatus;
+    identity_risk_note_count: number;
+  };
+  reconciliation: {
+    available: boolean;
+    metrics_valid?: boolean;
+    updated_at?: string;
+  };
+  timestamps: {
+    created_at: string;
+    updated_at: string;
+    payout_completed_at?: string;
+  };
+  error_count: number;
+};
+
+export type TransferReviewerEvidence = {
+  schema_version: 1;
+  generated_at: string;
+  transfer_id: string;
+  submission: {
+    title: 'PIX-to-Stellar Transfer Lifecycle Engine';
+    week: 1;
+    ready_count: number;
+    required_count: 4;
+    status: 'ready' | 'pending';
+  };
+  repository: {
+    url: string;
+    branch: 'main';
+    evidence_map_path: string;
+  };
+  dashboard: {
+    path: '/institution-settlement';
+    screenshot_target: string;
+  };
+  privacy: {
+    redaction_applied: true;
+    amounts_redacted: false;
+    notes: string[];
+  };
+  checklist: ReviewerEvidenceChecklistItem[];
+  transfer_record: ReviewerTransferRecord;
+  orchestration_log: TransferOrchestrationLog;
+};

@@ -14,6 +14,10 @@ import {
   Copy,
   Database,
   Code2,
+  Download,
+  ExternalLink,
+  FileJson,
+  GitBranch,
   Landmark,
   ListChecks,
   Loader2,
@@ -81,6 +85,7 @@ const stateRank = new Map(states.map((state, index) => [state.key, index]));
 
 const INITIAL_EVENT_TIME = "2026-05-25T12:00:00.000Z";
 const INITIAL_NOW_MS = Date.parse(INITIAL_EVENT_TIME);
+const REPOSITORY_URL = "https://github.com/rbfcdog/talk-to-stellar";
 
 const nextActionByState: Partial<Record<TransferState, string>> = {
   QUOTE_CREATED: "Create the institution funding intent and attach the funding reference to the settlement record.",
@@ -198,6 +203,7 @@ function quoteExpiresAtMs(value: any) {
 
 function isInactiveQuote(value: any, nowMs = Date.now()) {
   if (!value?.quote_id) return false;
+  if (value?.metadata?.reviewer_snapshot === true) return false;
   const status = quoteStatus(value);
   if (status && status !== "ACTIVE") return true;
   const expiresAt = quoteExpiresAtMs(value);
@@ -211,6 +217,7 @@ function quoteAmountMatches(value: any, sourceAmount: unknown) {
 
 function formatQuoteFreshness(value: any, nowMs: number) {
   if (!value?.quote_id) return "No quote";
+  if (value?.metadata?.reviewer_snapshot === true) return "CAPTURED";
   const status = quoteStatus(value) || "UNKNOWN";
   if (status !== "ACTIVE") return status;
   const expiresAt = quoteExpiresAtMs(value);
@@ -351,6 +358,7 @@ export default function InternationalTransferClient() {
   const [transfer, setTransfer] = useState<any>(null);
   const [reconciliation, setReconciliation] = useState<any>(null);
   const [orchestrationLog, setOrchestrationLog] = useState<any>(null);
+  const [reviewerEvidence, setReviewerEvidence] = useState<any>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [events, setEvents] = useState<EventEntry[]>([
     {
@@ -380,6 +388,87 @@ export default function InternationalTransferClient() {
   useEffect(() => {
     const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const transferId = new URLSearchParams(window.location.search).get("transfer_id")?.trim();
+    if (!transferId) return;
+
+    let cancelled = false;
+    void fetch(`/api/transfers/${encodeURIComponent(transferId)}/reviewer-evidence`, {
+      headers: {
+        "x-request-id": `reviewer_${Date.now().toString(36)}`,
+        "x-correlation-id": `instawards_capture_${transferId}`,
+      },
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.message || `Reviewer evidence failed with HTTP ${response.status}.`);
+        }
+        return payload.reviewer_evidence;
+      })
+      .then((evidence) => {
+        if (cancelled || !evidence) return;
+        const record = evidence.transfer_record || {};
+        const value = record.value || {};
+        setReviewerEvidence(evidence);
+        setOrchestrationLog(evidence.orchestration_log || null);
+        setBrlAmount(String(value.source_amount_brl || "0"));
+        setSenderName("Redacted origin institution");
+        setSenderEmail("[redacted]");
+        setRecipientName("Redacted destination institution");
+        setBankName(record.payout?.destination?.bank_name || "Redacted destination provider");
+        setRoutingNumber(record.payout?.destination?.routing_number_last4 ? `••••${record.payout.destination.routing_number_last4}` : "[redacted]");
+        setAccountNumber(record.payout?.destination?.account_number_last4 ? `••••${record.payout.destination.account_number_last4}` : "[redacted]");
+        setCountry(record.payout?.destination?.country || "US");
+        setQuote({
+          quote_id: record.quote_id,
+          brl_amount: value.source_amount_brl,
+          estimated_usdc_amount: value.quoted_destination_usd,
+          estimated_usd_amount: value.quoted_destination_usd,
+          fx_rate: value.fx_rate_brl_per_usd,
+          platform_fee: value.fees?.platform_fee,
+          estimated_provider_fee: value.fees?.estimated_provider_fee,
+          total_fee: value.fees?.total_fee,
+          quote_status: "ACTIVE",
+          metadata: { reviewer_snapshot: true },
+        });
+        setTransfer({
+          transfer_id: record.transfer_id,
+          quote_id: record.quote_id,
+          status: record.status,
+          brl_amount: record.value?.source_amount_brl,
+          quoted_usd_amount: record.value?.quoted_destination_usd,
+          fx_rate: record.value?.fx_rate_brl_per_usd,
+          fees: record.value?.fees,
+          pix_status: record.pix_funding?.status,
+          pix_received_at: record.pix_funding?.received_at,
+          stellar_asset_code: record.stellar_settlement?.asset_code,
+          stellar_tx_hash: record.stellar_settlement?.transaction_hash,
+          stellar_memo: record.stellar_settlement?.memo,
+          stellar_settled_at: record.stellar_settlement?.settled_at,
+          payout_provider: record.payout?.provider,
+          payout_instruction_id: record.payout?.instruction_id,
+          payout_status: record.payout?.status,
+          same_name_payout_required: record.controls?.same_name_required,
+          same_name_match_status: record.controls?.same_name_status,
+          created_at: record.timestamps?.created_at,
+          updated_at: record.timestamps?.updated_at,
+        });
+        setReconciliation(record.reconciliation?.available ? {
+          transfer_id: record.transfer_id,
+          evidence: { metrics_valid: record.reconciliation.metrics_valid },
+          updated_at: record.reconciliation.updated_at,
+        } : null);
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError?.message || String(loadError));
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const activeStatus = text(transfer?.status) as TransferState;
@@ -590,6 +679,43 @@ export default function InternationalTransferClient() {
     ],
     [activeRank, quote?.quote_id, quoteFreshness, quoteReady, reconciliation?.transfer_id, transfer],
   );
+  const weekOneEvidenceItems = useMemo(() => {
+    const serverItems = Array.isArray(reviewerEvidence?.checklist) ? reviewerEvidence.checklist : [];
+    const serverById = new Map<string, any>(serverItems.map((item: any) => [String(item.id), item]));
+    return [
+      {
+        id: "repository",
+        label: "Repository link",
+        detail: "main",
+        ready: serverById.get("repository")?.status === "ready" || Boolean(REPOSITORY_URL),
+        icon: GitBranch,
+      },
+      {
+        id: "dashboard_screenshot",
+        label: "Dashboard screenshot",
+        detail: "/institution-settlement",
+        ready: serverById.get("dashboard_screenshot")?.status === "ready" || Boolean(reviewerEvidence),
+        icon: Database,
+      },
+      {
+        id: "orchestration_logs",
+        label: "Orchestration logs",
+        detail: orchestrationLog?.timeline?.length ? `${orchestrationLog.timeline.length} events` : "waiting for transfer",
+        ready: serverById.get("orchestration_logs")?.status === "ready" || Boolean(orchestrationLog?.timeline?.length),
+        icon: ClipboardList,
+      },
+      {
+        id: "transfer_record",
+        label: "Transfer record",
+        detail: reviewerEvidence?.transfer_record?.transfer_id
+          ? shortId(reviewerEvidence.transfer_record.transfer_id, 20)
+          : "waiting for transfer",
+        ready: serverById.get("transfer_record")?.status === "ready" || Boolean(reviewerEvidence?.transfer_record?.transfer_id),
+        icon: FileJson,
+      },
+    ];
+  }, [orchestrationLog, reviewerEvidence]);
+  const weekOneReadyCount = weekOneEvidenceItems.filter((item) => item.ready).length;
 
   const transferPayload = useMemo(
     () => ({
@@ -646,6 +772,7 @@ export default function InternationalTransferClient() {
       transfer: redactSensitive(transfer),
       reconciliation: redactSensitive(reconciliation),
       orchestration_log: redactSensitive(orchestrationLog),
+      reviewer_evidence: redactSensitive(reviewerEvidence),
       events,
       api_logs: logs,
     };
@@ -661,6 +788,7 @@ export default function InternationalTransferClient() {
     setTransfer(null);
     setReconciliation(null);
     setOrchestrationLog(null);
+    setReviewerEvidence(null);
     setLogs([]);
     setError("");
     setCopied(false);
@@ -896,6 +1024,25 @@ export default function InternationalTransferClient() {
     return payload.orchestration_log;
   }
 
+  async function loadReviewerEvidence(currentTransfer = transfer) {
+    if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
+    const payload = await callApi("Load reviewer evidence", "GET", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/reviewer-evidence`);
+    setReviewerEvidence(payload.reviewer_evidence);
+    setOrchestrationLog(payload.reviewer_evidence?.orchestration_log || null);
+    return payload.reviewer_evidence;
+  }
+
+  async function downloadReviewerEvidence() {
+    const evidence = reviewerEvidence || await loadReviewerEvidence();
+    const blob = new Blob([`${JSON.stringify(evidence, null, 2)}\n`], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `instawards-${evidence.transfer_id || "transfer"}-reviewer-evidence.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function runSandboxFlow() {
 	    pushEvent("Payment-backed route started", "Running quote, institution route creation and PIX funding intent without local confirmation.", "info");
     try {
@@ -912,6 +1059,7 @@ export default function InternationalTransferClient() {
       const payout = await createPayoutInstruction(settled);
       await loadReconciliation(payout);
       await loadOrchestrationLog(payout);
+      await loadReviewerEvidence(payout);
 	      pushEvent("Ops route complete", "The ops-only confirmation path completed. Keep this out of user-facing sessions.", "ok");
 	    } catch (flowError: any) {
 	      pushEvent("Payment-backed route stopped", flowError?.message || String(flowError), "error");
@@ -976,6 +1124,66 @@ export default function InternationalTransferClient() {
           </div>
         </div>
       </header>
+
+      <section
+        data-testid="week-one-evidence"
+        data-evidence-status={`${weekOneReadyCount}/4`}
+        className="border-b border-tts-border bg-tts-surface"
+      >
+        <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-normal text-tts-gold">PIX-to-Stellar Transfer Lifecycle Engine</p>
+              <h2 className="mt-1 text-base font-bold text-tts-deep">Week 1 · {weekOneReadyCount}/4 reviewer artifacts ready</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <StatusPill state={weekOneReadyCount === 4 ? "ok" : "running"}>
+                {weekOneReadyCount === 4 ? "ready" : "in progress"}
+              </StatusPill>
+              <Link
+                href={REPOSITORY_URL}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open repository"
+                title="Open repository"
+                className="grid h-9 w-9 place-items-center rounded-md border border-tts-border text-tts-muted transition hover:border-tts-gold hover:text-tts-gold"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-tts-bg">
+            <div
+              className="h-full bg-tts-gold transition-[width] duration-500"
+              style={{ width: `${(weekOneReadyCount / 4) * 100}%` }}
+            />
+          </div>
+          <div className="mt-4 grid border-y border-tts-border sm:grid-cols-2 xl:grid-cols-4">
+            {weekOneEvidenceItems.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.id}
+                  className={`flex min-w-0 items-center gap-3 px-3 py-3 ${index > 0 ? "border-t border-tts-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}
+                >
+                  <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${item.ready ? "bg-tts-confirm/10 text-tts-confirm" : "bg-tts-bg text-tts-muted"}`}>
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-tts-deep">{item.label}</p>
+                    <p className="truncate font-mono text-xs text-tts-muted">{item.detail}</p>
+                  </div>
+                  {item.ready ? (
+                    <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-tts-confirm" aria-hidden="true" />
+                  ) : (
+                    <AlertCircle className="ml-auto h-4 w-4 shrink-0 text-tts-muted" aria-hidden="true" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 xl:grid-cols-[390px_minmax(0,1fr)]">
         <section className="rounded-xl border border-tts-border bg-tts-surface p-4 shadow-sm xl:sticky xl:top-5 xl:self-start">
@@ -1152,6 +1360,10 @@ export default function InternationalTransferClient() {
             <ActionButton onClick={() => loadOrchestrationLog()} disabled={Boolean(busy || !transfer)} variant="light">
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
               Orchestration log
+            </ActionButton>
+            <ActionButton onClick={downloadReviewerEvidence} disabled={Boolean(busy || !transfer)} variant="light">
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Evidence JSON
             </ActionButton>
             <div className="grid grid-cols-2 gap-3">
               <ActionButton onClick={copyDebugBundle} disabled={Boolean(busy)} variant="light">

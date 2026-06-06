@@ -5,6 +5,7 @@ import {
   PayoutInstruction,
   QuoteProvenance,
   SettlementEvidence,
+  TransferReviewerEvidence,
   TransferOrchestrationLog,
   TransferOrchestrationLogEntry,
   TransferReconciliation,
@@ -51,6 +52,14 @@ function compactText(value: unknown, maxLength = 180): string {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
+}
+
+function redactFreeText(value: unknown, maxLength = 240): string {
+  return compactText(value, maxLength)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(secret|token|password|pin|api[_ -]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/\b\d{8,}\b/g, '[redacted-number]');
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -639,7 +648,7 @@ export class SettlementEvidenceService {
         state: transfer.status,
         status: 'failed',
         at: firstText(error.at),
-        summary: compactText(firstText(error.message, 'Transfer lifecycle error recorded.'), 240),
+        summary: redactFreeText(firstText(error.message, 'Transfer lifecycle error recorded.'), 240),
         references: {
           stage: error.stage,
         },
@@ -696,9 +705,157 @@ export class SettlementEvidenceService {
         return {
           at: firstText(error.at) || undefined,
           stage: firstText(error.stage) || undefined,
-          message: compactText(firstText(error.message, 'Transfer lifecycle error recorded.'), 240),
+          message: redactFreeText(firstText(error.message, 'Transfer lifecycle error recorded.'), 240),
         };
       }),
+    };
+  }
+
+  static buildReviewerEvidence(input: {
+    transfer: InternationalTransfer;
+    reconciliation?: TransferReconciliation | null;
+  }): TransferReviewerEvidence {
+    const generatedAt = new Date().toISOString();
+    const transfer = input.transfer;
+    const reconciliation = input.reconciliation || null;
+    const orchestrationLog = this.buildOrchestrationLog({ transfer, reconciliation });
+    const metadata = asRecord(transfer.reconciliation_metadata);
+    const settlement = asRecord(metadata.stellar_settlement);
+    const evidence = asRecord(reconciliation?.evidence);
+    const repositoryUrl = firstText(
+      process.env.INSTAWARDS_REPOSITORY_URL,
+      'https://github.com/rbfcdog/talk-to-stellar',
+    );
+    const screenshotTarget = firstText(
+      process.env.INSTAWARDS_DASHBOARD_URL,
+      '/institution-settlement',
+    );
+
+    const checklist: TransferReviewerEvidence['checklist'] = [
+      {
+        id: 'repository',
+        label: 'Repository link',
+        status: repositoryUrl ? 'ready' : 'blocked',
+        artifact: repositoryUrl,
+        detail: 'Main branch source and reviewer evidence map.',
+      },
+      {
+        id: 'dashboard_screenshot',
+        label: 'Dashboard screenshot',
+        status: screenshotTarget ? 'ready' : 'blocked',
+        artifact: screenshotTarget,
+        detail: 'Stable capture target for the institution settlement dashboard.',
+      },
+      {
+        id: 'orchestration_logs',
+        label: 'Orchestration logs',
+        status: orchestrationLog.timeline.length ? 'ready' : 'pending',
+        artifact: `/api/transfers/${encodeURIComponent(transfer.transfer_id)}/orchestration-log`,
+        detail: `${orchestrationLog.timeline.length} redacted lifecycle events available.`,
+      },
+      {
+        id: 'transfer_record',
+        label: 'Transfer record',
+        status: transfer.transfer_id ? 'ready' : 'pending',
+        artifact: `/api/transfers/${encodeURIComponent(transfer.transfer_id)}/reviewer-evidence`,
+        detail: 'Persisted transfer record with identities and private references redacted.',
+      },
+    ];
+    const readyCount = checklist.filter((item) => item.status === 'ready').length;
+
+    return {
+      schema_version: 1,
+      generated_at: generatedAt,
+      transfer_id: transfer.transfer_id,
+      submission: {
+        title: 'PIX-to-Stellar Transfer Lifecycle Engine',
+        week: 1,
+        ready_count: readyCount,
+        required_count: 4,
+        status: readyCount === 4 ? 'ready' : 'pending',
+      },
+      repository: {
+        url: repositoryUrl,
+        branch: 'main',
+        evidence_map_path: 'insta-awards/evidence-map.md',
+      },
+      dashboard: {
+        path: '/institution-settlement',
+        screenshot_target: screenshotTarget,
+      },
+      privacy: {
+        redaction_applied: true,
+        amounts_redacted: false,
+        notes: [
+          'Financial amounts remain visible because they are required to verify fee and reconciliation math.',
+          'Names, emails, user identifiers, institution identifiers and provider references are hashed.',
+          'Bank and routing numbers expose at most their final four digits.',
+          'No raw provider payloads, session tokens, PINs, API keys or private keys are included.',
+        ],
+      },
+      checklist,
+      transfer_record: {
+        transfer_id: transfer.transfer_id,
+        quote_id: transfer.quote_id,
+        status: transfer.status,
+        subject: stripUndefined({
+          user_id_hash: sha256Short(transfer.user_id) || undefined,
+          institution_id_hash: sha256Short(transfer.institution_id) || undefined,
+          sender_name_hash: sha256Short(transfer.sender_identity?.legal_name || transfer.sender_identity?.entity_name) || undefined,
+          sender_email_hash: sha256Short(transfer.sender_identity?.email) || undefined,
+          sender_country: transfer.sender_identity?.country,
+          sender_type: transfer.sender_identity?.type,
+          recipient_name_hash: sha256Short(transfer.recipient_identity?.legal_name || transfer.recipient_identity?.entity_name) || undefined,
+          recipient_country: transfer.recipient_identity?.country,
+          recipient_type: transfer.recipient_identity?.type,
+        }),
+        value: {
+          source_amount_brl: transfer.brl_amount,
+          quoted_destination_usd: transfer.quoted_usd_amount,
+          fx_rate_brl_per_usd: transfer.fx_rate,
+          fees: transfer.fees,
+        },
+        pix_funding: stripUndefined({
+          status: transfer.pix_status,
+          order_reference_hash: sha256Short(transfer.pix_order_id) || undefined,
+          payment_reference_hash: sha256Short(transfer.pix_payment_id) || undefined,
+          received_at: transfer.pix_received_at,
+        }),
+        stellar_settlement: stripUndefined({
+          asset_code: transfer.stellar_asset_code,
+          network: firstText(settlement.network) || undefined,
+          execution_mode: firstText(settlement.execution_mode) || undefined,
+          transaction_hash: firstText(transfer.stellar_tx_hash, settlement.stellar_tx_hash) || undefined,
+          memo: firstText(transfer.stellar_memo, settlement.stellar_memo) || undefined,
+          settled_at: firstText(transfer.stellar_settled_at, settlement.settled_at) || undefined,
+        }),
+        payout: {
+          ...stripUndefined({
+            provider: transfer.payout_provider,
+            instruction_id: transfer.payout_instruction_id,
+            provider_reference_hash: sha256Short(transfer.provider_payout_id) || undefined,
+            status: transfer.payout_status,
+          }),
+          destination: redactedDestination(transfer),
+        },
+        controls: {
+          same_name_required: transfer.same_name_payout_required,
+          same_name_status: transfer.same_name_match_status,
+          identity_risk_note_count: transfer.identity_risk_notes?.length || 0,
+        },
+        reconciliation: stripUndefined({
+          available: Boolean(reconciliation),
+          metrics_valid: evidence.metrics_valid as boolean | undefined,
+          updated_at: reconciliation?.updated_at,
+        }),
+        timestamps: stripUndefined({
+          created_at: transfer.created_at,
+          updated_at: transfer.updated_at,
+          payout_completed_at: transfer.payout_completed_at,
+        }),
+        error_count: transfer.error_logs?.length || 0,
+      },
+      orchestration_log: orchestrationLog,
     };
   }
 }

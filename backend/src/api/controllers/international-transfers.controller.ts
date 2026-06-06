@@ -223,4 +223,20 @@ export class InternationalTransfersController {
       res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
     }
   }
+
+  static async getReviewerEvidence(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      const reviewer_evidence = await internationalTransferService.getReviewerEvidence(String(req.params.id));
+      lifecycleLog('reviewer_evidence_read', context, {
+        transfer_id: reviewer_evidence.transfer_id,
+        ready_count: reviewer_evidence.submission.ready_count,
+        required_count: reviewer_evidence.submission.required_count,
+      });
+      res.status(200).json({ success: true, ...responseContext(context), reviewer_evidence });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
 }

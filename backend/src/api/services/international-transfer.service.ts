@@ -9,6 +9,7 @@ import {
   InternationalTransfer,
   InternationalTransferState,
   PayoutInstruction,
+  TransferReviewerEvidence,
   TransferOrchestrationLog,
   TransferReconciliation,
   UsdBankDestination,
@@ -571,6 +572,12 @@ export class InternationalTransferService {
     const transfer = await this.requireTransfer(transferId);
     const reconciliation = await this.repository.getReconciliation(transferId);
     return SettlementEvidenceService.buildOrchestrationLog({ transfer, reconciliation });
+  }
+
+  async getReviewerEvidence(transferId: string): Promise<TransferReviewerEvidence> {
+    const transfer = await this.requireTransfer(transferId);
+    const reconciliation = await this.repository.getReconciliation(transferId);
+    return SettlementEvidenceService.buildReviewerEvidence({ transfer, reconciliation });
   }
 
   private assertTransition(transfer: Pick<InternationalTransfer, 'status'>, next: InternationalTransferState) {
