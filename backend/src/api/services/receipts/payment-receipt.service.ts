@@ -371,15 +371,16 @@ export class PaymentReceiptService {
     const savingsFirstDeliveryText = appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(localizedInput, receiptUrl));
     const externalDeliveryBase = this.sanitizeUserFacingText(localizedInput.externalDeliveryText);
     const externalDeliveryText = savingsFirstDeliveryText || appendReceiptLink(externalDeliveryBase || text);
+    let savedPrimaryReceipt = true;
 
     try {
-      const savedPrimaryReceipt = await this.saveReceiptMessage({
+      savedPrimaryReceipt = await this.saveReceiptMessage({
         sessionId: input.sessionId,
         content: textWithLink,
         dedupeKey: `${receiptDedupeKey}:text`,
       });
       if (!savedPrimaryReceipt) {
-        logger.info(`[receipt] primary receipt already saved dedupe_key=${receiptDedupeKey}; external callback will still be checked`);
+        logger.info(`[receipt] primary receipt already saved dedupe_key=${receiptDedupeKey}; skipping duplicate external callback`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -400,6 +401,11 @@ export class PaymentReceiptService {
     }
 
     const externalDeliveryDedupeKey = `${receiptDedupeKey}:external`;
+    if (!savedPrimaryReceipt) {
+      this.markExternalDeliveryDedupe(externalDeliveryDedupeKey);
+      return receiptUrl || '';
+    }
+
     if (this.hasExternalDeliveryDedupe(externalDeliveryDedupeKey)) {
       logger.info(`[receipt] skipped duplicate external receipt delivery dedupe_key=${receiptDedupeKey}`);
       return receiptUrl || '';
