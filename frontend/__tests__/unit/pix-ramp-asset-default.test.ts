@@ -119,6 +119,16 @@ describe("PIX asset defaults", () => {
     expect(text).toContain("destination_asset_code: requestedDestinationAsset");
   });
 
+  it("keeps the on-ramp savings noise stable while regenerating PIX quotes on the same page", () => {
+    const text = source("app/pix-ramp/pix-ramp-client.tsx");
+
+    expect(text).toContain('const pageSavingsSeedRef = useRef("")');
+    expect(text).toContain('const source = shortLinkCode || queryString || localIntentNonceRef.current || "pix-ramp";');
+    expect(text).toContain("const pageSavingsSeed = pageSavingsSeedRef.current;");
+    expect(text).toContain("savingsSeed={pageSavingsSeed}");
+    expect(text).not.toContain("savingsSeed={currentOnRampIntentId}");
+  });
+
   it("keeps the visible BRL receive field stable while PIX fees are estimated", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
 
