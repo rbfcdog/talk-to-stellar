@@ -171,6 +171,66 @@ export type TransferReconciliation = {
   updated_at: string;
 };
 
+export type TransferWorkflowStep = {
+  index: number;
+  state: InternationalTransferState;
+  label: string;
+  phase: 'quote' | 'funding' | 'settlement' | 'payout' | 'reconciliation';
+  description: string;
+  status: 'completed' | 'current' | 'pending' | 'failed' | 'skipped';
+};
+
+export type TransferWorkflowAction = {
+  code:
+    | 'create_pix_intent'
+    | 'await_pix_confirmation'
+    | 'settle_stellar'
+    | 'create_payout_instruction'
+    | 'refresh_payout_status'
+    | 'resolve_identity_alignment'
+    | 'manual_review'
+    | 'export_evidence'
+    | 'done';
+  label: string;
+  description: string;
+  actor: 'application' | 'provider' | 'operator' | 'reviewer' | 'none';
+  requires_ops_authorization: boolean;
+  blocked: boolean;
+  blocked_reason?: string;
+};
+
+export type TransferWorkflowSnapshot = {
+  schema_version: 1;
+  generated_at: string;
+  transfer_id: string;
+  current_state: InternationalTransferState;
+  terminal: boolean;
+  successful: boolean;
+  progress: {
+    completed_steps: number;
+    total_steps: number;
+    percent: number;
+  };
+  evidence: {
+    quote: boolean;
+    pix_intent: boolean;
+    pix_confirmation: boolean;
+    stellar_settlement: boolean;
+    payout_instruction: boolean;
+    reconciliation: boolean;
+    ready_count: number;
+    required_count: number;
+  };
+  identity_control: {
+    required: boolean;
+    status: SameNameMatchStatus;
+    payout_allowed: boolean;
+    risk_notes: string[];
+  };
+  next_action: TransferWorkflowAction;
+  steps: TransferWorkflowStep[];
+};
+
 export type OrchestrationEvidenceState =
   | 'missing'
   | 'pending'
@@ -327,4 +387,5 @@ export type TransferReviewerEvidence = {
   checklist: ReviewerEvidenceChecklistItem[];
   transfer_record: ReviewerTransferRecord;
   orchestration_log: TransferOrchestrationLog;
+  workflow?: TransferWorkflowSnapshot;
 };

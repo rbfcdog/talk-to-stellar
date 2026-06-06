@@ -47,6 +47,7 @@ The script creates:
 | `stellar/settlement.json` | Real testnet, sandbox, or mock settlement evidence. |
 | `payout/instruction.json` | Payout adapter payload/response with sensitive fields redacted. |
 | `logs/orchestration-log.json` | Redacted lifecycle log from the orchestration API when `--api-base` and `--transfer-id` are provided. |
+| `logs/workflow.json` | Authoritative lifecycle progress, evidence readiness, same-name control, and next action. |
 | `repository/link.json` | Repository URL, main branch, commit, and evidence-map path. |
 | `database/reviewer-evidence.json` | Complete reviewer-safe response from `GET /api/transfers/:id/reviewer-evidence`. |
 | `screenshots/dashboard-week-1.png` | Automated dashboard capture when `--dashboard-url` is provided. |
@@ -63,14 +64,19 @@ npm run instawards:evidence -- \
   --run-id week-1-transfer-001 \
   --api-base=http://localhost:3001 \
   --transfer-id=tr_brl_usd_123 \
-  --correlation-id=instawards_demo_001
+  --correlation-id=instawards_demo_001 \
+  --ops-secret=<operator-secret>
 ```
 
 This writes redacted copies of:
 
-- `GET /api/transfers/:id`
 - `GET /api/transfers/:id/reconciliation`
 - `GET /api/transfers/:id/orchestration-log`
+- `GET /api/transfers/:id/workflow`
+- `GET /api/transfers/:id/reviewer-evidence`
+
+Raw transfer and reconciliation reads require transfer-ops authorization.
+Workflow, orchestration, and reviewer evidence are reviewer-safe contracts.
 
 ## Status Rules
 

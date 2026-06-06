@@ -435,6 +435,12 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     });
     expect(orchestrationLog.destination).not.toHaveProperty('accountNumber');
     expect(orchestrationLog.destination).not.toHaveProperty('account_number');
+    const pixIntentLog = orchestrationLog.timeline.find((entry) => entry.step === 'pix_intent_created');
+    const payoutLog = orchestrationLog.timeline.find((entry) => entry.step === 'payout_instruction');
+    expect(pixIntentLog?.references).toHaveProperty('pix_order_reference_hash');
+    expect(pixIntentLog?.references).not.toHaveProperty('pix_order_id');
+    expect(payoutLog?.references).toHaveProperty('provider_reference_hash');
+    expect(payoutLog?.references).not.toHaveProperty('provider_payout_id');
     expect(orchestrationLog.quote_provenance).toMatchObject({
       kind: 'live_path_quote',
       source: 'stellar_horizon_strict_send_paths',
@@ -488,6 +494,82 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     expect(reviewerEvidence.transfer_record.subject.sender_email_hash).toHaveLength(16);
     expect(reviewerEvidence.transfer_record.subject).not.toHaveProperty('sender_name');
     expect(reviewerEvidence.transfer_record.payout.destination).not.toHaveProperty('accountNumber');
+    expect(reviewerEvidence.workflow).toMatchObject({
+      current_state: 'PAYOUT_PENDING',
+      evidence: {
+        quote: true,
+        pix_intent: true,
+        pix_confirmation: true,
+        stellar_settlement: true,
+        payout_instruction: true,
+        reconciliation: true,
+      },
+      next_action: {
+        code: 'refresh_payout_status',
+        requires_ops_authorization: true,
+        blocked: false,
+      },
+    });
+
+    const workflow = await service.getWorkflow(transfer.transfer_id);
+    expect(workflow.progress).toMatchObject({
+      completed_steps: 7,
+      total_steps: 9,
+      percent: 78,
+    });
+    expect(workflow.steps.find((step) => step.state === 'PAYOUT_PENDING')?.status).toBe('current');
+  });
+
+  it('blocks payout creation when same-name enforcement is required and unresolved', async () => {
+    const repository = new MemoryTransferRepository();
+    const stellarSettlement = {
+      settleUsdc: jest.fn(async (transfer: InternationalTransfer) => ({
+        stellar_tx_hash: 'stellar-hash-same-name',
+        stellar_memo: 'tts-name-check',
+        stellar_source_account: 'GSOURCE',
+        stellar_destination_account: 'GDEST',
+        asset_code: 'USDC',
+        asset_issuer: 'GUSDC',
+        amount: transfer.quoted_usd_amount,
+        network: 'testnet',
+        status: 'confirmed',
+        execution_mode: 'testnet',
+        settled_at: new Date().toISOString(),
+      })),
+    };
+    const payoutAdapter = {
+      providerName: 'bridge',
+      createPayoutInstruction: jest.fn(),
+      getPayoutStatus: jest.fn(),
+    };
+    const { service, transfer } = await createPixPendingTransfer({
+      repository,
+      stellarSettlement,
+      payoutAdapter,
+    });
+    const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+    const settled = await service.settleStellar(funded.transfer_id);
+    await repository.updateTransfer(settled.transfer_id, {
+      same_name_payout_required: true,
+      same_name_match_status: 'MISMATCHED',
+    });
+
+    await expect(service.createPayoutInstruction(settled.transfer_id, 'bridge')).rejects.toMatchObject({
+      code: 'same_name_payout_blocked',
+      status: 409,
+    });
+    expect(payoutAdapter.createPayoutInstruction).not.toHaveBeenCalled();
+
+    const workflow = await service.getWorkflow(settled.transfer_id);
+    expect(workflow.identity_control).toMatchObject({
+      required: true,
+      status: 'MISMATCHED',
+      payout_allowed: false,
+    });
+    expect(workflow.next_action).toMatchObject({
+      code: 'resolve_identity_alignment',
+      blocked: true,
+    });
   });
 
   it('marks Pix funding failure events as FAILED with an error log', async () => {

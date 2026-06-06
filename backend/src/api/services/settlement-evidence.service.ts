@@ -10,6 +10,10 @@ import {
   TransferOrchestrationLogEntry,
   TransferReconciliation,
 } from './international-transfer.types';
+import {
+  buildTransferWorkflowSnapshot,
+  hasReachedTransferState,
+} from './international-transfer-lifecycle';
 
 function toNumber(value: unknown): number {
   const parsed = Number(String(value || '0').replace(',', '.'));
@@ -87,28 +91,10 @@ function collectTraceIds(value: unknown, result: { requestIds: Set<string>; corr
   }
 }
 
-const ORCHESTRATION_STATE_ORDER: InternationalTransferState[] = [
-  'QUOTE_CREATED',
-  'PIX_PENDING',
-  'PIX_RECEIVED',
-  'BRL_TO_USDC_PENDING',
-  'USDC_SETTLEMENT_PENDING',
-  'USDC_SETTLED',
-  'PAYOUT_INSTRUCTION_CREATED',
-  'PAYOUT_PENDING',
-  'PAYOUT_COMPLETED',
-];
-
-function hasReached(status: InternationalTransferState, target: InternationalTransferState): boolean {
-  const current = ORCHESTRATION_STATE_ORDER.indexOf(status);
-  const expected = ORCHESTRATION_STATE_ORDER.indexOf(target);
-  return current >= 0 && expected >= 0 && current >= expected;
-}
-
 function settlementEvidenceState(transfer: InternationalTransfer, settlement?: SettlementEvidence): TransferOrchestrationLog['evidence_status'][string] {
   if (transfer.status === 'FAILED' && !transfer.stellar_tx_hash && !settlement?.stellar_tx_hash) return 'failed';
   if (!transfer.stellar_tx_hash && !settlement?.stellar_tx_hash) {
-    return hasReached(transfer.status, 'PIX_RECEIVED') ? 'pending' : 'missing';
+    return hasReachedTransferState(transfer.status, 'PIX_RECEIVED') ? 'pending' : 'missing';
   }
   const mode = firstText(settlement?.execution_mode).toLowerCase();
   const status = firstText(settlement?.status).toLowerCase();
@@ -123,7 +109,7 @@ function payoutEvidenceState(transfer: InternationalTransfer, payout?: PayoutIns
   const status = firstText(payout?.status || transfer.payout_status).toLowerCase();
   if (transfer.status === 'FAILED' && !transfer.payout_instruction_id && !payout?.payout_instruction_id) return 'failed';
   if (!transfer.payout_instruction_id && !payout?.payout_instruction_id) {
-    return hasReached(transfer.status, 'USDC_SETTLED') ? 'pending' : 'missing';
+    return hasReachedTransferState(transfer.status, 'USDC_SETTLED') ? 'pending' : 'missing';
   }
   if (status === 'failed' || status === 'cancelled') return 'failed';
   const provider = firstText(payout?.provider_name || transfer.payout_provider).toLowerCase();
@@ -481,7 +467,7 @@ export class SettlementEvidenceService {
     add({
       step: 'quote_created',
       state: 'QUOTE_CREATED',
-      status: hasReached(transfer.status, 'QUOTE_CREATED') || transfer.status === 'FAILED' ? 'completed' : 'pending',
+      status: hasReachedTransferState(transfer.status, 'QUOTE_CREATED') || transfer.status === 'FAILED' ? 'completed' : 'pending',
       at: transfer.created_at,
       summary: 'BRL/USD quote accepted into an institution transfer record.',
       references: {
@@ -503,8 +489,8 @@ export class SettlementEvidenceService {
         ? 'PIX funding intent reference is attached to the transfer.'
         : 'PIX funding intent has not been attached yet.',
       references: {
-        pix_order_id: transfer.pix_order_id,
-        pix_payment_id: transfer.pix_payment_id,
+        pix_order_reference_hash: sha256Short(transfer.pix_order_id) || undefined,
+        pix_payment_reference_hash: sha256Short(transfer.pix_payment_id) || undefined,
         pix_status: transfer.pix_status,
       },
     });
@@ -512,13 +498,13 @@ export class SettlementEvidenceService {
     add({
       step: 'pix_funding_confirmed',
       state: 'PIX_RECEIVED',
-      status: transfer.pix_received_at || hasReached(transfer.status, 'PIX_RECEIVED') ? 'completed' : transfer.status === 'FAILED' ? 'failed' : 'pending',
+      status: transfer.pix_received_at || hasReachedTransferState(transfer.status, 'PIX_RECEIVED') ? 'completed' : transfer.status === 'FAILED' ? 'failed' : 'pending',
       at: transfer.pix_received_at,
       summary: transfer.pix_received_at
         ? 'Source PIX funding event has been confirmed.'
         : 'Waiting for source PIX funding confirmation.',
       references: {
-        pix_order_id: transfer.pix_order_id,
+        pix_order_reference_hash: sha256Short(transfer.pix_order_id) || undefined,
         pix_status: transfer.pix_status,
       },
     });
@@ -531,7 +517,7 @@ export class SettlementEvidenceService {
         at: firstText(metadata.pix_webhook_replayed_at),
         summary: 'Repeated PIX funding event was treated idempotently.',
         references: {
-          pix_order_id: transfer.pix_order_id,
+          pix_order_reference_hash: sha256Short(transfer.pix_order_id) || undefined,
           pix_status: transfer.pix_status,
         },
       });
@@ -540,7 +526,7 @@ export class SettlementEvidenceService {
     add({
       step: 'brl_to_usdc_prepared',
       state: 'BRL_TO_USDC_PENDING',
-      status: hasReached(transfer.status, 'BRL_TO_USDC_PENDING') ? 'completed' : transfer.status === 'FAILED' ? 'failed' : 'pending',
+      status: hasReachedTransferState(transfer.status, 'BRL_TO_USDC_PENDING') ? 'completed' : transfer.status === 'FAILED' ? 'failed' : 'pending',
       at: transfer.pix_received_at,
       summary: 'Lifecycle is ready to represent BRL funding as USDC settlement exposure.',
       references: {
@@ -591,7 +577,7 @@ export class SettlementEvidenceService {
       references: {
         payout_provider: transfer.payout_provider || payout?.provider_name,
         payout_instruction_id: transfer.payout_instruction_id || payout?.payout_instruction_id,
-        provider_payout_id: transfer.provider_payout_id || payout?.provider_payout_id,
+        provider_reference_hash: sha256Short(transfer.provider_payout_id || payout?.provider_payout_id) || undefined,
         payout_status: transfer.payout_status || payout?.status,
       },
     });
@@ -605,7 +591,7 @@ export class SettlementEvidenceService {
         summary: 'Repeated payout instruction request returned the existing provider reference.',
         references: {
           payout_instruction_id: transfer.payout_instruction_id || payout?.payout_instruction_id,
-          provider_payout_id: transfer.provider_payout_id || payout?.provider_payout_id,
+          provider_reference_hash: sha256Short(transfer.provider_payout_id || payout?.provider_payout_id) || undefined,
         },
       });
     }
@@ -620,7 +606,7 @@ export class SettlementEvidenceService {
         summary: 'Payout provider status was refreshed and persisted.',
         references: {
           payout_provider: refresh.provider,
-          provider_payout_id: refresh.provider_payout_id,
+          provider_reference_hash: sha256Short(refresh.provider_payout_id) || undefined,
           payout_status: refresh.status,
         },
       });
@@ -675,7 +661,7 @@ export class SettlementEvidenceService {
       evidence_status: {
         quote: provenance?.fallback ? 'sandbox' : provenance ? 'captured' : 'missing',
         pix_funding: transfer.pix_order_id || transfer.pix_payment_id
-          ? transfer.pix_received_at || hasReached(transfer.status, 'PIX_RECEIVED') ? 'captured' : 'pending'
+          ? transfer.pix_received_at || hasReachedTransferState(transfer.status, 'PIX_RECEIVED') ? 'captured' : 'pending'
           : transfer.status === 'FAILED' ? 'failed' : 'missing',
         stellar_settlement: settlementEvidenceState(transfer, settlement),
         payout_instruction: payoutEvidenceState(transfer, payout),
@@ -856,6 +842,7 @@ export class SettlementEvidenceService {
         error_count: transfer.error_logs?.length || 0,
       },
       orchestration_log: orchestrationLog,
+      workflow: buildTransferWorkflowSnapshot({ transfer, reconciliation }),
     };
   }
 }

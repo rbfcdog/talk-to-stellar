@@ -20,6 +20,15 @@ The response contains exactly the four award-card artifacts:
 3. Redacted orchestration logs.
 4. Redacted transfer record.
 
+The console also loads:
+
+```text
+GET /api/transfers/:id/workflow
+```
+
+This contract prevents the frontend from inventing lifecycle progress or next
+actions independently from the backend state machine.
+
 Generate the local package:
 
 ```bash
@@ -38,6 +47,7 @@ insta-awards/evidence-runs/week-1-reviewer/
   repository/link.json
   screenshots/dashboard-week-1.png
   logs/orchestration-log.json
+  logs/workflow.json
   database/transfer.json
   database/reviewer-evidence.json
 ```

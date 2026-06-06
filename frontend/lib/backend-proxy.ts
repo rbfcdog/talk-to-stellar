@@ -26,6 +26,7 @@ function getBackendBaseUrl() {
 
 type ProxyOptions = {
   injectSession?: boolean;
+  forwardTransferOpsAuthorization?: boolean;
 };
 
 /** Forward an incoming Next.js API request to the backend, attaching session headers + idempotency key. */
@@ -52,6 +53,10 @@ export async function proxyBackendApi(
     "X-Correlation-Id": correlationId,
     ...buildSessionHeaders(req, requestSource),
   };
+  if (options.forwardTransferOpsAuthorization) {
+    const opsSecret = req.headers.get("x-international-transfer-ops-secret");
+    if (opsSecret) headers["x-international-transfer-ops-secret"] = opsSecret;
+  }
 
   const init: RequestInit = {
     method: req.method,

@@ -72,7 +72,7 @@ export class IdentityAlignmentService {
     }
 
     notes.push('Destination account holder name does not match sender, institution or recipient identity exactly.');
-    notes.push('Do not block automatically; route to compliance/manual review when policy requires it.');
+    notes.push('Same-name-required payout instructions remain blocked until compliance resolves the mismatch through manual review.');
     return {
       same_name_payout_required: sameNameRequired,
       same_name_match_status: 'MISMATCHED',
