@@ -1,9 +1,36 @@
-function stableStringify(value: any): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+function stableStringify(value: unknown, seen = new WeakSet<object>()): string {
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+
+  const type = typeof value;
+  if (type === "number") return Number.isFinite(value) ? String(value) : JSON.stringify(String(value));
+  if (type === "bigint") return `bigint:${String(value)}`;
+  if (type === "string" || type === "boolean") return JSON.stringify(value);
+  if (type === "symbol" || type === "function") return JSON.stringify(String(value));
+
+  if (value instanceof Date) return `date:${Number.isNaN(value.getTime()) ? "invalid" : value.toISOString()}`;
+
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return '"[Circular]"';
+    seen.add(value);
+    const serialized = `[${value.map((item) => stableStringify(item, seen)).join(",")}]`;
+    seen.delete(value);
+    return serialized;
   }
-  return JSON.stringify(value);
+
+  if (type === "object") {
+    const objectValue = value as Record<string, unknown>;
+    if (seen.has(objectValue)) return '"[Circular]"';
+    seen.add(objectValue);
+    const serialized = `{${Object.keys(objectValue)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(objectValue[key], seen)}`)
+      .join(",")}}`;
+    seen.delete(objectValue);
+    return serialized;
+  }
+
+  return JSON.stringify(String(value));
 }
 
 function hashString(value: string): string {
@@ -25,20 +52,25 @@ function parseBody(body: BodyInit | null | undefined) {
 }
 
 /** Build a deterministic idempotency key from a scope label + JSON-serializable payload. */
-export function buildIdempotencyKey(scope: string, payload: any) {
+export function buildIdempotencyKey(scope: string, payload: unknown) {
   const source = stableStringify({ scope, payload });
   return `tts_${hashString(source)}_${hashString(`${source}:v2`)}`;
 }
 
 /** Return the idempotency key for this scope+payload, persisting it in sessionStorage so retries reuse it. */
-export function getOrCreateIdempotencyKey(scope: string, payload: any) {
+export function getOrCreateIdempotencyKey(scope: string, payload: unknown) {
   const key = buildIdempotencyKey(scope, payload);
   if (typeof window === "undefined") return key;
 
-  const storageKey = `talk-to-stellar.idempotency.${scope}.${key}`;
-  const existing = sessionStorage.getItem(storageKey);
-  if (existing) return existing;
-  sessionStorage.setItem(storageKey, key);
+  try {
+    const storageKey = `talk-to-stellar.idempotency.${hashString(scope)}.${key}`;
+    const existing = window.sessionStorage.getItem(storageKey);
+    if (existing) return existing;
+    window.sessionStorage.setItem(storageKey, key);
+  } catch {
+    return key;
+  }
+
   return key;
 }
 

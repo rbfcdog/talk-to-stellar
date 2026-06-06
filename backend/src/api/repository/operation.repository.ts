@@ -1,8 +1,40 @@
 import { supabase } from '../../config/supabase';
 import { Operation } from '../../types';
+import { logger } from '../../utils/logger';
+
+type ContactPaymentSummary = {
+  payment_count: number;
+  total_amount: string;
+  total_usdc: string;
+};
+
+type SpendingSummary = {
+  category?: string;
+  asset_code?: string;
+  transaction_count: number;
+  total_amount: string;
+  total_usdc: string;
+  total_brl: string;
+};
+
+type OperationContactUpdate = Partial<Operation> & {
+  contact_id?: string;
+  category?: string;
+  memo?: string;
+};
+
+type OperationInsert = Omit<Operation, 'id' | 'created_at' | 'updated_at'> & {
+  amount_usdc?: number | string;
+  amount_brl?: number | string;
+};
+
+function throwRepositoryError(operation: string, detail: string, publicMessage: string): never {
+  logger.error(`[operation-repository] ${operation}: ${detail}`);
+  throw new Error(publicMessage);
+}
 
 export class OperationRepository {
-  static async create(opData: Omit<Operation, 'id' | 'created_at' | 'updated_at'>): Promise<Operation> {
+  static async create(opData: OperationInsert): Promise<Operation> {
     let { data, error } = await supabase
       .from('operations')
       .insert([opData])
@@ -16,7 +48,7 @@ export class OperationRepository {
       );
 
     if (missingWalletColumn) {
-      const { destination_session_id, source_public_key, source_session_id, amount_usdc, amount_brl, ...compatibleOpData } = opData as any;
+      const { destination_session_id, source_public_key, source_session_id, amount_usdc, amount_brl, ...compatibleOpData } = opData;
       const retry = await supabase
         .from('operations')
         .insert([compatibleOpData])
@@ -28,8 +60,7 @@ export class OperationRepository {
     }
 
     if (error) {
-      console.error('Supabase error creating operation:', error.message);
-      throw new Error(`Failed to create operation record in database: ${error.message}`);
+      throwRepositoryError('failed to create operation', error.message, 'Failed to create operation record in database.');
     }
     return data;
   }
@@ -48,7 +79,8 @@ export class OperationRepository {
         String(error.message || '').includes('ux_operations_stellar_tx_hash');
 
       if (duplicateStellarHash) {
-        const { stellar_transaction_hash, ...compatibleUpdates } = updates as any;
+        const compatibleUpdates: Partial<Operation> = { ...updates };
+        delete compatibleUpdates.stellar_transaction_hash;
         const retry = await supabase
           .from('operations')
           .update(compatibleUpdates)
@@ -57,19 +89,18 @@ export class OperationRepository {
           .single();
 
         if (!retry.error && retry.data) {
-          console.warn(`Operation ${id} completed with an already-recorded Stellar hash; status was updated without duplicating the hash.`);
+          logger.warn(`[operation-repository] operation ${id} completed with an already-recorded Stellar hash; status was updated without duplicating the hash.`);
           return retry.data;
         }
 
         const current = await this.findById(id);
         if (current) {
-          console.warn(`Operation ${id} hit duplicate Stellar hash and could not be updated, but the submitted transaction should remain valid.`);
+          logger.warn(`[operation-repository] operation ${id} hit duplicate Stellar hash and could not be updated, but the submitted transaction should remain valid.`);
           return current;
         }
       }
 
-      console.error('Supabase error updating operation:', error.message);
-      throw new Error('Failed to update operation record.');
+      throwRepositoryError('failed to update operation', error.message, 'Failed to update operation record.');
     }
     return data;
   }
@@ -80,10 +111,9 @@ export class OperationRepository {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    
+
     if (error) {
-        console.error('Supabase error finding operations:', error.message);
-        throw new Error('Failed to retrieve user operations.');
+      throwRepositoryError('failed to find operations by user ID', error.message, 'Failed to retrieve user operations.');
     }
     return data || [];
   }
@@ -99,13 +129,12 @@ export class OperationRepository {
       if (error.code === 'PGRST116') {
         return null; // Record not found
       }
-      console.error('Supabase error finding operation by id:', error.message);
-      throw new Error('Failed to retrieve operation record.');
+      throwRepositoryError('failed to find operation by ID', error.message, 'Failed to retrieve operation record.');
     }
     return data;
   }
 
-  static async findByContactId(userId: string, contactId: string, periodDays: number = 30): Promise<any[]> {
+  static async findByContactId(userId: string, contactId: string, periodDays: number = 30): Promise<Operation[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
@@ -119,13 +148,12 @@ export class OperationRepository {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Supabase error finding contact operations:', error.message);
-      throw new Error('Failed to retrieve contact payment history.');
+      throwRepositoryError('failed to find operations by contact ID', error.message, 'Failed to retrieve contact payment history.');
     }
     return data || [];
   }
 
-  static async getContactSummary(userId: string, contactId: string, periodDays: number = 30): Promise<any> {
+  static async getContactSummary(userId: string, contactId: string, periodDays: number = 30): Promise<ContactPaymentSummary> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
@@ -138,16 +166,16 @@ export class OperationRepository {
       .single();
 
     if (error && error.code !== 'PGRST116') {
-      console.error('Supabase error getting contact summary:', error.message);
+      logger.error(`[operation-repository] failed to get contact summary: ${error.message}`);
     }
     return data || { payment_count: 0, total_amount: '0', total_usdc: '0' };
   }
 
-  static async getSpendingSummary(userId: string, periodDays: number = 30, groupBy: 'category' | 'asset' = 'category'): Promise<any[]> {
+  static async getSpendingSummary(userId: string, periodDays: number = 30, groupBy: 'category' | 'asset' = 'category'): Promise<SpendingSummary[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
-    const selectFields = groupBy === 'category' 
+    const selectFields = groupBy === 'category'
       ? 'category, transaction_count, total_amount, total_usdc, total_brl'
       : 'asset_code, transaction_count, total_amount, total_usdc, total_brl';
 
@@ -159,14 +187,13 @@ export class OperationRepository {
       .order(groupBy === 'category' ? 'total_usdc' : 'total_amount', { ascending: false });
 
     if (error) {
-      console.error('Supabase error getting spending summary:', error.message);
-      throw new Error('Failed to retrieve spending summary.');
+      throwRepositoryError('failed to get spending summary', error.message, 'Failed to retrieve spending summary.');
     }
     return data || [];
   }
 
   static async updateWithContactInfo(id: string, contactId: string | null, category: string = 'other', memo: string = ''): Promise<Operation> {
-    const updates: any = { category };
+    const updates: OperationContactUpdate = { category };
     if (contactId) updates.contact_id = contactId;
     if (memo) updates.memo = memo;
 

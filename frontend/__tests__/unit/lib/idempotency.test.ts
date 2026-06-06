@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { buildIdempotencyKey } from '@/lib/idempotency'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { buildIdempotencyKey, getOrCreateIdempotencyKey } from '@/lib/idempotency'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('buildIdempotencyKey', () => {
   describe('determinism', () => {
@@ -58,6 +62,29 @@ describe('buildIdempotencyKey', () => {
       const key = buildIdempotencyKey('scope', 'simple-string')
       expect(typeof key).toBe('string')
       expect(key.length).toBeGreaterThan(0)
+    })
+
+    it('handles circular payloads without throwing', () => {
+      const payload: Record<string, unknown> = { amount: 100 }
+      payload.self = payload
+
+      const a = buildIdempotencyKey('scope', payload)
+      const b = buildIdempotencyKey('scope', payload)
+
+      expect(a).toBe(b)
+      expect(a.startsWith('tts_')).toBe(true)
+    })
+  })
+
+  describe('session persistence', () => {
+    it('falls back to the deterministic key when sessionStorage is unavailable', () => {
+      const expected = buildIdempotencyKey('payments.create', { amount: 100 })
+
+      vi.spyOn(window.sessionStorage.__proto__, 'getItem').mockImplementation(() => {
+        throw new Error('storage disabled')
+      })
+
+      expect(getOrCreateIdempotencyKey('payments.create', { amount: 100 })).toBe(expected)
     })
   })
 })

@@ -1,5 +1,11 @@
 import { supabase } from '../../config/supabase';
 import { User } from '../../types';
+import { logger } from '../../utils/logger';
+
+function throwRepositoryError(operation: string, detail: string, publicMessage: string): never {
+  logger.error(`[user-repository] ${operation}: ${detail}`);
+  throw new Error(publicMessage);
+}
 
 export class UserRepository {
   static async create(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
@@ -10,8 +16,7 @@ export class UserRepository {
       .single();
 
     if (error) {
-      console.error('Supabase error creating user:', error.message);
-      throw new Error('Failed to create user record in database.');
+      throwRepositoryError('failed to create user', error.message, 'Failed to create user record in database.');
     }
     return data;
   }
@@ -27,8 +32,7 @@ export class UserRepository {
       if (error.code === 'PGRST116') {
         return null;
       }
-      console.error('Supabase error finding user by ID:', error.message);
-      throw new Error('Failed to retrieve user by ID.');
+      throwRepositoryError('failed to find user by ID', error.message, 'Failed to retrieve user by ID.');
     }
     return data;
   }
@@ -44,8 +48,7 @@ export class UserRepository {
       if (error.code === 'PGRST116') {
         return null;
       }
-      console.error('Supabase error finding user by public key:', error.message);
-      throw new Error('Failed to retrieve user by public key.');
+      throwRepositoryError('failed to find user by public key', error.message, 'Failed to retrieve user by public key.');
     }
     return data;
   }
@@ -62,8 +65,7 @@ export class UserRepository {
         // Record not found
         return null;
       }
-      console.error('Supabase error finding user by email:', error.message);
-      throw new Error('Failed to retrieve user by email.');
+      throwRepositoryError('failed to find user by email', error.message, 'Failed to retrieve user by email.');
     }
     return data;
   }
