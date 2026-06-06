@@ -8,7 +8,13 @@ import {
   IdentityProfile,
   InternationalTransfer,
   InternationalTransferState,
+  PayoutCoordinationEvidence,
+  PayoutEventRecord,
   PayoutInstruction,
+  PayoutInstructionRecord,
+  PayoutProviderCapabilities,
+  PayoutProviderEvent,
+  PayoutStatusObservation,
   TransferReviewerEvidence,
   TransferOrchestrationLog,
   TransferReconciliation,
@@ -28,7 +34,9 @@ import {
 import { PixFundingService, pixFundingService } from './pix-funding.service';
 import { SettlementEvidenceService } from './settlement-evidence.service';
 import { StellarSettlementService, stellarSettlementService } from './stellar-settlement.service';
-import { getPayoutProviderAdapter, PayoutProviderAdapter } from './usd-payout-adapters';
+import { PayoutProviderAdapter } from './usd-payout-adapters';
+import { UsdPayoutCoordinationService, usdPayoutCoordinationService } from './usd-payout-coordination.service';
+import { redactSensitive } from '../../utils/redaction';
 
 type ServiceDeps = {
   repository?: InternationalTransferRepository;
@@ -36,6 +44,7 @@ type ServiceDeps = {
   pixFunding?: PixFundingService;
   stellarSettlement?: StellarSettlementService;
   payoutAdapter?: PayoutProviderAdapter;
+  payoutCoordination?: UsdPayoutCoordinationService;
 };
 
 function now() {
@@ -102,12 +111,30 @@ function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge
   return 'mock';
 }
 
+function payoutProviderSnapshot(value: unknown): Record<string, unknown> {
+  const snapshot = redactSensitive(value || {}) as Record<string, any>;
+  if (snapshot.destination && typeof snapshot.destination === 'object') {
+    const destination = snapshot.destination as Record<string, unknown>;
+    const last4 = (item: unknown) => String(item || '').replace(/\D+/g, '').slice(-4);
+    const redactedNumber = (item: unknown) => last4(item) ? `[REDACTED_LAST4:${last4(item)}]` : '[REDACTED]';
+    snapshot.destination = {
+      ...destination,
+      account_holder_name: destination.account_holder_name ? '[REDACTED]' : undefined,
+      account_number: destination.account_number ? redactedNumber(destination.account_number) : undefined,
+      routing_number: destination.routing_number ? redactedNumber(destination.routing_number) : undefined,
+      iban: destination.iban ? '[REDACTED]' : undefined,
+    };
+  }
+  return snapshot;
+}
+
 export class InternationalTransferService {
   private readonly repository: InternationalTransferRepository;
   private readonly quoteService: BrlUsdQuoteService;
   private readonly pixFunding: PixFundingService;
   private readonly stellarSettlement: StellarSettlementService;
   private readonly payoutAdapter?: PayoutProviderAdapter;
+  private readonly payoutCoordination: UsdPayoutCoordinationService;
 
   constructor(deps: ServiceDeps = {}) {
     this.repository = deps.repository || internationalTransferRepository;
@@ -115,6 +142,7 @@ export class InternationalTransferService {
     this.pixFunding = deps.pixFunding || pixFundingService;
     this.stellarSettlement = deps.stellarSettlement || stellarSettlementService;
     this.payoutAdapter = deps.payoutAdapter;
+    this.payoutCoordination = deps.payoutCoordination || usdPayoutCoordinationService;
   }
 
   async createTransfer(input: {
@@ -408,6 +436,18 @@ export class InternationalTransferService {
       await this.refreshReconciliation(updated);
       return updated;
     }
+    if (transfer.status === 'USDC_SETTLED' && this.repository.getPayoutInstructionByTransfer) {
+      const persisted = await this.repository.getPayoutInstructionByTransfer(transfer.transfer_id);
+      if (persisted) return this.restorePersistedPayoutInstruction(transfer, persisted, providerOptions);
+    }
+
+    if (!transfer.stellar_tx_hash || !hasReachedTransferState(transfer.status, 'USDC_SETTLED')) {
+      throw transferConflictError(
+        'stellar_settlement_required',
+        'A confirmed Stellar settlement transaction is required before creating a USD payout instruction.',
+        { transfer_id: transfer.transfer_id, status: transfer.status },
+      );
+    }
 
     if (transfer.same_name_payout_required && transfer.same_name_match_status !== 'MATCHED') {
       throw transferConflictError(
@@ -422,10 +462,10 @@ export class InternationalTransferService {
 
     this.assertTransition(transfer, 'PAYOUT_INSTRUCTION_CREATED');
     const selectedProvider = normalizePayoutProvider(provider);
-    const adapter = this.payoutAdapter || getPayoutProviderAdapter(selectedProvider);
+    const adapter = this.payoutCoordination.resolveAdapter(selectedProvider, this.payoutAdapter);
 
     try {
-      const instruction = await adapter.createPayoutInstruction({
+      const createdInstruction = await adapter.createPayoutInstruction({
         transferId: transfer.transfer_id,
         amountUsd: transfer.quoted_usd_amount,
         destination: transfer.payout_destination,
@@ -445,6 +485,14 @@ export class InternationalTransferService {
         },
         providerOptions,
       });
+      const initialObservation = this.payoutCoordination.normalizeObservation({
+        provider: adapter.providerName,
+        providerPayoutId: createdInstruction.provider_payout_id,
+        observation: createdInstruction.status_history?.at(-1) || createdInstruction.status,
+        source: 'create',
+      });
+      const instruction = this.payoutCoordination.attachObservation(createdInstruction, initialObservation);
+      await this.persistPayoutInstruction(transfer, instruction);
 
       let updated = await this.repository.updateTransfer(transfer.transfer_id, {
         status: 'PAYOUT_INSTRUCTION_CREATED',
@@ -459,15 +507,30 @@ export class InternationalTransferService {
           }, 'payout_instruction_created'),
           payout_instruction: instruction,
           off_ramp_provider: adapter.providerName,
+          payout_provider_capabilities: typeof adapter.getCapabilities === 'function'
+            ? adapter.getCapabilities()
+            : this.payoutCoordination.getCapabilities(adapter.providerName),
         },
       });
 
-      const nextState: InternationalTransferState = instruction.status === 'completed' ? 'PAYOUT_COMPLETED' : 'PAYOUT_PENDING';
+      const nextState: InternationalTransferState =
+        instruction.status === 'completed'
+          ? 'PAYOUT_COMPLETED'
+          : instruction.status === 'failed' || instruction.status === 'cancelled'
+            ? 'FAILED'
+            : 'PAYOUT_PENDING';
       this.assertTransition(updated, nextState);
       updated = await this.repository.updateTransfer(updated.transfer_id, {
         status: nextState,
         payout_status: instruction.status,
-        payout_completed_at: instruction.status === 'completed' ? now() : undefined,
+        payout_completed_at: instruction.status === 'completed' ? initialObservation.observed_at : undefined,
+        error_logs: nextState === 'FAILED'
+          ? [...(updated.error_logs || []), {
+            at: initialObservation.observed_at,
+            stage: 'payout_instruction',
+            message: `Payout provider created instruction with terminal status ${instruction.status}.`,
+          }]
+          : updated.error_logs,
         reconciliation_metadata: {
           ...(updated.reconciliation_metadata || {}),
           payout_instruction: instruction,
@@ -497,70 +560,81 @@ export class InternationalTransferService {
       request_id: String(providerOptions.request_id || providerOptions.requestId || '').trim(),
       correlation_id: String(providerOptions.correlation_id || providerOptions.correlationId || '').trim(),
     };
-    const adapter = this.payoutAdapter || getPayoutProviderAdapter(transfer.payout_provider);
-    const status = await adapter.getPayoutStatus(transfer.provider_payout_id);
-    const refreshedAt = now();
-    const metadata = transfer.reconciliation_metadata || {};
-    const existingInstruction = metadata.payout_instruction as PayoutInstruction | undefined;
-    const instruction: PayoutInstruction = {
-      payout_instruction_id: transfer.payout_instruction_id,
-      provider_name: transfer.payout_provider,
-      provider_payout_id: transfer.provider_payout_id,
-      status,
-      destination: transfer.payout_destination,
-      amount_usd: transfer.quoted_usd_amount,
-      currency: 'USD',
-      created_at: existingInstruction?.created_at || transfer.updated_at || transfer.created_at,
-      metadata: {
-        ...(existingInstruction?.metadata || {}),
-        payout_status_refreshed_at: refreshedAt,
-        previous_payout_status: transfer.payout_status,
-        ...requestTrace(trace),
-      },
-    };
-
-    let nextState = transfer.status;
-    const errorLogs = [...(transfer.error_logs || [])];
-    if (status === 'completed' && transfer.status !== 'PAYOUT_COMPLETED' && transfer.status !== 'FAILED' && transfer.status !== 'REFUNDED') {
-      this.assertTransition(transfer, 'PAYOUT_COMPLETED');
-      nextState = 'PAYOUT_COMPLETED';
-    }
-    if ((status === 'failed' || status === 'cancelled') && transfer.status !== 'FAILED' && transfer.status !== 'REFUNDED') {
-      this.assertTransition(transfer, 'FAILED');
-      nextState = 'FAILED';
-      errorLogs.push({
-        at: refreshedAt,
-        stage: 'payout_status',
-        message: `Payout provider status refreshed as ${status}.`,
-      });
-    }
-
-    const updated = await this.repository.updateTransfer(transfer.transfer_id, {
-      status: nextState,
-      payout_status: status,
-      payout_completed_at: status === 'completed'
-        ? (transfer.payout_completed_at || refreshedAt)
-        : transfer.payout_completed_at,
-      error_logs: errorLogs,
-      reconciliation_metadata: {
-        ...mergeTraceMetadata(metadata, trace, 'payout_status_refreshed'),
-        payout_instruction: instruction,
-        payout_status_refresh: {
-          provider: adapter.providerName,
-          provider_payout_id: transfer.provider_payout_id,
-          status,
-          refreshed_at: refreshedAt,
-        },
-        next_action: status === 'completed'
-          ? 'done'
-          : status === 'failed' || status === 'cancelled'
-            ? 'refund_or_manual_review'
-            : 'poll_payout_status',
-      },
+    const adapter = this.payoutCoordination.resolveAdapter(transfer.payout_provider, this.payoutAdapter);
+    const observation = this.payoutCoordination.normalizeObservation({
+      provider: adapter.providerName,
+      providerPayoutId: transfer.provider_payout_id,
+      observation: await adapter.getPayoutStatus(transfer.provider_payout_id),
+      source: 'poll',
     });
+    return this.applyPayoutObservation(transfer, observation, trace);
+  }
 
-    await this.refreshReconciliation(updated, { payout: instruction });
-    return updated;
+  async handlePayoutProviderEvent(provider: string, payload: Record<string, unknown>): Promise<InternationalTransfer> {
+    const event = this.payoutCoordination.normalizeProviderEvent(provider, payload);
+    if (!event) {
+      throw transferValidationError(
+        'invalid_payout_provider_event',
+        'Payout provider event is missing a provider payout reference or status.',
+      );
+    }
+    if (!this.repository.findTransferByProviderPayoutReference) {
+      throw new Error('Payout provider event lookup is not supported by this repository.');
+    }
+    const transfer = await this.repository.findTransferByProviderPayoutReference(event.provider_name, event.provider_payout_id);
+    if (!transfer) {
+      throw transferNotFoundError('payout_transfer_not_found', 'No transfer found for payout provider event.');
+    }
+    if (!transfer.payout_instruction_id) {
+      throw transferConflictError('payout_instruction_missing', 'Transfer has no payout instruction for this provider event.');
+    }
+
+    const eventRecord: PayoutEventRecord = {
+      payout_event_id: `payout_event_${crypto.randomUUID()}`,
+      transfer_id: transfer.transfer_id,
+      payout_instruction_id: transfer.payout_instruction_id,
+      provider_name: event.provider_name,
+      provider_event_id: event.provider_event_id,
+      provider_payout_id: event.provider_payout_id,
+      status: event.status,
+      event_type: event.event_type,
+      evidence: redactSensitive(event.evidence || {}) as Record<string, unknown>,
+      occurred_at: event.occurred_at,
+      created_at: now(),
+    };
+    const eventInserted = this.repository.appendPayoutEvent
+      ? await this.repository.appendPayoutEvent(eventRecord)
+      : false;
+    if (this.repository.appendPayoutEvent && !eventInserted) {
+      return transfer;
+    }
+
+    const observation: PayoutStatusObservation = {
+      provider_name: event.provider_name,
+      provider_payout_id: event.provider_payout_id,
+      status: event.status,
+      raw_status: event.raw_status,
+      source: 'webhook',
+      observed_at: event.occurred_at,
+      provider_event_id: event.provider_event_id,
+      evidence: event.evidence,
+    };
+    try {
+      return await this.applyPayoutObservation(transfer, observation, {}, event);
+    } catch (error) {
+      if (eventInserted && this.repository.deletePayoutEvent) {
+        await this.repository.deletePayoutEvent(event.provider_name, event.provider_event_id);
+      }
+      throw error;
+    }
+  }
+
+  getPayoutProviderCapabilities(): PayoutProviderCapabilities[] {
+    return this.payoutCoordination.getCapabilities() as PayoutProviderCapabilities[];
+  }
+
+  async getPayoutEvidence(transferId: string): Promise<PayoutCoordinationEvidence> {
+    return this.payoutCoordination.buildEvidence(await this.requireTransfer(transferId));
   }
 
   async getTransfer(transferId: string): Promise<InternationalTransfer> {
@@ -602,6 +676,185 @@ export class InternationalTransferService {
       throw transferNotFoundError('transfer_not_found', 'International transfer not found.');
     }
     return transfer;
+  }
+
+  private async applyPayoutObservation(
+    transfer: InternationalTransfer,
+    observation: PayoutStatusObservation,
+    trace: { request_id?: string; correlation_id?: string } = {},
+    providerEvent?: PayoutProviderEvent,
+  ): Promise<InternationalTransfer> {
+    if (!transfer.payout_provider || !transfer.provider_payout_id || !transfer.payout_instruction_id) {
+      throw new Error('Payout instruction reference is required before applying payout status.');
+    }
+    if (transfer.payout_provider !== observation.provider_name || transfer.provider_payout_id !== observation.provider_payout_id) {
+      throw transferConflictError(
+        'payout_provider_reference_mismatch',
+        'Payout status observation does not match the transfer payout instruction.',
+      );
+    }
+    if (transfer.status === 'PAYOUT_COMPLETED' || transfer.status === 'FAILED' || transfer.status === 'REFUNDED') {
+      return transfer;
+    }
+
+    const metadata = transfer.reconciliation_metadata || {};
+    const existingInstruction = metadata.payout_instruction as PayoutInstruction | undefined;
+    const baseInstruction: PayoutInstruction = existingInstruction || {
+      payout_instruction_id: transfer.payout_instruction_id,
+      provider_name: transfer.payout_provider,
+      provider_payout_id: transfer.provider_payout_id,
+      status: transfer.payout_status || 'pending',
+      destination: transfer.payout_destination,
+      amount_usd: transfer.quoted_usd_amount,
+      currency: 'USD',
+      created_at: transfer.updated_at || transfer.created_at,
+    };
+    const instruction = this.payoutCoordination.attachObservation(baseInstruction, observation);
+    let nextState: InternationalTransferState = transfer.status;
+    const errorLogs = [...(transfer.error_logs || [])];
+    if (observation.status === 'completed') {
+      this.assertTransition(transfer, 'PAYOUT_COMPLETED');
+      nextState = 'PAYOUT_COMPLETED';
+    } else if (observation.status === 'failed' || observation.status === 'cancelled') {
+      this.assertTransition(transfer, 'FAILED');
+      nextState = 'FAILED';
+      errorLogs.push({
+        at: observation.observed_at,
+        stage: 'payout_status',
+        message: `Payout provider status observed as ${observation.status}.`,
+      });
+    }
+
+    const updated = await this.repository.updateTransfer(transfer.transfer_id, {
+      status: nextState,
+      payout_status: observation.status,
+      payout_completed_at: observation.status === 'completed'
+        ? (transfer.payout_completed_at || observation.observed_at)
+        : transfer.payout_completed_at,
+      error_logs: errorLogs,
+      reconciliation_metadata: {
+        ...mergeTraceMetadata(metadata, trace, providerEvent ? 'payout_provider_event' : 'payout_status_refreshed'),
+        payout_instruction: instruction,
+        payout_status_observation: observation,
+        payout_status_refresh: {
+          provider: observation.provider_name,
+          provider_payout_id: observation.provider_payout_id,
+          status: observation.status,
+          refreshed_at: observation.observed_at,
+          source: observation.source,
+        },
+        ...(providerEvent ? {
+          payout_provider_event: {
+            provider: providerEvent.provider_name,
+            event_id: providerEvent.provider_event_id,
+            event_type: providerEvent.event_type,
+            occurred_at: providerEvent.occurred_at,
+          },
+        } : {}),
+        next_action: observation.status === 'completed'
+          ? 'done'
+          : observation.status === 'failed' || observation.status === 'cancelled'
+            ? 'refund_or_manual_review'
+            : 'poll_payout_status',
+      },
+    });
+    await this.persistPayoutInstruction(updated, instruction);
+    await this.refreshReconciliation(updated, { payout: instruction });
+    return updated;
+  }
+
+  private async restorePersistedPayoutInstruction(
+    transfer: InternationalTransfer,
+    persisted: PayoutInstructionRecord,
+    trace: Record<string, unknown>,
+  ): Promise<InternationalTransfer> {
+    const instruction: PayoutInstruction = {
+      payout_instruction_id: persisted.payout_instruction_id,
+      provider_name: persisted.provider_name,
+      provider_payout_id: persisted.provider_payout_id,
+      status: persisted.status,
+      execution_mode: persisted.execution_mode,
+      destination: transfer.payout_destination,
+      amount_usd: persisted.amount_usd,
+      currency: 'USD',
+      created_at: persisted.created_at,
+      updated_at: persisted.updated_at,
+      status_history: persisted.status_history,
+      metadata: {
+        recovered_from_persisted_instruction: true,
+      },
+    };
+    this.assertTransition(transfer, 'PAYOUT_INSTRUCTION_CREATED');
+    let updated = await this.repository.updateTransfer(transfer.transfer_id, {
+      status: 'PAYOUT_INSTRUCTION_CREATED',
+      payout_provider: instruction.provider_name,
+      payout_instruction_id: instruction.payout_instruction_id,
+      provider_payout_id: instruction.provider_payout_id,
+      payout_status: instruction.status,
+      reconciliation_metadata: {
+        ...mergeTraceMetadata(transfer.reconciliation_metadata, {
+          request_id: String(trace.request_id || trace.requestId || '').trim(),
+          correlation_id: String(trace.correlation_id || trace.correlationId || '').trim(),
+        }, 'payout_instruction_recovered'),
+        payout_instruction: instruction,
+        off_ramp_provider: instruction.provider_name,
+      },
+    });
+    const nextState: InternationalTransferState =
+      instruction.status === 'completed'
+        ? 'PAYOUT_COMPLETED'
+        : instruction.status === 'failed' || instruction.status === 'cancelled'
+          ? 'FAILED'
+          : 'PAYOUT_PENDING';
+    this.assertTransition(updated, nextState);
+    updated = await this.repository.updateTransfer(updated.transfer_id, {
+      status: nextState,
+      payout_status: instruction.status,
+      payout_completed_at: instruction.status === 'completed' ? (instruction.updated_at || now()) : undefined,
+      reconciliation_metadata: {
+        ...(updated.reconciliation_metadata || {}),
+        payout_instruction: instruction,
+        next_action: instruction.status === 'completed' ? 'done' : 'poll_payout_status',
+      },
+    });
+    await this.refreshReconciliation(updated, { payout: instruction });
+    return updated;
+  }
+
+  private async persistPayoutInstruction(transfer: InternationalTransfer, instruction: PayoutInstruction): Promise<void> {
+    if (!this.repository.upsertPayoutInstruction) return;
+    const instructionMetadata = instruction.metadata || {};
+    const destination = instruction.destination || transfer.payout_destination;
+    const record: PayoutInstructionRecord = {
+      payout_instruction_id: instruction.payout_instruction_id,
+      transfer_id: transfer.transfer_id,
+      provider_name: instruction.provider_name,
+      provider_payout_id: instruction.provider_payout_id,
+      status: instruction.status,
+      execution_mode: instruction.execution_mode || 'compatibility',
+      amount_usd: instruction.amount_usd,
+      currency: 'USD',
+      destination_metadata: {
+        account_holder_type: destination.accountHolderType,
+        country: destination.country,
+        provider_label: destination.providerLabel,
+        bank_name: destination.bankName,
+        account_number_last4: String(destination.accountNumber || '').replace(/\D+/g, '').slice(-4) || undefined,
+        routing_number_last4: String(destination.routingNumber || '').replace(/\D+/g, '').slice(-4) || undefined,
+      },
+      settlement_evidence: {
+        stellar_tx_hash: transfer.stellar_tx_hash,
+        stellar_memo: transfer.stellar_memo,
+        asset_code: transfer.stellar_asset_code,
+        amount_usd: transfer.quoted_usd_amount,
+      },
+      provider_request: payoutProviderSnapshot(instructionMetadata.provider_payload),
+      provider_response: payoutProviderSnapshot(instructionMetadata.provider_response),
+      status_history: instruction.status_history || [],
+      created_at: instruction.created_at,
+      updated_at: instruction.updated_at || now(),
+    };
+    await this.repository.upsertPayoutInstruction(record);
   }
 
   private async refreshReconciliation(

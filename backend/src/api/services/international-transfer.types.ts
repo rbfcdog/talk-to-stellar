@@ -17,6 +17,14 @@ export type QuoteStatus = 'ACTIVE' | 'EXPIRED' | 'ACCEPTED' | 'CANCELLED';
 export type SameNameMatchStatus = 'MATCHED' | 'MISMATCHED' | 'UNKNOWN';
 export type PayoutProviderName = 'mock' | 'circle' | 'bridge' | 'etherfuse';
 export type PayoutStatus = 'instruction_created' | 'pending' | 'completed' | 'failed' | 'cancelled';
+export type PayoutExecutionMode =
+  | 'mock'
+  | 'proof'
+  | 'compatibility'
+  | 'sandbox_api'
+  | 'live_api'
+  | 'wise_metadata_only';
+export type PayoutObservationSource = 'create' | 'poll' | 'webhook';
 export type QuoteSource = 'stellar_pathfinding' | 'etherfuse' | 'configured_fallback' | 'mock_sandbox';
 export type QuoteProvenanceKind = 'live_path_quote' | 'etherfuse_quote' | 'configured_fallback' | 'mock_sandbox';
 
@@ -111,11 +119,140 @@ export type PayoutInstruction = {
   provider_name: PayoutProviderName;
   provider_payout_id: string;
   status: PayoutStatus;
+  execution_mode?: PayoutExecutionMode;
   destination: UsdBankDestination;
   amount_usd: string;
   currency: 'USD';
   created_at: string;
+  updated_at?: string;
+  status_history?: PayoutStatusObservation[];
   metadata?: Record<string, unknown>;
+};
+
+export type PayoutStatusObservation = {
+  provider_name: PayoutProviderName;
+  provider_payout_id: string;
+  status: PayoutStatus;
+  raw_status?: string;
+  source: PayoutObservationSource;
+  observed_at: string;
+  provider_event_id?: string;
+  provider_reference?: string;
+  evidence?: Record<string, unknown>;
+};
+
+export type PayoutProviderEvent = {
+  provider_name: PayoutProviderName;
+  provider_event_id: string;
+  provider_payout_id: string;
+  status: PayoutStatus;
+  raw_status?: string;
+  event_type?: string;
+  occurred_at: string;
+  evidence?: Record<string, unknown>;
+};
+
+export type PayoutProviderCapabilities = {
+  provider_name: PayoutProviderName;
+  display_name: string;
+  execution_mode: PayoutExecutionMode;
+  configured: boolean;
+  execution_enabled: boolean;
+  supports: {
+    create_instruction: true;
+    status_polling: boolean;
+    webhooks: boolean;
+    cancellation: boolean;
+    usd_bank_destination: boolean;
+  };
+  requirements: string[];
+  blockers: string[];
+  notes: string[];
+};
+
+export type PayoutCoordinationEvidence = {
+  schema_version: 1;
+  generated_at: string;
+  transfer_id: string;
+  ready: boolean;
+  submission: {
+    title: 'USD Delivery & Payout Coordination Layer';
+    week: 2;
+    ready_count: number;
+    required_count: 4;
+    status: 'READY' | 'PENDING';
+  };
+  checklist: Array<{
+    id: 'adapter_interface_code' | 'stellar_transaction_hash' | 'circle_bridge_compatibility' | 'payout_coordination_record';
+    label: string;
+    ready: boolean;
+    artifact: string;
+  }>;
+  provider: PayoutProviderCapabilities;
+  execution_mode?: PayoutExecutionMode;
+  settlement: {
+    attached: boolean;
+    stellar_tx_hash?: string;
+    stellar_memo?: string;
+    asset_code: string;
+    amount_usd: string;
+  };
+  identity_control: {
+    same_name_required: boolean;
+    same_name_status: SameNameMatchStatus;
+    payout_allowed: boolean;
+    risk_notes: string[];
+  };
+  instruction: {
+    created: boolean;
+    instruction_id?: string;
+    provider_reference_hash?: string;
+    status?: PayoutStatus;
+    created_at?: string;
+    updated_at?: string;
+  };
+  status_history: PayoutStatusObservation[];
+  destination: TransferOrchestrationLog['destination'];
+  compatibility: {
+    circle: PayoutProviderCapabilities;
+    bridge: PayoutProviderCapabilities;
+  };
+  redaction: {
+    applied: true;
+    notes: string[];
+  };
+};
+
+export type PayoutInstructionRecord = {
+  payout_instruction_id: string;
+  transfer_id: string;
+  provider_name: PayoutProviderName;
+  provider_payout_id: string;
+  status: PayoutStatus;
+  execution_mode: PayoutExecutionMode;
+  amount_usd: string;
+  currency: 'USD';
+  destination_metadata: Record<string, unknown>;
+  settlement_evidence: Record<string, unknown>;
+  provider_request: Record<string, unknown>;
+  provider_response: Record<string, unknown>;
+  status_history: PayoutStatusObservation[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type PayoutEventRecord = {
+  payout_event_id: string;
+  transfer_id: string;
+  payout_instruction_id: string;
+  provider_name: PayoutProviderName;
+  provider_event_id: string;
+  provider_payout_id: string;
+  status: PayoutStatus;
+  event_type?: string;
+  evidence: Record<string, unknown>;
+  occurred_at: string;
+  created_at: string;
 };
 
 export type InternationalTransfer = {

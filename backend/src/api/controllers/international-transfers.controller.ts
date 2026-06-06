@@ -4,6 +4,7 @@ import { publicErrorMessage } from '../../utils/public-error';
 import { timingSafeEqualString } from '../../utils/password';
 import { logger } from '../../utils/logger';
 import { applyApiRequestContext, readApiRequestContext, responseContext } from './request-context';
+import { usdPayoutCoordinationService } from '../services/usd-payout-coordination.service';
 
 function statusFromError(error: any): number {
   const explicit = Number(error?.status || error?.statusCode || 0);
@@ -65,7 +66,63 @@ function requireInternalOpsAuthorization(req: Request, res: Response, context?: 
   return false;
 }
 
+function requirePayoutProviderAuthorization(
+  req: Request,
+  res: Response,
+  provider: string,
+  context: ReturnType<typeof readApiRequestContext>,
+): boolean {
+  const expected = usdPayoutCoordinationService.expectedWebhookSecret(provider);
+  const provided = String(req.headers['x-payout-webhook-secret'] || readBearerToken(req) || '').trim();
+  if (expected && provided && timingSafeEqualString(expected, provided)) return true;
+  res.status(401).json({
+    success: false,
+    ...responseContext(context),
+    message: 'Payout provider event authorization failed.',
+  });
+  return false;
+}
+
 export class InternationalTransfersController {
+  static async getPayoutProviders(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      const providers = internationalTransferService.getPayoutProviderCapabilities();
+      res.status(200).json({ success: true, ...responseContext(context), providers });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
+  static async receivePayoutProviderEvent(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    const provider = String(req.params.provider || '').trim().toLowerCase();
+    try {
+      if (!requirePayoutProviderAuthorization(req, res, provider, context)) return;
+      const transfer = await internationalTransferService.handlePayoutProviderEvent(provider, req.body || {});
+      lifecycleLog('payout_provider_event_applied', context, {
+        provider,
+        transfer_id: transfer.transfer_id,
+        status: transfer.status,
+        payout_status: transfer.payout_status,
+      });
+      res.status(202).json({
+        success: true,
+        ...responseContext(context),
+        payout_event: {
+          accepted: true,
+          transfer_id: transfer.transfer_id,
+          transfer_status: transfer.status,
+          payout_status: transfer.payout_status,
+        },
+      });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
   static async createTransfer(req: Request, res: Response) {
     const context = readApiRequestContext(req);
     applyApiRequestContext(res, context);
@@ -239,6 +296,22 @@ export class InternationalTransfersController {
         required_count: reviewer_evidence.submission.required_count,
       });
       res.status(200).json({ success: true, ...responseContext(context), reviewer_evidence });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
+  static async getPayoutEvidence(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      const payout_evidence = await internationalTransferService.getPayoutEvidence(String(req.params.id));
+      lifecycleLog('payout_evidence_read', context, {
+        transfer_id: payout_evidence.transfer_id,
+        ready: payout_evidence.ready,
+        provider: payout_evidence.provider.provider_name,
+      });
+      res.status(200).json({ success: true, ...responseContext(context), payout_evidence });
     } catch (error: any) {
       res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
     }

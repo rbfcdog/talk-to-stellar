@@ -5,7 +5,9 @@ import { InternationalTransferService } from '../src/api/services/international-
 import {
   InternationalTransfer,
   InternationalTransferQuote,
+  PayoutEventRecord,
   PayoutInstruction,
+  PayoutInstructionRecord,
   TransferReconciliation,
 } from '../src/api/services/international-transfer.types';
 
@@ -13,6 +15,8 @@ class MemoryTransferRepository implements InternationalTransferRepository {
   quotes = new Map<string, InternationalTransferQuote>();
   transfers = new Map<string, InternationalTransfer>();
   reconciliations = new Map<string, TransferReconciliation>();
+  payoutInstructions = new Map<string, PayoutInstructionRecord>();
+  payoutEvents = new Map<string, PayoutEventRecord>();
 
   async createQuote(quote: InternationalTransferQuote) {
     this.quotes.set(quote.quote_id, quote);
@@ -52,6 +56,31 @@ class MemoryTransferRepository implements InternationalTransferRepository {
     return Array.from(this.transfers.values()).find((transfer) =>
       transfer.pix_order_id === reference || transfer.pix_payment_id === reference
     ) || null;
+  }
+
+  async findTransferByProviderPayoutReference(provider: string, reference: string) {
+    return Array.from(this.transfers.values()).find((transfer) =>
+      transfer.payout_provider === provider && transfer.provider_payout_id === reference
+    ) || null;
+  }
+
+  async upsertPayoutInstruction(record: PayoutInstructionRecord) {
+    this.payoutInstructions.set(record.payout_instruction_id, record);
+  }
+
+  async getPayoutInstructionByTransfer(transferId: string) {
+    return Array.from(this.payoutInstructions.values()).find((instruction) => instruction.transfer_id === transferId) || null;
+  }
+
+  async appendPayoutEvent(record: PayoutEventRecord) {
+    const key = `${record.provider_name}:${record.provider_event_id}`;
+    if (this.payoutEvents.has(key)) return false;
+    this.payoutEvents.set(key, record);
+    return true;
+  }
+
+  async deletePayoutEvent(provider: string, providerEventId: string) {
+    this.payoutEvents.delete(`${provider}:${providerEventId}`);
   }
 
   async upsertReconciliation(reconciliation: TransferReconciliation) {
@@ -783,5 +812,93 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     expect(failed.payout_status).toBe('failed');
     expect(failed.error_logs.at(-1)).toMatchObject({ stage: 'payout_status' });
     expect((failed.reconciliation_metadata as any).next_action).toBe('refund_or_manual_review');
+  });
+
+  it('applies payout provider events once and builds the Week 2 coordination package', async () => {
+    const repository = new MemoryTransferRepository();
+    const stellarSettlement = {
+      settleUsdc: jest.fn(async (transfer: InternationalTransfer) => ({
+        stellar_tx_hash: 'stellar-hash-week-2',
+        stellar_memo: 'tts-week-2',
+        asset_code: 'USDC',
+        asset_issuer: 'GUSDC',
+        amount: transfer.quoted_usd_amount,
+        network: 'testnet',
+        status: 'confirmed',
+        execution_mode: 'testnet',
+        settled_at: new Date().toISOString(),
+      })),
+    };
+    const payoutAdapter = {
+      providerName: 'circle',
+      createPayoutInstruction: jest.fn(async () => ({
+        payout_instruction_id: 'circle-instruction-week-2',
+        provider_name: 'circle',
+        provider_payout_id: 'circle-payout-week-2',
+        status: 'pending',
+        execution_mode: 'compatibility',
+        amount_usd: '99',
+        currency: 'USD',
+        created_at: new Date().toISOString(),
+        destination: payoutDestination(),
+        metadata: { mode: 'compatibility' },
+      })),
+      getPayoutStatus: jest.fn(async () => 'pending'),
+    };
+    const { service, transfer } = await createPixPendingTransfer({
+      repository,
+      stellarSettlement,
+      payoutAdapter,
+    });
+    const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+    const settled = await service.settleStellar(funded.transfer_id);
+    const pending = await service.createPayoutInstruction(settled.transfer_id, 'circle');
+    await repository.updateTransfer(pending.transfer_id, {
+      status: 'USDC_SETTLED',
+      payout_provider: undefined,
+      payout_instruction_id: undefined,
+      provider_payout_id: undefined,
+      payout_status: undefined,
+    });
+    const recovered = await service.createPayoutInstruction(pending.transfer_id, 'circle');
+    expect(recovered.status).toBe('PAYOUT_PENDING');
+    expect(payoutAdapter.createPayoutInstruction).toHaveBeenCalledTimes(1);
+
+    const payload = {
+      id: 'circle-event-week-2',
+      type: 'payout.completed',
+      data: {
+        id: 'circle-payout-week-2',
+        status: 'complete',
+      },
+    };
+    const completed = await service.handlePayoutProviderEvent('circle', payload);
+    const replay = await service.handlePayoutProviderEvent('circle', payload);
+    const evidence = await service.getPayoutEvidence(recovered.transfer_id);
+
+    expect(completed.status).toBe('PAYOUT_COMPLETED');
+    expect(replay.status).toBe('PAYOUT_COMPLETED');
+    expect(repository.payoutEvents.size).toBe(1);
+    expect(repository.payoutInstructions.get('circle-instruction-week-2')).toMatchObject({
+      status: 'completed',
+      settlement_evidence: { stellar_tx_hash: 'stellar-hash-week-2' },
+    });
+    expect(evidence).toMatchObject({
+      ready: true,
+      submission: {
+        title: 'USD Delivery & Payout Coordination Layer',
+        week: 2,
+        ready_count: 4,
+        required_count: 4,
+        status: 'READY',
+      },
+      settlement: { stellar_tx_hash: 'stellar-hash-week-2' },
+      instruction: { status: 'completed' },
+    });
+    expect(evidence.status_history.at(-1)).toMatchObject({
+      source: 'webhook',
+      provider_event_id: 'circle-event-week-2',
+      status: 'completed',
+    });
   });
 });

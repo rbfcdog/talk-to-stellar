@@ -125,4 +125,22 @@ export type RouteEconomics = {
   metricsValid: boolean;
 };
 
-export type ConsoleTab = "overview" | "evidence" | "api";
+export type PayoutProviderCapability = {
+  provider_name: "mock" | "etherfuse" | "circle" | "bridge";
+  display_name: string;
+  execution_mode: string;
+  configured: boolean;
+  execution_enabled: boolean;
+  supports: {
+    create_instruction: boolean;
+    status_polling: boolean;
+    webhooks: boolean;
+    cancellation: boolean;
+    usd_bank_destination: boolean;
+  };
+  requirements: string[];
+  blockers: string[];
+  notes: string[];
+};
+
+export type ConsoleTab = "overview" | "payout" | "evidence" | "api";

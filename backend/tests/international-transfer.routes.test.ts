@@ -631,4 +631,92 @@ describe('international transfer HTTP routes', () => {
     expect(rawReconciliation).not.toHaveBeenCalled();
     expect(reviewer).toHaveBeenCalledTimes(1);
   });
+
+  it('exposes payout readiness and evidence while requiring a signed provider event secret', async () => {
+    process.env.CIRCLE_PAYOUT_WEBHOOK_SECRET = 'circle-webhook-secret';
+    jest.spyOn(internationalTransferService, 'getPayoutProviderCapabilities').mockReturnValue([{
+      provider_name: 'circle',
+      display_name: 'Circle compatibility adapter',
+      execution_mode: 'compatibility',
+      configured: false,
+      execution_enabled: false,
+      supports: {
+        create_instruction: true,
+        status_polling: false,
+        webhooks: true,
+        cancellation: false,
+        usd_bank_destination: true,
+      },
+      requirements: [],
+      blockers: ['ENABLE_REAL_PAYOUT_EXECUTION is false.'],
+      notes: [],
+    }]);
+    jest.spyOn(internationalTransferService, 'getPayoutEvidence').mockResolvedValue({
+      schema_version: 1,
+      generated_at: new Date().toISOString(),
+      transfer_id: 'tr-route-1',
+      ready: true,
+      submission: {
+        title: 'USD Delivery & Payout Coordination Layer',
+        week: 2,
+        ready_count: 4,
+        required_count: 4,
+        status: 'READY',
+      },
+      checklist: [],
+      provider: internationalTransferService.getPayoutProviderCapabilities()[0],
+      settlement: { attached: true, stellar_tx_hash: 'stellar-hash-1', asset_code: 'USDC', amount_usd: '99' },
+      identity_control: { same_name_required: true, same_name_status: 'MATCHED', payout_allowed: true, risk_notes: [] },
+      instruction: { created: true, instruction_id: 'payout-instruction-1', status: 'pending' },
+      status_history: [],
+      destination: { country: 'US', account_number_last4: '6789' },
+      compatibility: {
+        circle: internationalTransferService.getPayoutProviderCapabilities()[0],
+        bridge: { ...internationalTransferService.getPayoutProviderCapabilities()[0], provider_name: 'bridge', display_name: 'Bridge compatibility adapter' },
+      },
+      redaction: { applied: true, notes: [] },
+    });
+    const event = jest.spyOn(internationalTransferService, 'handlePayoutProviderEvent').mockResolvedValue({
+      ...transfer('PAYOUT_COMPLETED'),
+      payout_provider: 'circle',
+      payout_instruction_id: 'payout-instruction-1',
+      provider_payout_id: 'circle-payout-1',
+      payout_status: 'completed',
+    });
+
+    await expect(routeRequest({
+      method: 'GET',
+      path: '/api/transfers/payout-providers',
+    })).resolves.toMatchObject({ status: 200, body: { providers: [{ provider_name: 'circle' }] } });
+
+    await expect(routeRequest({
+      method: 'GET',
+      path: '/api/transfers/tr-route-1/payout-evidence',
+    })).resolves.toMatchObject({
+      status: 200,
+      body: { payout_evidence: { submission: { week: 2, ready_count: 4 } } },
+    });
+
+    await expect(routeRequest({
+      method: 'POST',
+      path: '/api/transfers/payout-events/circle',
+      body: { id: 'event-1', data: { id: 'circle-payout-1', status: 'complete' } },
+    })).resolves.toMatchObject({ status: 401 });
+    await expect(routeRequest({
+      method: 'POST',
+      path: '/api/transfers/payout-events/circle',
+      headers: { 'x-payout-webhook-secret': 'circle-webhook-secret' },
+      body: { id: 'event-1', data: { id: 'circle-payout-1', status: 'complete' } },
+    })).resolves.toMatchObject({
+      status: 202,
+      body: {
+        payout_event: {
+          accepted: true,
+          transfer_id: 'tr-route-1',
+          payout_status: 'completed',
+        },
+      },
+    });
+    expect(event).toHaveBeenCalledTimes(1);
+  });
 });

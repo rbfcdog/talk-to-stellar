@@ -102,7 +102,7 @@ describe('PayoutProviderAdapter contract', () => {
       provider_name: 'circle',
       status: 'pending',
       metadata: {
-        mode: 'sandbox',
+        mode: 'compatibility',
         provider_api_key_present: false,
         real_execution_enabled: false,
       },
@@ -125,7 +125,7 @@ describe('PayoutProviderAdapter contract', () => {
       provider_name: 'bridge',
       status: 'pending',
       metadata: {
-        mode: 'sandbox',
+        mode: 'compatibility',
         provider_api_key_present: false,
         real_execution_enabled: false,
         destination_provider_label: 'mercury',
@@ -133,5 +133,34 @@ describe('PayoutProviderAdapter contract', () => {
     });
     expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[configured]');
     expect((instruction.metadata as any).provider_payload.destination.iban).toBe('[configured]');
+  });
+
+  it('reports provider readiness and normalizes signed provider events', () => {
+    process.env.CIRCLE_PAYOUT_WEBHOOK_SECRET = 'circle-secret';
+    const adapter = new CircleCompatibilityAdapter();
+
+    expect(adapter.getCapabilities()).toMatchObject({
+      provider_name: 'circle',
+      execution_mode: 'compatibility',
+      execution_enabled: false,
+      supports: {
+        create_instruction: true,
+        webhooks: true,
+        usd_bank_destination: true,
+      },
+    });
+    expect(adapter.normalizeWebhookEvent?.({
+      id: 'event-circle-1',
+      type: 'payout.completed',
+      data: {
+        id: 'circle-payout-1',
+        status: 'complete',
+      },
+    })).toMatchObject({
+      provider_name: 'circle',
+      provider_event_id: 'event-circle-1',
+      provider_payout_id: 'circle-payout-1',
+      status: 'completed',
+    });
   });
 });

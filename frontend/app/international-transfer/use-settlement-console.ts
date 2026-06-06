@@ -5,6 +5,7 @@ import { getClientSession } from "@/lib/session";
 import {
   createCorrelationId,
   evidenceRows,
+  payoutEvidenceRows,
   redactSensitive,
   routeEconomics,
   text,
@@ -14,6 +15,7 @@ import type {
   ConsoleEvent,
   ConsoleForm,
   JsonRecord,
+  PayoutProviderCapability,
   WorkflowSnapshot,
 } from "./settlement-console.types";
 
@@ -48,6 +50,8 @@ export function useSettlementConsole() {
   const [reconciliation, setReconciliation] = useState<JsonRecord | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowSnapshot | null>(null);
   const [reviewerEvidence, setReviewerEvidence] = useState<JsonRecord | null>(null);
+  const [payoutEvidence, setPayoutEvidence] = useState<JsonRecord | null>(null);
+  const [payoutProviders, setPayoutProviders] = useState<PayoutProviderCapability[]>([]);
   const [events, setEvents] = useState<ConsoleEvent[]>([]);
   const [logs, setLogs] = useState<ApiLogEntry[]>([]);
   const [busy, setBusy] = useState("");
@@ -146,7 +150,7 @@ export function useSettlementConsole() {
   const loadArtifacts = useCallback(async (transferId: string, logCalls = true) => {
     const encoded = encodeURIComponent(transferId);
     const read = async (label: string, path: string, opsAuthorized = false) => {
-      if (logCalls) return callApi(label, "GET", path);
+      if (logCalls) return callApi(label, "GET", path, undefined, opsAuthorized);
       const response = await fetch(path, {
         headers: {
           "x-request-id": `${correlationId}_${Date.now().toString(36)}`,
@@ -160,9 +164,10 @@ export function useSettlementConsole() {
       if (!response.ok || payload?.success === false) throw new Error(payload?.message || `${label} failed.`);
       return payload as JsonRecord;
     };
-    const [workflowPayload, evidencePayload] = await Promise.all([
+    const [workflowPayload, evidencePayload, payoutEvidencePayload] = await Promise.all([
       read("Load workflow", `/api/transfers/${encoded}/workflow`),
       read("Load reviewer evidence", `/api/transfers/${encoded}/reviewer-evidence`),
+      read("Load payout evidence", `/api/transfers/${encoded}/payout-evidence`),
     ]);
     const reconciliationPayload = form.opsSecret
       ? await read("Load reconciliation", `/api/transfers/${encoded}/reconciliation`, true)
@@ -170,16 +175,39 @@ export function useSettlementConsole() {
     setWorkflow(workflowPayload.workflow || null);
     setReconciliation(reconciliationPayload.reconciliation || null);
     setReviewerEvidence(evidencePayload.reviewer_evidence || null);
+    setPayoutEvidence(payoutEvidencePayload.payout_evidence || null);
     return {
       workflow: workflowPayload.workflow as WorkflowSnapshot,
       reconciliation: reconciliationPayload.reconciliation as JsonRecord,
       reviewerEvidence: evidencePayload.reviewer_evidence as JsonRecord,
+      payoutEvidence: payoutEvidencePayload.payout_evidence as JsonRecord,
     };
   }, [callApi, correlationId, form.opsSecret]);
 
   useEffect(() => {
     void getClientSession().then((session) => setSessionId(session.sessionId || ""));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/transfers/payout-providers", {
+      headers: {
+        "x-request-id": `${correlationId}_${Date.now().toString(36)}`,
+        "x-correlation-id": correlationId,
+      },
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false) throw new Error(payload?.message || "Unable to load payout providers.");
+        if (!cancelled) setPayoutProviders(Array.isArray(payload.providers) ? payload.providers : []);
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [correlationId]);
 
   useEffect(() => {
     const transferId = new URLSearchParams(window.location.search).get("transfer_id")?.trim();
@@ -281,6 +309,7 @@ export function useSettlementConsole() {
     setWorkflow(null);
     setReconciliation(null);
     setReviewerEvidence(null);
+    setPayoutEvidence(null);
     return payload.quote as JsonRecord;
   }, [callApi, form.brlAmount, sessionId]);
 
@@ -399,15 +428,17 @@ export function useSettlementConsole() {
 
   const downloadEvidence = useCallback(async () => {
     if (!transfer?.transfer_id) throw new Error("Create the transfer record first.");
-    const evidence = reviewerEvidence || (await loadArtifacts(transfer.transfer_id)).reviewerEvidence;
-    const blob = new Blob([`${JSON.stringify(evidence, null, 2)}\n`], { type: "application/json" });
+    const artifacts = reviewerEvidence && payoutEvidence
+      ? { reviewer_evidence: reviewerEvidence, payout_evidence: payoutEvidence }
+      : await loadArtifacts(transfer.transfer_id);
+    const blob = new Blob([`${JSON.stringify(redactSensitive(artifacts), null, 2)}\n`], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = `instawards-${transfer.transfer_id}-reviewer-evidence.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [loadArtifacts, reviewerEvidence, transfer]);
+  }, [loadArtifacts, payoutEvidence, reviewerEvidence, transfer]);
 
   const copyBundle = useCallback(async () => {
     await navigator.clipboard.writeText(JSON.stringify(redactSensitive({
@@ -418,10 +449,12 @@ export function useSettlementConsole() {
       workflow,
       reconciliation,
       reviewer_evidence: reviewerEvidence,
+      payout_evidence: payoutEvidence,
+      payout_providers: payoutProviders,
       events,
       api_logs: logs,
     }), null, 2));
-  }, [correlationId, events, logs, quote, reconciliation, reviewerEvidence, transfer, workflow]);
+  }, [correlationId, events, logs, payoutEvidence, payoutProviders, quote, reconciliation, reviewerEvidence, transfer, workflow]);
 
   const reset = useCallback(() => {
     setForm(INITIAL_FORM);
@@ -431,6 +464,7 @@ export function useSettlementConsole() {
     setReconciliation(null);
     setWorkflow(null);
     setReviewerEvidence(null);
+    setPayoutEvidence(null);
     setEvents([]);
     setLogs([]);
     setError("");
@@ -448,6 +482,10 @@ export function useSettlementConsole() {
     () => evidenceRows(workflow, reviewerEvidence),
     [reviewerEvidence, workflow],
   );
+  const payoutArtifacts = useMemo(
+    () => payoutEvidenceRows(payoutEvidence),
+    [payoutEvidence],
+  );
 
   return {
     opsMocksAllowed,
@@ -460,12 +498,15 @@ export function useSettlementConsole() {
     reconciliation,
     workflow,
     reviewerEvidence,
+    payoutEvidence,
+    payoutProviders,
     events,
     logs,
     busy,
     error,
     economics,
     artifacts,
+    payoutArtifacts,
     actions: {
       createQuote,
       createTransfer,

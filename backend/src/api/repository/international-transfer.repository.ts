@@ -2,6 +2,8 @@ import { supabase } from '../../config/supabase';
 import {
   InternationalTransfer,
   InternationalTransferQuote,
+  PayoutEventRecord,
+  PayoutInstructionRecord,
   QuoteProvenance,
   TransferReconciliation,
 } from '../services/international-transfer.types';
@@ -175,6 +177,62 @@ function rowToReconciliation(row: any): TransferReconciliation {
   };
 }
 
+function payoutInstructionToRow(record: PayoutInstructionRecord): Record<string, unknown> {
+  return {
+    id: record.payout_instruction_id,
+    transfer_id: record.transfer_id,
+    provider_name: record.provider_name,
+    provider_payout_id: record.provider_payout_id,
+    status: record.status,
+    execution_mode: record.execution_mode,
+    amount_usd: record.amount_usd,
+    currency: record.currency,
+    destination_metadata: record.destination_metadata || {},
+    settlement_evidence: record.settlement_evidence || {},
+    provider_request: record.provider_request || {},
+    provider_response: record.provider_response || {},
+    status_history: record.status_history || [],
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+  };
+}
+
+function rowToPayoutInstruction(row: any): PayoutInstructionRecord {
+  return {
+    payout_instruction_id: String(row.id),
+    transfer_id: String(row.transfer_id),
+    provider_name: row.provider_name,
+    provider_payout_id: String(row.provider_payout_id),
+    status: row.status,
+    execution_mode: row.execution_mode,
+    amount_usd: String(row.amount_usd),
+    currency: 'USD',
+    destination_metadata: row.destination_metadata || {},
+    settlement_evidence: row.settlement_evidence || {},
+    provider_request: row.provider_request || {},
+    provider_response: row.provider_response || {},
+    status_history: Array.isArray(row.status_history) ? row.status_history : [],
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
+
+function payoutEventToRow(record: PayoutEventRecord): Record<string, unknown> {
+  return omitUndefined({
+    id: record.payout_event_id,
+    transfer_id: record.transfer_id,
+    payout_instruction_id: record.payout_instruction_id,
+    provider_name: record.provider_name,
+    provider_event_id: record.provider_event_id,
+    provider_payout_id: record.provider_payout_id,
+    status: record.status,
+    event_type: record.event_type,
+    evidence: record.evidence || {},
+    occurred_at: record.occurred_at,
+    created_at: record.created_at,
+  });
+}
+
 export interface InternationalTransferRepository {
   createQuote(quote: InternationalTransferQuote): Promise<InternationalTransferQuote>;
   getQuote(quoteId: string): Promise<InternationalTransferQuote | null>;
@@ -183,6 +241,11 @@ export interface InternationalTransferRepository {
   getTransfer(transferId: string): Promise<InternationalTransfer | null>;
   updateTransfer(transferId: string, updates: Partial<InternationalTransfer>): Promise<InternationalTransfer>;
   findTransferByPixReference(reference: string): Promise<InternationalTransfer | null>;
+  findTransferByProviderPayoutReference?(provider: string, reference: string): Promise<InternationalTransfer | null>;
+  getPayoutInstructionByTransfer?(transferId: string): Promise<PayoutInstructionRecord | null>;
+  upsertPayoutInstruction?(record: PayoutInstructionRecord): Promise<void>;
+  appendPayoutEvent?(record: PayoutEventRecord): Promise<boolean>;
+  deletePayoutEvent?(provider: string, providerEventId: string): Promise<void>;
   upsertReconciliation(reconciliation: TransferReconciliation): Promise<TransferReconciliation>;
   getReconciliation(transferId: string): Promise<TransferReconciliation | null>;
 }
@@ -321,6 +384,75 @@ export class SupabaseInternationalTransferRepository implements InternationalTra
 
     if (orderError) throw new Error(`Failed to find transfer by PIX order reference: ${orderError.message}`);
     return byOrderId ? rowToTransfer(byOrderId) : null;
+  }
+
+  async findTransferByProviderPayoutReference(provider: string, reference: string): Promise<InternationalTransfer | null> {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    const normalizedReference = String(reference || '').trim();
+    if (!normalizedProvider || !normalizedReference) return null;
+
+    const { data: instruction, error: instructionError } = await supabase
+      .from('international_payout_instructions')
+      .select('transfer_id')
+      .eq('provider_name', normalizedProvider)
+      .eq('provider_payout_id', normalizedReference)
+      .maybeSingle();
+
+    if (instructionError) {
+      throw new Error(`Failed to find transfer by payout provider reference: ${instructionError.message}`);
+    }
+    if (instruction?.transfer_id) return this.getTransfer(String(instruction.transfer_id));
+
+    const { data, error } = await supabase
+      .from('international_transfers')
+      .select('*')
+      .eq('payout_provider', normalizedProvider)
+      .eq('provider_payout_id', normalizedReference)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw new Error(`Failed to find transfer by legacy payout provider reference: ${error.message}`);
+    return data ? rowToTransfer(data) : null;
+  }
+
+  async upsertPayoutInstruction(record: PayoutInstructionRecord): Promise<void> {
+    const { error } = await supabase
+      .from('international_payout_instructions')
+      .upsert(payoutInstructionToRow(record), { onConflict: 'id' });
+
+    if (error) throw new Error(`Failed to persist payout instruction: ${error.message}`);
+  }
+
+  async getPayoutInstructionByTransfer(transferId: string): Promise<PayoutInstructionRecord | null> {
+    const { data, error } = await supabase
+      .from('international_payout_instructions')
+      .select('*')
+      .eq('transfer_id', transferId)
+      .maybeSingle();
+
+    if (error) throw new Error(`Failed to load persisted payout instruction: ${error.message}`);
+    return data ? rowToPayoutInstruction(data) : null;
+  }
+
+  async appendPayoutEvent(record: PayoutEventRecord): Promise<boolean> {
+    const { error } = await supabase
+      .from('international_payout_events')
+      .insert(payoutEventToRow(record));
+
+    if (!error) return true;
+    if (String((error as any).code || '') === '23505') return false;
+    throw new Error(`Failed to persist payout provider event: ${error.message}`);
+  }
+
+  async deletePayoutEvent(provider: string, providerEventId: string): Promise<void> {
+    const { error } = await supabase
+      .from('international_payout_events')
+      .delete()
+      .eq('provider_name', String(provider || '').trim().toLowerCase())
+      .eq('provider_event_id', String(providerEventId || '').trim());
+
+    if (error) throw new Error(`Failed to release payout provider event for retry: ${error.message}`);
   }
 
   async upsertReconciliation(reconciliation: TransferReconciliation): Promise<TransferReconciliation> {
