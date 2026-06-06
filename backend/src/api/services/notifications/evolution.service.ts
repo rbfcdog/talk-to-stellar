@@ -51,11 +51,21 @@ class EvolutionSendTextError extends Error {
   }
 }
 
+class EvolutionReplyDeliveryError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'EvolutionReplyDeliveryError';
+  }
+}
+
 const processedMessages = new Map<string, number>();
 const activeWebhookReplies = new Map<string, Promise<void>>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
 
-type PersistentDedupeStatus = 'reserved' | 'duplicate' | 'unavailable';
+type PersistentDedupeReservation = {
+  status: 'reserved' | 'duplicate' | 'unavailable';
+  key?: string;
+};
 
 function normalizeBaseUrl(value: unknown): string {
   const raw = String(value || '').trim();
@@ -390,31 +400,67 @@ function isUniqueViolation(error: any): boolean {
 async function reservePersistentDedupeKey(
   idempotencyKey: string,
   requestPayload: Record<string, unknown>
-): Promise<PersistentDedupeStatus> {
+): Promise<PersistentDedupeReservation> {
   const now = new Date().toISOString();
   const { error } = await supabase.from('idempotency_keys').insert({
     idempotency_key: idempotencyKey,
     request_hash: dedupeHash(JSON.stringify(requestPayload)),
     method: 'POST',
     route: '/api/evolution/webhook',
-    status: 'completed',
-    response_status: 200,
-    response_body: {
-      success: true,
-      dedupe: 'evolution_webhook',
-    },
+    status: 'processing',
     locked_at: now,
-    completed_at: now,
     created_at: now,
     updated_at: now,
   });
 
-  if (!error) return 'reserved';
-  if (isUniqueViolation(error)) return 'duplicate';
+  if (!error) return { status: 'reserved', key: idempotencyKey };
+  if (isUniqueViolation(error)) return { status: 'duplicate' };
 
   const message = String((error as any)?.message || error);
   logger.warn(`[evolution-webhook] persistent dedupe unavailable: ${message}`);
-  return 'unavailable';
+  return { status: 'unavailable' };
+}
+
+async function completePersistentDedupeKey(idempotencyKey?: string): Promise<void> {
+  if (!idempotencyKey) return;
+  const now = new Date().toISOString();
+  try {
+    const { error } = await supabase
+      .from('idempotency_keys')
+      .update({
+        status: 'completed',
+        response_status: 200,
+        response_body: {
+          success: true,
+          dedupe: 'evolution_webhook',
+        },
+        completed_at: now,
+        updated_at: now,
+      })
+      .eq('idempotency_key', idempotencyKey)
+      .eq('status', 'processing');
+    if (error) {
+      logger.warn(`[evolution-webhook] could not complete persistent dedupe claim: ${String((error as any)?.message || error)}`);
+    }
+  } catch (error) {
+    logger.warn(`[evolution-webhook] could not complete persistent dedupe claim: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function releasePersistentDedupeKey(idempotencyKey?: string): Promise<void> {
+  if (!idempotencyKey) return;
+  try {
+    const { error } = await supabase
+      .from('idempotency_keys')
+      .delete()
+      .eq('idempotency_key', idempotencyKey)
+      .eq('status', 'processing');
+    if (error) {
+      logger.warn(`[evolution-webhook] could not release persistent dedupe claim: ${String((error as any)?.message || error)}`);
+    }
+  } catch (error) {
+    logger.warn(`[evolution-webhook] could not release persistent dedupe claim: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function reserveEvolutionWebhookDedupe(input: {
@@ -422,7 +468,7 @@ async function reserveEvolutionWebhookDedupe(input: {
   remoteJid: string;
   messageId: string;
   text: string;
-}): Promise<string> {
+}): Promise<PersistentDedupeReservation> {
   const normalizedText = normalizeDedupeText(input.text);
   const commonPayload = {
     instance: input.instance,
@@ -431,16 +477,13 @@ async function reserveEvolutionWebhookDedupe(input: {
     text_hash: dedupeHash(normalizedText),
   };
 
-  const status = await reservePersistentDedupeKey(
+  return reservePersistentDedupeKey(
     evolutionDedupeKey('incoming_message', `${input.instance}:${input.remoteJid}:${input.messageId}`),
     {
       ...commonPayload,
       dedupe_kind: 'message_id',
     }
   );
-  if (status === 'duplicate') return 'duplicate_persistent_message';
-
-  return '';
 }
 
 function shouldSendFailureFallback(): boolean {
@@ -1089,6 +1132,21 @@ export class EvolutionService {
       return { received: true, replied: false, skipped: 'duplicate_in_flight', recipient, instance };
     }
 
+    // Claim before account lookup, LLM execution, or outbound delivery. Evolution can
+    // deliver the same webhook to multiple backend workers at the same time.
+    const persistentClaim = await reserveEvolutionWebhookDedupe({
+      instance,
+      remoteJid: message.remoteJid,
+      messageId: message.messageId,
+      text,
+    });
+    if (persistentClaim.status === 'duplicate') {
+      return { received: true, replied: false, skipped: 'duplicate_persistent', recipient, instance };
+    }
+    if (persistentClaim.status === 'unavailable' && isProductionLikeEnvironment()) {
+      throw new Error('Durable WhatsApp webhook dedupe is unavailable.');
+    }
+
     const replyPromise = this.replyWithAgent({
       instance,
       recipient,
@@ -1102,26 +1160,49 @@ export class EvolutionService {
     try {
       await replyPromise;
       markProcessed(messageKey);
-      await reserveEvolutionWebhookDedupe({
-        instance,
-        remoteJid: message.remoteJid,
-        messageId: message.messageId,
-        text,
-      });
+      await completePersistentDedupeKey(persistentClaim.key);
       logger.info(`[evolution-webhook] replied with agent to ***${recipient.slice(-4)} on instance ${instance}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
-      if (!shouldSendFailureFallback()) throw error;
-      await this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true });
-      markProcessed(messageKey);
-      await reserveEvolutionWebhookDedupe({
-        instance,
-        remoteJid: message.remoteJid,
-        messageId: message.messageId,
-        text,
-      });
-      logger.info(`[evolution-webhook] replied with fallback to ***${recipient.slice(-4)} on instance ${instance}`);
+      if (error instanceof EvolutionReplyDeliveryError) {
+        // The provider may have accepted the first send before the request failed.
+        // Complete the claim and do not send a fallback or allow a webhook retry.
+        markProcessed(messageKey);
+        await completePersistentDedupeKey(persistentClaim.key);
+        return {
+          received: true,
+          replied: false,
+          skipped: 'outbound_delivery_uncertain',
+          recipient,
+          instance,
+        };
+      }
+      try {
+        if (!shouldSendFailureFallback()) throw error;
+        try {
+          await this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true, attempts: 1 });
+        } catch (fallbackDeliveryError) {
+          markProcessed(messageKey);
+          await completePersistentDedupeKey(persistentClaim.key);
+          logger.warn(
+            `[evolution-webhook] fallback delivery uncertain for ***${recipient.slice(-4)} on instance ${instance}: ${fallbackDeliveryError instanceof Error ? fallbackDeliveryError.message : String(fallbackDeliveryError)}`
+          );
+          return {
+            received: true,
+            replied: false,
+            skipped: 'outbound_delivery_uncertain',
+            recipient,
+            instance,
+          };
+        }
+        markProcessed(messageKey);
+        await completePersistentDedupeKey(persistentClaim.key);
+        logger.info(`[evolution-webhook] replied with fallback to ***${recipient.slice(-4)} on instance ${instance}`);
+      } catch (fallbackError) {
+        await releasePersistentDedupeKey(persistentClaim.key);
+        throw fallbackError;
+      }
     } finally {
       activeWebhookReplies.delete(messageKey);
     }
@@ -1159,6 +1240,12 @@ export class EvolutionService {
       messageId: input.messageId,
     });
     const replyText = buildUsefulEvolutionReply(response);
-    await this.sendText(input.instance, input.recipient, replyText, { reliable: true });
+    try {
+      // An ambiguous provider timeout may mean the message was accepted. Retrying
+      // an interactive reply here can duplicate it.
+      await this.sendText(input.instance, input.recipient, replyText, { reliable: true, attempts: 1 });
+    } catch (error) {
+      throw new EvolutionReplyDeliveryError(error);
+    }
   }
 }
