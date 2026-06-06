@@ -26,7 +26,6 @@ function getBackendBaseUrl() {
 
 type ProxyOptions = {
   injectSession?: boolean;
-  injectEtherfuseWebhookSecret?: boolean;
 };
 
 /** Forward an incoming Next.js API request to the backend, attaching session headers + idempotency key. */
@@ -44,17 +43,15 @@ export async function proxyBackendApi(
   const body = options.injectSession === false ? rawBody : augmentJsonBodyWithSession(rawBody, req);
   const idempotencyKey = req.headers.get("Idempotency-Key") ||
     `next_${crypto.createHash("sha256").update(`${req.method}:${target}:${body || ""}`).digest("hex")}`;
-  const webhookSecret = options.injectEtherfuseWebhookSecret
-    ? String(process.env.ETHERFUSE_WEBHOOK_SECRET || "").trim()
-    : "";
-
+  const requestId = req.headers.get("x-request-id") || `next_${crypto.randomUUID()}`;
+  const correlationId = req.headers.get("x-correlation-id") || requestId;
   const headers: Record<string, string> = {
     "content-type": req.headers.get("content-type") || "application/json",
     "Idempotency-Key": idempotencyKey,
+    "X-Request-Id": requestId,
+    "X-Correlation-Id": correlationId,
     ...buildSessionHeaders(req, requestSource),
   };
-
-  if (webhookSecret) headers["X-Etherfuse-Webhook-Secret"] = webhookSecret;
 
   const init: RequestInit = {
     method: req.method,
@@ -66,9 +63,18 @@ export async function proxyBackendApi(
   try {
     const res = await fetch(target, init);
     const text = await res.text();
-    return passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
+    const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
+    response.headers.set("x-request-id", res.headers.get("x-request-id") || requestId);
+    response.headers.set("x-correlation-id", res.headers.get("x-correlation-id") || correlationId);
+    return response;
   } catch (error: any) {
     console.error("[backend-proxy] request failed", { target, error: error?.message || error });
-    return NextResponse.json(publicErrorPayload(error, { code: "backend_unavailable" }), { status: 502 });
+    const response = NextResponse.json(
+      { ...publicErrorPayload(error, { code: "backend_unavailable" }), request_id: requestId, correlation_id: correlationId },
+      { status: 502 },
+    );
+    response.headers.set("x-request-id", requestId);
+    response.headers.set("x-correlation-id", correlationId);
+    return response;
   }
 }

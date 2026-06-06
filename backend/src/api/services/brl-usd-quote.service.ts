@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { InternationalTransferRepository, internationalTransferRepository } from '../repository/international-transfer.repository';
 import { BrlReferenceRateService, BrlReferenceQuote } from './brl-reference-rate.service';
 import { PlatformFeeService } from './platform-fee.service';
-import { InternationalTransferQuote } from './international-transfer.types';
+import { InternationalTransferQuote, QuoteProvenance } from './international-transfer.types';
 
 function toPositiveNumber(value: unknown): number {
   const parsed = Number(String(value || '').replace(',', '.'));
@@ -17,6 +17,35 @@ function amount(value: number, decimals = 7): string {
 function quoteTtlSeconds(): number {
   const parsed = Number(process.env.BRL_USD_QUOTE_TTL_SECONDS || process.env.QUOTE_TTL_SECONDS || 300);
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 3600) : 300;
+}
+
+function requestTrace(input: { request_id?: string; correlation_id?: string }) {
+  const requestId = String(input.request_id || '').trim();
+  const correlationId = String(input.correlation_id || requestId).trim();
+  return {
+    ...(requestId ? { request_id: requestId } : {}),
+    ...(correlationId ? { correlation_id: correlationId } : {}),
+  };
+}
+
+function livePathProvenance(referenceQuote: BrlReferenceQuote, fetchedAt: string): QuoteProvenance {
+  return {
+    kind: 'live_path_quote',
+    label: 'Live Stellar strict-send path quote',
+    source: 'stellar_horizon_strict_send_paths',
+    fetched_at: referenceQuote.fetchedAt || fetchedAt,
+    live: true,
+    sandbox: false,
+    fallback: false,
+    executable: true,
+    details: {
+      reference_source: referenceQuote.source,
+      symbol: referenceQuote.symbol,
+      source_asset: referenceQuote.sourceAsset,
+      destination_asset: referenceQuote.destinationAsset,
+      path_asset_count: Array.isArray(referenceQuote.path) ? referenceQuote.path.length : 0,
+    },
+  };
 }
 
 type QuoteDeps = {
@@ -40,6 +69,8 @@ export class BrlUsdQuoteService {
     brl_amount: string | number;
     user_id?: string;
     institution_id?: string;
+    request_id?: string;
+    correlation_id?: string;
   }): Promise<InternationalTransferQuote> {
     const brlAmount = toPositiveNumber(input.brl_amount);
     if (!brlAmount) {
@@ -71,6 +102,8 @@ export class BrlUsdQuoteService {
     const retainedPct = estimatedUsdcGross > 0 ? (estimatedUsd / estimatedUsdcGross) * 100 : 0;
     const issuedAt = this.now();
     const expiresAt = new Date(issuedAt.getTime() + quoteTtlSeconds() * 1000);
+    const provenance = livePathProvenance(referenceQuote, issuedAt.toISOString());
+    const trace = requestTrace(input);
 
     const quote: InternationalTransferQuote = {
       quote_id: `q_brl_usd_${crypto.randomUUID()}`,
@@ -98,7 +131,11 @@ export class BrlUsdQuoteService {
       expires_at: expiresAt.toISOString(),
       quote_status: 'ACTIVE',
       quote_source: quoteSource,
+      provenance,
       metadata: {
+        ...trace,
+        quote_provenance: provenance,
+        provenance,
         reference_quote: referenceQuote,
         usdc_assumed_usd_parity: true,
         fee_model: 'charged_on_off_ramp_transaction_fees_only',

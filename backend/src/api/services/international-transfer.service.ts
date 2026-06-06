@@ -41,6 +41,65 @@ function appendError(transfer: InternationalTransfer, error: unknown, stage: str
   ];
 }
 
+function requestTrace(input: { request_id?: string; correlation_id?: string }) {
+  const requestId = String(input.request_id || '').trim();
+  const correlationId = String(input.correlation_id || requestId).trim();
+  return {
+    ...(requestId ? { request_id: requestId } : {}),
+    ...(correlationId ? { correlation_id: correlationId } : {}),
+  };
+}
+
+function mergeTraceMetadata(
+  metadata: Record<string, unknown> | undefined,
+  input: { request_id?: string; correlation_id?: string },
+  stage: string,
+) {
+  const trace = requestTrace(input);
+  if (!Object.keys(trace).length) return metadata || {};
+  return {
+    ...(metadata || {}),
+    ...trace,
+    trace: {
+      ...((metadata || {}).trace as Record<string, unknown> || {}),
+      ...trace,
+      last_stage: stage,
+      updated_at: now(),
+    },
+  };
+}
+
+const STATE_ORDER: InternationalTransferState[] = [
+  'QUOTE_CREATED',
+  'PIX_PENDING',
+  'PIX_RECEIVED',
+  'BRL_TO_USDC_PENDING',
+  'USDC_SETTLEMENT_PENDING',
+  'USDC_SETTLED',
+  'PAYOUT_INSTRUCTION_CREATED',
+  'PAYOUT_PENDING',
+  'PAYOUT_COMPLETED',
+];
+
+function hasReachedState(status: InternationalTransferState, target: InternationalTransferState): boolean {
+  const currentIndex = STATE_ORDER.indexOf(status);
+  const targetIndex = STATE_ORDER.indexOf(target);
+  return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex;
+}
+
+function pixFailureStatus(status: string): boolean {
+  return [
+    'failed',
+    'failure',
+    'pix.failed',
+    'cancelled',
+    'canceled',
+    'expired',
+    'rejected',
+    'refused',
+  ].includes(status);
+}
+
 function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge' | 'etherfuse' {
   const normalized = String(provider || process.env.PAYOUT_PROVIDER || 'etherfuse').trim().toLowerCase();
   if (normalized === 'circle') return 'circle';
@@ -72,6 +131,8 @@ export class InternationalTransferService {
     recipient_identity: IdentityProfile;
     payout_destination: UsdBankDestination;
     same_name_payout_required?: boolean;
+    request_id?: string;
+    correlation_id?: string;
   }): Promise<InternationalTransfer> {
     if (!input.quote_id) throw new Error('quote_id is required.');
     if (!input.payout_destination?.accountHolderName || !input.payout_destination?.country) {
@@ -109,7 +170,12 @@ export class InternationalTransferService {
       same_name_match_status: identity.same_name_match_status,
       identity_risk_notes: identity.identity_risk_notes,
       reconciliation_metadata: {
+        ...mergeTraceMetadata({}, {
+          request_id: input.request_id || (quote.metadata as any)?.request_id,
+          correlation_id: input.correlation_id || (quote.metadata as any)?.correlation_id,
+        }, 'transfer_created'),
         quote,
+        quote_provenance: quote.provenance || (quote.metadata as any)?.quote_provenance,
         next_action: 'create_pix_intent',
       },
       error_logs: [],
@@ -128,6 +194,8 @@ export class InternationalTransferService {
     session_token: string;
     email?: string;
     mock?: boolean;
+    request_id?: string;
+    correlation_id?: string;
   }): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
     this.assertTransition(transfer, 'PIX_PENDING');
@@ -140,7 +208,7 @@ export class InternationalTransferService {
         pix_order_id: intent.pix_order_id,
         pix_status: intent.status,
         reconciliation_metadata: {
-          ...(transfer.reconciliation_metadata || {}),
+          ...mergeTraceMetadata(transfer.reconciliation_metadata, input, 'pix_intent_created'),
           pix_funding_intent: intent,
           next_action: 'wait_for_pix_confirmation',
         },
@@ -176,12 +244,46 @@ export class InternationalTransferService {
     if (!transfer) throw new Error(`No transfer found for Pix reference ${reference}.`);
 
     const status = String(input.status || input.pix_status || input.event || 'completed').toLowerCase();
+    const trace = {
+      request_id: String(input.request_id || input.requestId || '').trim(),
+      correlation_id: String(input.correlation_id || input.correlationId || input.request_id || input.requestId || '').trim(),
+    };
+    if (pixFailureStatus(status)) {
+      if (transfer.status === 'FAILED') return transfer;
+      this.assertTransition(transfer, 'FAILED');
+      const updated = await this.repository.updateTransfer(transfer.transfer_id, {
+        status: 'FAILED',
+        pix_status: status,
+        reconciliation_metadata: {
+          ...mergeTraceMetadata(transfer.reconciliation_metadata, trace, 'pix_funding_failed'),
+          pix_webhook: input,
+          next_action: 'refund_or_retry',
+        },
+        error_logs: appendError(transfer, `Pix funding event reported ${status}.`, 'pix_funding'),
+      });
+      await this.refreshReconciliation(updated);
+      return updated;
+    }
+
     if (!['completed', 'paid', 'confirmed', 'pix.received', 'processing', 'funded'].includes(status)) {
       const updated = await this.repository.updateTransfer(transfer.transfer_id, {
         pix_status: status,
         reconciliation_metadata: {
-          ...(transfer.reconciliation_metadata || {}),
+          ...mergeTraceMetadata(transfer.reconciliation_metadata, trace, 'pix_webhook_status'),
           pix_webhook: input,
+        },
+      });
+      await this.refreshReconciliation(updated);
+      return updated;
+    }
+
+    if (hasReachedState(transfer.status, 'PIX_RECEIVED')) {
+      const updated = await this.repository.updateTransfer(transfer.transfer_id, {
+        pix_status: transfer.pix_status || 'completed',
+        reconciliation_metadata: {
+          ...mergeTraceMetadata(transfer.reconciliation_metadata, trace, 'pix_confirmation_replayed'),
+          pix_webhook_replay: input,
+          pix_webhook_replayed_at: now(),
         },
       });
       await this.refreshReconciliation(updated);
@@ -194,7 +296,7 @@ export class InternationalTransferService {
       pix_status: 'completed',
       pix_received_at: now(),
       reconciliation_metadata: {
-        ...(transfer.reconciliation_metadata || {}),
+        ...mergeTraceMetadata(transfer.reconciliation_metadata, trace, 'pix_confirmed'),
         pix_webhook: input,
         next_action: 'settle_stellar',
       },
@@ -224,12 +326,28 @@ export class InternationalTransferService {
       simulated: true,
       simulated_by: input.simulated_by || 'institution_settlement_tester',
       confirmed_at: now(),
+      request_id: input.request_id || input.requestId,
+      correlation_id: input.correlation_id || input.correlationId,
     });
   }
 
-  async settleStellar(transferId: string): Promise<InternationalTransfer> {
+  async settleStellar(transferId: string, input: {
+    request_id?: string;
+    correlation_id?: string;
+  } = {}): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
     let current = transfer;
+
+    if (hasReachedState(current.status, 'USDC_SETTLED') && current.stellar_tx_hash) {
+      const updated = await this.repository.updateTransfer(current.transfer_id, {
+        reconciliation_metadata: {
+          ...mergeTraceMetadata(current.reconciliation_metadata, input, 'stellar_settlement_replayed'),
+          stellar_settlement_replayed_at: now(),
+        },
+      });
+      await this.refreshReconciliation(updated);
+      return updated;
+    }
 
     try {
       if (current.status === 'PIX_RECEIVED') {
@@ -237,7 +355,7 @@ export class InternationalTransferService {
         current = await this.repository.updateTransfer(current.transfer_id, {
           status: 'BRL_TO_USDC_PENDING',
           reconciliation_metadata: {
-            ...(current.reconciliation_metadata || {}),
+            ...mergeTraceMetadata(current.reconciliation_metadata, input, 'brl_to_usdc_pending'),
             next_action: 'usdc_settlement',
           },
         });
@@ -262,7 +380,7 @@ export class InternationalTransferService {
         stellar_asset_issuer: evidence.asset_issuer,
         stellar_settled_at: evidence.settled_at,
         reconciliation_metadata: {
-          ...(current.reconciliation_metadata || {}),
+          ...mergeTraceMetadata(current.reconciliation_metadata, input, 'stellar_settled'),
           stellar_settlement: evidence,
           next_action: 'create_payout_instruction',
         },
@@ -280,6 +398,20 @@ export class InternationalTransferService {
 
   async createPayoutInstruction(transferId: string, provider?: string, providerOptions: Record<string, unknown> = {}): Promise<InternationalTransfer> {
     const transfer = await this.requireTransfer(transferId);
+    if (hasReachedState(transfer.status, 'PAYOUT_INSTRUCTION_CREATED') && transfer.payout_instruction_id) {
+      const updated = await this.repository.updateTransfer(transfer.transfer_id, {
+        reconciliation_metadata: {
+          ...mergeTraceMetadata(transfer.reconciliation_metadata, {
+            request_id: String(providerOptions.request_id || providerOptions.requestId || '').trim(),
+            correlation_id: String(providerOptions.correlation_id || providerOptions.correlationId || '').trim(),
+          }, 'payout_instruction_replayed'),
+          payout_instruction_replayed_at: now(),
+        },
+      });
+      await this.refreshReconciliation(updated);
+      return updated;
+    }
+
     this.assertTransition(transfer, 'PAYOUT_INSTRUCTION_CREATED');
     const selectedProvider = normalizePayoutProvider(provider);
     const adapter = this.payoutAdapter || getPayoutProviderAdapter(selectedProvider);
@@ -298,6 +430,10 @@ export class InternationalTransferService {
           identity_risk_notes: transfer.identity_risk_notes,
           on_ramp_provider: 'etherfuse',
           off_ramp_provider: adapter.providerName,
+          ...requestTrace({
+            request_id: String(providerOptions.request_id || providerOptions.requestId || '').trim(),
+            correlation_id: String(providerOptions.correlation_id || providerOptions.correlationId || '').trim(),
+          }),
         },
         providerOptions,
       });
@@ -309,7 +445,10 @@ export class InternationalTransferService {
         provider_payout_id: instruction.provider_payout_id,
         payout_status: instruction.status,
         reconciliation_metadata: {
-          ...(transfer.reconciliation_metadata || {}),
+          ...mergeTraceMetadata(transfer.reconciliation_metadata, {
+            request_id: String(providerOptions.request_id || providerOptions.requestId || '').trim(),
+            correlation_id: String(providerOptions.correlation_id || providerOptions.correlationId || '').trim(),
+          }, 'payout_instruction_created'),
           payout_instruction: instruction,
           off_ramp_provider: adapter.providerName,
         },

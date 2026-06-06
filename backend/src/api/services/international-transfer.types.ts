@@ -17,6 +17,20 @@ export type QuoteStatus = 'ACTIVE' | 'EXPIRED' | 'ACCEPTED' | 'CANCELLED';
 export type SameNameMatchStatus = 'MATCHED' | 'MISMATCHED' | 'UNKNOWN';
 export type PayoutProviderName = 'mock' | 'circle' | 'bridge' | 'etherfuse';
 export type PayoutStatus = 'instruction_created' | 'pending' | 'completed' | 'failed' | 'cancelled';
+export type QuoteSource = 'stellar_pathfinding' | 'etherfuse' | 'configured_fallback' | 'mock_sandbox';
+export type QuoteProvenanceKind = 'live_path_quote' | 'etherfuse_quote' | 'configured_fallback' | 'mock_sandbox';
+
+export type QuoteProvenance = {
+  kind: QuoteProvenanceKind;
+  label: string;
+  source: string;
+  fetched_at: string;
+  live: boolean;
+  sandbox: boolean;
+  fallback: boolean;
+  executable: boolean;
+  details?: Record<string, unknown>;
+};
 
 export type CurrencyFee = {
   amount: string;
@@ -70,7 +84,8 @@ export type InternationalTransferQuote = {
   total_fee: TransferFeeBreakdown['total_fee'];
   expires_at: string;
   quote_status: QuoteStatus;
-  quote_source: 'stellar_pathfinding';
+  quote_source: QuoteSource;
+  provenance?: QuoteProvenance;
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;

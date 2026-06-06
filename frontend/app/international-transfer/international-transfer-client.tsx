@@ -34,6 +34,8 @@ type LogEntry = {
   label: string;
   method: string;
   path: string;
+  request_id?: string;
+  correlation_id?: string;
   status?: number;
   durationMs?: number;
   request?: unknown;
@@ -110,6 +112,10 @@ const phaseDescriptions: Record<TransferState, string> = {
 
 function text(value: unknown) {
   return String(value || "").trim();
+}
+
+function createCorrelationId() {
+  return `instawards_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function pretty(value: unknown) {
@@ -321,6 +327,7 @@ function StatusPill({ state, children }: { state: EventEntry["state"] | "idle"; 
 
 export default function InternationalTransferClient() {
   const opsMocksAllowed = String(process.env.NEXT_PUBLIC_ALLOW_OPS_MOCKS || "").toLowerCase() === "true";
+  const [correlationId, setCorrelationId] = useState("");
   const [brlAmount, setBrlAmount] = useState("1000");
   const [senderName, setSenderName] = useState("Origin BR Institution Ltda");
   const [senderEmail, setSenderEmail] = useState("ops@origin-institution.example");
@@ -339,6 +346,7 @@ export default function InternationalTransferClient() {
   const [manualSessionId, setManualSessionId] = useState("");
   const [manualSessionToken, setManualSessionToken] = useState("");
   const [walletPin, setWalletPin] = useState("");
+  const [opsSecret, setOpsSecret] = useState("");
   const [quote, setQuote] = useState<any>(null);
   const [transfer, setTransfer] = useState<any>(null);
   const [reconciliation, setReconciliation] = useState<any>(null);
@@ -353,6 +361,10 @@ export default function InternationalTransferClient() {
     },
   ]);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setCorrelationId((current) => current || createCorrelationId());
+  }, []);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
@@ -625,6 +637,7 @@ export default function InternationalTransferClient() {
   async function copyDebugBundle() {
     const bundle = {
       generated_at: new Date().toISOString(),
+      correlation_id: correlationId,
       current_operation: busy || "idle",
       value_delta: quoteDelta,
       metric_validation: metricValidation,
@@ -640,6 +653,8 @@ export default function InternationalTransferClient() {
   }
 
   function resetRun() {
+    const nextCorrelationId = createCorrelationId();
+    setCorrelationId(nextCorrelationId);
     setQuote(null);
     setTransfer(null);
     setReconciliation(null);
@@ -651,21 +666,42 @@ export default function InternationalTransferClient() {
         id: `reset-${Date.now()}`,
         at: new Date().toISOString(),
         title: "Reset",
-        detail: "The local tester state was cleared. Backend records were not deleted.",
+        detail: `The local tester state was cleared. Backend records were not deleted. Correlation ID: ${nextCorrelationId}`,
         state: "info",
       },
     ]);
   }
 
-  async function callApi(label: string, method: string, path: string, body?: unknown) {
+  function requireOpsSecret() {
+    if (!opsSecret.trim()) {
+      throw new Error("Operator secret required for this transition. Set it in Execution credentials.");
+    }
+    return opsSecret.trim();
+  }
+
+  function currentCorrelationId() {
+    if (correlationId) return correlationId;
+    const next = createCorrelationId();
+    setCorrelationId(next);
+    return next;
+  }
+
+  async function callApi(label: string, method: string, path: string, body?: unknown, headers?: Record<string, string>) {
     const startedAt = performance.now();
+    const activeCorrelationId = currentCorrelationId();
+    const requestId = `${activeCorrelationId}_${Date.now().toString(36)}`;
     setBusy(label);
     setError("");
     pushEvent(label, `${method} ${path}`, "running", path);
     try {
       const response = await fetch(path, {
         method,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": requestId,
+          "x-correlation-id": activeCorrelationId,
+          ...(headers || {}),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const payload = await response.json().catch(() => ({}));
@@ -674,6 +710,8 @@ export default function InternationalTransferClient() {
         label,
         method,
         path,
+        request_id: text(payload?.request_id) || response.headers.get("x-request-id") || requestId,
+        correlation_id: text(payload?.correlation_id) || response.headers.get("x-correlation-id") || activeCorrelationId,
         status: response.status,
         durationMs: Math.round(performance.now() - startedAt),
         request: redactSensitive(body),
@@ -701,6 +739,8 @@ export default function InternationalTransferClient() {
           label,
           method,
           path,
+          request_id: requestId,
+          correlation_id: activeCorrelationId,
           request: redactSensitive(body),
           error: message,
           durationMs: Math.round(performance.now() - startedAt),
@@ -775,12 +815,13 @@ export default function InternationalTransferClient() {
 	    if (useMock && !opsMocksAllowed) {
 	      throw new Error("Local PIX funding is disabled. Configure session credentials and create a payment-backed PIX intent.");
 	    }
+	    const headers = useMock ? { "x-international-transfer-ops-secret": requireOpsSecret() } : undefined;
     const payload = await callApi("Create funding intent", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/pix-intent`, {
       mock_pix_intent: useMock,
       session_id: manualSessionId || undefined,
       session_token: manualSessionToken || undefined,
       email: senderEmail,
-    });
+    }, headers);
     setTransfer(payload.transfer);
     return payload.transfer;
   }
@@ -790,9 +831,12 @@ export default function InternationalTransferClient() {
 	    if (!opsMocksAllowed) {
 	      throw new Error("Internal funding confirmation is disabled. Wait for the payment confirmation event instead.");
 	    }
+	    const secret = requireOpsSecret();
 	    const payload = await callApi("Confirm funding", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/funding-confirmation`, {
       status: "completed",
       event: "pix.received",
+    }, {
+      "x-international-transfer-ops-secret": secret,
     });
     setTransfer(payload.transfer);
     return payload.transfer;
@@ -800,7 +844,9 @@ export default function InternationalTransferClient() {
 
   async function settleStellar(currentTransfer = transfer) {
     if (!currentTransfer?.transfer_id) throw new Error("Create an institution settlement route first.");
-    const payload = await callApi("Settle blockchain", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/settle-stellar`);
+    const payload = await callApi("Settle blockchain", "POST", `/api/transfers/${encodeURIComponent(currentTransfer.transfer_id)}/settle-stellar`, {}, {
+      "x-international-transfer-ops-secret": requireOpsSecret(),
+    });
     setTransfer(payload.transfer);
     return payload.transfer;
   }
@@ -814,6 +860,8 @@ export default function InternationalTransferClient() {
       wallet_pin: walletPin || undefined,
       run_etherfuse_offramp_test: payoutProvider === "etherfuse" && runEtherfuseOffRamp,
       target_brl: quoteDelta.sourceBrl ? String(quoteDelta.sourceBrl) : undefined,
+    }, {
+      "x-international-transfer-ops-secret": requireOpsSecret(),
     });
     setTransfer(payload.transfer);
     return payload.transfer;
@@ -1027,6 +1075,7 @@ export default function InternationalTransferClient() {
                   <Field label="Session ID" value={manualSessionId} onChange={setManualSessionId} placeholder={sessionId || "cookie"} />
                   <Field label="Session token" value={manualSessionToken} onChange={setManualSessionToken} placeholder="cookie" />
                 </div>
+                <Field label="Ops secret" type="password" value={opsSecret} onChange={setOpsSecret} placeholder="Required for controlled transitions" />
                 {payoutProvider === "etherfuse" && runEtherfuseOffRamp ? (
                   <Field label="Wallet PIN for withdrawal" type="password" value={walletPin} onChange={setWalletPin} placeholder="Required only to execute PIX withdrawal" />
                 ) : null}
@@ -1528,6 +1577,7 @@ export default function InternationalTransferClient() {
             <div className="mb-4 flex items-center gap-2">
               <Code2 className="h-5 w-5 text-tts-muted" aria-hidden="true" />
               <h2 className="text-base font-bold text-tts-deep">API log</h2>
+              <span className="ml-auto font-mono text-xs font-semibold text-tts-muted">{correlationId || "pending"}</span>
             </div>
             <div className="mt-4 grid gap-3">
               {logs.length ? logs.map((log) => (
@@ -1541,7 +1591,14 @@ export default function InternationalTransferClient() {
                     </span>
                   </summary>
                   <pre className="mt-3 max-h-[320px] overflow-auto rounded-xl bg-tts-surface p-3 text-xs leading-5 text-tts-muted">
-                    {pretty({ label: log.label, request: log.request, response: log.response, error: log.error })}
+                    {pretty({
+                      label: log.label,
+                      request_id: log.request_id,
+                      correlation_id: log.correlation_id,
+                      request: log.request,
+                      response: log.response,
+                      error: log.error,
+                    })}
                   </pre>
                 </details>
               )) : (
