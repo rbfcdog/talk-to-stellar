@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
+import { safeLocalStorage, safeSessionStorage } from "@/lib/browser-storage"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Chrome, Fingerprint, LogIn, Mail, MessageCircle, Send } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
@@ -178,10 +179,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   }
 
   function getBrowserId() {
-    let browserId = localStorage.getItem("talk-to-stellar.browserId")
+    let browserId = safeLocalStorage.get("talk-to-stellar.browserId")
     if (!browserId) {
       browserId = generateBrowserId()
-      localStorage.setItem("talk-to-stellar.browserId", browserId)
+      safeLocalStorage.set("talk-to-stellar.browserId", browserId)
     }
     return browserId
   }
@@ -227,14 +228,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     if (typeof window === "undefined") return false
     const lockKey = getExternalLoginLockKey()
     if (!lockKey) return false
-    return window.sessionStorage.getItem(lockKey) === "done"
+    return safeSessionStorage.get(lockKey) === "done"
   }
 
   function markExternalLoginCompleted() {
     if (typeof window === "undefined") return
     const lockKey = getExternalLoginLockKey()
     if (!lockKey) return
-    window.sessionStorage.setItem(lockKey, "done")
+    safeSessionStorage.set(lockKey, "done")
     setExternalLinkUsed(true)
     actionLockRef.current = true
   }
@@ -509,7 +510,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       setEmailConfirmationCode("")
       const resolvedLogin = String(payload?.email || payload?.userId || loginEmail || externalIdentifierLabel).trim()
       if (resolvedLogin) {
-        localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
+        safeLocalStorage.set("talk-to-stellar.userName", resolvedLogin)
       }
       finishLogin(resolvedLogin)
     } catch (err) {
@@ -630,7 +631,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
 
       saveClientSession()
       markExternalLoginCompleted()
-      localStorage.setItem("talk-to-stellar.userName", email.trim())
+      safeLocalStorage.set("talk-to-stellar.userName", email.trim())
       getBrowserId()
       await linkExternalSession(
         completePayload?.sessionId ? String(completePayload.sessionId) : undefined
@@ -710,7 +711,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       }
 
       saveClientSession()
-      localStorage.setItem("talk-to-stellar.userName", email.trim())
+      safeLocalStorage.set("talk-to-stellar.userName", email.trim())
 
       const codeRes = await fetch("/api/passkeys/login-code/create", {
         method: "POST",
@@ -778,7 +779,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       saveClientSession()
       const resolvedLogin = String(payload?.email || payload?.userId || email.trim() || "user").trim()
       if (resolvedLogin) {
-        localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
+        safeLocalStorage.set("talk-to-stellar.userName", resolvedLogin)
       }
       finishLogin(resolvedLogin)
     } catch (err) {
@@ -886,7 +887,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           saveClientSession()
           const resolvedLogin = String(payload?.email || payload?.user_id || payload?.display_name || "user").trim()
           if (resolvedLogin) {
-            localStorage.setItem("talk-to-stellar.userName", resolvedLogin)
+            safeLocalStorage.set("talk-to-stellar.userName", resolvedLogin)
           }
           finishLogin(resolvedLogin)
         } catch (error) {

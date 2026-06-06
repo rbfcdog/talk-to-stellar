@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { idempotentFetch } from "@/lib/idempotency"
+import { safeLocalStorage, safeSessionStorage } from "@/lib/browser-storage"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { normalizeClientSessionSource, scopedClientStorageKey } from "@/lib/session"
 import { OperationalCard, OperationalPage, StatusPill } from "@/components/layout/OperationalShell"
@@ -107,14 +108,14 @@ export default function LogoutClient() {
           "talk-to-stellar.sessionCreatedAt",
           "talk-to-stellar.sessionLastSeenAt",
         ]) {
-          localStorage.removeItem(scopedClientStorageKey(key, logoutScope))
-          if (logoutScope === "web") localStorage.removeItem(key)
+          safeLocalStorage.remove(scopedClientStorageKey(key, logoutScope))
+          if (logoutScope === "web") safeLocalStorage.remove(key)
         }
-        if (logoutScope === "web") localStorage.removeItem("talk-to-stellar.browserId")
-        localStorage.setItem(scopedClientStorageKey("talk-to-stellar.logoutRefreshAt", logoutScope), new Date().toISOString())
+        if (logoutScope === "web") safeLocalStorage.remove("talk-to-stellar.browserId")
+        safeLocalStorage.set(scopedClientStorageKey("talk-to-stellar.logoutRefreshAt", logoutScope), new Date().toISOString())
         const chatSessionKey = scopedClientStorageKey("chat-session-agent", logoutScope)
-        sessionStorage.removeItem(chatSessionKey)
-        sessionStorage.setItem(chatSessionKey, generateSessionId())
+        safeSessionStorage.remove(chatSessionKey)
+        safeSessionStorage.set(chatSessionKey, generateSessionId())
       }
       setStatus("done")
       setMessage("You signed out successfully.")

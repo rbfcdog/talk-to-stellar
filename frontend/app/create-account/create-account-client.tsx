@@ -6,6 +6,7 @@ import { browserSupportsWebAuthn, platformAuthenticatorIsAvailable, startRegistr
 import { useSearchParams } from "next/navigation"
 import { saveClientSession } from "@/lib/session"
 import { idempotentFetch } from "@/lib/idempotency"
+import { safeLocalStorage } from "@/lib/browser-storage"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { useLanguage } from "@/lib/i18n"
@@ -377,7 +378,7 @@ export default function CreateAccountClient({
 
     if (resolvedUserId) {
       try {
-        localStorage.setItem("talk-to-stellar.userName", resolvedUserId)
+        safeLocalStorage.set("talk-to-stellar.userName", resolvedUserId)
       } catch {
         // ignore storage failures
       }
@@ -411,10 +412,10 @@ export default function CreateAccountClient({
   }
 
   async function recoverOnboardingContextFromBackend(forceNewAccount = false, browserIdOverride?: string): Promise<RecoveryResult> {
-    let browserId = browserIdOverride || localStorage.getItem("talk-to-stellar.browserId")
+    let browserId = browserIdOverride || safeLocalStorage.get("talk-to-stellar.browserId")
     if (!browserId) {
       browserId = generateBrowserId()
-      localStorage.setItem("talk-to-stellar.browserId", browserId)
+      safeLocalStorage.set("talk-to-stellar.browserId", browserId)
     }
     const googleProviderUserId = String(
       tokenPayload?.provider_user_id ||
@@ -463,7 +464,7 @@ export default function CreateAccountClient({
     const freshBrowserId = generateBrowserId()
     const recovered = await recoverOnboardingContextFromBackend(true, freshBrowserId)
     if (recovered.mode === "token" && recovered.token) {
-      localStorage.setItem("talk-to-stellar.browserId", freshBrowserId)
+      safeLocalStorage.set("talk-to-stellar.browserId", freshBrowserId)
       return { token: recovered.token, browserId: freshBrowserId }
     }
     return {}
@@ -711,10 +712,10 @@ export default function CreateAccountClient({
         throw new Error(tokenRecoveryError || "Could not create a secure account link right now. Open a fresh signup link and try again.")
       }
 
-      let browserId = localStorage.getItem("talk-to-stellar.browserId")
+      let browserId = safeLocalStorage.get("talk-to-stellar.browserId")
       if (!browserId) {
         browserId = generateBrowserId()
-        localStorage.setItem("talk-to-stellar.browserId", browserId)
+        safeLocalStorage.set("talk-to-stellar.browserId", browserId)
       }
 
       const response = await idempotentFetch(`/api/external/finalize`, {
@@ -799,7 +800,7 @@ export default function CreateAccountClient({
 
       if (response.ok && payload.success) {
         saveClientSession()
-        localStorage.setItem("talk-to-stellar.userName", name || email || payload.userId || "User")
+        safeLocalStorage.set("talk-to-stellar.userName", name || email || payload.userId || "User")
       }
 
       if (response.ok && payload.success && PASSKEY_ENROLLMENT_ENABLED && requestPasskey) {

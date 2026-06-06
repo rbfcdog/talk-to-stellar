@@ -20,6 +20,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
+import { safeLocalStorage } from "@/lib/browser-storage";
 import { getClientSession, saveClientSession } from "@/lib/session";
 
 type SessionSnapshot = {
@@ -291,7 +292,7 @@ export default function PasskeyTestClient() {
         platformAuthenticatorIsAvailable().catch(() => false),
       ]);
       if (!active) return;
-      const userName = localStorage.getItem("talk-to-stellar.userName") || "";
+      const userName = safeLocalStorage.get("talk-to-stellar.userName") || "";
       setIdentity(userName);
       setSession({
         authenticated: sessionPayload.authenticated,

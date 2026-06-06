@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Copy, Link2, Send, ShieldCheck } from "lucide-react"
 import { idempotentFetch } from "@/lib/idempotency"
 import { getClientSession } from "@/lib/session"
+import { safeLocalStorage } from "@/lib/browser-storage"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots, Shimmer } from "@/components/shared/feedback"
 
@@ -60,7 +61,7 @@ export default function PayAnyoneClient() {
 
   useEffect(() => {
     getClientSession().then(({ sessionId: storedSessionId, authenticated }) => {
-      const storedUserName = localStorage.getItem("talk-to-stellar.userName") || ""
+      const storedUserName = safeLocalStorage.get("talk-to-stellar.userName") || ""
       setSessionId(storedSessionId)
       setUserName(friendlyName(storedUserName || storedSessionId))
       setMode(searchParams.get("mode") === "receive" ? "receive" : "send")
@@ -99,7 +100,7 @@ export default function PayAnyoneClient() {
         const nextName = friendlyName(String(profile.display_name || profile.username || ""))
         if (!active || !nextName) return
         setUserName(nextName)
-        localStorage.setItem("talk-to-stellar.userName", nextName)
+        safeLocalStorage.set("talk-to-stellar.userName", nextName)
       } catch {
         // Keep the locally cached name.
       }
@@ -136,7 +137,7 @@ export default function PayAnyoneClient() {
         const link = String(profile.public_link)
         const displayName = friendlyName(String(profile.display_name || profile.username || userName))
         setUserName(displayName)
-        localStorage.setItem("talk-to-stellar.userName", displayName)
+        safeLocalStorage.set("talk-to-stellar.userName", displayName)
         setResult({
           success: true,
           url: link,
