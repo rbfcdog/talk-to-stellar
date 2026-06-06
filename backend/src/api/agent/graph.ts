@@ -332,10 +332,19 @@ export class AgentGraph {
   }
 
   private getLanguage(state?: Partial<AgentState> | null): 'pt-BR' | 'en' {
+    const actionParams = (state?.action_params as any) || {};
+    const sessionData = (state?.session_data as any) || {};
     return this.normalizeLanguage(
-      (state?.action_params as any)?.language ||
-      (state?.action_params as any)?.llm_route?.language ||
-      (state as any)?.language
+      actionParams.preferred_language ||
+      actionParams.preferredLanguage ||
+      sessionData.preferred_language ||
+      sessionData.preferredLanguage ||
+      actionParams.language ||
+      actionParams.llm_route?.language ||
+      (state as any)?.language ||
+      sessionData.language ||
+      sessionData.lang ||
+      sessionData.locale
     );
   }
 

@@ -547,21 +547,35 @@ function externalOnboardingMessage(language: 'pt-BR' | 'en', url: string): strin
   );
 }
 
-function languageFromSession(sessionData: SessionData | null | undefined): 'pt-BR' | 'en' | '' {
+function preferredLanguageFromSession(sessionData: SessionData | null | undefined): 'pt-BR' | 'en' | '' {
   return normalizeOptionalLanguage(
     (sessionData as any)?.preferred_language ||
-      (sessionData as any)?.preferredLanguage ||
-      (sessionData as any)?.language ||
+      (sessionData as any)?.preferredLanguage
+  );
+}
+
+function runtimeLanguageFromSession(sessionData: SessionData | null | undefined): 'pt-BR' | 'en' | '' {
+  return normalizeOptionalLanguage(
+    (sessionData as any)?.language ||
       (sessionData as any)?.lang ||
       (sessionData as any)?.locale
   );
 }
 
-function languageFromActionParams(actionParams: any): 'pt-BR' | 'en' | '' {
+function languageFromSession(sessionData: SessionData | null | undefined): 'pt-BR' | 'en' | '' {
+  return preferredLanguageFromSession(sessionData) || runtimeLanguageFromSession(sessionData);
+}
+
+function preferredLanguageFromActionParams(actionParams: any): 'pt-BR' | 'en' | '' {
   return normalizeOptionalLanguage(
     actionParams?.preferred_language ||
-      actionParams?.preferredLanguage ||
-      actionParams?.language ||
+      actionParams?.preferredLanguage
+  );
+}
+
+function runtimeLanguageFromActionParams(actionParams: any): 'pt-BR' | 'en' | '' {
+  return normalizeOptionalLanguage(
+    actionParams?.language ||
       actionParams?.lang ||
       actionParams?.locale
   );
@@ -950,11 +964,11 @@ export function createAgentRoutes(
 
         const existing = await externalService.checkExternalAccount(normalizedProvider, channelProviderUserId);
         externalStoredLanguage = normalizeOptionalLanguage(
-          (existing as any)?.data?.language ||
+          (existing as any)?.data?.preferred_language ||
+            (existing as any)?.data?.preferredLanguage ||
+            (existing as any)?.data?.language ||
             (existing as any)?.data?.lang ||
-            (existing as any)?.data?.locale ||
-            (existing as any)?.data?.preferred_language ||
-            (existing as any)?.data?.preferredLanguage
+            (existing as any)?.data?.locale
         );
         const externalResponseLanguage = externalStoredLanguage || requestLanguage;
         if (!existing) {
@@ -1210,10 +1224,14 @@ export function createAgentRoutes(
 
       // Get previous state before hydration checks (used to honor explicit logout marker).
       const previousState = await repository.getState(sessionId);
-      const storedLanguage =
-        languageFromActionParams(previousState?.action_params) ||
-        languageFromSession(sessionData) ||
+      const durableStoredLanguage =
+        preferredLanguageFromActionParams(previousState?.action_params) ||
+        preferredLanguageFromSession(sessionData) ||
         externalStoredLanguage;
+      const runtimeStoredLanguage =
+        runtimeLanguageFromActionParams(previousState?.action_params) ||
+        runtimeLanguageFromSession(sessionData);
+      const storedLanguage = durableStoredLanguage || runtimeStoredLanguage;
       const preferredLanguage = explicitMessageLanguage || storedLanguage || requestLanguage;
       if (explicitMessageLanguage) {
         await persistLanguagePreference({
