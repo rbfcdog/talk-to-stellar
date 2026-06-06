@@ -485,18 +485,19 @@ async function reserveEvolutionWebhookDedupe(input: {
   text: string;
 }): Promise<PersistentDedupeReservation> {
   const normalizedText = normalizeDedupeText(input.text);
+  const textHash = dedupeHash(normalizedText);
   const commonPayload = {
     instance: input.instance,
     remote_jid: input.remoteJid,
     message_id: input.messageId,
-    text_hash: dedupeHash(normalizedText),
+    text_hash: textHash,
   };
 
   return reservePersistentDedupeKey(
-    evolutionDedupeKey('incoming_message', `${input.instance}:${input.remoteJid}:${input.messageId}`),
+    evolutionDedupeKey('incoming_message', `${input.instance}:${input.remoteJid}:${input.messageId}:${textHash}`),
     {
       ...commonPayload,
-      dedupe_kind: 'message_id',
+      dedupe_kind: 'message_id_and_text',
     }
   );
 }
@@ -504,6 +505,11 @@ async function reserveEvolutionWebhookDedupe(input: {
 function shouldSendFailureFallback(): boolean {
   const value = String(process.env.EVOLUTION_SEND_FAILURE_FALLBACK || '').trim().toLowerCase();
   return value !== 'false' && value !== '0';
+}
+
+function shouldRequireDurableWebhookDedupe(): boolean {
+  const value = String(process.env.EVOLUTION_REQUIRE_DURABLE_WEBHOOK_DEDUPE || '').trim().toLowerCase();
+  return value === 'true' || value === '1' || value === 'on' || value === 'yes';
 }
 
 function outboundQueueMaxAttempts(): number {
@@ -769,6 +775,85 @@ async function discoverEvolutionInstanceNames(baseUrl: string, apiKey: string): 
   }
 
   return [];
+}
+
+function collectStatusStrings(value: any, depth = 0): string[] {
+  if (!value || depth > 4) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectStatusStrings(item, depth + 1));
+  if (typeof value !== 'object') return [];
+
+  const statuses: string[] = [];
+  for (const key of ['status', 'state', 'messageStatus', 'deliveryStatus']) {
+    const raw = value?.[key];
+    if (typeof raw === 'string' && raw.trim()) statuses.push(raw.trim().toLowerCase());
+  }
+
+  return statuses.concat(
+    collectStatusStrings(value.data, depth + 1),
+    collectStatusStrings(value.response, depth + 1),
+    collectStatusStrings(value.message, depth + 1),
+    collectStatusStrings(value.result, depth + 1)
+  );
+}
+
+function hasEvolutionMessageKey(value: any, depth = 0): boolean {
+  if (!value || depth > 4) return false;
+  if (Array.isArray(value)) return value.some((item) => hasEvolutionMessageKey(item, depth + 1));
+  if (typeof value !== 'object') return false;
+
+  const key = value.key || value.messageKey;
+  if (key && typeof key === 'object' && String(key.id || '').trim()) return true;
+  if (String(value.messageId || value.message_id || value.id || '').trim()) return true;
+  return (
+    hasEvolutionMessageKey(value.data, depth + 1) ||
+    hasEvolutionMessageKey(value.response, depth + 1) ||
+    hasEvolutionMessageKey(value.message, depth + 1) ||
+    hasEvolutionMessageKey(value.result, depth + 1)
+  );
+}
+
+function evolutionResponseIndicatesFailure(body: any): boolean {
+  if (!body || typeof body !== 'object') return false;
+  if (body.success === false || body.sent === false || body.delivered === false) return true;
+  if (body.error || body.errors) return true;
+
+  const statuses = collectStatusStrings(body);
+  return statuses.some((status) => [
+    'error',
+    'erro',
+    'failed',
+    'failure',
+    'rejected',
+    'not_sent',
+    'undelivered',
+    'timeout',
+  ].includes(status));
+}
+
+function evolutionResponseLooksAccepted(body: any): boolean {
+  if (!body || typeof body !== 'object') return true;
+  if (evolutionResponseIndicatesFailure(body)) return false;
+  if (body.success === true || body.sent === true || body.delivered === true) return true;
+  if (hasEvolutionMessageKey(body)) return true;
+
+  const statuses = collectStatusStrings(body);
+  if (statuses.some((status) => [
+    'ok',
+    'success',
+    'sent',
+    'delivered',
+    'pending',
+    'server_ack',
+    'device_ack',
+    'read',
+    'played',
+  ].includes(status))) {
+    return true;
+  }
+
+  // Evolution versions differ in response shape. Unknown 2xx bodies are still
+  // accepted as success, but explicit failure markers above are not.
+  return true;
 }
 
 async function resolveExistingSession(input: {
@@ -1299,6 +1384,13 @@ export class EvolutionService {
         responseBody
       );
     }
+    if (!evolutionResponseLooksAccepted(responseBody)) {
+      throw new EvolutionSendTextError(
+        `Evolution sendText returned an unsuccessful body after HTTP ${response.status}: ${JSON.stringify(responseBody)}`,
+        502,
+        responseBody
+      );
+    }
     return responseBody;
   }
 
@@ -1425,12 +1517,13 @@ export class EvolutionService {
     if (!text) {
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
     }
+    const exactMessageKey = `${messageKey}:${dedupeHash(normalizeDedupeText(text))}`;
 
-    if (isProcessed(messageKey)) {
+    if (isProcessed(exactMessageKey)) {
       return { received: true, replied: false, skipped: 'duplicate', recipient, instance };
     }
 
-    const activeReply = activeWebhookReplies.get(messageKey);
+    const activeReply = activeWebhookReplies.get(exactMessageKey);
     if (activeReply) {
       await activeReply.catch(() => undefined);
       return { received: true, replied: false, skipped: 'duplicate_in_flight', recipient, instance };
@@ -1447,8 +1540,11 @@ export class EvolutionService {
     if (persistentClaim.status === 'duplicate') {
       return { received: true, replied: false, skipped: 'duplicate_persistent', recipient, instance };
     }
-    if (persistentClaim.status === 'unavailable' && isProductionLikeEnvironment()) {
+    if (persistentClaim.status === 'unavailable' && shouldRequireDurableWebhookDedupe()) {
       throw new Error('Durable WhatsApp webhook dedupe is unavailable.');
+    }
+    if (persistentClaim.status === 'unavailable') {
+      logger.warn(`[evolution-webhook] durable dedupe unavailable; continuing with in-memory dedupe for ***${recipient.slice(-4)} on instance ${instance}`);
     }
 
     const replyPromise = this.replyWithAgent({
@@ -1459,11 +1555,11 @@ export class EvolutionService {
       instanceId: message.instanceId,
       text,
     });
-    activeWebhookReplies.set(messageKey, replyPromise);
+    activeWebhookReplies.set(exactMessageKey, replyPromise);
 
     try {
       const replyStatus = await replyPromise;
-      markProcessed(messageKey);
+      markProcessed(exactMessageKey);
       await completePersistentDedupeKey(persistentClaim.key);
       if (replyStatus === 'queued') {
         logger.warn(`[evolution-webhook] agent reply queued for retry to ***${recipient.slice(-4)} on instance ${instance}`);
@@ -1499,7 +1595,7 @@ export class EvolutionService {
             metadata: { source: 'evolution_webhook_fallback' },
           });
           if (queued.queued) {
-            markProcessed(messageKey);
+            markProcessed(exactMessageKey);
             await completePersistentDedupeKey(persistentClaim.key);
             logger.warn(`[evolution-webhook] fallback reply queued for retry to ***${recipient.slice(-4)} on instance ${instance}`);
             return {
@@ -1513,7 +1609,7 @@ export class EvolutionService {
           await releasePersistentDedupeKey(persistentClaim.key);
           throw fallbackDeliveryError;
         }
-        markProcessed(messageKey);
+        markProcessed(exactMessageKey);
         await completePersistentDedupeKey(persistentClaim.key);
         logger.info(`[evolution-webhook] replied with fallback to ***${recipient.slice(-4)} on instance ${instance}`);
       } catch (fallbackError) {
@@ -1521,7 +1617,7 @@ export class EvolutionService {
         throw fallbackError;
       }
     } finally {
-      activeWebhookReplies.delete(messageKey);
+      activeWebhookReplies.delete(exactMessageKey);
     }
 
     return {

@@ -397,6 +397,35 @@ describe('EvolutionService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does not treat a 2xx Evolution error body as delivered', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl !== 'http://evolution.local/message/sendText/main') {
+        throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+      }
+
+      if (fetchMock.mock.calls.length === 1) {
+        return new Response(JSON.stringify({
+          success: false,
+          status: 'failed',
+          error: 'number not reachable',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ key: { id: 'msg-after-body-error' } }), { status: 200 });
+    });
+    global.fetch = fetchMock as any;
+
+    await expect(EvolutionService.sendText(
+      'main',
+      '5519981808102',
+      'Mensagem confiavel.',
+      { reliable: true, attempts: 2, timeoutMs: 5000 }
+    )).resolves.toEqual({ key: { id: 'msg-after-body-error' } });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('discovers the real Evolution instance when the configured fallback instance does not exist', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url, init] = args;
@@ -911,6 +940,147 @@ describe('EvolutionService', () => {
     const agentCalls = fetchMock.mock.calls.filter(([url]) => String(url) === 'http://backend.local/api/agent/query');
     expect(agentCalls).toHaveLength(1);
     expect(sendTextSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not drop a different WhatsApp text if Evolution reuses the same message id', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url, init] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        const body = JSON.parse(String((init as RequestInit).body || '{}'));
+        return new Response(JSON.stringify({
+          success: true,
+          message: `Resposta para ${body.query}`,
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+    const payload = {
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-reused-id-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'primeira mensagem',
+        },
+      },
+    };
+
+    const first = await EvolutionService.handleWebhook(payload);
+    const second = await EvolutionService.handleWebhook({
+      ...payload,
+      data: {
+        ...payload.data,
+        message: {
+          conversation: 'quero mandar 50 dolares pra ana silva via pix',
+        },
+      },
+    });
+
+    expect(first).toEqual(expect.objectContaining({ replied: true }));
+    expect(second).toEqual(expect.objectContaining({ replied: true }));
+    const agentCalls = fetchMock.mock.calls.filter(([url]) => String(url) === 'http://backend.local/api/agent/query');
+    expect(agentCalls).toHaveLength(2);
+    expect(sendTextSpy.mock.calls.map((call) => call[2])).toEqual([
+      'Resposta para primeira mensagem',
+      'Resposta para quero mandar 50 dolares pra ana silva via pix',
+    ]);
+  });
+
+  it('continues replying when durable webhook dedupe storage is temporarily unavailable', async () => {
+    process.env.NODE_ENV = 'production';
+    mockSupabaseInsert.mockResolvedValueOnce({
+      error: {
+        message: 'relation "idempotency_keys" does not exist',
+      },
+    });
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Resposta mesmo sem dedupe duravel.',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    await expect(EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-dedupe-storage-down-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'olaa',
+        },
+      },
+    })).resolves.toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+    }));
+
+    expect(sendTextSpy).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Resposta mesmo sem dedupe duravel.',
+      { reliable: true, attempts: 1 }
+    );
+  });
+
+  it('can still fail closed when durable webhook dedupe is explicitly required', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.EVOLUTION_REQUIRE_DURABLE_WEBHOOK_DEDUPE = 'true';
+    mockSupabaseInsert.mockResolvedValueOnce({
+      error: {
+        message: 'relation "idempotency_keys" does not exist',
+      },
+    });
+    global.fetch = jest.fn() as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    await expect(EvolutionService.handleWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-dedupe-required-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'olaa',
+        },
+      },
+    })).rejects.toThrow('Durable WhatsApp webhook dedupe is unavailable.');
+
+    expect(sendTextSpy).not.toHaveBeenCalled();
   });
 
   it('claims an inbound WhatsApp message before the LLM runs so concurrent webhook deliveries send one reply', async () => {
