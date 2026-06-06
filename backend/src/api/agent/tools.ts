@@ -243,7 +243,7 @@ function toAmountNumber(value: unknown): number {
 
 function formatPercent(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0,00%';
-  return `${value.toFixed(4).replace('.', ',')}%`;
+  return `${value.toFixed(2).replace('.', ',')}%`;
 }
 
 async function buildTransparentFeeBreakdown(input: {
@@ -3460,7 +3460,7 @@ async function executePreviewMainnetPayment(input: any): Promise<string> {
       success: true,
       preview,
       message:
-        `${(preview as any).amount} ${(preview as any).asset_code} para ${(preview as any).destination_public_key} validado como preview Mainnet. ` +
+        `${formatCustomerAssetAmount((preview as any).amount, (preview as any).asset_code)} para ${(preview as any).destination_public_key} validado como preview Mainnet. ` +
         `${(preview as any).can_submit ? 'Envio real exige aprovacao manual e signer configurado.' : 'Envio real esta desativado; nada foi submetido.'}`,
     });
   } catch (error) {
@@ -3484,8 +3484,8 @@ async function executeCreateBrlUsdQuote(input: any): Promise<string> {
       quote,
       message:
         `Cotação criada para entrega internacional em conta USD: ` +
-        `R$ ${quote.brl_amount} estimados para US$ ${quote.estimated_usd_amount}. ` +
-        `Taxa estimada: R$ ${quote.total_fee.amount_brl_equivalent}. ` +
+        `${formatCustomerAssetAmount(quote.brl_amount, 'BRL')} estimados para ${formatCustomerAssetAmount(quote.estimated_usd_amount, 'USDC')}. ` +
+        `Taxa estimada: ${formatCustomerAssetAmount(quote.total_fee.amount_brl_equivalent, 'BRL')}. ` +
         `A cotação vence em ${quote.expires_at}.`,
     });
   } catch (error) {
@@ -3935,7 +3935,7 @@ async function executeQuoteAssetTransfer(input: any): Promise<string> {
       effective_rate: {
         destination_per_source: Number.isFinite(effectiveRate) ? effectiveRate.toFixed(8) : null,
         label: Number.isFinite(effectiveRate) && effectiveRate > 0
-          ? `1 ${quote.sourceAsset?.code} = ${effectiveRate.toFixed(8)} ${quote.destinationAsset?.code}`
+          ? `${formatCustomerAssetAmount('1', quote.sourceAsset?.code)} = ${formatCustomerAssetAmount(String(effectiveRate), quote.destinationAsset?.code)}`
           : null,
       },
       quote_expires_at: expiringQuote.quote_expires_at,
@@ -4064,7 +4064,7 @@ async function executeGetBestRoute(input: any): Promise<string> {
         destination_per_source: destinationPerSource > 0 ? destinationPerSource.toFixed(8) : null,
         source_per_destination: sourcePerDestination > 0 ? sourcePerDestination.toFixed(8) : null,
         label: destinationPerSource > 0
-          ? `1 ${quote.sourceAsset?.code} = ${destinationPerSource.toFixed(8)} ${quote.destinationAsset?.code}`
+          ? `${formatCustomerAssetAmount('1', quote.sourceAsset?.code)} = ${formatCustomerAssetAmount(String(destinationPerSource), quote.destinationAsset?.code)}`
           : null,
       },
       total_fee_estimate: {
@@ -6421,7 +6421,7 @@ function buildFinancialMemoryMessage(mode: string, lastPayment: any, conversionS
     const totals = Object.entries(conversionSummary.totals)
       .map(([key, value]) => `${key}: ${Number(value).toFixed(2)}`)
       .join(', ');
-    const avg = conversionSummary.averageRate ? ` Média de cotação: ${conversionSummary.averageRate.toFixed(6)}.` : '';
+    const avg = conversionSummary.averageRate ? ` Média de cotação: ${conversionSummary.averageRate.toFixed(2)}.` : '';
     return `Neste mês: ${conversionSummary.count} conversão(ões). ${totals || 'Sem totais disponíveis.'}.${avg}`;
   }
 

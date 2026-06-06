@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase';
+import { formatCustomerAssetAmount } from '../../utils/fee-display';
 import { getAssetIssuer, resolveConfiguredAsset } from '../../config/assets';
 import { EconomyEngineService } from './economy-engine.service';
 import { FinancialContextService, formatMoney, startOfMonth, toNumber, trackFinancialEvent } from './financial-context.service';
@@ -147,7 +148,7 @@ export class ActivityFeedService {
         eventType = status === 'success' ? 'conversion_completed' : 'conversion_failed';
         title = status === 'success' ? 'Conversão concluída' : 'Conversão não concluída';
         description = status === 'success'
-          ? `Conversão de ${sourceAmount} ${sourceCurrency} para ${destinationAmount} ${destinationCurrency}.`
+          ? `Conversão de ${formatCustomerAssetAmount(String(sourceAmount), sourceCurrency)} para ${formatCustomerAssetAmount(String(destinationAmount), destinationCurrency)}.`
           : `Conversão falhou: ${String(row.error_message || 'erro desconhecido')}`;
       } else if (status !== 'success') {
         eventType = 'payment_failed';

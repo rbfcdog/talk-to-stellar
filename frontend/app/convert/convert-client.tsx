@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
 import { SecurePinGate } from "@/components/shared/secure-pin-gate";
+import { formatCustomerNumber } from "@/lib/customer-amount";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
 import { currentPageSessionSource, getClientSession, normalizeClientSessionSource } from "@/lib/session";
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target";
@@ -112,10 +113,7 @@ function parseAmount(value: unknown) {
 }
 
 function formatDecimal(value: number, language: AppLanguage, maximumFractionDigits = 2) {
-  return new Intl.NumberFormat(language === "pt-BR" ? "pt-BR" : "en-US", {
-    minimumFractionDigits: value > 0 && value < 1 ? Math.min(4, maximumFractionDigits) : 2,
-    maximumFractionDigits,
-  }).format(value);
+  return formatCustomerNumber(value, language === "pt-BR" ? "pt-BR" : "en-US", maximumFractionDigits);
 }
 
 function formatQueryDecimal(value: number) {
@@ -172,7 +170,7 @@ function balanceForAsset(balances: BalanceLine[], code: string) {
 function formatAssetAmount(amount: number, asset: AssetOption, language: AppLanguage) {
   if (asset.code === "BRL") return `R$ ${formatDecimal(amount, language, 2)}`;
   if (asset.code === "USDC") return `US$ ${formatDecimal(amount, language, 2)}`;
-  return `${formatDecimal(amount, language, 7)} ${asset.short}`;
+  return `${formatDecimal(amount, language, 2)} ${asset.short}`;
 }
 
 function scopedRampApiPath(path: string) {

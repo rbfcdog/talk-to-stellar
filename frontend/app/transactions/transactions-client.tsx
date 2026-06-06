@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { AccountStatusCard } from "@/components/shared/account-status"
 import { SecurePinGate } from "@/components/shared/secure-pin-gate"
+import { formatCustomerNumber } from "@/lib/customer-amount"
 import { getClientSession } from "@/lib/session"
 
 type TransactionItem = {
@@ -61,13 +62,6 @@ function numberFrom(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : NaN
 }
 
-function formatNumber(value: number, min = 2, max = 7) {
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: min,
-    maximumFractionDigits: max,
-  }).format(value)
-}
-
 function formatAmount(amount?: string | null, assetCode?: string | null) {
   const code = normalizeAssetCode(assetCode || "")
   const value = numberFrom(amount)
@@ -75,11 +69,12 @@ function formatAmount(amount?: string | null, assetCode?: string | null) {
     const raw = String(amount || "").trim()
     return raw ? `${raw}${code ? ` ${code}` : ""}` : "Valor não informado"
   }
-  if (code === "BRL") return `R$ ${formatNumber(value, 2, 7)}`
-  if (code === "USD") return `US$ ${formatNumber(value, 2, 7)}`
-  if (code === "CETES") return `${formatNumber(value, 2, 7)} CETES`
-  if (code === "XLM") return `${formatNumber(value, 2, 7)} XLM`
-  return `${formatNumber(value, 2, 7)}${code ? ` ${code}` : ""}`
+  const display = formatCustomerNumber(value, "pt-BR")
+  if (code === "BRL") return `R$ ${display}`
+  if (code === "USD") return `US$ ${display}`
+  if (code === "CETES") return `${display} CETES`
+  if (code === "XLM") return `${display} XLM`
+  return `${display}${code ? ` ${code}` : ""}`
 }
 
 function formatWhen(value?: string | null) {

@@ -26,6 +26,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatCustomerNumber } from "@/lib/customer-amount";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
@@ -94,7 +95,7 @@ function optionCode(option?: YieldOption | null) { return String(option?.display
 function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   const p = Number(String(value || "0").replace(",", "."));
   if (!Number.isFinite(p)) return String(value || "0");
-  return new Intl.NumberFormat(isPortuguese(language) ? "pt-BR" : "en-US", { minimumFractionDigits: p > 0 && p < 1 ? 4 : 2, maximumFractionDigits: 7 }).format(p);
+  return formatCustomerNumber(p, isPortuguese(language) ? "pt-BR" : "en-US");
 }
 function formatPositionAmount(value: unknown, profile: { short: string }, language: AppLanguage = "pt-BR") {
   const amount = normalizeDecimal(value);
