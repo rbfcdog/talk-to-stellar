@@ -98,6 +98,38 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Recibo registrado');
   });
 
+  it('hides transfer values, quote, fee, and savings text when amount privacy is enabled', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-hidden-values',
+      userId: 'user-hidden-values',
+      language: 'en',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '100',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '1539.9100000',
+      destinationAssetCode: 'CETES',
+      feeDisplay: '0.00001 XLM',
+      hash: 'tx-hidden-values',
+      completedAt: '2026-06-06T17:23:00.000Z',
+      savings: {
+        estimatedSavings: 18.04,
+      },
+      hideAmounts: true,
+    });
+
+    expect(receipt).toContain('You sent a transfer to Ana Silva.');
+    expect(receipt).toContain('Status: completed');
+    expect(receipt).toContain('Receipt saved in your history.');
+    expect(receipt).not.toContain('US$');
+    expect(receipt).not.toContain('CETES');
+    expect(receipt).not.toContain('100');
+    expect(receipt).not.toContain('1539');
+    expect(receipt).not.toContain('Quote used');
+    expect(receipt).not.toContain('Fee:');
+    expect(receipt).not.toContain('Estimated savings');
+  });
+
   it('uses the settled source and destination amounts as the receipt quote source of truth', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',
@@ -932,6 +964,51 @@ describe('PaymentReceiptService', () => {
     expect(notifySpy.mock.calls[0][0].text).not.toContain('Taxa paga');
 
     notifySpy.mockRestore();
+  });
+
+  it('does not leak explicit external amount text when amount privacy is enabled', async () => {
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+    const createSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://talk-to-stellar-owxg.vercel.app/receipt/hidden-values');
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(true);
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_sent',
+      sessionId: 'session-hidden-external',
+      userId: 'user-hidden-external',
+      language: 'en',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '100',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '1539.91',
+      destinationAssetCode: 'CETES',
+      hash: 'tx-hidden-external',
+      externalDeliveryText: 'PIX confirmed and transfer sent.\nAmount: 1539.91 CETES\nDestination: Ana Silva',
+      hideAmounts: true,
+    });
+
+    const text = String(notifySpy.mock.calls[0]?.[0]?.text || '');
+    expect(text).toContain('You sent a transfer to Ana Silva.');
+    expect(text).toContain('Receipt: https://talk-to-stellar-owxg.vercel.app/receipt/hidden-values');
+    expect(text).not.toContain('Amount:');
+    expect(text).not.toContain('1539');
+    expect(text).not.toContain('CETES');
+    expect(text).not.toContain('US$');
+
+    notifySpy.mockRestore();
+    createSpy.mockRestore();
+    saveSpy.mockRestore();
   });
 
   it('does not use the savings-first WhatsApp receipt for XLM payments', async () => {

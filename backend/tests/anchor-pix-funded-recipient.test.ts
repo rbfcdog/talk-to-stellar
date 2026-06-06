@@ -296,7 +296,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       asset_code: 'CETES',
       receipt_url: 'https://talktostellar.com/receipt/cetes-pix',
     });
-    expect(String(result.message)).toContain('100 CETES');
+    expect(String(result.message)).toContain('100.00 CETES');
     expect(receiptSpy).toHaveBeenCalledWith(expect.objectContaining({
       type: 'payment_sent',
       provider: 'whatsapp',
@@ -310,7 +310,7 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
       dedupeKey: 'pix-funded-autopay:page-1',
     }));
     const receiptInput = receiptSpy.mock.calls[0][0] as any;
-    expect(receiptInput.externalDeliveryText).toContain('Valor: 100 CETES');
+    expect(receiptInput.externalDeliveryText).toContain('Valor: 100.00 CETES');
     expect(receiptInput.externalDeliveryText).toContain('Destino: Ana Silva');
   });
 

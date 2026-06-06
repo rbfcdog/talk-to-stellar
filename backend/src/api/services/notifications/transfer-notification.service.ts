@@ -14,12 +14,14 @@ type WhatsAppDeliveryAttempt = {
   phone_tail: string;
   instance: string;
   delivered: boolean;
+  queued?: boolean;
   error?: string;
 };
 
 type WhatsAppDeliveryReport = {
   attempted: boolean;
   delivered: number;
+  queued?: number;
   recipients: number;
   instances: string[];
   attempts: WhatsAppDeliveryAttempt[];
@@ -764,6 +766,7 @@ export class TransferNotificationService {
     }
 
     const deliveredByEvolution = new Set<string>();
+    const queuedByEvolution = new Set<string>();
     const attempts: WhatsAppDeliveryAttempt[] = [];
     const evolutionInstances = this.evolutionInstanceCandidates(whatsappMappings);
     if (this.hasEvolutionWhatsAppBaseConfig() && evolutionInstances.length > 0) {
@@ -772,7 +775,7 @@ export class TransferNotificationService {
       );
       await Promise.all(phoneDigits.map(async (phone) => {
         for (const evolutionInstance of evolutionInstances) {
-          if (deliveredByEvolution.has(phone)) break;
+          if (deliveredByEvolution.has(phone) || queuedByEvolution.has(phone)) break;
           try {
             await EvolutionService.sendText(evolutionInstance, phone, text, { reliable: true });
             deliveredByEvolution.add(phone);
@@ -783,13 +786,32 @@ export class TransferNotificationService {
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
+            let queued = false;
+            try {
+              const queueResult = await EvolutionService.queueText({
+                instance: evolutionInstance,
+                recipient: phone,
+                text,
+                reason: message,
+                metadata: { source: 'transfer_notification' },
+              });
+              queued = Boolean(queueResult.queued);
+              if (queued) queuedByEvolution.add(phone);
+            } catch (queueError) {
+              logger.warn(
+                `[whatsapp-notify] could not queue failed Evolution notification for ***${phone.slice(-4)} on instance ${evolutionInstance}: ${queueError instanceof Error ? queueError.message : String(queueError)}`
+              );
+            }
             attempts.push({
               phone_tail: phone.slice(-4),
               instance: evolutionInstance,
               delivered: false,
+              queued,
               error: message,
             });
-            logger.warn(`[whatsapp-notify] evolution send failed for ***${phone.slice(-4)} on instance ${evolutionInstance}: ${message}`);
+            logger.warn(
+              `[whatsapp-notify] evolution send failed for ***${phone.slice(-4)} on instance ${evolutionInstance}: ${message}${queued ? ' (queued for retry)' : ''}`
+            );
           }
         }
       }));
@@ -801,12 +823,13 @@ export class TransferNotificationService {
     const authToken = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
     const from = this.normalizeWhatsAppAddress(process.env.TWILIO_PHONE_NUMBER);
     if (!accountSid || !authToken || !from) {
-      if (deliveredByEvolution.size === 0) {
+      if (deliveredByEvolution.size === 0 && queuedByEvolution.size === 0) {
         logger.warn('[whatsapp-notify] no WhatsApp provider delivered the message. Twilio fallback is not configured.');
       }
       return {
         attempted: attempts.length > 0,
         delivered: deliveredByEvolution.size,
+        queued: queuedByEvolution.size,
         recipients: phoneDigits.length,
         instances: evolutionInstances,
         attempts,
@@ -816,7 +839,7 @@ export class TransferNotificationService {
 
     const recipients = Array.from(new Set(
       phoneDigits
-        .filter((phone) => !deliveredByEvolution.has(phone))
+        .filter((phone) => !deliveredByEvolution.has(phone) && !queuedByEvolution.has(phone))
         .map((phone) => this.normalizeWhatsAppAddress(phone))
         .filter(Boolean) as string[]
     ));
@@ -824,6 +847,7 @@ export class TransferNotificationService {
       return {
         attempted: attempts.length > 0,
         delivered: deliveredByEvolution.size,
+        queued: queuedByEvolution.size,
         recipients: phoneDigits.length,
         instances: evolutionInstances,
         attempts,
@@ -853,6 +877,7 @@ export class TransferNotificationService {
     return {
       attempted: attempts.length > 0 || recipients.length > 0,
       delivered: deliveredByEvolution.size,
+      queued: queuedByEvolution.size,
       recipients: phoneDigits.length,
       instances: evolutionInstances,
       attempts,

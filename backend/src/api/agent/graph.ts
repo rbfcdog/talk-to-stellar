@@ -358,6 +358,33 @@ export class AgentGraph {
     return language === 'en' ? en : pt;
   }
 
+  private booleanPreference(value: unknown): boolean | null {
+    if (typeof value === 'boolean') return value;
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return null;
+    if (['true', '1', 'yes', 'sim', 'on', 'hidden', 'hide', 'oculto', 'ocultar'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'nao', 'não', 'off', 'visible', 'show', 'mostrar', 'exibir'].includes(normalized)) return false;
+    return null;
+  }
+
+  private shouldHideAmounts(state?: Partial<AgentState> | null): boolean {
+    const actionParams = (state?.action_params as any) || {};
+    const sessionData = (state?.session_data as any) || {};
+    return Boolean(
+      this.booleanPreference(actionParams.hide_amounts) ??
+        this.booleanPreference(actionParams.hideAmounts) ??
+        this.booleanPreference(actionParams.amounts_hidden) ??
+        this.booleanPreference(actionParams.amountsHidden) ??
+        this.booleanPreference(actionParams.value_privacy) ??
+        this.booleanPreference(sessionData.hide_amounts) ??
+        this.booleanPreference(sessionData.hideAmounts) ??
+        this.booleanPreference(sessionData.amounts_hidden) ??
+        this.booleanPreference(sessionData.amountsHidden) ??
+        this.booleanPreference(sessionData.value_privacy) ??
+        false
+    );
+  }
+
   private shouldUseLlmIntentRouter(): boolean {
     const key = String(this.openaiApiKey || '').trim().toLowerCase();
     return Boolean(key && key !== 'test-openai-key' && !key.startsWith('test-'));
@@ -397,6 +424,37 @@ export class AgentGraph {
     if (/\b(speak|talk|answer|respond|switch|use)\s+in\s+english\b/.test(normalized)) return 'en';
     if (/\b(fale|responda|mude|troque|use)\b.*\b(portugues|pt-br)\b/.test(normalized)) return 'pt-BR';
     return null;
+  }
+
+  private extractValuePrivacyPreference(text: string): boolean | null {
+    const normalized = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+    if (!normalized) return null;
+    const mentionsValues = /\b(valor|valores|amount|amounts|value|values|transferencia|transferencias|transfer|transfers|pagamento|pagamentos|payment|payments|recibo|receipt|comprovante)\b/.test(normalized);
+    if (!mentionsValues) return null;
+    if (/\b(esconder|ocultar|mascarar|privad[oa]|nao mostrar|nao exibir|hide|hidden|mask|private|do not show|dont show)\b/.test(normalized)) {
+      return true;
+    }
+    if (/\b(mostrar|exibir|desocultar|voltar a mostrar|show|visible|unhide|show again)\b/.test(normalized)) {
+      return false;
+    }
+    return null;
+  }
+
+  private detectsAddPendingPixContactText(text: string): boolean {
+    const normalized = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+    if (!normalized) return false;
+    return (
+      /\b(add|adiciona|adicionar|salva|salvar|save)\b/.test(normalized) &&
+      /\b(contato|contact|destinatario|recipient|ele|ela|it|isso)\b/.test(normalized)
+    );
   }
 
   private normalizeIntentText(text: string): string {
@@ -516,8 +574,47 @@ export class AgentGraph {
       .trim();
   }
 
+  private maskAssistantAmounts(content: string, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    const hiddenLabel = language === 'en' ? 'hidden amount' : 'valor oculto';
+    const assetWords = [
+      'USDC',
+      'USD',
+      'BRL',
+      'CETES',
+      'XLM',
+      'REAIS',
+      'REAL',
+      'DOLAR',
+      'DOLARES',
+      'DÓLAR',
+      'DÓLARES',
+      'DOLLAR',
+      'DOLLARS',
+    ].join('|');
+    const numberPattern = String.raw`-?\d+(?:[.,]\d{1,8})?`;
+    const groupedNumberPattern = String.raw`-?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,8})?`;
+    const anyNumberPattern = `(?:${groupedNumberPattern}|${numberPattern})`;
+    const labelPattern = String.raw`(?:amount|valor|valor enviado|valor recebido|origem|source|delivered|entregue|sent|enviado|paid amount|received amount|fee|taxa|fee paid|taxa paga|cotação usada|quote used)`;
+
+    return String(content || '')
+      .split('\n')
+      .map((line) => {
+        if (/https?:\/\//i.test(line)) return line;
+        return line
+          .replace(new RegExp(`\\b(${labelPattern})\\s*:\\s*(?:R\\$|US\\$|\\$)?\\s*${anyNumberPattern}\\s*(?:${assetWords})?`, 'gi'), (_match, label) => `${label}: ${hiddenLabel}`)
+          .replace(new RegExp(`(?:R\\$|US\\$|\\$)\\s*${anyNumberPattern}`, 'gi'), hiddenLabel)
+          .replace(new RegExp(`\\b${anyNumberPattern}\\s*(?:${assetWords})\\b`, 'gi'), hiddenLabel)
+          .replace(new RegExp(`\\b${anyNumberPattern}\\s*%\\b`, 'g'), hiddenLabel);
+      })
+      .join('\n');
+  }
+
   private async saveAssistantResponse(state: AgentState): Promise<void> {
-    state.response_message = this.sanitizeAssistantResponse(state.response_message, this.getLanguage(state));
+    const language = this.getLanguage(state);
+    const sanitized = this.sanitizeAssistantResponse(state.response_message, language);
+    state.response_message = this.shouldHideAmounts(state)
+      ? this.maskAssistantAmounts(sanitized, language)
+      : sanitized;
     await this.repository.saveMessage(state.session_id, 'assistant', state.response_message);
   }
 
@@ -1680,13 +1777,22 @@ export class AgentGraph {
         const userId = String(state.session_data?.user_id || state.session_data?.email || '').trim();
         const resolvedRecipient = await this.resolveOwnedPaymentContact(intent.recipient_query || '', userId);
         if (!resolvedRecipient.destination) {
+          const pendingFailedPixContact = {
+            intent,
+            recipient_query: String(intent.recipient_query || '').trim(),
+            created_at: new Date().toISOString(),
+          };
           state.success = false;
           state.pending_pix_ramp = undefined;
-          state.action_params = { ...(state.action_params || {}), pending_pix_ramp: undefined };
+          state.action_params = {
+            ...(state.action_params || {}),
+            pending_pix_ramp: undefined,
+            pending_failed_pix_contact: pendingFailedPixContact,
+          };
           state.response_message = this.text(
             language,
-            `Não encontrei "${intent.recipient_query || 'esse destinatário'}" nos seus contatos salvos. Digite "contatos" para ver os destinatários reais disponíveis ou adicione esse contato antes de gerar o PIX.`,
-            `I could not find "${intent.recipient_query || 'that recipient'}" in your saved contacts. Type "contacts" to see available real recipients or add this contact before creating the PIX.`
+            `Não encontrei "${intent.recipient_query || 'esse destinatário'}" nos seus contatos salvos. Se esse telefone, e-mail ou chave pertence a uma conta TalkToStellar, responda "adicionar contato" que eu salvo e continuo o PIX.`,
+            `I could not find "${intent.recipient_query || 'that recipient'}" in your saved contacts. If that phone, email, or key belongs to a TalkToStellar account, reply "add contact" and I will save it and continue the PIX.`
           );
           await this.saveAssistantResponse(state);
           await this.repository.saveState(state.session_id, state);
@@ -1776,6 +1882,111 @@ export class AgentGraph {
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);
     return state;
+  }
+
+  private async handlePendingPixContactAdd(state: AgentState, pending: any): Promise<AgentState> {
+    const language = this.getLanguage(state);
+    const recipientQuery = String(pending?.recipient_query || pending?.intent?.recipient_query || '').trim();
+    const intent = pending?.intent && typeof pending.intent === 'object' ? pending.intent : null;
+
+    await this.repository.saveMessage(
+      state.session_id,
+      "user",
+      this.sanitizeUserMessage(state.current_input)
+    );
+
+    if (!recipientQuery || !intent) {
+      state.success = false;
+      state.response_message = this.text(
+        language,
+        'Não encontrei o pedido anterior de PIX para adicionar esse contato. Envie o telefone, e-mail ou chave do contato de novo.',
+        'I could not find the previous PIX request to add that contact. Send the contact phone, email, or key again.'
+      );
+      state.action_params = { ...(state.action_params || {}), pending_failed_pix_contact: undefined };
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const toolResult = await this.executeAddContactTool({
+      session_id: state.session_id,
+      user_id: state.session_data?.user_id,
+      contact_key: recipientQuery,
+    });
+
+    if (!toolResult.success) {
+      state.success = false;
+      state.response_message = this.text(
+        language,
+        `Não consegui adicionar esse contato: ${toolResult.error || 'erro desconhecido'}`,
+        `I could not add that contact: ${toolResult.error || 'unknown error'}`
+      );
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const userId = String(state.session_data?.user_id || state.session_data?.email || '').trim();
+    const resolvedRecipient = await this.resolveOwnedPaymentContact(recipientQuery, userId);
+    if (!resolvedRecipient.destination) {
+      state.success = false;
+      state.response_message = [
+        this.formatAddedContactMessage(toolResult),
+        '',
+        this.text(
+          language,
+          'Contato salvo, mas ainda não consegui confirmar uma conta ativa para gerar o PIX. Peça para a pessoa terminar o cadastro e tente de novo.',
+          'Contact saved, but I still could not confirm an active account to create the PIX. Ask the person to finish signup and try again.'
+        ),
+      ].join('\n');
+      await this.saveAssistantResponse(state);
+      await this.repository.saveState(state.session_id, state);
+      return state;
+    }
+
+    const resolvedRecipientLabel = String(resolvedRecipient.destinationName || recipientQuery).trim();
+    const pixIntent = {
+      ...intent,
+      recipient_query: resolvedRecipientLabel,
+      recipient_key: this.getContactDisplayKey(resolvedRecipient.contact) || recipientQuery,
+      recipient_public_key: resolvedRecipient.destination,
+    };
+    const url = await this.buildPixRampUrl(state, pixIntent);
+    const amountText = this.formatMoneyByAsset(intent.amount, intent.amount_currency || intent.asset_code || 'BRL');
+    const deliveryAssetCode = this.normalizeAgentAssetCode(intent.pay_destination_asset_code || '');
+    const sourceAssetCode = this.normalizeAgentAssetCode(intent.asset_code || intent.amount_currency || 'BRL');
+    const deliverySuffix = deliveryAssetCode && deliveryAssetCode !== sourceAssetCode
+      ? this.text(language, ` para entregar em ${deliveryAssetCode}`, ` to deliver in ${deliveryAssetCode}`)
+      : '';
+
+    state.success = true;
+    state.pending_pix_ramp = undefined;
+    state.action_params = {
+      ...(state.action_params || {}),
+      pending_pix_ramp: undefined,
+      pending_failed_pix_contact: undefined,
+    };
+    state.response_message = [
+      this.formatAddedContactMessage(toolResult),
+      '',
+      this.text(
+        language,
+        `Agora, para mandar ${amountText} para ${resolvedRecipientLabel}${deliverySuffix} via PIX, abra:\n\n${url}\n\nA página mostra o PIX a pagar, a taxa do app e pede seu PIN antes de enviar.`,
+        `Now, to send ${amountText} to ${resolvedRecipientLabel}${deliverySuffix} with PIX, open:\n\n${url}\n\nThe page shows the PIX amount to pay, the app fee, and asks for your PIN before sending.`
+      ),
+    ].join('\n');
+    await this.saveAssistantResponse(state);
+    await this.repository.saveState(state.session_id, state);
+    return state;
+  }
+
+  private async executeAddContactTool(input: Record<string, any>): Promise<any> {
+    const resultRaw = await executeTool('add_contact', input);
+    try {
+      return JSON.parse(resultRaw);
+    } catch {
+      return { success: false, error: 'Failed to parse add_contact response' };
+    }
   }
 
   private async handlePayAnyoneLinkRequest(state: AgentState): Promise<AgentState> {
@@ -2482,12 +2693,32 @@ export class AgentGraph {
         contact = contacts[index - 1];
       }
     } else if (queryPhone.length >= 8) {
+      const queryPhoneCandidates = Array.from(new Set([
+        queryPhone,
+        queryPhone.slice(-13),
+        queryPhone.slice(-12),
+        queryPhone.slice(-11),
+        queryPhone.slice(-10),
+        queryPhone.slice(-9),
+        queryPhone.slice(-8),
+      ].filter((value) => value.length >= 8)));
+      const phoneMatches = (value: unknown) => {
+        const digits = String(value || '').replace(/\D+/g, '');
+        if (digits.length < 8) return false;
+        return queryPhoneCandidates.some((candidate) => (
+          digits.endsWith(candidate) || candidate.endsWith(digits)
+        ));
+      };
       contact = contacts.find((item: any) => {
-        const phones = [
+        const phonesAndPhoneKeys = [
           item?.phone_number,
           item?.contact_profile?.phone_number,
+          item?.pix_key,
+          item?.contact_profile?.pix_key,
+          item?.identifier,
+          item?.contact_profile?.identifier,
         ];
-        return phones.some((phone) => String(phone || '').replace(/\D+/g, '') === queryPhone);
+        return phonesAndPhoneKeys.some(phoneMatches);
       });
     } else {
       contact = contacts.find((item: any) => {
@@ -5335,6 +5566,54 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         await this.saveAssistantResponse(state);
         await this.repository.saveState(state.session_id, state);
         return state;
+      }
+
+      const valuePrivacyPreference = this.extractValuePrivacyPreference(state.current_input);
+      if (valuePrivacyPreference !== null) {
+        const toolResultRaw = await executeTool('set_value_privacy', {
+          session_id: state.session_id,
+          user_id: state.session_data?.user_id,
+          hide_amounts: valuePrivacyPreference,
+          language: this.getLanguage(state),
+        });
+        let toolResult: any;
+        try {
+          toolResult = JSON.parse(toolResultRaw);
+        } catch {
+          toolResult = { success: false };
+        }
+        state.action_params = {
+          ...(state.action_params || {}),
+          hide_amounts: valuePrivacyPreference,
+          amounts_hidden: valuePrivacyPreference,
+          value_privacy: valuePrivacyPreference ? 'hidden' : 'visible',
+        };
+        if (state.session_data) {
+          (state.session_data as any).hide_amounts = valuePrivacyPreference;
+        }
+        await this.repository.saveMessage(
+          state.session_id,
+          "user",
+          this.sanitizeUserMessage(state.current_input)
+        );
+        state.success = Boolean(toolResult?.success);
+        state.response_message = String(toolResult?.message || '').trim() || this.text(
+          this.getLanguage(state),
+          valuePrivacyPreference
+            ? 'Pronto. Vou ocultar os valores das transferências no chat e nos comprovantes.'
+            : 'Pronto. Vou mostrar os valores das transferências novamente.',
+          valuePrivacyPreference
+            ? 'Done. I will hide transfer values in chat and receipts.'
+            : 'Done. I will show transfer values again.'
+        );
+        await this.saveAssistantResponse(state);
+        await this.repository.saveState(state.session_id, state);
+        return state;
+      }
+
+      const pendingFailedPixContact = (state.action_params as any)?.pending_failed_pix_contact;
+      if (pendingFailedPixContact && this.detectsAddPendingPixContactText(state.current_input)) {
+        return await this.handlePendingPixContactAdd(state, pendingFailedPixContact);
       }
 
       // Resume wallet creation flow when waiting for user contact input (email/phone)

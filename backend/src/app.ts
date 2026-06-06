@@ -93,6 +93,7 @@ app.use('/webhooks', webhooksRouter);
 DailySummaryService.startScheduler();
 FxRateAlertService.startScheduler();
 EvolutionService.startWebhookAutoConfiguration();
+EvolutionService.startOutboundDeliveryWorker();
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

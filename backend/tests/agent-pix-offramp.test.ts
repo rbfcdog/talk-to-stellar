@@ -753,6 +753,51 @@ describe('Agent PIX off-ramp detection', () => {
     }
   });
 
+  it('hides transfer setup values when amount privacy is enabled', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent', {
+      amount: '100',
+      asset_code: 'USDC',
+      recipient_query: 'João Pedro Rodrigues Marques',
+      language: 'en',
+    });
+    const recipientPublicKey = 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP';
+    jest.spyOn(graph as any, 'resolveOwnedPaymentContact').mockResolvedValue({
+      contact: {
+        contact_name: 'João Pedro Rodrigues Marques',
+        phone_number: '558591417838',
+        stellar_public_key: recipientPublicKey,
+      },
+      destination: recipientPublicKey,
+      destinationName: 'João Pedro Rodrigues Marques',
+    });
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async () => 'https://talktostellar.com/r/private-values'),
+    };
+
+    const state = createState('quero mandar 100 dolares via pix pro +55 85 9141-7838 receber em dolar');
+    state.action_params = {
+      language: 'en',
+      hide_amounts: true,
+      amounts_hidden: true,
+      value_privacy: 'hidden',
+    };
+    state.session_data = {
+      ...state.session_data,
+      hide_amounts: true,
+    } as any;
+
+    const result = await graph.processInput(state);
+
+    expect(result.success).toBe(true);
+    expect(result.response_message).toContain('To send hidden amount to João Pedro Rodrigues Marques with PIX');
+    expect(result.response_message).toContain('https://talktostellar.com/r/private-values');
+    expect(result.response_message).not.toContain('US$ 100.00');
+    expect(result.response_message).not.toContain('100 USDC');
+    expect(result.response_message).not.toContain('Amount:');
+  });
+
   it('resolves PIX-funded contact links when the saved contact only has an email transfer key', async () => {
     const repository = createRepository();
     const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
@@ -904,6 +949,145 @@ describe('Agent PIX off-ramp detection', () => {
       if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
       else process.env.FRONTEND_URL = previousFrontendUrl;
     }
+  });
+
+  it('continues a failed PIX phone recipient flow when the user says add it to contacts', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'live-openai-key', 'test prompt') as any;
+    mockRouteIntent(graph, 'route_pix_intent', {
+      amount: '100',
+      asset_code: 'USDC',
+      recipient_query: '+55 85 9141-7838',
+      language: 'en',
+    });
+    const contactLookup = jest.spyOn(graph, 'resolveOwnedPaymentContact').mockResolvedValue({
+      destination: '',
+      destinationName: '+55 85 9141-7838',
+    });
+    (graph as any).externalService = {
+      shortenPublicUrl: jest.fn(async ({ url }) => url),
+    };
+
+    const first = await graph.processInput(createState(
+      'quero mandar 100 dolares via pix pro +55 85 9141-7838 receber em dolar'
+    ));
+
+    expect(first.success).toBe(false);
+    expect(first.response_message).toContain('+55 85 9141-7838');
+    expect(first.action_params.pending_failed_pix_contact).toMatchObject({
+      recipient_query: '+55 85 9141-7838',
+      intent: expect.objectContaining({
+        amount: '100',
+        asset_code: 'USDC',
+        recipient_query: '+55 85 9141-7838',
+      }),
+    });
+
+    const resumeSpy = jest
+      .spyOn(graph, 'handlePendingPixContactAdd')
+      .mockImplementation(async (...args: unknown[]) => {
+        const state = args[0] as AgentState;
+        const pending = args[1] as any;
+        return {
+          ...state,
+          success: true,
+          response_message: `continued ${pending.recipient_query}`,
+        };
+      });
+    const followUpState = createState('add it to contacts');
+    followUpState.action_params = first.action_params;
+
+    const second = await graph.processInput(followUpState);
+
+    expect(resumeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ current_input: 'add it to contacts' }),
+      expect.objectContaining({ recipient_query: '+55 85 9141-7838' })
+    );
+    expect(second.success).toBe(true);
+    expect(second.response_message).toBe('continued +55 85 9141-7838');
+
+    resumeSpy.mockRestore();
+    contactLookup.mockRestore();
+  });
+
+  it('resolves a newly saved phone contact when the phone is stored as pix_key', async () => {
+    const graph = new AgentGraph(createRepository() as any, 'test-openai-key', 'test prompt') as any;
+    jest.spyOn(graph, 'fetchContacts').mockResolvedValue([
+      {
+        contact_name: 'João Pedro Rodrigues Marques',
+        stellar_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
+        pix_key: '+55 85 9141-7838',
+      },
+    ]);
+
+    const resolved = await graph.resolveOwnedPaymentContact('+55 85 9141-7838', 'user-pix-offramp');
+
+    expect(resolved).toMatchObject({
+      destination: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
+      destinationName: 'João Pedro Rodrigues Marques',
+    });
+  });
+
+  it('adds a pending phone recipient and immediately starts the original PIX transaction', async () => {
+    const repository = createRepository();
+    const graph = new AgentGraph(repository as any, 'test-openai-key', 'test prompt') as any;
+    const addContactSpy = jest.spyOn(graph, 'executeAddContactTool').mockResolvedValue({
+      success: true,
+      contact: {
+        contact_name: 'João Pedro Rodrigues Marques',
+        phone_number: '558591417838',
+        pix_key: '+55 85 9141-7838',
+      },
+      contact_profile: {
+        phone_number: '558591417838',
+      },
+    });
+    const resolveSpy = jest.spyOn(graph, 'resolveOwnedPaymentContact').mockResolvedValue({
+      contact: {
+        contact_name: 'João Pedro Rodrigues Marques',
+        phone_number: '558591417838',
+        pix_key: '+55 85 9141-7838',
+      },
+      destination: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
+      destinationName: 'João Pedro Rodrigues Marques',
+    });
+    jest.spyOn(graph, 'buildPixRampUrl').mockResolvedValue('https://app.example.com/pix-on?flow=fund_and_pay');
+
+    const state = createState('add it to contacts');
+    state.action_params = {
+      pending_failed_pix_contact: {
+        recipient_query: '+55 85 9141-7838',
+        intent: {
+          direction: 'onramp',
+          flow: 'fund_and_pay',
+          amount: '100',
+          amount_currency: 'USDC',
+          asset_code: 'USDC',
+          recipient_query: '+55 85 9141-7838',
+        },
+      },
+    };
+
+    const result = await graph.processInput(state);
+
+    expect(addContactSpy).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: 'session-pix-offramp',
+      user_id: 'user-pix-offramp',
+      contact_key: '+55 85 9141-7838',
+    }));
+    expect(resolveSpy).toHaveBeenCalledWith('+55 85 9141-7838', 'user-pix-offramp');
+    expect(graph.buildPixRampUrl).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        recipient_query: 'João Pedro Rodrigues Marques',
+        recipient_key: '+55 85 9141-7838',
+        recipient_public_key: 'GDRJSYKLLAJB57DCGYAAH4XMFPURAI5VP6FI3VXE5SC2SEKCDGGZUZUP',
+      })
+    );
+    expect(result.success).toBe(true);
+    expect(result.action_params.pending_failed_pix_contact).toBeUndefined();
+    expect(result.response_message).toContain('Contato adicionado com sucesso.');
+    expect(result.response_message).toContain('https://app.example.com/pix-on?flow=fund_and_pay');
   });
 
   it('extracts direct payment wording with insufficient balance as a normal payment intent', () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe2, LogOut, Moon, Sun } from "lucide-react";
+import { Eye, EyeOff, Globe2, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -12,11 +12,17 @@ export function LanguageToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const [hideAmounts, setHideAmounts] = useState(false);
   const isChatPage = pathname === "/chat" || pathname?.startsWith("/chat/");
   const isLandingPage = pathname === "/";
 
   useEffect(() => {
     setMounted(true);
+    try {
+      setHideAmounts(window.localStorage.getItem("talk-to-stellar.hideAmounts") === "true");
+    } catch {
+      setHideAmounts(false);
+    }
   }, []);
 
   const isDark = mounted ? resolvedTheme === "dark" : false;
@@ -27,6 +33,33 @@ export function LanguageToggle() {
   const themeTitle = isDark ? t("theme_switch_to_light") : t("theme_switch_to_dark");
   const themeLabel = isDark ? t("theme_light_short") : t("theme_dark_short");
   const logoutTitle = language === "pt-BR" ? "Sair" : "Logout";
+  const privacyTitle = hideAmounts
+    ? (language === "pt-BR" ? "Mostrar valores" : "Show values")
+    : (language === "pt-BR" ? "Ocultar valores" : "Hide values");
+  const privacyLabel = hideAmounts
+    ? (language === "pt-BR" ? "Oculto" : "Hidden")
+    : (language === "pt-BR" ? "Valores" : "Values");
+
+  function toggleAmountPrivacy() {
+    const next = !hideAmounts;
+    setHideAmounts(next);
+    try {
+      window.localStorage.setItem("talk-to-stellar.hideAmounts", String(next));
+      document.cookie = `tts_hide_amounts=${next ? "1" : "0"}; path=/; max-age=31536000; SameSite=Lax`;
+    } catch {
+      // Preference still syncs to the backend when storage is unavailable.
+    }
+    fetch("/api/chat/preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hide_amounts: next,
+        language,
+        source: "web",
+        metadata: { source: "web", language },
+      }),
+    }).catch(() => undefined);
+  }
 
   return (
     <div
@@ -55,6 +88,18 @@ export function LanguageToggle() {
       >
         {isDark ? <Sun className="h-3.5 w-3.5" aria-hidden="true" /> : <Moon className="h-3.5 w-3.5" aria-hidden="true" />}
         <span className="hidden sm:inline">{themeLabel}</span>
+      </button>
+      <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
+      <button
+        type="button"
+        onClick={toggleAmountPrivacy}
+        className="inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-16 sm:px-2"
+        aria-label={privacyTitle}
+        aria-pressed={hideAmounts}
+        title={privacyTitle}
+      >
+        {hideAmounts ? <EyeOff className="h-3.5 w-3.5" aria-hidden="true" /> : <Eye className="h-3.5 w-3.5" aria-hidden="true" />}
+        <span className="hidden sm:inline">{privacyLabel}</span>
       </button>
       <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
       <Link

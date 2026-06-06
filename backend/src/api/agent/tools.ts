@@ -363,6 +363,193 @@ async function executeSetLanguage(input: Record<string, any>): Promise<string> {
   });
 }
 
+function normalizeBooleanPreference(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  if (!normalized) return null;
+  if (['true', '1', 'yes', 'sim', 'on', 'hide', 'hidden', 'ocultar', 'oculto', 'esconder'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'nao', 'off', 'show', 'visible', 'mostrar', 'visivel', 'exibir'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+function missingPreferenceStorageError(error: any): boolean {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('schema cache') ||
+    message.includes('does not exist') ||
+    message.includes('could not find') ||
+    message.includes('column') ||
+    message.includes('relation')
+  );
+}
+
+async function updateExternalAmountPrivacy(input: {
+  sessionId?: string;
+  userId?: string;
+  hideAmounts: boolean;
+}) {
+  const rows = new Map<string, any>();
+  const addRows = (items: any[] | null | undefined) => {
+    for (const row of items || []) {
+      const key = String(row?.id || `${row?.provider || ''}:${row?.provider_user_id || ''}:${row?.session_id || ''}:${row?.user_id || ''}`);
+      if (key) rows.set(key, row);
+    }
+  };
+
+  if (input.sessionId) {
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('id, provider, provider_user_id, session_id, user_id, data')
+      .eq('session_id', input.sessionId)
+      .limit(50);
+    if (!error) addRows(data as any[]);
+    else if (!missingPreferenceStorageError(error)) throw error;
+  }
+
+  if (input.userId) {
+    const { data, error } = await supabase
+      .from('external_accounts')
+      .select('id, provider, provider_user_id, session_id, user_id, data')
+      .eq('user_id', input.userId)
+      .limit(50);
+    if (!error) addRows(data as any[]);
+    else if (!missingPreferenceStorageError(error)) throw error;
+  }
+
+  for (const row of rows.values()) {
+    const currentData = row?.data && typeof row.data === 'object' ? row.data : {};
+    const update = {
+      data: {
+        ...currentData,
+        hide_amounts: input.hideAmounts,
+        amounts_hidden: input.hideAmounts,
+        value_privacy: input.hideAmounts ? 'hidden' : 'visible',
+      },
+      updated_at: new Date().toISOString(),
+    };
+    const query = supabase.from('external_accounts').update(update);
+    const result = row?.id
+      ? await query.eq('id', row.id)
+      : await query
+          .eq('provider', String(row?.provider || ''))
+          .eq('provider_user_id', String(row?.provider_user_id || ''));
+    if (result.error && !missingPreferenceStorageError(result.error)) throw result.error;
+  }
+}
+
+async function executeSetValuePrivacy(input: Record<string, any>): Promise<string> {
+  try {
+    const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+    const hideAmounts = normalizeBooleanPreference(
+      input.hide_amounts ??
+      input.hideAmounts ??
+      input.amounts_hidden ??
+      input.amountsHidden ??
+      input.value_privacy ??
+      input.valuePrivacy ??
+      input.mode
+    );
+    if (hideAmounts === null) {
+      return JSON.stringify({
+        success: false,
+        error: language === 'en'
+          ? 'Tell me whether to hide or show transfer values.'
+          : 'Me diga se é para ocultar ou mostrar os valores das transferências.',
+      });
+    }
+
+    const sessionId = String(input.session_id || input.sessionId || '').trim();
+    let userId = String(input.user_id || input.userId || '').trim();
+    const updatedAt = new Date().toISOString();
+
+    if (sessionId) {
+      const sessionResult = await supabase
+        .from('agent_sessions')
+        .select('user_id')
+        .eq('session_id', sessionId)
+        .limit(1)
+        .maybeSingle();
+      if (!sessionResult.error && sessionResult.data?.user_id && !userId) {
+        userId = String(sessionResult.data.user_id || '').trim();
+      } else if (sessionResult.error && !missingPreferenceStorageError(sessionResult.error)) {
+        throw sessionResult.error;
+      }
+
+      const { error: sessionUpdateError } = await supabase
+        .from('agent_sessions')
+        .update({
+          hide_amounts: hideAmounts,
+          updated_at: updatedAt,
+        })
+        .eq('session_id', sessionId);
+      if (sessionUpdateError && !missingPreferenceStorageError(sessionUpdateError)) {
+        throw sessionUpdateError;
+      }
+
+      const { data: stateRow, error: stateReadError } = await supabase
+        .from('agent_states')
+        .select('action_params')
+        .eq('session_id', sessionId)
+        .limit(1)
+        .maybeSingle();
+      if (stateReadError && !missingPreferenceStorageError(stateReadError)) {
+        throw stateReadError;
+      }
+      if (stateRow) {
+        const currentActionParams = stateRow.action_params && typeof stateRow.action_params === 'object'
+          ? stateRow.action_params
+          : {};
+        const { error: stateUpdateError } = await supabase
+          .from('agent_states')
+          .update({
+            action_params: {
+              ...currentActionParams,
+              hide_amounts: hideAmounts,
+              amounts_hidden: hideAmounts,
+              value_privacy: hideAmounts ? 'hidden' : 'visible',
+            },
+            updated_at: updatedAt,
+          })
+          .eq('session_id', sessionId);
+        if (stateUpdateError && !missingPreferenceStorageError(stateUpdateError)) {
+          throw stateUpdateError;
+        }
+      }
+    }
+
+    await updateExternalAmountPrivacy({ sessionId, userId, hideAmounts });
+
+    return JSON.stringify({
+      success: true,
+      hide_amounts: hideAmounts,
+      amounts_hidden: hideAmounts,
+      value_privacy: hideAmounts ? 'hidden' : 'visible',
+      session_id: sessionId || null,
+      message: hideAmounts
+        ? (language === 'en'
+            ? 'Done. I will hide transfer values in chat and receipts.'
+            : 'Pronto. Vou ocultar os valores das transferências no chat e nos comprovantes.')
+        : (language === 'en'
+            ? 'Done. I will show transfer values again.'
+            : 'Pronto. Vou mostrar os valores das transferências novamente.'),
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({
+      success: false,
+      error: errorMessage,
+    });
+  }
+}
+
 function normalizeYieldAssetInput(value: unknown): string {
   const raw = String(value || 'USDC').trim().toUpperCase();
   if (!raw || raw === 'USD' || raw === 'DOLLAR' || raw === 'DOLLARS' || raw === 'US$') return 'USDC';
@@ -910,6 +1097,33 @@ export const toolDefinitions = [
         },
       },
       required: ["language"],
+    },
+  },
+  {
+    name: "set_value_privacy",
+    description: "Persist whether transfer/payment values should be hidden or visible in chat, WhatsApp, and receipt output.",
+    parameters: {
+      type: "object",
+      properties: {
+        hide_amounts: {
+          type: "boolean",
+          description: "true to hide transfer values, false to show values again.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+        user_id: {
+          type: "string",
+          description: "Current user ID, when available.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Current conversation language.",
+        },
+      },
+      required: ["hide_amounts"],
     },
   },
   {
@@ -2177,6 +2391,8 @@ export async function executeTool(
     switch (toolName) {
       case "set_language":
         return await executeSetLanguage(toolInput);
+      case "set_value_privacy":
+        return await executeSetValuePrivacy(toolInput);
       case "get_intent_help":
         return executeGetIntentHelp();
       case "get_product_context":
@@ -7002,6 +7218,21 @@ async function executeAddContact(input: any): Promise<string> {
     const contactKey = String(input.public_key || input.stellar_public_key || input.pix_key || input.contact_key || '').trim();
     const isPublicKey = /^G[A-Z2-7]{55}$/i.test(contactKey);
     const pixKeyInput = String(input.pix_key || (!isPublicKey ? contactKey : '') || '').trim().toLowerCase();
+    const explicitPhoneDigits = String(input.phone_number || input.phone || '').replace(/\D+/g, '');
+    const contactKeyDigits = contactKey.replace(/\D+/g, '');
+    const phoneNumber = explicitPhoneDigits.length >= 8
+      ? explicitPhoneDigits
+      : (
+          !isPublicKey &&
+          contactKeyDigits.length >= 8 &&
+          (
+            contactKey.trim().startsWith('+') ||
+            contactKeyDigits.length >= 12 ||
+            /[\s().-]/.test(contactKey)
+          )
+        )
+        ? contactKeyDigits
+        : '';
     const resolved = pixKeyInput ? await resolveContactPublicKeyByPixKey(pixKeyInput) : {};
     const publicKey = isPublicKey ? contactKey : String(resolved.publicKey || '').trim();
 
@@ -7012,15 +7243,20 @@ async function executeAddContact(input: any): Promise<string> {
     const requestedName = String(input.contact_name || input.name || '').trim();
     const contactName = String(requestedName || resolved.name || `Contato ${publicKey.slice(0, 6)}`).trim();
 
+    const contactPayload: Record<string, any> = {
+      owner_id: ownerId,
+      contact_name: contactName,
+      stellar_public_key: publicKey,
+      pix_key: pixKeyInput || resolved.pixKey || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (phoneNumber) {
+      contactPayload.phone_number = phoneNumber;
+    }
+
     const { data, error } = await supabase
       .from("contacts")
-      .upsert({
-        owner_id: ownerId,
-        contact_name: contactName,
-        stellar_public_key: publicKey,
-        pix_key: pixKeyInput || resolved.pixKey || null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'owner_id,contact_name' })
+      .upsert(contactPayload, { onConflict: 'owner_id,contact_name' })
       .select()
       .single();
 

@@ -29,6 +29,7 @@ import { PaymentReceiptService } from './payment-receipt.service';
 import { StellarService } from './stellar.service';
 import { BrlReferenceRateService } from './brl-reference-rate.service';
 import { PlatformFeeService } from './platform-fee.service';
+import { ConversionRateMatrixService } from './conversion-rate-matrix.service';
 import { DefindexYieldAction, DefindexYieldService } from './defindex-yield.service';
 import { TrustlineService } from './trustline.service';
 import { normalizeHumanAmountText, parseHumanAmountNumber } from '../../utils/amount';
@@ -469,6 +470,7 @@ function formatDisplayAmount(value: unknown, assetCode: string): string {
   if (Number.isFinite(numeric)) {
     if (code === 'BRL') return `R$ ${numeric.toFixed(2).replace('.', ',')}`;
     if (code === 'USDC') return `US$ ${numeric.toFixed(2)}`;
+    return `${numeric.toFixed(2)} ${code}`;
   }
   return `${amount} ${code}`;
 }
@@ -8496,6 +8498,32 @@ export class AnchorService {
     };
   }
 
+  private static async estimateCrossAssetDestinationAmount(input: {
+    sourceAmount: string;
+    sourceAssetCode: string;
+    destinationAssetCode: string;
+  }): Promise<string> {
+    const sourceAmount = Number(String(input.sourceAmount || '').replace(',', '.'));
+    if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) return '';
+    const sourceAssetCode = userFacingAssetCode(input.sourceAssetCode);
+    const destinationAssetCode = userFacingAssetCode(input.destinationAssetCode);
+    if (!sourceAssetCode || !destinationAssetCode || sourceAssetCode === destinationAssetCode) return '';
+
+    try {
+      const matrix = await ConversionRateMatrixService.buildMatrix({
+        assets: [sourceAssetCode, destinationAssetCode, 'BRL', 'USDC'],
+        sampleAmount: sourceAmount,
+      });
+      const cell = matrix.matrix?.[sourceAssetCode]?.[destinationAssetCode];
+      const rate = Number(cell?.rate || 0);
+      if (!Number.isFinite(rate) || rate <= 0) return '';
+      return (sourceAmount * rate).toFixed(7);
+    } catch (error) {
+      logger.warn(`[ramp] Could not estimate ${sourceAssetCode}->${destinationAssetCode} PIX transfer destination amount: ${debugErrorMessage(error)}`);
+      return '';
+    }
+  }
+
   static async submitPixFundedTransferForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
     if (!this.getRuntimeInfo().sandbox) {
       throw apiError('PIX-funded transfer automation is unavailable in the current payment mode.', 403);
@@ -8595,8 +8623,15 @@ export class AnchorService {
       };
     }
 
+    const estimatedDestinationAmount = crossAssetTransfer && !result.destinationAmount
+      ? await this.estimateCrossAssetDestinationAmount({
+          sourceAmount: amount,
+          sourceAssetCode: userFacingAssetCode(sourceAsset.code),
+          destinationAssetCode: userFacingAssetCode(destinationAsset.code),
+        })
+      : '';
     const destinationAmount = crossAssetTransfer
-      ? normalizeAmount(result.destinationAmount || amount, 'destination_amount')
+      ? normalizeAmount(result.destinationAmount || estimatedDestinationAmount || amount, 'destination_amount')
       : amount;
     const route = {
       selected: crossAssetTransfer

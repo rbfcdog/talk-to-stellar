@@ -44,6 +44,7 @@ export type PaymentReceiptInput = {
   contextMessage?: string | null;
   externalDeliveryText?: string | null;
   dedupeKey?: string | null;
+  hideAmounts?: boolean | null;
 };
 
 type FeeBreakdown = {
@@ -107,6 +108,35 @@ export class PaymentReceiptService {
     return String(record.language || record.lang || record.locale || '').trim();
   }
 
+  private static booleanPreference(value: unknown): boolean | null {
+    if (typeof value === 'boolean') return value;
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return null;
+    if (['true', '1', 'yes', 'sim', 'on', 'hidden', 'hide', 'oculto', 'ocultar'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'nao', 'off', 'visible', 'show', 'mostrar', 'exibir'].includes(normalized)) return false;
+    return null;
+  }
+
+  private static objectHideAmounts(value?: unknown): boolean | null {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      try {
+        return this.objectHideAmounts(JSON.parse(value));
+      } catch {
+        return null;
+      }
+    }
+    if (typeof value !== 'object') return null;
+    const record = value as Record<string, any>;
+    return this.booleanPreference(
+      record.hide_amounts ??
+      record.hideAmounts ??
+      record.amounts_hidden ??
+      record.amountsHidden ??
+      (record.value_privacy === 'hidden' ? true : record.value_privacy === 'visible' ? false : undefined)
+    );
+  }
+
   private static async resolveReceiptLanguage(input: PaymentReceiptInput): Promise<'pt-BR' | 'en'> {
     const direct = String(
       input.language ||
@@ -151,6 +181,37 @@ export class PaymentReceiptService {
       logger.debug(`[receipt] could not resolve receipt language for session=${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
       return 'pt-BR';
     }
+  }
+
+  private static async resolveHideAmounts(input: PaymentReceiptInput): Promise<boolean> {
+    const direct =
+      this.booleanPreference(input.hideAmounts) ??
+      this.objectHideAmounts(input.quote) ??
+      this.objectHideAmounts(input.quote?.metadata) ??
+      this.objectHideAmounts(input.quote?.operation_context) ??
+      this.objectHideAmounts(input.quote?.operationContext);
+    if (direct !== null) return direct;
+
+    const sessionId = String(input.sessionId || '').trim();
+    if (!sessionId) return false;
+
+    try {
+      const session = await this.agentRepo.getSession(sessionId);
+      const sessionPreference =
+        this.objectHideAmounts((session as any)?.action_params) ??
+        this.objectHideAmounts(session as any);
+      if (sessionPreference !== null) return sessionPreference;
+
+      const state = await this.agentRepo.getState(sessionId);
+      const statePreference =
+        this.objectHideAmounts((state as any)?.action_params) ??
+        this.objectHideAmounts(state as any);
+      if (statePreference !== null) return statePreference;
+    } catch (error) {
+      logger.debug(`[receipt] could not resolve amount privacy for session=${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return false;
   }
 
   private static sanitizeUserFacingText(value?: string | null): string {
@@ -328,23 +389,25 @@ export class PaymentReceiptService {
       txHash: input.hash || null,
       receiptType: input.type,
       metadata: {
-        destinationAmount: input.destinationAmount,
+        destinationAmount: input.hideAmounts ? null : input.destinationAmount,
         destinationAssetCode: input.destinationAssetCode,
-        sourceAmount: input.sourceAmount || null,
+        sourceAmount: input.hideAmounts ? null : input.sourceAmount || null,
         sourceAssetCode: input.sourceAssetCode || null,
-        feeDisplay: input.feeDisplay || null,
-        contextMessage: input.contextMessage || null,
+        feeDisplay: input.hideAmounts ? null : input.feeDisplay || null,
+        contextMessage: input.hideAmounts ? null : input.contextMessage || null,
         counterpartyLabel: this.userFacingCounterpartyLabel(input.counterpartyLabel) || null,
         counterpartyKey: input.counterpartyKey || null,
         completedAt: input.completedAt || null,
         language: input.language || null,
+        hideAmounts: Boolean(input.hideAmounts),
       },
     });
   }
 
   static async sendReceipt(input: PaymentReceiptInput): Promise<string> {
     const language = await this.resolveReceiptLanguage(input);
-    const localizedInput = { ...input, language };
+    const hideAmounts = await this.resolveHideAmounts(input);
+    const localizedInput = { ...input, language, hideAmounts };
     const text = await this.buildReceiptText(localizedInput);
     let viewerUrl = '';
     const operationId = this.toPublicOperationId(input.hash);
@@ -373,9 +436,13 @@ export class PaymentReceiptService {
       return `${base}\n${language === 'en' ? 'Receipt' : 'Comprovante'}: ${receiptUrl}`;
     };
     const textWithLink = appendReceiptLink(text);
-    const savingsFirstDeliveryText = appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(localizedInput, receiptUrl));
+    const savingsFirstDeliveryText = hideAmounts
+      ? ''
+      : appendReceiptLink(await this.buildSavingsFirstWhatsappReceipt(localizedInput, receiptUrl));
     const externalDeliveryBase = this.sanitizeUserFacingText(localizedInput.externalDeliveryText);
-    const externalDeliveryText = savingsFirstDeliveryText || appendReceiptLink(externalDeliveryBase || text);
+    const externalDeliveryText = hideAmounts
+      ? textWithLink
+      : savingsFirstDeliveryText || appendReceiptLink(externalDeliveryBase || text);
     let savedPrimaryReceipt = true;
 
     try {
@@ -637,6 +704,7 @@ export class PaymentReceiptService {
 
   private static async buildSavingsFirstWhatsappReceipt(input: PaymentReceiptInput, viewerUrl?: string): Promise<string> {
     const type = String(input.type || '').trim();
+    if (input.hideAmounts) return '';
     if (!this.shouldUseSavingsFirstExternalReceipt(input)) return '';
     const language = this.normalizeReceiptLanguage(input.language);
     const isEn = language === 'en';
@@ -689,27 +757,30 @@ export class PaymentReceiptService {
   }
 
   static async buildReceiptImageSvg(input: PaymentReceiptInput): Promise<string> {
+    const language = this.normalizeReceiptLanguage(input.language);
+    const hideAmounts = Boolean(input.hideAmounts);
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
     const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
     const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
     const fee = await this.resolveFeeBreakdown(input);
-    const feeLabel = fee.actualDisplay || 'indisponível';
+    const hiddenLabel = language === 'en' ? 'hidden' : 'oculto';
+    const feeLabel = hideAmounts ? hiddenLabel : fee.actualDisplay || 'indisponível';
 
     return ReceiptImageService.toSvg(
       ReceiptImageService.fromPaymentReceipt({
-        destinationAmount: String(input.destinationAmount || ''),
+        destinationAmount: hideAmounts ? hiddenLabel : String(input.destinationAmount || ''),
         destinationAssetCode,
         counterpartyLabel: String(input.counterpartyLabel || 'destinatário'),
         counterpartyKey: String(input.counterpartyKey || ''),
-        sourceAmount,
+        sourceAmount: hideAmounts ? hiddenLabel : sourceAmount,
         sourceAssetCode,
         feeDisplay: feeLabel,
         settlementMs: input.settlementMs || null,
         completedAt: input.completedAt || null,
         hash: input.hash || null,
-        quote: input.quote,
-        savings: input.savings,
-        contextMessage: this.sanitizeContextMessage(input.contextMessage) || null,
+        quote: hideAmounts ? null : input.quote,
+        savings: hideAmounts ? null : input.savings,
+        contextMessage: hideAmounts ? null : this.sanitizeContextMessage(input.contextMessage) || null,
       })
     );
   }
@@ -717,18 +788,20 @@ export class PaymentReceiptService {
   static async buildReceiptText(input: PaymentReceiptInput): Promise<string> {
     const language = this.normalizeReceiptLanguage(input.language);
     const isEn = language === 'en';
+    const hideAmounts = Boolean(input.hideAmounts);
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
     const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
     const destinationAmount = String(input.destinationAmount || '').trim();
     const destinationAssetCode = this.userFacingAssetCode(input.destinationAssetCode);
-    const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
-    const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
+    const hiddenLabel = isEn ? 'hidden amount' : 'valor oculto';
+    const sourceLabel = hideAmounts ? hiddenLabel : formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
+    const destinationLabel = hideAmounts ? hiddenLabel : formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
     const counterparty = this.userFacingCounterpartyLabel(input.counterpartyLabel);
-    const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty, language);
+    const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty, language, hideAmounts);
     const counterpartyKeyLine = this.counterpartyKeyLine(input.counterpartyKey, language);
     const hasConversion = sourceAssetCode !== destinationAssetCode;
-    const showEconomics = this.shouldShowReceiptEconomics(input);
-    const quoteLine = hasConversion
+    const showEconomics = !hideAmounts && this.shouldShowReceiptEconomics(input);
+    const quoteLine = !hideAmounts && hasConversion
       ? buildUsedQuoteLabel({
           sourceAmount,
           sourceAssetCode,
@@ -746,7 +819,7 @@ export class PaymentReceiptService {
     const publicOperationId = this.toPublicOperationId(input.hash);
     const status = this.statusLabel(input.status, language);
     const nicknamePrompt = this.transactionNicknamePrompt(input.type);
-    const contextLine = this.contextLine(input.contextMessage, language);
+    const contextLine = hideAmounts ? '' : this.contextLine(input.contextMessage, language);
 
     return [
       operationLine,
@@ -828,6 +901,7 @@ export class PaymentReceiptService {
   }
 
   private static async cumulativeSavingsLine(input: PaymentReceiptInput): Promise<string> {
+    if (input.hideAmounts) return '';
     const type = String(input.type || '').trim();
     const shouldShow =
       this.shouldShowReceiptEconomics(input) && (
@@ -864,10 +938,26 @@ export class PaymentReceiptService {
     sourceLabel: string,
     destinationLabel: string,
     counterparty?: string,
-    language: 'pt-BR' | 'en' = 'pt-BR'
+    language: 'pt-BR' | 'en' = 'pt-BR',
+    hideAmounts = false
   ): string {
     const isEn = language === 'en';
     const target = counterparty || (isEn ? 'recipient' : 'destinatário');
+    if (hideAmounts) {
+      if (type === 'conversion') {
+        return isEn ? 'You completed a conversion.' : 'Você concluiu uma conversão.';
+      }
+      if (type === 'payment_received') {
+        return isEn ? `You received a transfer from ${target}.` : `Você recebeu uma transferência de ${target}.`;
+      }
+      if (type === 'claim_redeemed') {
+        return isEn ? `Your link was claimed by ${target}.` : `Seu link foi resgatado por ${target}.`;
+      }
+      if (/conta banc[aá]ria externa|pix|banco/i.test(target)) {
+        return isEn ? `You completed a PIX withdrawal to ${target}.` : `Você concluiu uma retirada PIX para ${target}.`;
+      }
+      return isEn ? `You sent a transfer to ${target}.` : `Você enviou uma transferência para ${target}.`;
+    }
     if (type === 'conversion') {
       return isEn ? `You converted ${sourceLabel} to ${destinationLabel}.` : `Você converteu ${sourceLabel} para ${destinationLabel}.`;
     }
