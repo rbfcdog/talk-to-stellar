@@ -251,7 +251,7 @@ export class EconomyEngineService {
 
     let query = supabase
       .from('payment_logs')
-      .select('source_amount, source_asset_code, metadata, completed_at, status')
+      .select('payment_hash, source_amount, source_asset_code, metadata, completed_at, status, estimated_traditional_fee, actual_fee, estimated_savings, savings_percentage, comparison_method')
       .eq('user_id', ctx.userId)
       .eq('status', 'success')
       .order('completed_at', { ascending: false });
@@ -270,19 +270,28 @@ export class EconomyEngineService {
     let estimatedTraditionalFee = 0;
     let estimatedSavings = 0;
     const countries = new Set<string>();
+    const countedOperationReferences = new Set<string>();
     let biggestSavingsOperation: SavingsIdentity['biggestSavingsOperation'];
 
     for (const row of logs || []) {
       const metadata = ((row as Record<string, unknown>).metadata || {}) as Record<string, any>;
       const savedSavings = (metadata.savings || {}) as Record<string, unknown>;
+      const paymentHash = String(
+        (row as Record<string, unknown>).payment_hash ||
+        metadata.payment_hash ||
+        metadata.tx_hash ||
+        metadata.transaction_hash ||
+        ''
+      ).trim();
+      if (paymentHash) countedOperationReferences.add(paymentHash);
       const sourceAmount = toNumber((row as Record<string, unknown>).source_amount);
       const sourceAsset = String((row as Record<string, unknown>).source_asset_code || '').toUpperCase();
       const grossBrl = toNumber(savedSavings.gross_amount_brl || metadata.gross_amount_brl) ||
         (sourceAsset === 'BRL' || sourceAsset === 'TESOURO' ? sourceAmount : 0);
-      const rowActualFee = toNumber(savedSavings.actual_fee || metadata.actual_fee_brl || metadata.fee_brl);
-      const rowTraditionalFee = toNumber(savedSavings.estimated_traditional_fee) ||
+      const rowActualFee = toNumber(savedSavings.actual_fee || (row as Record<string, unknown>).actual_fee || metadata.actual_fee_brl || metadata.fee_brl);
+      const rowTraditionalFee = toNumber(savedSavings.estimated_traditional_fee || (row as Record<string, unknown>).estimated_traditional_fee) ||
         (grossBrl > 0 ? grossBrl * DEFAULT_TRADITIONAL_FEE_PCT : 0);
-      const rowSavings = toNumber(savedSavings.estimated_savings) ||
+      const rowSavings = toNumber(savedSavings.estimated_savings || (row as Record<string, unknown>).estimated_savings) ||
         Math.max(0, rowTraditionalFee - rowActualFee);
 
       operationAmountBrl += grossBrl;
@@ -305,6 +314,53 @@ export class EconomyEngineService {
           completedAt: String((row as Record<string, unknown>).completed_at || ''),
           destinationLabel: String(metadata.destination_name || metadata.recipient_name || metadata.destination || '').trim() || undefined,
         };
+      }
+    }
+
+    let eventsQuery = supabase
+      .from('financial_events')
+      .select('amount, currency, metadata_json, created_at, dedupe_key')
+      .eq('user_id', ctx.userId)
+      .eq('event_type', 'savings_estimated')
+      .order('created_at', { ascending: false });
+
+    if (start) {
+      eventsQuery = eventsQuery.gte('created_at', start.toISOString());
+    }
+
+    const { data: savingsEvents, error: savingsEventsError } = await eventsQuery;
+    if (!savingsEventsError) {
+      for (const event of savingsEvents || []) {
+        const metadata = ((event as Record<string, unknown>).metadata_json || {}) as Record<string, any>;
+        const operationReference = String(
+          metadata.payment_hash ||
+          metadata.operation_reference ||
+          metadata.operation_id ||
+          (event as Record<string, unknown>).dedupe_key ||
+          ''
+        ).trim();
+        if (operationReference && countedOperationReferences.has(operationReference)) continue;
+        if (operationReference) countedOperationReferences.add(operationReference);
+
+        const rowSavings = toNumber(metadata.estimated_savings || (event as Record<string, unknown>).amount);
+        if (rowSavings <= 0) continue;
+        const rowActualFee = toNumber(metadata.actual_fee);
+        const rowTraditionalFee = toNumber(metadata.estimated_traditional_fee) || rowSavings + rowActualFee;
+        const grossBrl = toNumber(metadata.gross_amount_brl);
+
+        operationAmountBrl += grossBrl;
+        actualFee += rowActualFee;
+        estimatedTraditionalFee += rowTraditionalFee;
+        estimatedSavings += rowSavings;
+
+        if (!biggestSavingsOperation || rowSavings > biggestSavingsOperation.estimatedSavings) {
+          biggestSavingsOperation = {
+            amountBrl: grossBrl,
+            estimatedSavings: rowSavings,
+            completedAt: String((event as Record<string, unknown>).created_at || ''),
+            destinationLabel: String(metadata.destination_name || metadata.recipient_name || metadata.destination || '').trim() || undefined,
+          };
+        }
       }
     }
 

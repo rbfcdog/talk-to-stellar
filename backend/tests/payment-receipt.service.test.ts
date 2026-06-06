@@ -1,5 +1,6 @@
 import { PaymentReceiptService } from '../src/api/services/payment-receipt.service';
 import { TransferNotificationService } from '../src/api/services/transfer-notification.service';
+import { supabase } from '../src/config/supabase';
 
 describe('PaymentReceiptService', () => {
   const originalEnv = process.env;
@@ -446,6 +447,116 @@ describe('PaymentReceiptService', () => {
 
     createSpy.mockRestore();
     notifySpy.mockRestore();
+  });
+
+  it('persists real receipt savings before writing the cumulative account savings line', async () => {
+    const originalRepo = (PaymentReceiptService as any).agentRepo;
+    (PaymentReceiptService as any).agentRepo = {
+      getSession: jest.fn().mockResolvedValue({ session_id: 'session-savings-persist' }),
+      getState: jest.fn().mockResolvedValue({ action_params: { language: 'pt-BR' } }),
+    };
+
+    const originalFrom = (supabase.from as jest.Mock).getMockImplementation();
+    const savedEvents: any[] = [];
+    const financialEventsBuilder: any = {};
+    financialEventsBuilder.select = jest.fn(() => financialEventsBuilder);
+    financialEventsBuilder.eq = jest.fn(() => financialEventsBuilder);
+    financialEventsBuilder.gte = jest.fn(() => financialEventsBuilder);
+    financialEventsBuilder.order = jest.fn(async () => ({ data: savedEvents, error: null }));
+    financialEventsBuilder.upsert = jest.fn(async (payload: any) => {
+      savedEvents.push(payload);
+      return { data: payload, error: null };
+    });
+    financialEventsBuilder.insert = jest.fn(async (payload: any) => {
+      savedEvents.push(payload);
+      return { data: payload, error: null };
+    });
+
+    const paymentLogsBuilder: any = {};
+    paymentLogsBuilder.select = jest.fn(() => paymentLogsBuilder);
+    paymentLogsBuilder.eq = jest.fn(() => paymentLogsBuilder);
+    paymentLogsBuilder.gte = jest.fn(() => paymentLogsBuilder);
+    paymentLogsBuilder.order = jest.fn(async () => ({ data: [], error: null }));
+
+    const agentSessionsBuilder: any = {};
+    agentSessionsBuilder.select = jest.fn(() => agentSessionsBuilder);
+    agentSessionsBuilder.eq = jest.fn(() => agentSessionsBuilder);
+    agentSessionsBuilder.order = jest.fn(() => agentSessionsBuilder);
+    agentSessionsBuilder.limit = jest.fn(() => agentSessionsBuilder);
+    agentSessionsBuilder.maybeSingle = jest.fn(async () => ({
+      data: {
+        session_id: 'session-savings-persist',
+        user_id: 'user-savings-persist',
+        public_key: 'GTEST',
+      },
+      error: null,
+    }));
+
+    (supabase.from as jest.Mock).mockImplementation((table: string) => {
+      if (table === 'agent_sessions') return agentSessionsBuilder;
+      if (table === 'financial_events') return financialEventsBuilder;
+      if (table === 'payment_logs') return paymentLogsBuilder;
+      return originalFrom ? originalFrom(table) : { upsert: jest.fn(async () => ({ data: null, error: null })) };
+    });
+
+    const createSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://talk-to-stellar-owxg.vercel.app/receipt/savings-persist');
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(true);
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    try {
+      await PaymentReceiptService.sendReceipt({
+        type: 'payment_received',
+        sessionId: 'session-savings-persist',
+        userId: 'user-savings-persist',
+        provider: 'whatsapp',
+        providerUserId: '5519997624114',
+        counterpartyLabel: 'PIX',
+        sourceAmount: '450.09',
+        sourceAssetCode: 'BRL',
+        destinationAmount: '100',
+        destinationAssetCode: 'USDC',
+        feeBrl: '2.24',
+        hash: 'tx-savings-persist',
+        completedAt: '2026-06-05T21:23:55.000Z',
+        quote: { direction: 'onramp' },
+        savings: {
+          estimatedSavings: 18.01,
+          estimatedTraditionalFee: 20.25,
+          actualFee: 2.24,
+          grossAmountBrl: 450.09,
+          savingsPercentage: 88.94,
+        },
+      });
+
+      expect(financialEventsBuilder.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        event_type: 'savings_estimated',
+        amount: 18.01,
+        currency: 'BRL',
+        user_id: 'user-savings-persist',
+      }), { onConflict: 'dedupe_key' });
+      expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+        content: expect.stringContaining('Economia acumulada da conta: R$ 18.01 em relação a métodos tradicionais.'),
+      }));
+      expect(saveSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+        content: expect.stringContaining('Economia acumulada da conta: R$ 0.00'),
+      }));
+    } finally {
+      (PaymentReceiptService as any).agentRepo = originalRepo;
+      (supabase.from as jest.Mock).mockImplementation(originalFrom as any);
+      createSpy.mockRestore();
+      saveSpy.mockRestore();
+      notifySpy.mockRestore();
+    }
   });
 
   it('falls back to the agent state language for English external receipts', async () => {

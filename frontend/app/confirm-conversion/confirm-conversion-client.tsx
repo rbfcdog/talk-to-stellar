@@ -10,7 +10,6 @@ import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target"
-import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 
 type ValidationResult = {
   success?: boolean
@@ -250,11 +249,6 @@ export default function ConfirmConversionClient({
     fallbackSource: "convert",
   })
   const pixReturnTarget = isPixReturnTarget(returnTarget)
-
-  useEffect(() => {
-    if (status !== "done" || !result?.success || !pixReturnTarget) return
-    closeIntermediatePage()
-  }, [pixReturnTarget, result?.success, status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -564,7 +558,9 @@ export default function ConfirmConversionClient({
                       <p className="mt-1 text-base font-black text-tts-deep">
                         {T(feedbackLanguage, "Volte ao PIX para continuar.", "Back to PIX to continue.")}
                       </p>
-                      <p className="mt-1 text-xs font-bold text-tts-muted">{INTERMEDIATE_PAGE_CLOSE_COPY}</p>
+                      <p className="mt-1 text-xs font-bold text-tts-muted">
+                        {T(feedbackLanguage, "Use o botão abaixo para voltar ao PIX e concluir a retirada.", "Use the button below to return to PIX and finish the withdrawal.")}
+                      </p>
                     </div>
                   </div>
                   <a

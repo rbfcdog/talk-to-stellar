@@ -146,10 +146,12 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("visibleSupportCode");
     expect(text).toContain("O resultado é salvo no histórico da conta.");
     expect(text).toContain("isPixReturnTarget");
-    expect(text).toContain("closeIntermediatePage()");
-    expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
+    expect(text).not.toContain("closeIntermediatePage()");
+    expect(text).not.toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
     expect(text).toContain("PIX atualizado");
     expect(text).toContain("Volte ao PIX para continuar.");
+    expect(text).toContain("Use o botão abaixo para voltar ao PIX e concluir a retirada.");
+    expect(text).toContain("href={returnTarget.href}");
     expect(text).not.toContain("Voltar ao chat");
     expect(text).not.toContain("Back to chat");
     expect(text).not.toContain('buildActionUrl("/chat"');
