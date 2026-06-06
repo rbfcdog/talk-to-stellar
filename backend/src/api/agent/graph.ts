@@ -1222,6 +1222,142 @@ export class AgentGraph {
     return amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : undefined;
   }
 
+  private extractAmountAndAssetFromText(text: string): { amount: string; assetCode: string } {
+    const normalized = this.normalizeTextForIntent(text);
+    const amountMatch = normalized.match(/(?:^|\s)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,8})?|\d+(?:[.,]\d{1,8})?)(?=\s|$)/);
+    const amount = amountMatch?.[1] ? normalizeHumanAmountText(amountMatch[1]) : '';
+    const assetCode = amountMatch ? this.inferPaymentAssetFromText(normalized, amountMatch) : '';
+    return { amount, assetCode: this.normalizeAgentAssetCode(assetCode || '') };
+  }
+
+  private cleanPixRecipientQuery(value: string): string {
+    return String(value || '')
+      .replace(/\b(?:de|do|da)\s+(?:r\$\s*)?\d{1,3}(?:\.\d{3})*(?:[.,]\d{1,8})?\s*(?:brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|cetes|xlm|lumens?)?.*$/i, '')
+      .replace(/\b(?:via|em|no|pelo|por)\s+pix\b.*$/i, '')
+      .replace(/\b(?:na qual|que|so|para|pra)\s+(?:eu\s+)?(?:pago|recebe|receber|receba|they\s+receive).*$/i, '')
+      .replace(/[^\p{L}\p{N}@._+\-\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private extractPixFundedRecipientFromText(normalized: string): string {
+    const patterns = [
+      /\bdireto\s+(?:pra|para|pro|a)\s+(.+)$/,
+      /\bpix\s+(?:pra|para|pro|a)\s+(.+)$/,
+      /\b(?:transacao|trasacao|pagamento|pix|mandar|enviar|pagar|fazer)\b.*?\b(?:pra|para|pro|a)\s+(.+?)\s+\b(?:de|no valor de)\b\s+(?:r\$\s*)?\d/i,
+      /\b(?:em|via|por|pelo)\s+pix\s+(?:pra|para|pro|a)\s+(.+)$/,
+      /\b(?:pra|para|pro|a)\s+([a-z0-9@._+\-\s]{2,80}?)\s+\b(?:via|em|por|pelo)\s+pix\b/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = normalized.match(pattern);
+      const recipient = this.cleanPixRecipientQuery(match?.[1] || '');
+      if (!recipient) continue;
+      if (/\b(?:minha|meu|sua|seu)\s+(?:conta|pix|banco)\b/.test(recipient)) continue;
+      if (recipient.length < 2) continue;
+      return recipient;
+    }
+    return '';
+  }
+
+  private extractDirectPaymentIntentFromText(text: string): {
+    recipient_query?: string;
+    amount?: string;
+    asset_code?: string;
+  } {
+    const normalized = this.normalizeTextForIntent(text);
+    const { amount, assetCode } = this.extractAmountAndAssetFromText(normalized);
+    const recipientMatch = normalized.match(/\b(?:pra|para|pro|a)\s+(.+?)(?:\s+\b(?:mas|via|em|no|na|com|receber|receba)\b|$)/);
+    const recipient = this.cleanPixRecipientQuery(recipientMatch?.[1] || '');
+    return {
+      recipient_query: recipient || undefined,
+      amount: amount || undefined,
+      asset_code: assetCode || undefined,
+    };
+  }
+
+  private isRampHistoryRequest(text: string): boolean {
+    const normalized = this.normalizeTextForIntent(text);
+    const hasRampVerb = /\b(?:pix|depositei|depositos?|coloquei|retirei|saques?|saquei|ramp|entrada|saida)\b/.test(normalized);
+    const hasPeriodAsk = /\b(?:quanto|historico|extrato|total|mes|mês|semana|hoje|ano)\b/.test(normalized);
+    return hasRampVerb && hasPeriodAsk;
+  }
+
+  private rampHistoryPeriodFromText(text: string): 'today' | 'week' | 'month' | 'year' | 'all' {
+    const normalized = this.normalizeTextForIntent(text);
+    if (/\b(?:hoje|today)\b/.test(normalized)) return 'today';
+    if (/\b(?:semana|week)\b/.test(normalized)) return 'week';
+    if (/\b(?:ano|year)\b/.test(normalized)) return 'year';
+    if (/\b(?:mes|mês|month)\b/.test(normalized)) return 'month';
+    return 'all';
+  }
+
+  private extractPixRampIntentFromText(text: string): {
+    is_pix_ramp: boolean;
+    direction: 'onramp' | 'offramp';
+    flow?: 'fund_wallet' | 'fund_and_pay';
+    amount?: string;
+    amount_currency?: string;
+    asset_code: string;
+    recipient_query?: string;
+  } {
+    const normalized = this.normalizeTextForIntent(text);
+    const { amount, assetCode } = this.extractAmountAndAssetFromText(normalized);
+    const mentionsPix = /\b(?:pix|offramp)\b/.test(normalized);
+    const conversionLayerToOutside = /\b\d{1,3}(?:\.\d{3})*(?:[.,]\d{1,8})?\s+(?:brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|cetes|xlm|lumens?)\s+em\s+(?:brl|real|reais|usd|usdc|dolar|dolares|dollar|dollars|cetes|xlm|lumens?)\s+(?:pra|para)\s+fora\b/.test(normalized);
+    const ownMoneyOut = (
+      /\b(?:retirar|sacar|tirar|withdraw|offramp)\b/.test(normalized) ||
+      /\b(?:pra|para|pro)\s+fora\b/.test(normalized) ||
+      /\bfora\s+do\s+pix\b/.test(normalized) ||
+      /\b(?:out|outside)\s+(?:of\s+)?(?:my\s+)?account\b/.test(normalized) ||
+      (/\b(?:banco|bank)\b/.test(normalized) && /\b(?:retirar|sacar|tirar|mandar|enviar)\b/.test(normalized))
+    );
+    if (ownMoneyOut && (!conversionLayerToOutside || mentionsPix || /\b(?:banco|bank|conta|pix)\b/.test(normalized))) {
+      return {
+        is_pix_ramp: true,
+        direction: 'offramp',
+        flow: 'fund_wallet',
+        amount: amount || undefined,
+        amount_currency: assetCode || 'BRL',
+        asset_code: assetCode || 'BRL',
+      };
+    }
+
+    const recipientQuery = mentionsPix ? this.extractPixFundedRecipientFromText(normalized) : '';
+    if (recipientQuery && amount) {
+      return {
+        is_pix_ramp: true,
+        direction: 'onramp',
+        flow: 'fund_and_pay',
+        amount,
+        amount_currency: assetCode || 'BRL',
+        asset_code: assetCode || 'BRL',
+        recipient_query: recipientQuery,
+      };
+    }
+
+    const ownMoneyIn = mentionsPix && (
+      /\b(?:colocar|botar|adicionar|depositar|carregar|recarregar|trazer|receber|dar|chegar|entrar|cair)\b/.test(normalized) ||
+      /\b(?:na|para|pra)\s+minha\s+conta\b/.test(normalized)
+    );
+    if (ownMoneyIn) {
+      return {
+        is_pix_ramp: true,
+        direction: 'onramp',
+        flow: 'fund_wallet',
+        amount: amount || undefined,
+        amount_currency: assetCode || 'BRL',
+        asset_code: assetCode || 'BRL',
+      };
+    }
+
+    return {
+      is_pix_ramp: false,
+      direction: 'onramp',
+      asset_code: 'BRL',
+    };
+  }
+
   private pixFundedPaymentIntentFromLlmRoute(state: AgentState): {
     is_pix_ramp: boolean;
     direction: 'onramp' | 'offramp';
@@ -1500,7 +1636,8 @@ export class AgentGraph {
   private async handlePixRampRequest(state: AgentState): Promise<AgentState> {
     const llmOwnAccountPixIntent = this.pixOwnAccountIntentFromLlmRoute(state);
     const llmPixFundedPaymentIntent = this.pixFundedPaymentIntentFromLlmRoute(state);
-    const intent = llmOwnAccountPixIntent || llmPixFundedPaymentIntent || {
+    const deterministicPixIntent = this.extractPixRampIntentFromText(state.current_input);
+    const intent = llmOwnAccountPixIntent || llmPixFundedPaymentIntent || (deterministicPixIntent.is_pix_ramp ? deterministicPixIntent : null) || {
       is_pix_ramp: false,
       direction: 'onramp' as const,
       asset_code: 'BRL',
@@ -5166,6 +5303,33 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         state.action_type = ActionType.CREATE_WALLET;
         state.detected_intent = IntentType.WALLET;
         return await this.handleWalletCreation(state);
+      }
+
+      const pendingPixRamp = (state.action_params as any)?.pending_pix_ramp || (state as any).pending_pix_ramp;
+      if (pendingPixRamp) {
+        const followUp = this.extractAmountAndAssetFromText(state.current_input);
+        if (followUp.amount) {
+          const direction = String(pendingPixRamp.direction || '').trim() === 'offramp' ? 'offramp' : 'onramp';
+          const assetCode = followUp.assetCode || this.normalizeAgentAssetCode(pendingPixRamp.asset_code || pendingPixRamp.amount_currency || 'BRL') || 'BRL';
+          state.detected_intent = IntentType.PIX;
+          state.action_type = ActionType.INITIATE_PIX;
+          state.action_params = {
+            ...(state.action_params || {}),
+            llm_route: {
+              tool_name: direction === 'offramp' ? 'route_pix_offramp_intent' : 'route_pix_onramp_intent',
+              amount: followUp.amount,
+              asset_code: assetCode,
+              source_asset_code: assetCode,
+              language: this.getLanguage(state),
+            },
+          };
+          await this.repository.saveMessage(
+            state.session_id,
+            "user",
+            this.sanitizeUserMessage(state.current_input)
+          );
+          return await this.handlePixRampRequest(state);
+        }
       }
 
       const llmDetectedIntent = await this.detectIntent(state.current_input, state.session_data?.user_id, state.messages);
