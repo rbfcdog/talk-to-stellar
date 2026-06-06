@@ -34,7 +34,7 @@ import {
 import { PixFundingService, pixFundingService } from './pix-funding.service';
 import { SettlementEvidenceService } from './settlement-evidence.service';
 import { StellarSettlementService, stellarSettlementService } from './stellar-settlement.service';
-import { PayoutProviderAdapter } from './usd-payout-adapters';
+import { payoutProviderEvidenceSnapshot, PayoutProviderAdapter } from './usd-payout-adapters';
 import { UsdPayoutCoordinationService, usdPayoutCoordinationService } from './usd-payout-coordination.service';
 import { redactSensitive } from '../../utils/redaction';
 
@@ -108,24 +108,11 @@ function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge
   if (normalized === 'circle') return 'circle';
   if (normalized === 'bridge') return 'bridge';
   if (normalized === 'etherfuse') return 'etherfuse';
-  return 'mock';
-}
-
-function payoutProviderSnapshot(value: unknown): Record<string, unknown> {
-  const snapshot = redactSensitive(value || {}) as Record<string, any>;
-  if (snapshot.destination && typeof snapshot.destination === 'object') {
-    const destination = snapshot.destination as Record<string, unknown>;
-    const last4 = (item: unknown) => String(item || '').replace(/\D+/g, '').slice(-4);
-    const redactedNumber = (item: unknown) => last4(item) ? `[REDACTED_LAST4:${last4(item)}]` : '[REDACTED]';
-    snapshot.destination = {
-      ...destination,
-      account_holder_name: destination.account_holder_name ? '[REDACTED]' : undefined,
-      account_number: destination.account_number ? redactedNumber(destination.account_number) : undefined,
-      routing_number: destination.routing_number ? redactedNumber(destination.routing_number) : undefined,
-      iban: destination.iban ? '[REDACTED]' : undefined,
-    };
-  }
-  return snapshot;
+  if (normalized === 'mock') return 'mock';
+  throw transferValidationError(
+    'unsupported_payout_provider',
+    `Unsupported payout provider "${normalized}". Expected mock, etherfuse, circle, or bridge.`,
+  );
 }
 
 export class InternationalTransferService {
@@ -848,8 +835,8 @@ export class InternationalTransferService {
         asset_code: transfer.stellar_asset_code,
         amount_usd: transfer.quoted_usd_amount,
       },
-      provider_request: payoutProviderSnapshot(instructionMetadata.provider_payload),
-      provider_response: payoutProviderSnapshot(instructionMetadata.provider_response),
+      provider_request: payoutProviderEvidenceSnapshot(instructionMetadata.provider_payload),
+      provider_response: payoutProviderEvidenceSnapshot(instructionMetadata.provider_response),
       status_history: instruction.status_history || [],
       created_at: instruction.created_at,
       updated_at: instruction.updated_at || now(),

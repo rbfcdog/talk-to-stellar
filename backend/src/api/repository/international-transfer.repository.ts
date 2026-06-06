@@ -8,10 +8,15 @@ import {
   TransferReconciliation,
 } from '../services/international-transfer.types';
 
-function omitUndefined<T extends Record<string, any>>(value: T): T {
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined)
   ) as T;
+}
+
+function errorCode(error: unknown): string {
+  if (!error || typeof error !== 'object') return '';
+  return String((error as Record<string, unknown>).code || '');
 }
 
 function quoteToRow(quote: InternationalTransferQuote): Record<string, unknown> {
@@ -34,6 +39,27 @@ function quoteToRow(quote: InternationalTransferQuote): Record<string, unknown> 
     metadata: quote.metadata || {},
     created_at: quote.created_at,
     updated_at: quote.updated_at,
+  });
+}
+
+function quoteUpdatesToRow(updates: Partial<InternationalTransferQuote>): Record<string, unknown> {
+  return omitUndefined({
+    user_id: updates.user_id,
+    institution_id: updates.institution_id,
+    source_currency: updates.source_currency,
+    destination_currency: updates.destination_currency,
+    brl_amount: updates.brl_amount,
+    estimated_usdc_amount: updates.estimated_usdc_amount,
+    estimated_usd_amount: updates.estimated_usd_amount,
+    fx_rate: updates.fx_rate,
+    platform_fee: updates.platform_fee,
+    estimated_provider_fee: updates.estimated_provider_fee,
+    total_fee: updates.total_fee,
+    quote_status: updates.quote_status,
+    quote_source: updates.quote_source,
+    expires_at: updates.expires_at,
+    metadata: updates.metadata,
+    updated_at: new Date().toISOString(),
   });
 }
 
@@ -100,6 +126,44 @@ function transferToRow(transfer: InternationalTransfer): Record<string, unknown>
     payout_completed_at: transfer.payout_completed_at,
     created_at: transfer.created_at,
     updated_at: transfer.updated_at,
+  });
+}
+
+function transferUpdatesToRow(updates: Partial<InternationalTransfer>): Record<string, unknown> {
+  return omitUndefined({
+    quote_id: updates.quote_id,
+    status: updates.status,
+    user_id: updates.user_id,
+    institution_id: updates.institution_id,
+    sender_identity: updates.sender_identity,
+    recipient_identity: updates.recipient_identity,
+    brl_amount: updates.brl_amount,
+    quoted_usd_amount: updates.quoted_usd_amount,
+    fx_rate: updates.fx_rate,
+    fees: updates.fees,
+    stellar_asset_code: updates.stellar_asset_code,
+    stellar_asset_issuer: updates.stellar_asset_issuer,
+    stellar_tx_hash: updates.stellar_tx_hash,
+    stellar_memo: updates.stellar_memo,
+    stellar_source_account: updates.stellar_source_account,
+    stellar_destination_account: updates.stellar_destination_account,
+    payout_provider: updates.payout_provider,
+    payout_destination: updates.payout_destination,
+    payout_instruction_id: updates.payout_instruction_id,
+    provider_payout_id: updates.provider_payout_id,
+    payout_status: updates.payout_status,
+    pix_payment_id: updates.pix_payment_id,
+    pix_order_id: updates.pix_order_id,
+    pix_status: updates.pix_status,
+    same_name_payout_required: updates.same_name_payout_required,
+    same_name_match_status: updates.same_name_match_status,
+    identity_risk_notes: updates.identity_risk_notes,
+    reconciliation_metadata: updates.reconciliation_metadata,
+    error_logs: updates.error_logs,
+    pix_received_at: updates.pix_received_at,
+    stellar_settled_at: updates.stellar_settled_at,
+    payout_completed_at: updates.payout_completed_at,
+    updated_at: new Date().toISOString(),
   });
 }
 
@@ -274,16 +338,7 @@ export class SupabaseInternationalTransferRepository implements InternationalTra
   }
 
   async updateQuote(quoteId: string, updates: Partial<InternationalTransferQuote>): Promise<InternationalTransferQuote> {
-    const patch = quoteToRow({
-      ...(updates as InternationalTransferQuote),
-      quote_id: quoteId,
-      source_currency: 'BRL',
-      destination_currency: 'USD',
-      created_at: updates.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    delete (patch as any).id;
-    delete (patch as any).created_at;
+    const patch = quoteUpdatesToRow(updates);
 
     const { data, error } = await supabase
       .from('international_transfer_quotes')
@@ -319,34 +374,7 @@ export class SupabaseInternationalTransferRepository implements InternationalTra
   }
 
   async updateTransfer(transferId: string, updates: Partial<InternationalTransfer>): Promise<InternationalTransfer> {
-    const patch = transferToRow({
-      ...(updates as InternationalTransfer),
-      transfer_id: transferId,
-      quote_id: updates.quote_id || '',
-      status: updates.status || 'QUOTE_CREATED',
-      sender_identity: updates.sender_identity || {},
-      recipient_identity: updates.recipient_identity || {},
-      brl_amount: updates.brl_amount || '0',
-      quoted_usd_amount: updates.quoted_usd_amount || '0',
-      fx_rate: updates.fx_rate || '0',
-      fees: updates.fees || {} as any,
-      stellar_asset_code: updates.stellar_asset_code || 'USDC',
-      payout_destination: updates.payout_destination || {} as any,
-      same_name_payout_required: updates.same_name_payout_required || false,
-      same_name_match_status: updates.same_name_match_status || 'UNKNOWN',
-      identity_risk_notes: updates.identity_risk_notes || [],
-      reconciliation_metadata: updates.reconciliation_metadata || {},
-      error_logs: updates.error_logs || [],
-      created_at: updates.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    delete (patch as any).id;
-    delete (patch as any).created_at;
-    Object.keys(patch).forEach((key) => {
-      if ((updates as Record<string, unknown>)[key] === undefined && key !== 'updated_at') {
-        delete (patch as any)[key];
-      }
-    });
+    const patch = transferUpdatesToRow(updates);
 
     const { data, error } = await supabase
       .from('international_transfers')
@@ -441,7 +469,7 @@ export class SupabaseInternationalTransferRepository implements InternationalTra
       .insert(payoutEventToRow(record));
 
     if (!error) return true;
-    if (String((error as any).code || '') === '23505') return false;
+    if (errorCode(error) === '23505') return false;
     throw new Error(`Failed to persist payout provider event: ${error.message}`);
   }
 

@@ -1,5 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodSchema } from 'zod';
+import { ZodError, ZodSchema } from 'zod';
+import { errorLogMessage } from '../../utils/error-log';
+import { logger } from '../../utils/logger';
+
+function validationLogSummary(error: unknown): string {
+  if (!(error instanceof ZodError)) return errorLogMessage(error);
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || 'request'}:${issue.code}`)
+    .join(', ');
+}
 
 export const validate = (schema: ZodSchema) =>
   async (req: Request, res: Response, next: NextFunction) => {
@@ -10,32 +19,19 @@ export const validate = (schema: ZodSchema) =>
         params: req.params,
       });
       return next();
-    } catch (error: any) {
-      console.log('Validation Error:', error);
-      
-      let formattedErrors;
-      
-      if (error.errors && Array.isArray(error.errors)) {
-        formattedErrors = error.errors.map((err: any) => ({
-          path: err.path.join('.'),
-          message: err.message,
-          received: err.received,
-          expected: err.expected
-        }));
-      } else if (Array.isArray(error)) {
-        formattedErrors = error.map((err: any) => ({
-          path: err.path.join('.'),
-          message: err.message,
-          received: err.received,
-          expected: err.expected
-        }));
-      } else {
-        formattedErrors = [{
-          path: 'validation',
-          message: 'Validation failed. Check request format.',
-          details: error.message || 'Unknown validation error'
-        }];
-      }
+    } catch (error: unknown) {
+      logger.warn(`[validation] request rejected: ${validationLogSummary(error)}`);
+
+      const formattedErrors = error instanceof ZodError
+        ? error.issues.map((issue) => ({
+            path: issue.path.join('.'),
+            message: issue.message,
+            code: issue.code,
+          }))
+        : [{
+            path: 'validation',
+            message: 'Validation failed. Check request format.',
+          }];
 
       return res.status(400).json({
         success: false,

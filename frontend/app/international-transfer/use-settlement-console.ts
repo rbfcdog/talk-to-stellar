@@ -31,7 +31,7 @@ const INITIAL_FORM: ConsoleForm = {
   accountType: "checking",
   country: "US",
   providerLabel: "other",
-  payoutProvider: "etherfuse",
+  payoutProvider: "circle",
   mockPix: false,
   runEtherfuseOffRamp: false,
   manualSessionId: "",

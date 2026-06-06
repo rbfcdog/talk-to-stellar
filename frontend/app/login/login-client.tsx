@@ -12,6 +12,7 @@ import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { trackUserResearchEvent } from "@/lib/user-research"
+import { decodeJwtPayload } from "@/lib/jwt"
 
 declare global {
   interface Window {
@@ -55,18 +56,6 @@ function isPasskeyChallengeExpiredMessage(message?: string) {
     normalized.includes("challenge expired") ||
     normalized.includes("desafio expirado")
   )
-}
-
-function decodeJwtPayload(token: string): any {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return {}
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
-    return JSON.parse(atob(padded))
-  } catch {
-    return {}
-  }
 }
 
 function formatExternalIdentifier(provider: string, value: string): string {

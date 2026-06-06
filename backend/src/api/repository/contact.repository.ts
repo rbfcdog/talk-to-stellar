@@ -1,5 +1,11 @@
 import { supabase } from '../../config/supabase';
 import { Contact } from '../../types';
+import { logger } from '../../utils/logger';
+
+function throwRepositoryError(operation: string, detail: string, publicMessage: string): never {
+  logger.error(`[contact-repository] ${operation}: ${detail}`);
+  throw new Error(publicMessage);
+}
 
 export class ContactRepository {
   static async create(contactData: Omit<Contact, 'id' | 'created_at' | 'updated_at'>): Promise<Contact> {
@@ -10,8 +16,7 @@ export class ContactRepository {
       .single();
 
     if (error) {
-      console.error('Supabase error creating contact:', error.message);
-      throw new Error('Failed to create contact record in database.');
+      throwRepositoryError('failed to create contact', error.message, 'Failed to create contact record in database.');
     }
     return data;
   }
@@ -24,8 +29,7 @@ export class ContactRepository {
       .order('created_at', { ascending: false });
     
     if (error) {
-      console.error('Supabase error finding contacts by owner ID:', error.message);
-      throw new Error('Failed to retrieve user contacts.');
+      throwRepositoryError('failed to find contacts by owner ID', error.message, 'Failed to retrieve user contacts.');
     }
     return data || [];
   }
@@ -40,8 +44,7 @@ export class ContactRepository {
       .maybeSingle();
 
     if (error) {
-      console.error('Supabase error finding contact by name for owner:', error.message);
-      throw new Error('Failed to retrieve contact by name.');
+      throwRepositoryError('failed to find contact by name for owner', error.message, 'Failed to retrieve contact by name.');
     }
 
     return data || null;
@@ -61,8 +64,7 @@ export class ContactRepository {
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      console.error('Supabase error finding contact by transfer key:', error.message);
-      throw new Error('Failed to retrieve contact by transfer key.');
+      throwRepositoryError('failed to find contact by transfer key', error.message, 'Failed to retrieve contact by transfer key.');
     }
 
     return data || null;

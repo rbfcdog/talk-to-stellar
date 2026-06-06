@@ -10,6 +10,7 @@ import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target"
+import { decodeJwtPayload } from "@/lib/jwt"
 
 type ValidationResult = {
   success?: boolean
@@ -42,18 +43,6 @@ type ConfirmResponse = {
   code?: string
   support_code?: string
   request_id?: string
-}
-
-function decodeJwtPayload(token: string): any {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return {}
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
-    return JSON.parse(atob(padded))
-  } catch {
-    return {}
-  }
 }
 
 function normalizeAssetCode(value?: string) {

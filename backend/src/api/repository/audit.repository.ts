@@ -1,5 +1,6 @@
 import { supabase } from '../../config/supabase';
 import crypto from 'crypto';
+import { logger } from '../../utils/logger';
 
 export interface AuditEvent {
   id: string;
@@ -7,7 +8,7 @@ export interface AuditEvent {
   event_type: string;
   ip_hash?: string;
   user_agent?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -20,7 +21,7 @@ export class AuditRepository {
   static async logEvent(
     sessionId: string,
     eventType: string,
-    metadata: any = {},
+    metadata: Record<string, unknown> = {},
     ipAddress?: string,
     userAgent?: string
   ): Promise<AuditEvent> {
@@ -37,7 +38,7 @@ export class AuditRepository {
       .single();
 
     if (error) {
-      console.error('Supabase error logging audit event:', error.message);
+      logger.error(`[audit-repository] failed to log event: ${error.message}`);
       throw new Error(`Failed to log audit event: ${error.message}`);
     }
     return data;
@@ -52,7 +53,7 @@ export class AuditRepository {
       .limit(limit);
 
     if (error) {
-      console.error('Supabase error retrieving audit events:', error.message);
+      logger.error(`[audit-repository] failed to retrieve session events: ${error.message}`);
       throw new Error('Failed to retrieve audit events.');
     }
     return data || [];
@@ -68,7 +69,7 @@ export class AuditRepository {
       .limit(limit);
 
     if (error) {
-      console.error('Supabase error retrieving events by type:', error.message);
+      logger.error(`[audit-repository] failed to retrieve events by type: ${error.message}`);
       throw new Error('Failed to retrieve audit events.');
     }
     return data || [];

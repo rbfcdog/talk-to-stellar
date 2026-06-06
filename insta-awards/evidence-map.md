@@ -32,6 +32,7 @@ Migration:
 ```text
 backend/migrations/20260520_00_international_usd_transfers.sql
 backend/migrations/20260606_00_usd_payout_coordination.sql
+backend/migrations/20260606_01_usd_payout_coordination_hardening.sql
 ```
 
 Tables:

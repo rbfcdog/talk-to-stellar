@@ -41,6 +41,16 @@ Required instruction fields:
 - `status_history`
 - `metadata`
 
+For configured provider execution, the adapter keeps two separate payload
+surfaces:
+
+- an in-memory outbound payload containing the destination fields required by
+  the configured provider endpoint;
+- a persisted evidence snapshot where account holder names, account numbers,
+  routing numbers, IBANs, secrets, and tokens are redacted.
+
+Unknown provider names are rejected. They never fall back to the mock adapter.
+
 ## Provider Modes
 
 | Adapter | Current mode | Execution boundary |
@@ -102,6 +112,7 @@ Tests:
 backend/tests/payout-adapter-contract.test.ts
 backend/tests/international-transfer.service.test.ts
 backend/tests/international-transfer.routes.test.ts
+backend/tests/international-transfer.repository.test.ts
 ```
 
 Capture for reviewers:

@@ -10,6 +10,7 @@ import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_
 import { TypingDots } from "@/components/shared/feedback"
 import { SecureLinkState } from "@/components/shared/secure-link-state"
 import { useLanguage, type AppLanguage } from "@/lib/i18n"
+import { decodeJwtPayload } from "@/lib/jwt"
 
 type ValidationResult = {
   valid?: boolean
@@ -17,18 +18,6 @@ type ValidationResult = {
   message?: string
   expired?: boolean
   expired_at?: string
-}
-
-function decodeJwtPayload(token: string): any {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return {}
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
-    return JSON.parse(atob(padded))
-  } catch {
-    return {}
-  }
 }
 
 function normalizeAssetCode(value?: string) {

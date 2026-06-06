@@ -6,6 +6,7 @@ import { idempotentFetch } from "@/lib/idempotency"
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { normalizeClientSessionSource, scopedClientStorageKey } from "@/lib/session"
 import { OperationalCard, OperationalPage, StatusPill } from "@/components/layout/OperationalShell"
+import { decodeJwtPayload } from "@/lib/jwt"
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -16,18 +17,6 @@ function generateSessionId(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
-}
-
-function decodeJwtPayload(token: string): any {
-  try {
-    const payload = token.split(".")[1]
-    if (!payload) return {}
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=")
-    return JSON.parse(atob(padded))
-  } catch {
-    return {}
-  }
 }
 
 export default function LogoutClient() {

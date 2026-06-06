@@ -451,6 +451,25 @@ if (apiBase && transferId) {
       }
       if (capture.id === 'payout-coordination') {
         const payoutEvidence = body.payload?.payout_evidence || {};
+        writeJson(join(runDir, 'payout', 'instruction.json'), {
+          captured_at: body.captured_at,
+          transfer_id: payoutEvidence.transfer_id || transferId,
+          provider: payoutEvidence.provider || null,
+          execution_mode: payoutEvidence.execution_mode || null,
+          settlement: payoutEvidence.settlement || null,
+          identity_control: payoutEvidence.identity_control || null,
+          instruction: payoutEvidence.instruction || null,
+          status_history: payoutEvidence.status_history || [],
+          destination: payoutEvidence.destination || null,
+          redaction: payoutEvidence.redaction || null,
+        });
+        markEvidence(
+          'payout-evidence',
+          payoutEvidence?.instruction?.created ? 'captured' : 'blocked',
+          payoutEvidence?.instruction?.created
+            ? 'Reviewer-safe payout instruction evidence captured.'
+            : 'Payout coordination captured, but no instruction exists yet.',
+        );
         markWeekTwoEvidence(
           'payout-coordination-record',
           payoutEvidence?.instruction?.created ? 'captured' : 'blocked',
@@ -524,6 +543,8 @@ if (dashboardBase) {
       }
       await page.screenshot({ path: screenshotPath, fullPage: false });
       await page.locator('[data-testid="week-two-evidence"]').waitFor({ state: 'visible', timeout: 15_000 });
+      await page.locator('[data-testid="tab-payout"]').click();
+      await page.locator('[data-testid="payout-coordination-panel"]').waitFor({ state: 'visible', timeout: 15_000 });
       await page.screenshot({ path: weekTwoScreenshotPath, fullPage: true });
     } finally {
       await browser.close();

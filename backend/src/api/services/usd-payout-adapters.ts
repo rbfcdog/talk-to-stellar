@@ -34,6 +34,8 @@ export interface PayoutProviderAdapter {
   cancelPayout?(providerPayoutId: string): Promise<void>;
 }
 
+const SUPPORTED_PAYOUT_PROVIDERS: PayoutProviderName[] = ['mock', 'circle', 'bridge', 'etherfuse'];
+
 function now() {
   return new Date().toISOString();
 }
@@ -83,8 +85,68 @@ function readBoolean(value: unknown): boolean {
   return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+}
+
+function providerTimeoutMs(): number {
+  const configured = Number(process.env.PAYOUT_PROVIDER_TIMEOUT_MS || 30000);
+  if (!Number.isFinite(configured)) return 30000;
+  return Math.max(1000, Math.min(120000, Math.floor(configured)));
+}
+
+function redactPayoutFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactPayoutFields);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normalized === 'accountholdername') return [key, item ? '[REDACTED]' : item];
+    if (normalized === 'accountnumber' || normalized === 'routingnumber') {
+      const lastFour = readText(item).replace(/\D+/g, '').slice(-4);
+      return [key, lastFour ? `[REDACTED_LAST4:${lastFour}]` : '[REDACTED]'];
+    }
+    if (normalized === 'iban') return [key, item ? '[REDACTED]' : item];
+    return [key, redactPayoutFields(item)];
+  }));
+}
+
+export function payoutProviderEvidenceSnapshot(value: unknown): Record<string, unknown> {
+  return redactPayoutFields(redactSensitive(value || {})) as Record<string, unknown>;
+}
+
+function providerResponseId(payload: Record<string, unknown>): string {
+  const data = record(payload.data);
+  return readText(payload.id || payload.payout_id || payload.transfer_id || data.id || data.payout_id || data.transfer_id);
+}
+
+function providerResponseStatus(payload: Record<string, unknown>): unknown {
+  const data = record(payload.data);
+  return payload.status ||
+    data.status ||
+    record(payload.payout).status ||
+    record(payload.transfer).status ||
+    record(data.payout).status ||
+    record(data.transfer).status;
+}
+
+function providerResponseError(payload: Record<string, unknown>, status: number): string {
+  const data = record(payload.data);
+  return readText(payload.message || payload.error || data.message || data.error) || String(status);
+}
+
+function assertExecutableDestination(destination: UsdBankDestination): void {
+  const hasDomesticDetails = Boolean(readText(destination.routingNumber) && readText(destination.accountNumber));
+  const hasInternationalDetails = Boolean(readText(destination.iban));
+  if (!readText(destination.accountHolderName) || !readText(destination.country) || (!hasDomesticDetails && !hasInternationalDetails)) {
+    throw new Error('Configured payout execution requires account holder, country, and either routing/account numbers or an IBAN.');
+  }
 }
 
 function destinationCompatibilityMetadata(destination: UsdBankDestination): Record<string, unknown> {
@@ -128,7 +190,7 @@ function statusObservation(
     raw_status: readText(rawStatus) || undefined,
     source,
     observed_at: now(),
-    evidence: redactSensitive(evidence) as Record<string, unknown>,
+    evidence: payoutProviderEvidenceSnapshot(evidence),
   };
 }
 
@@ -157,7 +219,7 @@ function providerEvent(
     raw_status: rawStatus,
     event_type: readText(payload.type || payload.event_type || payload.event) || undefined,
     occurred_at: readText(payload.occurred_at || payload.createDate || payload.created_at || data.updated_at) || now(),
-    evidence: redactSensitive(payload) as Record<string, unknown>,
+    evidence: payoutProviderEvidenceSnapshot(payload),
   };
 }
 
@@ -283,10 +345,10 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
         account_holder_type: input.destination.accountHolderType,
         bank_name: input.destination.bankName,
         routing_number: input.destination.routingNumber,
-        account_number: input.destination.accountNumber ? '[configured]' : undefined,
+        account_number: input.destination.accountNumber,
         account_type: input.destination.accountType,
         swift_bic: input.destination.swiftBic,
-        iban: input.destination.iban ? '[configured]' : undefined,
+        iban: input.destination.iban,
         country: input.destination.country,
         provider_label: input.destination.providerLabel,
       },
@@ -306,13 +368,14 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
     const createUrl = String(process.env[this.createUrlEnvName] || '').trim();
     const realExecution = shouldExecuteRealPayouts();
     const providerPayload = this.buildProviderPayload(input);
+    const providerPayloadEvidence = payoutProviderEvidenceSnapshot(providerPayload);
 
     if (isWiseDestination(input.destination)) {
       return createInstruction(input, this.providerName, 'wise_metadata_only', {
         mode: 'wise_metadata_only',
         provider_api_key_present: Boolean(apiKey),
         real_execution_enabled: false,
-        provider_payload: providerPayload,
+        provider_payload: providerPayloadEvidence,
         ...destinationCompatibilityMetadata(input.destination),
         note: 'Wise is destination metadata only for this sprint. No Wise API, ACH, wire, or provider payout was executed.',
       });
@@ -323,14 +386,15 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
         mode: 'compatibility',
         provider_api_key_present: Boolean(apiKey),
         real_execution_enabled: realExecution,
-        provider_payload: providerPayload,
+        provider_payload: providerPayloadEvidence,
         ...destinationCompatibilityMetadata(input.destination),
         note: `${this.providerName} compatibility adapter prepared the payout payload but did not execute a bank payout.`,
       });
     }
 
+    assertExecutableDestination(input.destination);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Number(process.env.PAYOUT_PROVIDER_TIMEOUT_MS || 30000));
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
     let response: Response;
     try {
       response = await fetch(createUrl, {
@@ -346,14 +410,14 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
     } finally {
       clearTimeout(timeout);
     }
-    const payload: any = await response.json().catch(() => ({}));
+    const payload = record(await response.json().catch(() => ({})));
     if (!response.ok) {
-      throw new Error(`${this.providerName} payout API rejected instruction: ${payload?.message || payload?.error || response.status}`);
+      throw new Error(`${this.providerName} payout API rejected instruction: ${providerResponseError(payload, response.status)}`);
     }
 
-    const providerPayoutId = String(payload.id || payload.payout_id || payload.transfer_id || crypto.randomUUID());
+    const providerPayoutId = providerResponseId(payload) || crypto.randomUUID();
     const createdAt = now();
-    const rawStatus = payload.status || payload.data?.status || 'pending';
+    const rawStatus = providerResponseStatus(payload) || 'pending';
     const status = normalizePayoutStatus(rawStatus, this.providerName);
     return {
       payout_instruction_id: `${this.providerName}_instruction_${crypto.randomUUID()}`,
@@ -370,8 +434,8 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
       metadata: {
         mode: 'live_api',
         ...destinationCompatibilityMetadata(input.destination),
-        provider_payload: redactSensitive(providerPayload),
-        provider_response: redactSensitive(payload),
+        provider_payload: providerPayloadEvidence,
+        provider_response: payoutProviderEvidenceSnapshot(payload),
       },
     };
   }
@@ -389,7 +453,7 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
       ? template.replace('{id}', encodeURIComponent(providerPayoutId))
       : `${template.replace(/\/+$/, '')}/${encodeURIComponent(providerPayoutId)}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Number(process.env.PAYOUT_PROVIDER_TIMEOUT_MS || 30000));
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
     let response: Response;
     try {
       response = await fetch(url, {
@@ -402,14 +466,14 @@ abstract class CompatibilityPayoutAdapter implements PayoutProviderAdapter {
     } finally {
       clearTimeout(timeout);
     }
-    const payload: any = await response.json().catch(() => ({}));
+    const payload = record(await response.json().catch(() => ({})));
     if (!response.ok) {
-      throw new Error(`${this.providerName} payout status API rejected request: ${payload?.message || payload?.error || response.status}`);
+      throw new Error(`${this.providerName} payout status API rejected request: ${providerResponseError(payload, response.status)}`);
     }
     return statusObservation(
       this.providerName,
       providerPayoutId,
-      payload.status || payload.data?.status || payload.payout?.status || payload.transfer?.status || 'pending',
+      providerResponseStatus(payload) || 'pending',
       'poll',
       payload,
     );
@@ -553,7 +617,8 @@ export function getPayoutProviderAdapter(provider = process.env.PAYOUT_PROVIDER)
   if (normalized === 'circle') return new CircleCompatibilityAdapter();
   if (normalized === 'bridge') return new BridgeCompatibilityAdapter();
   if (normalized === 'etherfuse') return new EtherfusePixOffRampAdapter();
-  return new MockUsdPayoutAdapter();
+  if (normalized === 'mock') return new MockUsdPayoutAdapter();
+  throw new Error(`Unsupported payout provider "${normalized}". Expected one of: ${SUPPORTED_PAYOUT_PROVIDERS.join(', ')}.`);
 }
 
 export function getPayoutProviderCapabilities(): PayoutProviderCapabilities[] {

@@ -702,6 +702,12 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     const funded = await service.confirmSandboxFunding(transfer.transfer_id);
     const settled = await service.settleStellar(funded.transfer_id);
 
+    await expect(service.createPayoutInstruction(settled.transfer_id, 'typo-provider')).rejects.toMatchObject({
+      code: 'unsupported_payout_provider',
+      status: 400,
+    });
+    expect(repository.transfers.get(settled.transfer_id)?.status).toBe('USDC_SETTLED');
+
     await expect(service.createPayoutInstruction(settled.transfer_id, 'etherfuse')).rejects.toThrow(/provider rejected/);
     expect(repository.transfers.get(settled.transfer_id)?.status).toBe('FAILED');
     expect(repository.transfers.get(settled.transfer_id)?.error_logs.at(-1)).toMatchObject({ stage: 'payout_instruction' });

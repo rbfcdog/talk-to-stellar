@@ -12,6 +12,7 @@ import {
 import {
   getPayoutProviderAdapter,
   getPayoutProviderCapabilities,
+  payoutProviderEvidenceSnapshot,
   PayoutProviderAdapter,
 } from './usd-payout-adapters';
 
@@ -203,6 +204,7 @@ export class UsdPayoutCoordinationService {
         ...item,
         provider_payout_id: `[redacted-hash:${sha256Short(item.provider_payout_id)}]`,
         provider_reference: item.provider_reference ? `[redacted-hash:${sha256Short(item.provider_reference)}]` : undefined,
+        evidence: payoutProviderEvidenceSnapshot(item.evidence),
       })),
       destination: {
         account_holder_hash: sha256Short(transfer.payout_destination?.accountHolderName),

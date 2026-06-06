@@ -22,6 +22,7 @@ Apply:
 
 ```text
 backend/migrations/20260606_00_usd_payout_coordination.sql
+backend/migrations/20260606_01_usd_payout_coordination_hardening.sql
 ```
 
 It creates:
@@ -31,12 +32,18 @@ It creates:
 
 Provider references are unique per provider. Provider event IDs are unique per
 provider, so replayed webhook events do not advance the lifecycle twice.
+The hardening migration also enforces supported providers, statuses, execution
+modes, positive USD amounts, and USD currency at the database boundary.
 
 ## Execution Boundaries
 
 - Circle and Bridge default to compatibility mode.
 - Provider API execution requires credentials, configured create/status URLs,
   and `ENABLE_REAL_PAYOUT_EXECUTION=true`.
+- Executable destination details are sent only to the configured provider URL.
+  Persisted provider request/response evidence is redacted and exposes account
+  and routing numbers only as final-four markers.
+- Unknown payout provider names are rejected and never fall back to mock.
 - Wise remains destination metadata only.
 - Etherfuse remains a PIX off-ramp proof and is not presented as USD bank
   delivery.
