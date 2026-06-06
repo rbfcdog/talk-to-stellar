@@ -44,7 +44,7 @@ describe("/r short-link session handoff", () => {
     const response = await GET(request, { params: Promise.resolve({ code: "abc" }) });
     const cookies = setCookieHeaders(response).join("\n");
 
-    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=whatsapp&session_scope=whatsapp");
+    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=whatsapp&session_scope=whatsapp&short_link_code=abc");
     expect(cookies).toContain("tts_session_id_whatsapp=whatsapp-session");
     expect(cookies).toContain("tts_session_token_whatsapp=whatsapp-token");
     expect(cookies).toContain("tts_session_source_whatsapp=whatsapp");
@@ -74,7 +74,7 @@ describe("/r short-link session handoff", () => {
     const response = await GET(request, { params: Promise.resolve({ code: "rendimentos" }) });
     const cookies = setCookieHeaders(response).join("\n");
 
-    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=chat&session_scope=whatsapp");
+    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=chat&session_scope=whatsapp&short_link_code=rendimentos");
     expect(cookies).toContain("tts_session_id_whatsapp=whatsapp-session");
     expect(cookies).toContain("tts_session_token_whatsapp=whatsapp-token");
     expect(cookies).toContain("tts_session_source_whatsapp=whatsapp");
@@ -102,7 +102,7 @@ describe("/r short-link session handoff", () => {
     const response = await GET(request, { params: Promise.resolve({ code: "login" }) });
     const cookies = setCookieHeaders(response).join("\n");
 
-    expect(response.headers.get("location")).toBe("https://app.test/login?provider=whatsapp&source=whatsapp&session_scope=whatsapp");
+    expect(response.headers.get("location")).toBe("https://app.test/login?provider=whatsapp&source=whatsapp&session_scope=whatsapp&short_link_code=login");
     expect(cookies).toContain("tts_session_id_whatsapp=");
     expect(cookies).toContain("tts_session_token_whatsapp=");
     expect(cookies).toContain("tts_session_source_whatsapp=");
@@ -138,7 +138,7 @@ describe("/r short-link session handoff", () => {
     const response = await GET(request, { params: Promise.resolve({ code: "rendimentos" }) });
     const cookies = setCookieHeaders(response).join("\n");
 
-    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=chat&session_scope=whatsapp");
+    expect(response.headers.get("location")).toBe("https://app.test/rendimentos?source=chat&session_scope=whatsapp&short_link_code=rendimentos");
     expect(cookies).not.toContain("tts_session_id_whatsapp=");
     expect(cookies).not.toContain("tts_session_token_whatsapp=");
     expect(cookies).not.toContain("tts_session_source_whatsapp=");

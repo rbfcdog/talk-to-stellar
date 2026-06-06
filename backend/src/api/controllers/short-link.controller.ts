@@ -19,6 +19,7 @@ const PUBLIC_SHORT_LINK_PATHS = [
   '/login',
   '/confirm-payment',
   '/send-external',
+  '/setup-passkey',
 ];
 
 function splitCsv(value: unknown): string[] {
@@ -67,6 +68,18 @@ function hasTrustedProxySecret(req: Request): boolean {
   const expected = String(process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
   const provided = String(req.get('x-internal-api-secret') || req.get('x-short-link-proxy-secret') || '').trim();
   return Boolean(expected && provided && timingSafeEqualString(expected, provided));
+}
+
+function requestSessionId(req: Request): string {
+  return String(
+    req.body?.session_id ||
+      req.body?.sessionId ||
+      req.query.session_id ||
+      req.query.sessionId ||
+      req.get('x-session-id') ||
+      req.get('x-talktostellar-session-id') ||
+      ''
+  ).trim();
 }
 
 function normalizeSessionSource(value: unknown): string {
@@ -172,6 +185,7 @@ export class ShortLinkController {
       const purpose = String(req.body?.purpose || 'qr_passkey_confirm').trim().toLowerCase();
       const sessionId = String(req.body?.session_id || req.body?.sessionId || '').trim();
       const userId = String(req.body?.user_id || req.body?.userId || '').trim();
+      const expiresInMinutes = Math.max(0, Number(req.body?.expires_in_minutes || req.body?.expiresInMinutes || 0));
       const expiresInHours = Math.max(1, Number(req.body?.expires_in_hours || req.body?.expiresInHours || 24));
 
       if (!url) {
@@ -190,6 +204,7 @@ export class ShortLinkController {
         purpose,
         sessionId: sessionId || undefined,
         userId: userId || undefined,
+        expiresInMinutes: expiresInMinutes || undefined,
         expiresInHours,
       });
 
@@ -277,6 +292,24 @@ export class ShortLinkController {
       const code = String(req.params.code || req.query.code || '').trim();
       if (!code) {
         return res.status(400).json({ success: false, message: 'code é obrigatório.' });
+      }
+
+      const record = await externalService.resolveShortLinkRecord(code);
+      if (!record?.url) {
+        return res.status(404).json({ success: false, message: 'Link não encontrado.' });
+      }
+
+      const recordSessionId = String(record.session_id || '').trim();
+      const callerSessionId = requestSessionId(req);
+      const authorized =
+        hasTrustedProxySecret(req) ||
+        Boolean(recordSessionId && callerSessionId && recordSessionId === callerSessionId);
+
+      if (!authorized) {
+        return res.status(403).json({
+          success: false,
+          message: 'Esta sessão não pode marcar este link como usado.',
+        });
       }
 
       const consumed = await externalService.expireShortLink(code);

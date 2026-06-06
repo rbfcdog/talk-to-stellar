@@ -1007,7 +1007,7 @@ export class AgentGraph {
           purpose: 'onboarding_generic',
           sessionId: String(state?.session_id || '').trim() || undefined,
           userId: String(state?.session_data?.user_id || '').trim() || undefined,
-          expiresInHours: 24,
+          expiresInMinutes: 15,
         });
       } catch (error) {
         logger.warn(`[onboarding-url] failed to shorten generic onboarding URL: ${error instanceof Error ? error.message : String(error)}`);
@@ -1033,7 +1033,7 @@ export class AgentGraph {
             purpose: 'login_entry',
             sessionId: String(state?.session_id || '').trim() || undefined,
             userId: String(state?.session_data?.user_id || '').trim() || undefined,
-            expiresInHours: 24,
+            expiresInMinutes: 15,
           });
         }
       } catch (error) {
@@ -1412,7 +1412,7 @@ export class AgentGraph {
         purpose: `pix_${intent.direction}`,
         sessionId: state.session_id,
         userId: String(state.session_data?.user_id || '').trim() || undefined,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
     } catch (error) {
       logger.warn(`[pix-ramp-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
@@ -4036,7 +4036,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         providerUserId: externalProviderUserId || undefined,
         source: externalProvider || undefined,
         userId: String(state?.session_data?.user_id || '').trim() || undefined,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
     } catch (error) {
       logger.warn(`[logout-url] failed to create short logout URL: ${error instanceof Error ? error.message : String(error)}`);
@@ -4224,7 +4224,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         purpose: 'balance_view',
         sessionId: state.session_id,
         userId: String(state.session_data?.user_id || '').trim() || undefined,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
     } catch (error) {
       logger.warn(`[balance-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
@@ -4244,7 +4244,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
         purpose: 'transaction_history',
         sessionId: state.session_id,
         userId: String(state.session_data?.user_id || '').trim() || undefined,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
     } catch (error) {
       logger.warn(`[history-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);

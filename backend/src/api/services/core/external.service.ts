@@ -260,6 +260,7 @@ export class ExternalService {
     purpose: string;
     sessionId?: string | null;
     userId?: string | null;
+    expiresInMinutes?: number;
     expiresInHours?: number;
     expiresAt?: string | Date | null;
   }): Promise<string> {
@@ -269,7 +270,14 @@ export class ExternalService {
     const code = shortCodeFromToken(input.token, input.purpose);
     const hash = tokenHash(input.token);
     const explicitExpiresAt = normalizeExpiresAt(input.expiresAt);
-    const expiresAt = (explicitExpiresAt || new Date(Date.now() + (input.expiresInHours || 24) * 60 * 60 * 1000)).toISOString();
+    const expiresInMinutes = Number(input.expiresInMinutes || 0);
+    const expiresAt = (explicitExpiresAt || new Date(
+      Date.now() + (
+        Number.isFinite(expiresInMinutes) && expiresInMinutes > 0
+          ? expiresInMinutes * 60 * 1000
+          : (input.expiresInHours || 24) * 60 * 60 * 1000
+      )
+    )).toISOString();
 
     try {
       const { error } = await this.supabase
@@ -652,7 +660,7 @@ export class ExternalService {
       token,
       url: longUrl,
       purpose: 'external_onboard',
-      expiresInHours: 24,
+      expiresInMinutes: Number((extra as any).expires_in_minutes || (extra as any).expiresInMinutes || 15),
     });
     return { token, url: shortUrl, longUrl };
   }
@@ -693,6 +701,7 @@ export class ExternalService {
       purpose: 'external_login',
       sessionId: String(extra.session_id || extra.sessionId || '').trim() || null,
       userId: String(extra.user_id || extra.userId || '').trim() || null,
+      expiresInMinutes: Number(extra.expires_in_minutes || extra.expiresInMinutes || 15),
       expiresInHours: Number(extra.expires_in_hours || extra.expiresInHours || 24),
     });
     return { token, url: shortUrl, longUrl };
@@ -704,6 +713,7 @@ export class ExternalService {
     providerUserId?: string;
     source?: string;
     userId?: string;
+    expiresInMinutes?: number;
     expiresInHours?: number;
   }): Promise<string> {
     const sessionId = String(input.sessionId || '').trim();
@@ -720,21 +730,23 @@ export class ExternalService {
       source: source || null,
       nonce: uuidv4(),
     };
+    const expiresInMinutes = Math.max(0, Number(input.expiresInMinutes || 0));
     const expiresInHours = Math.max(1, Number(input.expiresInHours || 24));
-    const token = jwt.sign(payload, getJwtSecret(), { expiresIn: `${expiresInHours}h` });
+    const expiresMs = expiresInMinutes > 0 ? expiresInMinutes * 60 * 1000 : expiresInHours * 60 * 60 * 1000;
+    const token = jwt.sign(payload, getJwtSecret(), { expiresIn: expiresInMinutes > 0 ? `${expiresInMinutes}m` : `${expiresInHours}h` });
     await this.registerLogoutConfirmation({
       token,
       sessionId: sessionId || null,
       userId: userId || null,
       provider: provider || null,
       providerUserId: providerUserId || null,
-      expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + expiresMs),
     });
 
     const url = new URL(`${getPaymentConfirmBase()}/logout`);
     url.searchParams.set('token', token);
 
-    const expiresAt = new Date(Date.now() + Math.max(1, Number(input.expiresInHours || 24)) * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + expiresMs);
     return await this.shortenArbitraryUrl({
       url: url.toString(),
       purpose: 'logout_confirm',
@@ -780,9 +792,15 @@ export class ExternalService {
     purpose: string;
     sessionId?: string;
     userId?: string;
+    expiresInMinutes?: number;
     expiresInHours?: number;
   }): Promise<string> {
-    const expiresAt = new Date(Date.now() + Math.max(1, Number(input.expiresInHours || 24)) * 60 * 60 * 1000);
+    const expiresInMinutes = Number(input.expiresInMinutes || 0);
+    const expiresAt = new Date(Date.now() + (
+      Number.isFinite(expiresInMinutes) && expiresInMinutes > 0
+        ? Math.max(1, expiresInMinutes) * 60 * 1000
+        : Math.max(1, Number(input.expiresInHours || 24)) * 60 * 60 * 1000
+    ));
     return await this.shortenArbitraryUrl({
       url: input.url,
       purpose: input.purpose,
@@ -872,7 +890,7 @@ export class ExternalService {
         purpose: 'payment_confirm',
         sessionId: payload.session_id,
         userId: payload.owner_id,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
       return { token, url };
     }
@@ -935,7 +953,7 @@ export class ExternalService {
         purpose: 'payment_confirm',
         sessionId: payload.session_id,
         userId: payload.owner_id,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
       return { token, url };
     }
@@ -960,7 +978,7 @@ export class ExternalService {
         purpose: 'payment_confirm',
         sessionId: payload.session_id,
         userId: payload.owner_id,
-        expiresInHours: 24,
+        expiresInMinutes: 15,
       });
       return { token, url };
     }
@@ -1122,7 +1140,7 @@ export class ExternalService {
       purpose: 'conversion_confirm',
       sessionId: payload.session_id,
       userId: payload.owner_id,
-      expiresInHours: 24,
+      expiresInMinutes: 15,
     });
 
     return { token, url };

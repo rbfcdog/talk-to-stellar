@@ -341,7 +341,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       finalAssetIssuer: usdcIssuer,
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('completed');
     expect(record.deliveryHash).toMatch(/^sandbox-ledger-/);
@@ -387,7 +387,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       operationId: 'operation-brl-no-distributor-default',
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('failed');
     expect(record.deliveryError).toContain('saldo real');
@@ -425,7 +425,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       finalAmount: '10.07',
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('completed');
     expect(record.deliveryError).toBeUndefined();
@@ -622,7 +622,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       operationId: 'operation-brl-distributor',
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('completed');
     expect(record.deliveryHash).toBe('stellar-tesouro-delivery-hash');
@@ -704,7 +704,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       },
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('completed');
     expect(record.deliveryHash).toBe('stellar-tesouro-delivery-fee-hash');
@@ -764,7 +764,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       operationId: 'operation-brl-trustline-failure',
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('failed');
     expect(record.deliveryError).toContain('preparar sua conta para receber reais');
@@ -813,7 +813,7 @@ describe('AnchorService sandbox PIX confirmation', () => {
       operationId: 'operation-brl-no-delta',
     });
 
-    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId);
+    const record = await (AnchorService as any).deliverSandboxOnRamp(orderId, undefined, undefined, true);
 
     expect(record.transaction.status).toBe('failed');
     expect(record.deliveryError).toContain('wallet balance did not increase');
@@ -1360,7 +1360,11 @@ describe('AnchorService sandbox PIX confirmation', () => {
     const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt')
       .mockResolvedValue('https://talktostellar.com/receipt/conversion-complete');
 
-    const result = await AnchorService.getOnRampStatus('sandbox-pix-xlm-usdc', 'op-1');
+    const result = await AnchorService.getOnRampStatus({
+      order_id: 'sandbox-pix-xlm-usdc',
+      operation_id: 'op-1',
+      trusted_internal: true,
+    });
 
     expect(conversionSpy).toHaveBeenCalledWith(expect.objectContaining({
       sourceAsset: { code: 'XLM', issuer: undefined },

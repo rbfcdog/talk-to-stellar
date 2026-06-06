@@ -22,7 +22,7 @@ function createSupabaseMock(existingRows: any[]) {
 }
 
 describe('ExternalRepository', () => {
-  it('prefers a WhatsApp alias with login data over an empty phone alias', async () => {
+  it('keeps generic phone lookup separate from WhatsApp aliases', async () => {
     const { supabase } = createSupabaseMock([
       {
         provider: 'phone',
@@ -44,8 +44,8 @@ describe('ExternalRepository', () => {
     const row = await repo.findByProviderAndId('phone', '5519997624114@s.whatsapp.net');
 
     expect(row).toEqual(expect.objectContaining({
-      provider: 'whatsapp',
-      data: expect.objectContaining({ email: 'rodrigo@example.com' }),
+      provider: 'phone',
+      data: expect.objectContaining({ remote_jid: '5519997624114@s.whatsapp.net' }),
     }));
   });
 
@@ -86,7 +86,7 @@ describe('ExternalRepository', () => {
     }));
   });
 
-  it('does not copy identity data from another provider alias into a new alias row', async () => {
+  it('does not copy identity data or ownership from another provider alias into a new alias row', async () => {
     const { supabase, getUpsertPayload } = createSupabaseMock([
       {
         provider: 'whatsapp',
@@ -111,8 +111,8 @@ describe('ExternalRepository', () => {
     expect(getUpsertPayload()).toEqual(expect.objectContaining({
       provider: 'phone',
       provider_user_id: '5511999999999',
-      session_id: 'session-1',
-      user_id: 'user@example.com',
+      session_id: null,
+      user_id: null,
       data: { language: 'pt-BR' },
     }));
   });

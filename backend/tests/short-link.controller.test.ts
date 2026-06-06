@@ -185,8 +185,14 @@ describe('ShortLinkController security validation', () => {
   });
 
   it('expires a short link when the frontend consumes it after completion', async () => {
+    mockResolveShortLinkRecord.mockResolvedValue({
+      url: 'https://app.example.com/pix-ramp?short_link_code=abc123',
+      purpose: 'pix_onramp',
+      session_id: 'session-1',
+      user_id: 'user-1',
+    });
     mockExpireShortLink.mockResolvedValue(true);
-    const req = createRequest({}, {}, { code: 'abc123' });
+    const req = createRequest({ session_id: 'session-1' }, {}, { code: 'abc123' });
     const res = createResponse();
 
     await ShortLinkController.consume(req, res);
@@ -197,6 +203,22 @@ describe('ShortLinkController security validation', () => {
       success: true,
       message: 'Link marcado como usado.',
     }));
+  });
+
+  it('rejects consume attempts from a different session', async () => {
+    mockResolveShortLinkRecord.mockResolvedValue({
+      url: 'https://app.example.com/pix-ramp?short_link_code=abc123',
+      purpose: 'pix_onramp',
+      session_id: 'session-1',
+      user_id: 'user-1',
+    });
+    const req = createRequest({ session_id: 'session-2' }, {}, { code: 'abc123' });
+    const res = createResponse();
+
+    await ShortLinkController.consume(req, res);
+
+    expect(mockExpireShortLink).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
   });
 
   it('does not resolve an already expired or consumed short link', async () => {

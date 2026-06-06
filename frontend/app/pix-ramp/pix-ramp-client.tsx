@@ -1717,8 +1717,8 @@ export default function PixRampClient({
     const fiatAmount = normalizeHumanAmount(params.get("fiat_amount") || params.get("target_brl") || params.get("to_amount") || "");
     const quoteAmount = normalizeHumanAmount(params.get("quote_amount") || "");
     const quoteAsset = String(params.get("quote_asset") || "").trim().toUpperCase();
-    const receiveAmount = normalizeHumanAmount(params.get("receive_amount") || params.get("target_amount") || quoteAmount || "");
-    const receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || quoteAsset || "").trim().toUpperCase();
+    let receiveAmount = normalizeHumanAmount(params.get("receive_amount") || params.get("target_amount") || quoteAmount || "");
+    let receiveAsset = String(params.get("receive_asset") || params.get("target_asset") || quoteAsset || "").trim().toUpperCase();
     const postConversionAssetParam = String(params.get("post_conversion_asset") || params.get("convert_to_asset") || params.get("dest_asset") || "").trim().toUpperCase();
     const asset = String(params.get("source_asset") || params.get("asset") || "").trim().toUpperCase();
     const currency = String(params.get("currency") || params.get("fiat_currency") || asset || "").trim().toUpperCase();
@@ -1741,6 +1741,18 @@ export default function PixRampClient({
     const paySourceAsset = String(params.get("pay_source_asset") || "").trim().toUpperCase();
     const payDestinationAsset = String(params.get("pay_destination_asset") || "").trim().toUpperCase();
     const nextIntentId = String(params.get("intent_id") || params.get("operation_key") || params.get("intent") || "").trim();
+    const normalizedOnRampAmountAsset = normalizeTargetAsset(paySourceAsset || payAsset || currency || asset || "", "");
+    if (
+      mode === "onramp" &&
+      !receiveAmount &&
+      amount &&
+      normalizedOnRampAmountAsset &&
+      normalizedOnRampAmountAsset !== "BRL" &&
+      normalizedOnRampAmountAsset !== "TESOURO"
+    ) {
+      receiveAmount = amount;
+      receiveAsset = normalizedOnRampAmountAsset;
+    }
     const offRampBrlAmount = mode === "offramp" && (
       fiatAmount ||
       (receiveAmount && receiveAsset === "BRL") ||

@@ -53,7 +53,7 @@ describe("external channel login", () => {
 
     expect(createText).toContain("const lockedWhatsAppPhoneNumber = useMemo");
     expect(createText).toContain("tokenPayload?.provider_user_id");
-    expect(createText).toContain("setPhoneNumber(lockedWhatsAppPhoneNumber)");
+    expect(createText).toContain("setPhoneNumber(formatInternationalPhoneInput(lockedWhatsAppPhoneNumber))");
     expect(createText).toContain("disabled={Boolean(lockedWhatsAppPhoneNumber)}");
   });
 

@@ -3,11 +3,13 @@ import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { supabase } from "../../config/supabase";
 import { AgentRepository } from "../repository/core/agent.repository";
+import ExternalService from "../services/core/external.service";
 import { isSessionExpired } from "../../utils/session-expiry";
 import { publicErrorMessage } from "../../utils/public-error";
 
 const router = express.Router();
 const agentRepository = new AgentRepository(supabase);
+const externalService = new ExternalService(supabase as any);
 
 function normalizeEmail(value: unknown): string {
   return String(value || "").trim().toLowerCase();
@@ -65,7 +67,17 @@ export function sessionHasPin(session: any): boolean {
   );
 }
 
-function googlePinSetupPayload(input: { email: string; displayName: string; reason: string }) {
+function googlePinSetupPayload(input: { email: string; displayName: string; reason: string; language?: string }) {
+  const onboard = externalService.createOnboardUrl("google", input.email, {
+    email: input.email,
+    name: input.displayName || undefined,
+    display_name: input.displayName || undefined,
+    source: "google",
+    language: input.language || undefined,
+    email_verified: true,
+    email_verification_source: "google_oauth",
+  });
+
   return {
     success: true,
     provider: "google",
@@ -74,6 +86,8 @@ function googlePinSetupPayload(input: { email: string; displayName: string; reas
     user_id: input.email,
     display_name: input.displayName,
     reason: input.reason,
+    token: onboard.token,
+    creationUrl: onboard.url,
     message: "Create your PIN to finish Google sign-in.",
   };
 }
@@ -95,6 +109,7 @@ router.post("/google", async (req, res) => {
     const google = await verifyGoogleIdToken(idToken);
     const email = normalizeEmail(google?.email);
     const displayName = String(google?.name || google?.given_name || google?.email || "").trim();
+    const language = String(req.body?.language || req.body?.lang || req.body?.locale || "").trim();
     if (!email) {
       return res.status(400).json({ success: false, message: "Google account email not found." });
     }
@@ -104,6 +119,7 @@ router.post("/google", async (req, res) => {
       return res.status(200).json(googlePinSetupPayload({
         email,
         displayName,
+        language,
         reason: "google_account_not_linked",
       }));
     }
@@ -112,6 +128,7 @@ router.post("/google", async (req, res) => {
       return res.status(200).json(googlePinSetupPayload({
         email,
         displayName,
+        language,
         reason: "pin_setup_required",
       }));
     }
