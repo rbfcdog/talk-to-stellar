@@ -553,7 +553,7 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).not.toHaveBeenCalled();
   });
 
-  it('does not send a fallback when outbound WhatsApp delivery is uncertain', async () => {
+  it('queues the agent reply when outbound WhatsApp delivery is uncertain', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
       const normalizedUrl = String(url);
@@ -595,8 +595,8 @@ describe('EvolutionService', () => {
 
     expect(result).toEqual(expect.objectContaining({
       received: true,
-      replied: false,
-      skipped: 'outbound_delivery_uncertain',
+      replied: true,
+      queued: true,
       recipient: '5519981808102',
       instance: 'main',
     }));
@@ -605,6 +605,82 @@ describe('EvolutionService', () => {
 
     expect(sendTextSpy).toHaveBeenCalledTimes(1);
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Estou aqui e funcionando.', { reliable: true, attempts: 1 });
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('evolution_outbound_queue');
+    expect(mockSupabaseInsert).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      instance: 'main',
+      recipient: '5519981808102',
+      remote_jid: '5519981808102@s.whatsapp.net',
+      message_id: 'evolution-send-timeout-test-1',
+      text: 'Estou aqui e funcionando.',
+      status: 'pending',
+      attempts: 0,
+    }));
+  });
+
+  it('drains queued outbound WhatsApp replies without re-running the agent', async () => {
+    const updatePayloads: any[] = [];
+    const queuedRow = {
+      dedupe_key: 'evolution_outbound_message_test',
+      instance: 'main',
+      recipient: '5519981808102',
+      text: 'Resposta pendente.',
+      attempts: 0,
+      max_attempts: 8,
+      next_attempt_at: new Date(Date.now() - 1000).toISOString(),
+    };
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table !== 'evolution_outbound_queue') {
+        return {
+          insert: mockSupabaseInsert,
+          update: mockSupabaseUpdate,
+          delete: mockSupabaseDelete,
+        };
+      }
+      const selectChain: any = {};
+      selectChain.select = jest.fn(() => selectChain);
+      selectChain.in = jest.fn(() => selectChain);
+      selectChain.lte = jest.fn(() => selectChain);
+      selectChain.order = jest.fn(() => selectChain);
+      selectChain.limit = jest.fn(() => Promise.resolve({ data: [queuedRow], error: null }));
+
+      return {
+        select: selectChain.select,
+        update: jest.fn((payload: any) => {
+          updatePayloads.push(payload);
+          const updateChain: any = {};
+          updateChain.eq = jest.fn(() => updateChain);
+          updateChain.in = jest.fn(() => Promise.resolve({ error: null }));
+          updateChain.lt = jest.fn(() => Promise.resolve({ error: null }));
+          updateChain.then = (resolve: any, reject: any) => Promise.resolve({ error: null }).then(resolve, reject);
+          if (payload.status === 'sent' || payload.status === 'dead_letter') {
+            updateChain.eq = jest.fn(() => Promise.resolve({ error: null }));
+          }
+          return updateChain;
+        }),
+      };
+    });
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const result = await EvolutionService.processQueuedOutboundDeliveries(5);
+
+    expect(result).toEqual({
+      processed: 1,
+      sent: 1,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Resposta pendente.', {
+      reliable: true,
+      attempts: 1,
+      timeoutMs: 45000,
+    });
+    expect(updatePayloads).toContainEqual(expect.objectContaining({ status: 'sending' }));
+    expect(updatePayloads).toContainEqual(expect.objectContaining({
+      status: 'sent',
+      attempts: 1,
+      last_error: null,
+    }));
   });
 
   it('sends the detailed capability fallback when the agent request fails', async () => {

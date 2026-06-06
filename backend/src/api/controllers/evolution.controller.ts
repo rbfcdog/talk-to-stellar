@@ -123,10 +123,12 @@ export default class EvolutionController {
       });
       const providerKey = provider.toLowerCase();
       const whatsappRequested = ['whatsapp', 'phone', 'evolution', 'whatsapp_evolution'].includes(providerKey);
+      const whatsappQueued = report.whatsapp.attempts.some((attempt) => attempt.queued);
       const whatsappFailed =
         whatsappRequested &&
         report.whatsapp.recipients > 0 &&
-        report.whatsapp.delivered === 0;
+        report.whatsapp.delivered === 0 &&
+        !whatsappQueued;
       return res.status(whatsappFailed ? 502 : 200).json({
         success: !whatsappFailed,
         provider,
@@ -146,6 +148,30 @@ export default class EvolutionController {
         recipient_tail: providerUserId.replace(/\D+/g, '').slice(-4) || null,
         session_id: sessionId || null,
         user_id: userId || null,
+        message,
+      });
+    }
+  }
+
+  static async drainOutbox(req: Request, res: Response) {
+    if (!hasDiagnosticAuthorization(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Internal authorization is required to drain the Evolution outbox.',
+      });
+    }
+
+    const limit = Number(req.body?.limit || req.query?.limit || process.env.EVOLUTION_OUTBOUND_DRAIN_LIMIT || 20);
+    try {
+      const result = await EvolutionService.processQueuedOutboundDeliveries(limit);
+      return res.status(200).json({
+        success: true,
+        result,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({
+        success: false,
         message,
       });
     }

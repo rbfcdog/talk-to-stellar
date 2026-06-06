@@ -20,6 +20,7 @@ type EvolutionWebhookResult = {
   skipped?: string;
   recipient?: string;
   instance?: string;
+  queued?: boolean;
 };
 
 type AgentResponse = {
@@ -37,8 +38,12 @@ type EvolutionSendTextOptions = {
 };
 
 type EvolutionSendTextBodyVariant = 'v2' | 'v1' | 'hybrid';
+type EvolutionReplyDeliveryStatus = 'sent' | 'queued';
 
 let webhookAutoConfigurationStarted = false;
+let outboundWorkerStarted = false;
+let outboundQueueDrainTimer: NodeJS.Timeout | null = null;
+let outboundQueueDrainRunning = false;
 
 class EvolutionSendTextError extends Error {
   status?: number;
@@ -59,7 +64,7 @@ class EvolutionReplyDeliveryError extends Error {
 }
 
 const processedMessages = new Map<string, number>();
-const activeWebhookReplies = new Map<string, Promise<void>>();
+const activeWebhookReplies = new Map<string, Promise<EvolutionReplyDeliveryStatus>>();
 const PROCESSED_TTL_MS = 5 * 60 * 1000;
 
 type PersistentDedupeReservation = {
@@ -397,6 +402,16 @@ function isUniqueViolation(error: any): boolean {
   return code === '23505' || message.includes('duplicate key');
 }
 
+function isMissingQueueStorageError(error: any): boolean {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('schema cache') ||
+    message.includes('does not exist') ||
+    message.includes('relation') ||
+    message.includes('column')
+  );
+}
+
 async function reservePersistentDedupeKey(
   idempotencyKey: string,
   requestPayload: Record<string, unknown>
@@ -489,6 +504,37 @@ async function reserveEvolutionWebhookDedupe(input: {
 function shouldSendFailureFallback(): boolean {
   const value = String(process.env.EVOLUTION_SEND_FAILURE_FALLBACK || '').trim().toLowerCase();
   return value !== 'false' && value !== '0';
+}
+
+function outboundQueueMaxAttempts(): number {
+  return clampNumber(process.env.EVOLUTION_OUTBOUND_MAX_ATTEMPTS, 8, 1, 25);
+}
+
+function outboundQueueInitialDelayMs(): number {
+  return clampNumber(process.env.EVOLUTION_OUTBOUND_RETRY_INITIAL_DELAY_MS, 15_000, 0, 300_000);
+}
+
+function outboundQueueBackoffMs(attempts: number): number {
+  const base = clampNumber(process.env.EVOLUTION_OUTBOUND_RETRY_BACKOFF_MS, 30_000, 1_000, 600_000);
+  const max = clampNumber(process.env.EVOLUTION_OUTBOUND_RETRY_MAX_DELAY_MS, 30 * 60_000, base, 24 * 60 * 60_000);
+  const exponent = Math.max(0, Math.min(attempts, 8));
+  return Math.min(max, base * Math.pow(2, exponent));
+}
+
+function outboundQueueLockTimeoutMs(): number {
+  return clampNumber(process.env.EVOLUTION_OUTBOUND_LOCK_TIMEOUT_MS, 2 * 60_000, 30_000, 60 * 60_000);
+}
+
+function queuedTextDedupeKey(input: {
+  instance: string;
+  recipient: string;
+  messageId?: string;
+  text: string;
+}): string {
+  return evolutionDedupeKey(
+    'outbound_message',
+    `${input.instance}:${input.recipient}:${input.messageId || ''}:${dedupeHash(input.text)}`
+  );
 }
 
 function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -929,6 +975,264 @@ export class EvolutionService {
     interval.unref?.();
   }
 
+  static startOutboundDeliveryWorker(): void {
+    if (outboundWorkerStarted) return;
+    outboundWorkerStarted = true;
+
+    if (isEnvDisabled(process.env.EVOLUTION_OUTBOUND_WORKER_ENABLED)) {
+      logger.info('[evolution-outbox] worker disabled by env');
+      return;
+    }
+
+    const intervalMs = clampNumber(
+      process.env.EVOLUTION_OUTBOUND_WORKER_INTERVAL_MS,
+      30_000,
+      5_000,
+      600_000
+    );
+    const startupDelayMs = clampNumber(
+      process.env.EVOLUTION_OUTBOUND_WORKER_STARTUP_DELAY_MS,
+      5_000,
+      0,
+      120_000
+    );
+
+    const startupTimer = setTimeout(() => {
+      void this.processQueuedOutboundDeliveries().catch((error) => {
+        logger.warn(`[evolution-outbox] startup drain failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, startupDelayMs);
+    startupTimer.unref?.();
+
+    const interval = setInterval(() => {
+      void this.processQueuedOutboundDeliveries().catch((error) => {
+        logger.warn(`[evolution-outbox] periodic drain failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, intervalMs);
+    interval.unref?.();
+  }
+
+  private static scheduleOutboundQueueDrain(delayMs = 0): void {
+    if (outboundQueueDrainTimer) return;
+    const clampedDelay = clampNumber(delayMs, 0, 0, 600_000);
+    outboundQueueDrainTimer = setTimeout(() => {
+      outboundQueueDrainTimer = null;
+      void this.processQueuedOutboundDeliveries().catch((error) => {
+        logger.warn(`[evolution-outbox] scheduled drain failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, clampedDelay);
+    outboundQueueDrainTimer.unref?.();
+  }
+
+  static async queueText(input: {
+    instance: string;
+    recipient: string;
+    text: string;
+    remoteJid?: string;
+    messageId?: string;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ queued: boolean; dedupeKey?: string; duplicate?: boolean; unavailable?: boolean }> {
+    const instance = sendableEvolutionInstance(input.instance);
+    const recipient = normalizeOutboundWhatsAppNumber(input.recipient);
+    const text = String(input.text || '').trim();
+    if (!instance || !recipient || !text) return { queued: false };
+
+    const dedupeKey = queuedTextDedupeKey({
+      instance,
+      recipient,
+      messageId: input.messageId,
+      text,
+    });
+    const now = new Date();
+    const nextAttemptAt = new Date(now.getTime() + outboundQueueInitialDelayMs()).toISOString();
+    const row = {
+      dedupe_key: dedupeKey,
+      provider: 'whatsapp',
+      instance,
+      recipient,
+      remote_jid: String(input.remoteJid || '').trim() || null,
+      message_id: String(input.messageId || '').trim() || null,
+      text,
+      status: 'pending',
+      attempts: 0,
+      max_attempts: outboundQueueMaxAttempts(),
+      next_attempt_at: nextAttemptAt,
+      last_error: String(input.reason || '').slice(0, 1000) || null,
+      metadata: input.metadata || {},
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    };
+
+    try {
+      const { error } = await supabase
+        .from('evolution_outbound_queue')
+        .insert(row);
+      if (error) {
+        if (isUniqueViolation(error)) {
+          logger.info(`[evolution-outbox] outbound reply already queued dedupe_key=${dedupeKey}`);
+          return { queued: true, dedupeKey, duplicate: true };
+        }
+        if (isMissingQueueStorageError(error)) {
+          logger.warn(`[evolution-outbox] queue table unavailable: ${String(error.message || error)}`);
+          return { queued: false, dedupeKey, unavailable: true };
+        }
+        throw error;
+      }
+
+      logger.warn(`[evolution-outbox] queued WhatsApp reply for ***${recipient.slice(-4)} instance=${instance} dedupe_key=${dedupeKey}`);
+      this.scheduleOutboundQueueDrain(outboundQueueInitialDelayMs() + 250);
+      return { queued: true, dedupeKey };
+    } catch (error) {
+      if (isMissingQueueStorageError(error)) {
+        logger.warn(`[evolution-outbox] queue unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        return { queued: false, dedupeKey, unavailable: true };
+      }
+      throw error;
+    }
+  }
+
+  static async processQueuedOutboundDeliveries(limitInput?: number): Promise<{
+    processed: number;
+    sent: number;
+    failed: number;
+    remaining: number;
+  }> {
+    if (outboundQueueDrainRunning) {
+      return { processed: 0, sent: 0, failed: 0, remaining: 0 };
+    }
+    outboundQueueDrainRunning = true;
+
+    try {
+      const limit = clampNumber(limitInput || process.env.EVOLUTION_OUTBOUND_DRAIN_LIMIT, 20, 1, 100);
+      const now = new Date().toISOString();
+      const staleLockedBefore = new Date(Date.now() - outboundQueueLockTimeoutMs()).toISOString();
+      const staleRelease = await supabase
+        .from('evolution_outbound_queue')
+        .update({
+          status: 'failed',
+          locked_at: null,
+          last_error: 'stale sending lock released for retry',
+          updated_at: now,
+        })
+        .eq('status', 'sending')
+        .lt('locked_at', staleLockedBefore);
+      if ((staleRelease as any)?.error && !isMissingQueueStorageError((staleRelease as any).error)) {
+        logger.warn(`[evolution-outbox] stale lock release failed: ${String((staleRelease as any).error.message || (staleRelease as any).error)}`);
+      }
+
+      const query = supabase
+        .from('evolution_outbound_queue')
+        .select('*')
+        .in('status', ['pending', 'failed'])
+        .lte('next_attempt_at', now)
+        .order('next_attempt_at', { ascending: true })
+        .limit(limit);
+      const { data, error } = await query;
+      if (error) {
+        if (isMissingQueueStorageError(error)) {
+          logger.warn(`[evolution-outbox] drain skipped; queue table unavailable: ${String(error.message || error)}`);
+          return { processed: 0, sent: 0, failed: 0, remaining: 0 };
+        }
+        throw error;
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+      let sent = 0;
+      let failed = 0;
+
+      for (const row of rows) {
+        const dedupeKey = String(row?.dedupe_key || '').trim();
+        if (!dedupeKey) continue;
+        const currentAttempts = Number(row?.attempts || 0);
+        const maxAttempts = clampNumber(row?.max_attempts, outboundQueueMaxAttempts(), 1, 25);
+        if (currentAttempts >= maxAttempts) {
+          const updatedAt = new Date().toISOString();
+          await supabase
+            .from('evolution_outbound_queue')
+            .update({
+              status: 'dead_letter',
+              locked_at: null,
+              last_error: String(row?.last_error || `max attempts exhausted (${maxAttempts})`).slice(0, 1000),
+              updated_at: updatedAt,
+            })
+            .eq('dedupe_key', dedupeKey);
+          failed += 1;
+          logger.warn(`[evolution-outbox] queued WhatsApp reply moved to dead_letter after ${currentAttempts}/${maxAttempts} attempts dedupe_key=${dedupeKey}`);
+          continue;
+        }
+        const attemptNumber = currentAttempts + 1;
+        const lockedAt = new Date().toISOString();
+
+        const claim = await supabase
+          .from('evolution_outbound_queue')
+          .update({
+            status: 'sending',
+            locked_at: lockedAt,
+            updated_at: lockedAt,
+          })
+          .eq('dedupe_key', dedupeKey)
+          .in('status', ['pending', 'failed']);
+        if ((claim as any)?.error) {
+          logger.warn(`[evolution-outbox] could not claim queued reply ${dedupeKey}: ${String((claim as any).error.message || (claim as any).error)}`);
+          continue;
+        }
+
+        try {
+          await this.sendText(
+            String(row.instance || configuredInstance()),
+            String(row.recipient || ''),
+            String(row.text || ''),
+            {
+              reliable: true,
+              attempts: clampNumber(process.env.EVOLUTION_OUTBOUND_SEND_ATTEMPTS, 1, 1, 3),
+              timeoutMs: clampNumber(process.env.EVOLUTION_OUTBOUND_SEND_TIMEOUT_MS, 45_000, 5_000, 180_000),
+            }
+          );
+          const sentAt = new Date().toISOString();
+          await supabase
+            .from('evolution_outbound_queue')
+            .update({
+              status: 'sent',
+              attempts: attemptNumber,
+              sent_at: sentAt,
+              locked_at: null,
+              last_error: null,
+              updated_at: sentAt,
+            })
+            .eq('dedupe_key', dedupeKey);
+          sent += 1;
+          logger.info(`[evolution-outbox] delivered queued WhatsApp reply dedupe_key=${dedupeKey}`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const nextAttemptAt = new Date(Date.now() + outboundQueueBackoffMs(attemptNumber)).toISOString();
+          await supabase
+            .from('evolution_outbound_queue')
+            .update({
+              status: attemptNumber >= maxAttempts ? 'dead_letter' : 'failed',
+              attempts: attemptNumber,
+              next_attempt_at: nextAttemptAt,
+              locked_at: null,
+              last_error: message.slice(0, 1000),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('dedupe_key', dedupeKey);
+          failed += 1;
+          logger.warn(`[evolution-outbox] queued WhatsApp reply failed attempt=${attemptNumber}/${maxAttempts} dedupe_key=${dedupeKey}: ${message}`);
+        }
+      }
+
+      return {
+        processed: rows.length,
+        sent,
+        failed,
+        remaining: Math.max(0, rows.length - sent - failed),
+      };
+    } finally {
+      outboundQueueDrainRunning = false;
+    }
+  }
+
   private static async sendTextOnce(input: {
     baseUrl: string;
     apiKey: string;
@@ -1158,43 +1462,56 @@ export class EvolutionService {
     activeWebhookReplies.set(messageKey, replyPromise);
 
     try {
-      await replyPromise;
+      const replyStatus = await replyPromise;
       markProcessed(messageKey);
       await completePersistentDedupeKey(persistentClaim.key);
+      if (replyStatus === 'queued') {
+        logger.warn(`[evolution-webhook] agent reply queued for retry to ***${recipient.slice(-4)} on instance ${instance}`);
+        return {
+          received: true,
+          replied: true,
+          queued: true,
+          recipient,
+          instance,
+        };
+      }
       logger.info(`[evolution-webhook] replied with agent to ***${recipient.slice(-4)} on instance ${instance}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
       if (error instanceof EvolutionReplyDeliveryError) {
-        // The provider may have accepted the first send before the request failed.
-        // Complete the claim and do not send a fallback or allow a webhook retry.
-        markProcessed(messageKey);
-        await completePersistentDedupeKey(persistentClaim.key);
-        return {
-          received: true,
-          replied: false,
-          skipped: 'outbound_delivery_uncertain',
-          recipient,
-          instance,
-        };
+        await releasePersistentDedupeKey(persistentClaim.key);
+        throw error;
       }
       try {
         if (!shouldSendFailureFallback()) throw error;
         try {
           await this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true, attempts: 1 });
         } catch (fallbackDeliveryError) {
-          markProcessed(messageKey);
-          await completePersistentDedupeKey(persistentClaim.key);
-          logger.warn(
-            `[evolution-webhook] fallback delivery uncertain for ***${recipient.slice(-4)} on instance ${instance}: ${fallbackDeliveryError instanceof Error ? fallbackDeliveryError.message : String(fallbackDeliveryError)}`
-          );
-          return {
-            received: true,
-            replied: false,
-            skipped: 'outbound_delivery_uncertain',
-            recipient,
+          const fallbackText = buildEvolutionFallbackReply();
+          const queued = await this.queueText({
             instance,
-          };
+            recipient,
+            remoteJid: message.remoteJid,
+            messageId: message.messageId,
+            text: fallbackText,
+            reason: fallbackDeliveryError instanceof Error ? fallbackDeliveryError.message : String(fallbackDeliveryError),
+            metadata: { source: 'evolution_webhook_fallback' },
+          });
+          if (queued.queued) {
+            markProcessed(messageKey);
+            await completePersistentDedupeKey(persistentClaim.key);
+            logger.warn(`[evolution-webhook] fallback reply queued for retry to ***${recipient.slice(-4)} on instance ${instance}`);
+            return {
+              received: true,
+              replied: true,
+              queued: true,
+              recipient,
+              instance,
+            };
+          }
+          await releasePersistentDedupeKey(persistentClaim.key);
+          throw fallbackDeliveryError;
         }
         markProcessed(messageKey);
         await completePersistentDedupeKey(persistentClaim.key);
@@ -1222,7 +1539,7 @@ export class EvolutionService {
     messageId: string;
     instanceId?: string;
     text: string;
-  }): Promise<void> {
+  }): Promise<EvolutionReplyDeliveryStatus> {
     const sessionId = await resolveExistingSession({
       phoneNumber: input.recipient,
       remoteJid: input.remoteJid,
@@ -1244,7 +1561,18 @@ export class EvolutionService {
       // An ambiguous provider timeout may mean the message was accepted. Retrying
       // an interactive reply here can duplicate it.
       await this.sendText(input.instance, input.recipient, replyText, { reliable: true, attempts: 1 });
+      return 'sent';
     } catch (error) {
+      const queued = await this.queueText({
+        instance: input.instance,
+        recipient: input.recipient,
+        remoteJid: input.remoteJid,
+        messageId: input.messageId,
+        text: replyText,
+        reason: error instanceof Error ? error.message : String(error),
+        metadata: { source: 'evolution_webhook_agent_reply' },
+      });
+      if (queued.queued) return 'queued';
       throw new EvolutionReplyDeliveryError(error);
     }
   }

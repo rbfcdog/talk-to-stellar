@@ -581,6 +581,34 @@ function runtimeLanguageFromActionParams(actionParams: any): 'pt-BR' | 'en' | ''
   );
 }
 
+function normalizeOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (['true', '1', 'yes', 'sim', 'on', 'hidden', 'hide', 'oculto', 'ocultar'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'nao', 'off', 'visible', 'show', 'mostrar', 'exibir'].includes(normalized)) return false;
+  return null;
+}
+
+function hideAmountsFromObject(value: any): boolean | null {
+  if (!value || typeof value !== 'object') return null;
+  return normalizeOptionalBoolean(
+    value.hide_amounts ??
+      value.hideAmounts ??
+      value.amounts_hidden ??
+      value.amountsHidden ??
+      (value.value_privacy === 'hidden' ? true : value.value_privacy === 'visible' ? false : undefined)
+  );
+}
+
+function hideAmountsFromSession(sessionData: SessionData | null | undefined): boolean | null {
+  return hideAmountsFromObject(sessionData as any);
+}
+
+function hideAmountsFromActionParams(actionParams: any): boolean | null {
+  return hideAmountsFromObject(actionParams);
+}
+
 function isMissingLanguageStorageError(error: any): boolean {
   const message = String(error?.message || error || '').toLowerCase();
   return (
@@ -885,6 +913,75 @@ export function createAgentRoutes(
     }
   }) as RequestHandler);
 
+  router.post('/preferences', (async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const hideAmounts = normalizeOptionalBoolean(
+        req.body?.hide_amounts ??
+          req.body?.hideAmounts ??
+          req.body?.amounts_hidden ??
+          req.body?.amountsHidden ??
+          req.body?.value_privacy ??
+          req.body?.valuePrivacy
+      );
+      if (hideAmounts === null) {
+        return res.status(400).json({ success: false, message: 'hide_amounts must be boolean' });
+      }
+
+      const sessionId = String(req.body?.session_id || req.body?.sessionId || req.headers['x-session-id'] || '').trim();
+      const sessionToken = readSessionToken(req);
+      const provider = normalizeExternalProvider(String(
+        req.body?.provider ||
+          req.body?.external_provider ||
+          req.body?.source ||
+          req.body?.metadata?.provider ||
+          req.body?.metadata?.external_provider ||
+          ''
+      ));
+      const providerUserId = normalizeExternalProviderUserId(provider, String(
+        req.body?.provider_user_id ||
+          req.body?.providerUserId ||
+          req.body?.external_provider_user_id ||
+          req.body?.metadata?.provider_user_id ||
+          req.body?.metadata?.external_provider_user_id ||
+          ''
+      ));
+
+      let sessionData: SessionData | null = null;
+      if (sessionId) {
+        sessionData = await repository.getSession(sessionId);
+        const storedToken = String((sessionData as any)?.session_token || '').trim();
+        if (storedToken && (!sessionToken || !timingSafeEqualString(storedToken, sessionToken))) {
+          return res.status(401).json({ success: false, message: 'Invalid session token' });
+        }
+      }
+
+      const resultRaw = await executeTool('set_value_privacy', {
+        session_id: sessionData ? sessionId : '',
+        user_id: String((sessionData as any)?.user_id || '').trim(),
+        provider,
+        provider_user_id: providerUserId,
+        hide_amounts: hideAmounts,
+        language: normalizeLanguage(req.body?.language || req.body?.lang || req.body?.locale),
+      });
+      const result = JSON.parse(resultRaw);
+
+      return res.status(result.success ? 200 : 400).json({
+        success: Boolean(result.success),
+        hide_amounts: hideAmounts,
+        amounts_hidden: hideAmounts,
+        value_privacy: hideAmounts ? 'hidden' : 'visible',
+        persisted: Boolean(result.success),
+        message: result.message || undefined,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler);
+
   /**
    * POST /api/agent/query
    * Main endpoint for agent queries
@@ -921,6 +1018,7 @@ export function createAgentRoutes(
       const normalizedProvider = normalizeSourceProvider(normalizedSource);
       let runtimeExternalContext: Record<string, string> = {};
       let externalStoredLanguage: 'pt-BR' | 'en' | '' = '';
+      let externalStoredHideAmounts: boolean | null = null;
       if (normalizedProvider === "telegram" || normalizedProvider === "whatsapp") {
         // Hard gate: external channels are backend-to-backend integrations
         // (the Telegram/WhatsApp bot calling this backend). Require a shared
@@ -970,6 +1068,7 @@ export function createAgentRoutes(
             (existing as any)?.data?.lang ||
             (existing as any)?.data?.locale
         );
+        externalStoredHideAmounts = hideAmountsFromObject((existing as any)?.data);
         const externalResponseLanguage = externalStoredLanguage || requestLanguage;
         if (!existing) {
           const { url } = await externalService.createOnboardUrlWithShortLink(normalizedProvider, channelProviderUserId, {
@@ -1224,6 +1323,10 @@ export function createAgentRoutes(
 
       // Get previous state before hydration checks (used to honor explicit logout marker).
       const previousState = await repository.getState(sessionId);
+      const durableStoredHideAmounts =
+        hideAmountsFromActionParams(previousState?.action_params) ??
+        hideAmountsFromSession(sessionData) ??
+        externalStoredHideAmounts;
       const durableStoredLanguage =
         preferredLanguageFromActionParams(previousState?.action_params) ||
         preferredLanguageFromSession(sessionData) ||
@@ -1304,6 +1407,13 @@ export function createAgentRoutes(
           ...runtimeExternalContext,
           language: preferredLanguage,
           preferred_language: preferredLanguage,
+          ...(durableStoredHideAmounts !== null
+            ? {
+                hide_amounts: durableStoredHideAmounts,
+                amounts_hidden: durableStoredHideAmounts,
+                value_privacy: durableStoredHideAmounts ? 'hidden' : 'visible',
+              }
+            : {}),
         },
         pending_payment: previousState?.pending_payment || (previousState?.action_params as any)?.pending_payment,
         pending_conversion: (previousState as any)?.pending_conversion || (previousState?.action_params as any)?.pending_conversion,

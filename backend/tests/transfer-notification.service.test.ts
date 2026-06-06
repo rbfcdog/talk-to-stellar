@@ -1,4 +1,5 @@
 const sendTextMock = jest.fn();
+const queueTextMock = jest.fn();
 
 jest.mock('../src/config/supabase', () => ({
   supabase: {
@@ -9,6 +10,7 @@ jest.mock('../src/config/supabase', () => ({
 jest.mock('../src/api/services/evolution.service', () => ({
   EvolutionService: {
     sendText: (...args: any[]) => sendTextMock(...args),
+    queueText: (...args: any[]) => queueTextMock(...args),
   },
 }));
 
@@ -22,6 +24,8 @@ describe('TransferNotificationService', () => {
   beforeEach(() => {
     sendTextMock.mockReset();
     sendTextMock.mockResolvedValue({ success: true });
+    queueTextMock.mockReset();
+    queueTextMock.mockResolvedValue({ queued: true, dedupeKey: 'queued-test-message' });
     (supabase.from as jest.Mock).mockReset();
     (supabase.from as jest.Mock).mockImplementation(() => emptySupabaseSelect());
     (TransferNotificationService as any).agentRepo = originalAgentRepo;
@@ -55,6 +59,39 @@ describe('TransferNotificationService', () => {
       'PIX confirmado. Seu pagamento foi concluido.',
       { reliable: true }
     );
+  });
+
+  it('queues completion callbacks when Evolution delivery times out', async () => {
+    sendTextMock.mockRejectedValueOnce(new Error('This operation was aborted'));
+
+    const report = await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'whatsapp',
+      providerUserId: '55 19 98180-8102',
+      text: 'PIX confirmed and transfer sent.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(queueTextMock).toHaveBeenCalledTimes(1);
+    expect(queueTextMock).toHaveBeenCalledWith(expect.objectContaining({
+      instance: 'main',
+      recipient: '5519981808102',
+      text: 'PIX confirmed and transfer sent.',
+      reason: 'This operation was aborted',
+      metadata: { source: 'transfer_notification' },
+    }));
+    expect(report.whatsapp).toMatchObject({
+      attempted: true,
+      delivered: 0,
+      queued: 1,
+      recipients: 1,
+    });
+    expect(report.whatsapp.attempts[0]).toMatchObject({
+      phone_tail: '8102',
+      instance: 'main',
+      delivered: false,
+      queued: true,
+      error: 'This operation was aborted',
+    });
   });
 
   it('treats AUTHENTICATION_API_KEY as a valid Evolution API key for completion callbacks', async () => {
