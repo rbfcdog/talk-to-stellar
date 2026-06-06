@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { idempotentFetch } from "@/lib/idempotency"
-import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
+import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { SecureLinkState } from "@/components/shared/secure-link-state"
@@ -117,19 +117,6 @@ function formatPaymentAmount(amount?: string, assetCode?: string) {
   return `${truncated.toFixed(2)} ${code}`
 }
 
-function getAutoConversionMessage(result?: ConfirmResponse | null, language: AppLanguage = "en") {
-  if (result?.autoConversion?.message) return result.autoConversion.message
-  const details = result?.transferDetails
-  const sourceAsset = normalizeAssetCode(details?.sourceAssetCode)
-  const destinationAsset = normalizeAssetCode(details?.destinationAssetCode)
-  if (!sourceAsset || !destinationAsset || sourceAsset === destinationAsset) return ""
-  return T(
-    language,
-    `Conversão automática concluída com a cotação atual: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} virou ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} antes do envio.`,
-    `Automatic conversion completed with the current quote: ${formatPaymentAmount(details?.sourceAmount, sourceAsset)} became ${formatPaymentAmount(details?.destinationAmount, destinationAsset)} before sending.`
-  )
-}
-
 function formatRecipientLabel(payload: any, language: AppLanguage = "en") {
   const candidate = String(
     payload?.destination_name ||
@@ -167,140 +154,6 @@ function formatRecipientKey(payload: any) {
   ).trim()
 
   return candidate && !isPublicAccountKey(candidate) ? candidate : ""
-}
-
-function hasUsableFeeDisplay(value?: string) {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized || normalized.includes("indispon")) return false
-  const compact = normalized.replace(/\s+/g, "")
-  const looksLikeZeroOnly =
-    compact.includes("us$0") ||
-    compact.includes("r$0") ||
-    compact.includes("0%") ||
-    compact.includes("0,0%")
-  return !looksLikeZeroOnly
-}
-
-function parseNumber(value?: string) {
-  const parsed = Number(String(value || "").replace(",", "."))
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
-}
-
-function trimFixed(value: number, decimals: number) {
-  return value.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
-}
-
-function truncateNumber(value: number, decimals: number) {
-  const factor = 10 ** decimals
-  return Math.trunc(value * factor) / factor
-}
-
-function formatFeeAmount(value: number, assetCode: string) {
-  const code = normalizeAssetCode(assetCode)
-  const decimals = value > 0 && value < 0.01 ? 8 : 2
-  const threshold = Math.pow(10, -decimals)
-  const prefix = value > 0 && value < threshold ? "<" : ""
-  if (code === "BRL") return `R$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
-  if (code === "USDC") return `US$ ${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)}`
-  if (code === "CETES") return `${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)} CETES`
-  if (code === "XLM") {
-    return "processing fee included"
-  }
-  return `${prefix}${trimFixed(prefix ? threshold : truncateNumber(value, decimals), decimals)} ${code}`
-}
-
-function formatFeePercent(percent: number) {
-  if (!Number.isFinite(percent) || percent < 0) return ""
-  const decimals = percent > 0 && percent < 0.01 ? 6 : 4
-  const threshold = Math.pow(10, -decimals)
-  if (percent > 0 && percent < threshold) return `<${trimFixed(threshold, decimals)}%`
-  return `${trimFixed(percent, decimals)}%`
-}
-
-function formatBrl(value?: string, language: AppLanguage = "en") {
-  const amount = Number(String(value || "").replace(",", "."))
-  if (!Number.isFinite(amount) || amount <= 0) return ""
-  const displayAmount = amount > 0 && amount < 0.01 ? 0.01 : amount
-  return new Intl.NumberFormat(language === "pt-BR" ? "pt-BR" : "en-US", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(displayAmount)
-}
-
-function formatRouteChainFromPayload(payload: any) {
-  const explicit = String(payload?.route_chain || payload?.route?.chain || "").trim()
-  if (explicit) return explicit
-  const quote = payload?.quote
-  const source = String(quote?.sourceAsset?.code || payload?.source_asset_code || "").trim().toUpperCase()
-  const destination = String(quote?.destinationAsset?.code || payload?.destination_asset_code || payload?.asset_code || "").trim().toUpperCase()
-  const hops = Array.isArray(quote?.path)
-    ? quote.path
-      .map((item: any) => String(item?.code || item?.asset_code || "").trim().toUpperCase())
-      .filter(Boolean)
-    : []
-  const chain = [source, ...hops, destination].filter(Boolean)
-  const compact = chain.filter((asset, index) => index === 0 || asset !== chain[index - 1])
-  return compact.join(" -> ")
-}
-
-function buildFeeSummary(input: {
-  feeDisplay?: string
-  platformFeeDisplay?: string
-  totalFeeDisplay?: string
-  feeUsdc?: string
-  feeBrl?: string
-  feeXlm?: string
-  sourceAmount?: string
-  sourceAssetCode?: string
-}) {
-  if (hasUsableFeeDisplay(input.totalFeeDisplay)) return String(input.totalFeeDisplay || "")
-
-  const sourceCode = normalizeAssetCode(input.sourceAssetCode)
-  const sourceAmount = parseNumber(input.sourceAmount)
-  const feeUsdc = parseNumber(input.feeUsdc)
-  const feeBrl = parseNumber(input.feeBrl)
-  const feeXlm = parseNumber(input.feeXlm)
-
-  let primaryAmount: number | undefined
-  let primaryAsset = sourceCode
-  if (sourceCode === "USDC" && feeUsdc !== undefined) primaryAmount = feeUsdc
-  if (sourceCode === "BRL" && feeBrl !== undefined) primaryAmount = feeBrl
-  if (sourceCode === "XLM" && feeXlm !== undefined) primaryAmount = feeXlm
-
-  if (primaryAmount === undefined && feeUsdc !== undefined) {
-    primaryAmount = feeUsdc
-    primaryAsset = "USDC"
-  }
-  if (primaryAmount === undefined && feeBrl !== undefined) {
-    primaryAmount = feeBrl
-    primaryAsset = "BRL"
-  }
-  if (primaryAmount === undefined && feeXlm !== undefined) {
-    primaryAmount = feeXlm
-    primaryAsset = "XLM"
-  }
-
-  const fallbackParts = [
-    hasUsableFeeDisplay(input.platformFeeDisplay) ? String(input.platformFeeDisplay || "") : "",
-    hasUsableFeeDisplay(input.feeDisplay) ? String(input.feeDisplay || "") : "",
-  ].filter(Boolean)
-  const fallback = fallbackParts.join(" + ")
-  if (primaryAmount === undefined) return fallback
-  if (primaryAmount <= 0) return ""
-
-  const equivalents: string[] = []
-  if (primaryAsset !== "BRL" && feeBrl !== undefined) equivalents.push(formatFeeAmount(feeBrl, "BRL"))
-  if (primaryAsset !== "USDC" && feeUsdc !== undefined) equivalents.push(formatFeeAmount(feeUsdc, "USDC"))
-
-  if (sourceAmount && sourceAmount > 0 && primaryAsset === sourceCode) {
-    equivalents.push(formatFeePercent((primaryAmount / sourceAmount) * 100))
-  }
-
-  const nonZeroEquivalents = equivalents.filter((item) => !/^(r\$|us\$)\s*0([.,]0+)?$|^0([.,]0+)?%$/i.test(item.trim()))
-  const computed = `${formatFeeAmount(primaryAmount, primaryAsset)}${nonZeroEquivalents.length ? ` (${nonZeroEquivalents.join(", ")})` : ""}`
-  return fallbackParts.length ? `${fallbackParts.join(" + ")} + ${computed}` : computed
 }
 
 function getProviderLabel(provider?: string) {
@@ -625,37 +478,6 @@ export default function ConfirmPaymentClient({
           error: publicPaymentErrorMessage(payload?.message || payload?.error || "Failed to confirm payment", feedbackLanguage),
         })
       setStatus(response.ok && payload?.success ? "done" : "error")
-
-      if (response.ok && payload?.success) {
-        const conversionMessage = getAutoConversionMessage(payload, feedbackLanguage)
-        const payloadForFeedback = validation?.payload || decodeJwtPayload(token)
-        const routeForFeedback = formatRouteChainFromPayload(payloadForFeedback)
-        const feedbackSourceCode = normalizeAssetCode(String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || ""))
-        const feedbackDestinationCode = normalizeAssetCode(String(payloadForFeedback?.destination_asset_code || payloadForFeedback?.quote?.destinationAsset?.code || payloadForFeedback?.asset_code || ""))
-        const feedbackIsCrossAsset = Boolean(feedbackSourceCode && feedbackDestinationCode && feedbackSourceCode !== feedbackDestinationCode)
-        const estimatedFeeForFeedback = buildFeeSummary({
-          feeDisplay: String(payloadForFeedback?.estimated_fee_display || payloadForFeedback?.quote?.fee_display || ""),
-          feeUsdc: String(payloadForFeedback?.estimated_fee_usdc || payloadForFeedback?.quote?.fee_usdc || ""),
-          feeBrl: String(payloadForFeedback?.estimated_fee_brl || payloadForFeedback?.quote?.fee_brl || ""),
-          sourceAmount: String(payloadForFeedback?.source_amount || payloadForFeedback?.quote?.sourceAmount || payloadForFeedback?.amount || ""),
-          sourceAssetCode: String(payloadForFeedback?.source_asset_code || payloadForFeedback?.quote?.sourceAsset?.code || payloadForFeedback?.asset_code || ""),
-        })
-        const savingsForFeedback = formatBrl(String(payloadForFeedback?.savings_estimate?.estimated_savings_brl || ""), feedbackLanguage)
-        const monthlySavingsForFeedback = formatBrl(String(payload?.monthly_savings?.estimated_savings_brl || ""), feedbackLanguage)
-        const recipientKey = formatRecipientKey(payload) || formatRecipientKey(payloadForFeedback)
-        enqueueWebChatFeedback([
-          T(feedbackLanguage, "Pagamento enviado com sucesso.", "Payment sent successfully."),
-          conversionMessage,
-          `${T(feedbackLanguage, "Valor", "Amount")}: ${formatPaymentAmount(String(payload.amount || payload.transferDetails?.destinationAmount || ""), String(payload.asset || payload.assetCode || payload.transferDetails?.destinationAssetCode || ""))}`,
-          `${T(feedbackLanguage, "Destino", "Destination")}: ${formatRecipientLabel(payload, feedbackLanguage)}`,
-          recipientKey ? `${T(feedbackLanguage, "Chave", "Key")}: ${recipientKey}` : "",
-          feedbackIsCrossAsset && routeForFeedback ? T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.") : "",
-          hasUsableFeeDisplay(estimatedFeeForFeedback) ? `${T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: ${estimatedFeeForFeedback}` : "",
-          feedbackIsCrossAsset && savingsForFeedback ? `${T(feedbackLanguage, "Economia estimada", "Estimated savings")}: ${savingsForFeedback}` : "",
-          monthlySavingsForFeedback ? `${T(feedbackLanguage, "Economia no mês até agora", "Monthly savings so far")}: ${monthlySavingsForFeedback}` : "",
-          `${T(feedbackLanguage, "Horário", "Time")}: ${formatTimestamp(payload.completed_at, feedbackLanguage)}`,
-        ].filter(Boolean).join("\n"))
-      }
 
       if (!response.ok || !payload?.success) {
         submitLockRef.current = false

@@ -627,6 +627,8 @@ export class PaymentReceiptService {
   }
 
   static async buildReceiptText(input: PaymentReceiptInput): Promise<string> {
+    const language = this.normalizeReceiptLanguage(input.language);
+    const isEn = language === 'en';
     const sourceAmount = String(input.sourceAmount || input.destinationAmount || '').trim();
     const sourceAssetCode = this.userFacingAssetCode(input.sourceAssetCode || input.destinationAssetCode);
     const destinationAmount = String(input.destinationAmount || '').trim();
@@ -634,8 +636,8 @@ export class PaymentReceiptService {
     const sourceLabel = formatCustomerAssetAmount(sourceAmount, sourceAssetCode);
     const destinationLabel = formatCustomerAssetAmount(destinationAmount, destinationAssetCode);
     const counterparty = this.userFacingCounterpartyLabel(input.counterpartyLabel);
-    const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty);
-    const counterpartyKeyLine = this.counterpartyKeyLine(input.counterpartyKey);
+    const operationLine = this.operationLine(input.type, sourceLabel, destinationLabel, counterparty, language);
+    const counterpartyKeyLine = this.counterpartyKeyLine(input.counterpartyKey, language);
     const hasConversion = sourceAssetCode !== destinationAssetCode;
     const showEconomics = this.shouldShowReceiptEconomics(input);
     const quoteLine = hasConversion
@@ -644,23 +646,24 @@ export class PaymentReceiptService {
           sourceAssetCode,
           destinationAmount,
           destinationAssetCode,
+          language,
         })
       : '';
     const fee = await this.resolveFeeBreakdown(input);
-    const feeLine = showEconomics ? this.feeLine(fee) : '';
-    const traditionalFeeLine = showEconomics ? this.traditionalFeeLine(fee) : '';
-    const settlementLine = showEconomics ? this.settlementLine(input.settlementMs) : '';
-    const savingsLine = showEconomics ? this.savingsLine(input.savings, fee) : '';
-    const timeLine = this.timeLine(input.completedAt);
+    const feeLine = showEconomics ? this.feeLine(fee, language) : '';
+    const traditionalFeeLine = showEconomics ? this.traditionalFeeLine(fee, language) : '';
+    const settlementLine = showEconomics ? this.settlementLine(input.settlementMs, language) : '';
+    const savingsLine = showEconomics ? this.savingsLine(input.savings, fee, language) : '';
+    const timeLine = this.timeLine(input.completedAt, language);
     const publicOperationId = this.toPublicOperationId(input.hash);
-    const status = this.statusLabel(input.status);
+    const status = this.statusLabel(input.status, language);
     const nicknamePrompt = this.transactionNicknamePrompt(input.type);
-    const contextLine = this.contextLine(input.contextMessage);
+    const contextLine = this.contextLine(input.contextMessage, language);
 
     return [
       operationLine,
       counterpartyKeyLine,
-      `Status: ${status}`,
+      `${isEn ? 'Status' : 'Status'}: ${status}`,
       contextLine,
       quoteLine,
       feeLine,
@@ -668,31 +671,34 @@ export class PaymentReceiptService {
       savingsLine,
       settlementLine,
       timeLine,
-      publicOperationId ? `ID da operação: ${publicOperationId}` : 'ID da operação: em processamento',
+      publicOperationId
+        ? `${isEn ? 'Operation ID' : 'ID da operação'}: ${publicOperationId}`
+        : `${isEn ? 'Operation ID' : 'ID da operação'}: ${isEn ? 'processing' : 'em processamento'}`,
       '',
-      'Recibo registrado no seu histórico.',
+      isEn ? 'Receipt saved in your history.' : 'Recibo registrado no seu histórico.',
       nicknamePrompt,
     ].filter((line) => line !== '').join('\n');
   }
 
-  private static counterpartyKeyLine(counterpartyKey?: string | null): string {
+  private static counterpartyKeyLine(counterpartyKey?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const key = String(counterpartyKey || '').trim();
     if (!key || /^G[A-Z2-7]{55}$/i.test(key)) return '';
-    return `Chave: ${key}`;
+    return `${language === 'en' ? 'Key' : 'Chave'}: ${key}`;
   }
 
-  private static contextLine(contextMessage?: string | null): string {
-    const sanitized = this.sanitizeContextMessage(contextMessage);
+  private static contextLine(contextMessage?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    const sanitized = this.sanitizeContextMessage(contextMessage, language);
     if (!sanitized) return '';
-    return `Resumo: ${sanitized}`;
+    return `${language === 'en' ? 'Summary' : 'Resumo'}: ${sanitized}`;
   }
 
-  private static sanitizeContextMessage(contextMessage?: string | null): string {
+  private static sanitizeContextMessage(contextMessage?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const raw = String(contextMessage || '').trim();
     if (!raw) return '';
+    const isEn = language === 'en';
     const normalized = raw
       .replace(/\s+/g, ' ')
-      .replace(/\bwallet\b/gi, 'conta')
+      .replace(/\bwallet\b/gi, isEn ? 'account' : 'conta')
       .replace(/\btestnet\b/gi, '')
       .replace(/\bsandbox\b/gi, '')
       .replace(/\bdevnet\b/gi, '')
@@ -704,25 +710,33 @@ export class PaymentReceiptService {
       .trim();
 
     if (/retirada via pix conclu[ií]da|pix enviado ao seu pix|entrou no seu pix|saldo saiu da conta/i.test(normalized)) {
-      return 'PIX enviado à chave.';
+      return isEn ? 'PIX sent to the key.' : 'PIX enviado à chave.';
     }
     if (/pix.*recebid|depositad/i.test(normalized)) {
-      return 'PIX recebido.';
+      return isEn ? 'PIX received.' : 'PIX recebido.';
     }
     return normalized.slice(0, 120);
   }
 
-  private static savingsLine(savings: PaymentReceiptInput['savings'] | undefined, fee: FeeBreakdown): string {
+  private static savingsLine(
+    savings: PaymentReceiptInput['savings'] | undefined,
+    fee: FeeBreakdown,
+    language: 'pt-BR' | 'en' = 'pt-BR'
+  ): string {
     const fromPayload = Number(String(savings?.estimatedSavings || '').replace(',', '.'));
     if (Number.isFinite(fromPayload) && fromPayload > 0) {
-      return `Economia estimada: R$ ${fromPayload.toFixed(2)} em relação a métodos tradicionais.`;
+      return language === 'en'
+        ? `Estimated savings: R$ ${fromPayload.toFixed(2)} vs traditional methods.`
+        : `Economia estimada: R$ ${fromPayload.toFixed(2)} em relação a métodos tradicionais.`;
     }
 
     const traditional = Number(fee.traditionalFeeBrl || 0);
     const actual = Number(fee.actualFeeBrl || 0);
     const estimated = traditional - actual;
     if (!Number.isFinite(estimated) || estimated <= 0) return '';
-    return `Economia estimada: R$ ${estimated.toFixed(2)} em relação a métodos tradicionais.`;
+    return language === 'en'
+      ? `Estimated savings: R$ ${estimated.toFixed(2)} vs traditional methods.`
+      : `Economia estimada: R$ ${estimated.toFixed(2)} em relação a métodos tradicionais.`;
   }
 
   private static async cumulativeSavingsLine(input: PaymentReceiptInput): Promise<string> {
@@ -742,62 +756,77 @@ export class PaymentReceiptService {
         period: 'lifetime',
       });
       const value = Number(identity?.estimatedSavings || 0);
+      const language = this.normalizeReceiptLanguage(input.language);
       if (!Number.isFinite(value) || value <= 0) {
-        return 'Economia acumulada da conta: R$ 0.00 em relação a métodos tradicionais.';
+        return language === 'en'
+          ? 'Account lifetime savings: R$ 0.00 vs traditional methods.'
+          : 'Economia acumulada da conta: R$ 0.00 em relação a métodos tradicionais.';
       }
-      return `Economia acumulada da conta: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
+      return language === 'en'
+        ? `Account lifetime savings: R$ ${value.toFixed(2)} vs traditional methods.`
+        : `Economia acumulada da conta: R$ ${value.toFixed(2)} em relação a métodos tradicionais.`;
     } catch (error) {
       logger.debug(`[receipt] could not load cumulative savings: ${error instanceof Error ? error.message : String(error)}`);
       return '';
     }
   }
 
-  private static operationLine(type: ReceiptType, sourceLabel: string, destinationLabel: string, counterparty?: string): string {
-    const target = counterparty || 'destinatário';
+  private static operationLine(
+    type: ReceiptType,
+    sourceLabel: string,
+    destinationLabel: string,
+    counterparty?: string,
+    language: 'pt-BR' | 'en' = 'pt-BR'
+  ): string {
+    const isEn = language === 'en';
+    const target = counterparty || (isEn ? 'recipient' : 'destinatário');
     if (type === 'conversion') {
-      return `Você converteu ${sourceLabel} para ${destinationLabel}.`;
+      return isEn ? `You converted ${sourceLabel} to ${destinationLabel}.` : `Você converteu ${sourceLabel} para ${destinationLabel}.`;
     }
     if (type === 'payment_received') {
-      return `Você recebeu ${destinationLabel} de ${target}.`;
+      return isEn ? `You received ${destinationLabel} from ${target}.` : `Você recebeu ${destinationLabel} de ${target}.`;
     }
     if (type === 'claim_redeemed') {
-      return `Seu link foi resgatado por ${target}: ${destinationLabel} enviados.`;
+      return isEn ? `Your link was claimed by ${target}: ${destinationLabel} sent.` : `Seu link foi resgatado por ${target}: ${destinationLabel} enviados.`;
     }
     if (/conta banc[aá]ria externa|pix|banco/i.test(target)) {
-      return `Você retirou ${destinationLabel} para ${target}.`;
+      return isEn ? `You withdrew ${destinationLabel} to ${target}.` : `Você retirou ${destinationLabel} para ${target}.`;
     }
     const sourceCode = String(sourceLabel || '').trim();
     const destinationCode = String(destinationLabel || '').trim();
     if (sourceCode && destinationCode && sourceCode !== destinationCode) {
-      return `Você converteu ${sourceLabel} para ${destinationLabel} e enviou para ${target}.`;
+      return isEn
+        ? `You converted ${sourceLabel} to ${destinationLabel} and sent it to ${target}.`
+        : `Você converteu ${sourceLabel} para ${destinationLabel} e enviou para ${target}.`;
     }
-    return `Você enviou ${destinationLabel} para ${target}.`;
+    return isEn ? `You sent ${destinationLabel} to ${target}.` : `Você enviou ${destinationLabel} para ${target}.`;
   }
 
   private static transactionNicknamePrompt(_type: ReceiptType): string {
     return '';
   }
 
-  private static statusLabel(status?: string | null): string {
+  private static statusLabel(status?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    const isEn = language === 'en';
     const normalized = String(status || 'confirmado').trim().toLowerCase();
-    if (normalized === 'completed' || normalized === 'success' || normalized === 'confirmado') return 'concluído';
-    if (normalized === 'processing' || normalized === 'pending') return 'processando';
-    if (normalized === 'failed' || normalized === 'error') return 'não concluído';
-    return normalized || 'concluído';
+    if (normalized === 'completed' || normalized === 'success' || normalized === 'confirmado') return isEn ? 'completed' : 'concluído';
+    if (normalized === 'processing' || normalized === 'pending') return isEn ? 'processing' : 'processando';
+    if (normalized === 'failed' || normalized === 'error') return isEn ? 'not completed' : 'não concluído';
+    return normalized || (isEn ? 'completed' : 'concluído');
   }
 
-  private static feeLine(fee: FeeBreakdown): string {
-    if (!fee.actualDisplay) return 'Taxa: indisponível';
-    return `Taxa: ${fee.actualDisplay}`;
+  private static feeLine(fee: FeeBreakdown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
+    if (!fee.actualDisplay) return language === 'en' ? 'Fee: unavailable' : 'Taxa: indisponível';
+    return `${language === 'en' ? 'Fee' : 'Taxa'}: ${fee.actualDisplay}`;
   }
 
-  private static traditionalFeeLine(fee: FeeBreakdown): string {
+  private static traditionalFeeLine(fee: FeeBreakdown, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const traditionalBrl = Number(fee.traditionalFeeBrl || 0);
     const traditionalUsdc = Number(fee.traditionalFeeUsdc || 0);
     if (!Number.isFinite(traditionalBrl) || traditionalBrl <= 0 || !Number.isFinite(traditionalUsdc) || traditionalUsdc <= 0) {
       return '';
     }
-    return `Taxa estimada em métodos tradicionais: ${this.formatSmallFiat(traditionalBrl, 'BRL')} / ${this.formatSmallFiat(traditionalUsdc, 'USDC')}`;
+    return `${language === 'en' ? 'Estimated traditional-method fee' : 'Taxa estimada em métodos tradicionais'}: ${this.formatSmallFiat(traditionalBrl, 'BRL')} / ${this.formatSmallFiat(traditionalUsdc, 'USDC')}`;
   }
 
   private static parseFeeDisplay(display?: string | null): { brl?: number; usdc?: number } {
@@ -1150,13 +1179,16 @@ export class PaymentReceiptService {
     };
   }
 
-  private static settlementLine(_settlementMs?: number | null): string {
+  private static settlementLine(_settlementMs?: number | null, _language: 'pt-BR' | 'en' = 'pt-BR'): string {
     return '';
   }
 
-  private static timeLine(completedAt?: string | null): string {
+  private static timeLine(completedAt?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const timestamp = completedAt ? Date.parse(completedAt) : Date.now();
     const date = Number.isFinite(timestamp) ? new Date(timestamp) : new Date();
+    if (language === 'en') {
+      return `Time: ${date.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })}`;
+    }
     return `Horário: ${date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`;
   }
 }

@@ -66,6 +66,36 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('blockchain');
   });
 
+  it('builds cross-asset payment receipts fully in English when requested', async () => {
+    const operationId = PaymentReceiptService.toPublicOperationId('tx-english-cross-asset');
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_sent',
+      sessionId: 'session-english-cross-asset',
+      userId: 'user-english-cross-asset',
+      language: 'en',
+      counterpartyLabel: 'Rodrigo Camargo',
+      counterpartyKey: 'rodrigooobfcdog@gmail.com',
+      sourceAmount: '10',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '15.3002683',
+      destinationAssetCode: 'XLM',
+      hash: 'tx-english-cross-asset',
+      completedAt: '2026-06-05T22:51:38.000Z',
+    });
+
+    expect(receipt).toContain('You converted US$ 10.00 to 15.3002683 XLM and sent it to Rodrigo Camargo.');
+    expect(receipt).toContain('Key: rodrigooobfcdog@gmail.com');
+    expect(receipt).toContain('Status: completed');
+    expect(receipt).toContain('Quote used: 1 XLM = 0.653583 US$ (US$ 10.00 -> 15.3002683 XLM)');
+    expect(receipt).toContain('Time:');
+    expect(receipt).toContain(`Operation ID: ${operationId}`);
+    expect(receipt).toContain('Receipt saved in your history.');
+    expect(receipt).not.toContain('Você');
+    expect(receipt).not.toContain('Chave:');
+    expect(receipt).not.toContain('Cotação usada');
+    expect(receipt).not.toContain('Recibo registrado');
+  });
+
   it('uses the settled source and destination amounts as the receipt quote source of truth', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_sent',

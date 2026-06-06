@@ -157,6 +157,14 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("chat recebe");
   });
 
+  it("does not post duplicate chat feedback from payment confirmation", () => {
+    const text = source("app/confirm-payment/confirm-payment-client.tsx");
+
+    expect(text).not.toContain("enqueueWebChatFeedback");
+    expect(text).toContain("A mensagem final é enviada ao canal de origem.");
+    expect(text).toContain("Payment sent successfully");
+  });
+
   it("closes the external send screen after successful confirmation", () => {
     const text = source("app/send-external/send-external-client.tsx");
 
