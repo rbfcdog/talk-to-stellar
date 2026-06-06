@@ -207,4 +207,20 @@ export class InternationalTransfersController {
       res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
     }
   }
+
+  static async getOrchestrationLog(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      const orchestration_log = await internationalTransferService.getOrchestrationLog(String(req.params.id));
+      lifecycleLog('orchestration_log_read', context, {
+        transfer_id: orchestration_log.transfer_id,
+        status: orchestration_log.current_status,
+        evidence_status: orchestration_log.evidence_status,
+      });
+      res.status(200).json({ success: true, ...responseContext(context), orchestration_log });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
 }

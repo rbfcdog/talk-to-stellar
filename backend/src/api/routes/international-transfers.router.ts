@@ -10,6 +10,7 @@ router.post('/:id/settle-stellar', InternationalTransfersController.settleStella
 router.post('/:id/payout-instruction', InternationalTransfersController.createPayoutInstruction);
 router.post('/:id/payout-status-refresh', InternationalTransfersController.refreshPayoutStatus);
 router.get('/:id/reconciliation', InternationalTransfersController.getReconciliation);
+router.get('/:id/orchestration-log', InternationalTransfersController.getOrchestrationLog);
 router.get('/:id', InternationalTransfersController.getTransfer);
 
 export default router;

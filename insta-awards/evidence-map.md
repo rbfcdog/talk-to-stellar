@@ -69,6 +69,7 @@ POST /api/transfers/:id/settle-stellar
 POST /api/transfers/:id/payout-instruction
 POST /api/transfers/:id/payout-status-refresh
 GET  /api/transfers/:id/reconciliation
+GET  /api/transfers/:id/orchestration-log
 GET  /api/transfers/:id
 ```
 
@@ -80,6 +81,8 @@ Evidence to capture:
 - Transfer state after each call.
 - Redacted error output if a provider is not configured.
 - Timestamp of each transition.
+- Redacted orchestration log with quote provenance, evidence status, timeline
+  steps, replay markers, and correlation IDs.
 
 ## Frontend Evidence
 

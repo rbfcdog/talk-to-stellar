@@ -36,8 +36,28 @@ The script creates:
 | `database/reconciliation.json` | Placeholder reconciliation export. |
 | `stellar/settlement.json` | Real testnet, sandbox, or mock settlement evidence. |
 | `payout/instruction.json` | Payout adapter payload/response with sensitive fields redacted. |
+| `logs/orchestration-log.json` | Redacted lifecycle log from the orchestration API when `--api-base` and `--transfer-id` are provided. |
 | `screenshots/` | Screenshots from `/institution-settlement`. |
 | `logs/` | Redacted backend/frontend logs with correlation IDs. |
+
+## Capture From A Running API
+
+After a transfer exists, the generator can hydrate evidence directly from the
+API:
+
+```bash
+npm run instawards:evidence -- \
+  --run-id week-1-transfer-001 \
+  --api-base=http://localhost:3001 \
+  --transfer-id=tr_brl_usd_123 \
+  --correlation-id=instawards_demo_001
+```
+
+This writes redacted copies of:
+
+- `GET /api/transfers/:id`
+- `GET /api/transfers/:id/reconciliation`
+- `GET /api/transfers/:id/orchestration-log`
 
 ## Status Rules
 

@@ -411,6 +411,45 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       route_delta_explained_by_fees: true,
     });
     expect(evidence.metrics_valid).toBe(true);
+
+    const orchestrationLog = await service.getOrchestrationLog(transfer.transfer_id);
+    expect(orchestrationLog).toMatchObject({
+      transfer_id: transfer.transfer_id,
+      quote_id: quote.quote_id,
+      current_status: 'PAYOUT_PENDING',
+      correlation_id: 'corr-service-1',
+      evidence_status: {
+        quote: 'captured',
+        pix_funding: 'captured',
+        stellar_settlement: 'mock',
+        payout_instruction: 'mock',
+        reconciliation: 'captured',
+      },
+      destination: {
+        account_number_last4: '6789',
+        routing_number_last4: '0021',
+      },
+      redaction: {
+        applied: true,
+      },
+    });
+    expect(orchestrationLog.destination).not.toHaveProperty('accountNumber');
+    expect(orchestrationLog.destination).not.toHaveProperty('account_number');
+    expect(orchestrationLog.quote_provenance).toMatchObject({
+      kind: 'live_path_quote',
+      source: 'stellar_horizon_strict_send_paths',
+    });
+    expect(orchestrationLog.timeline.map((entry) => entry.step)).toEqual(expect.arrayContaining([
+      'quote_created',
+      'pix_intent_created',
+      'pix_funding_confirmed',
+      'pix_funding_replay',
+      'stellar_settlement',
+      'stellar_settlement_replay',
+      'payout_instruction',
+      'payout_instruction_replay',
+      'reconciliation',
+    ]));
   });
 
   it('marks Pix funding failure events as FAILED with an error log', async () => {
