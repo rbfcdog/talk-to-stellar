@@ -545,7 +545,7 @@ describe('PaymentReceiptService', () => {
     notifySpy.mockRestore();
   });
 
-  it('still delivers one external callback when the receipt row already exists', async () => {
+  it('skips the external callback when the deduped receipt row already exists', async () => {
     const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockResolvedValue('https://app.example.com/receipt/once');
     const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(false);
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
@@ -565,6 +565,48 @@ describe('PaymentReceiptService', () => {
       provider: 'whatsapp',
       providerUserId: '5519997624114',
       counterpartyLabel: 'PIX Etherfuse',
+      sourceAmount: '10.15',
+      sourceAssetCode: 'BRL',
+      destinationAmount: '10.07',
+      destinationAssetCode: 'BRL',
+      hash: 'sandbox-ledger-duplicate',
+      dedupeKey: 'pix-onramp:operation-duplicate',
+      externalDeliveryText: 'PIX confirmado com sucesso.\nValor recebido: R$10.07',
+    });
+
+    expect(result).toBe('https://app.example.com/receipt/once');
+    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
+      dedupeKey: 'receipt:pix-onramp:operation-duplicate:text',
+    }));
+    expect(notifySpy).not.toHaveBeenCalled();
+
+    createSpy.mockRestore();
+    saveSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
+  it('delivers only the first external callback for repeated receipt dedupe keys', async () => {
+    const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockResolvedValue('https://app.example.com/receipt/once');
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage')
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    const result = await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'session-pix-dedupe',
+      userId: 'user-pix-dedupe',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'PIX',
       sourceAmount: '10.15',
       sourceAssetCode: 'BRL',
       destinationAmount: '10.07',
