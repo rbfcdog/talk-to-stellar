@@ -770,6 +770,8 @@ export class AgentGraph {
   private async lookupGlobalContactByPixKey(pixKey: string): Promise<any | undefined> {
     const normalizedPixKey = String(pixKey || '').trim().toLowerCase();
     if (!normalizedPixKey) return undefined;
+    const pixDigits = normalizedPixKey.replace(/\D+/g, '');
+    const phoneTail = pixDigits.length >= 8 ? pixDigits.slice(-11) || pixDigits.slice(-8) : '';
 
     try {
       const { data: walletRow, error: walletError } = await supabase
@@ -787,6 +789,23 @@ export class AgentGraph {
         };
       }
 
+      if (phoneTail) {
+        const { data: walletByPhone, error: walletByPhoneError } = await supabase
+          .from('wallets')
+          .select('public_key, name, pix_key')
+          .ilike('pix_key', `%${phoneTail}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (!walletByPhoneError && walletByPhone?.public_key) {
+          return {
+            contact_name: walletByPhone.name || normalizedPixKey,
+            stellar_public_key: walletByPhone.public_key,
+            pix_key: walletByPhone.pix_key || normalizedPixKey,
+          };
+        }
+      }
+
       const { data: contactRow, error: contactError } = await supabase
         .from('contacts')
         .select('contact_name, stellar_public_key, pix_key')
@@ -796,6 +815,30 @@ export class AgentGraph {
 
       if (!contactError && contactRow?.stellar_public_key) {
         return contactRow;
+      }
+
+      if (phoneTail) {
+        const { data: sessionByPhone, error: sessionByPhoneError } = await supabase
+          .from('agent_sessions')
+          .select('session_id, user_id, phone_number, email')
+          .ilike('phone_number', `%${phoneTail}%`)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const sessionId = String(sessionByPhone?.session_id || '').trim();
+        if (!sessionByPhoneError && sessionId) {
+          const wallet = await walletRepo.getWalletBySession(sessionId);
+          if (wallet?.public_key) {
+            return {
+              contact_name: String(sessionByPhone?.email || sessionByPhone?.user_id || normalizedPixKey),
+              stellar_public_key: wallet.public_key,
+              session_id: sessionId,
+              phone_number: sessionByPhone?.phone_number || normalizedPixKey,
+              pix_key: normalizedPixKey,
+            };
+          }
+        }
       }
     } catch (error) {
       logger.debug(`[lookupGlobalContactByPixKey] Error: ${error}`);
@@ -1791,8 +1834,8 @@ export class AgentGraph {
           };
           state.response_message = this.text(
             language,
-            `Não encontrei "${intent.recipient_query || 'esse destinatário'}" nos seus contatos salvos. Se esse telefone, e-mail ou chave pertence a uma conta TalkToStellar, responda "adicionar contato" que eu salvo e continuo o PIX.`,
-            `I could not find "${intent.recipient_query || 'that recipient'}" in your saved contacts. If that phone, email, or key belongs to a TalkToStellar account, reply "add contact" and I will save it and continue the PIX.`
+            `Não encontrei uma conta TalkToStellar ativa para "${intent.recipient_query || 'esse destinatário'}". Confira o telefone, e-mail ou chave, ou peça para a pessoa terminar o cadastro antes de gerar o PIX.`,
+            `I could not find an active TalkToStellar account for "${intent.recipient_query || 'that recipient'}". Check the phone, email, or key, or ask them to finish signup before creating the PIX.`
           );
           await this.saveAssistantResponse(state);
           await this.repository.saveState(state.session_id, state);
@@ -2772,7 +2815,39 @@ export class AgentGraph {
       }
     }
 
-    if (!contact || !destination) return { destination: '', destinationName: query };
+    if (!destination) {
+      let globalContact: any | undefined;
+      if (isPublicKey) {
+        globalContact = {
+          contact_name: query,
+          stellar_public_key: query,
+          pix_key: query,
+        };
+      } else if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(query.toLowerCase())) {
+        globalContact = await this.lookupGlobalContactByEmail(query.toLowerCase());
+      }
+      if (!globalContact) {
+        globalContact = await this.lookupGlobalContactByPixKey(query);
+      }
+
+      const globalDestination = String(
+        globalContact?.destination_public_key ||
+        globalContact?.stellar_public_key ||
+        globalContact?.public_key ||
+        ''
+      ).trim();
+      if (globalDestination) {
+        destination = globalDestination;
+        resolvedContact = {
+          ...(contact || {}),
+          ...globalContact,
+          contact_name: contact?.contact_name || globalContact.contact_name || globalContact.name || query,
+          pix_key: contact?.pix_key || globalContact.pix_key || globalContact.email || query,
+        };
+      }
+    }
+
+    if (!destination) return { destination: '', destinationName: query };
 
     return {
       contact: resolvedContact,

@@ -8367,7 +8367,21 @@ export class AnchorService {
     }
 
     if (!contact) {
-      throw apiError(`Recipient "${query}" was not found in your saved contacts. Open contacts and choose a real recipient before creating a PIX-funded transfer.`, 404);
+      const directReferenceCandidates = Array.from(new Set([
+        preferredKey,
+        preferredPublicKey,
+        query,
+      ].map((value) => coalesceString(value)).filter(Boolean)));
+
+      for (const reference of directReferenceCandidates) {
+        const resolvedByReference = await this.resolveTransferRecipientReference(reference, {
+          displayName: preferredName || query,
+          pixKey: preferredKey || query,
+        });
+        if (resolvedByReference?.publicKey) return resolvedByReference;
+      }
+
+      throw apiError(`Recipient "${query}" was not found as an active TalkToStellar account. Ask them to finish signup or check the phone, email, or key before creating a PIX-funded transfer.`, 404);
     }
 
     const contactPublicKey = contactDestinationPublicKey(contact);
