@@ -764,11 +764,56 @@
       padding-bottom: calc(6.25rem + env(safe-area-inset-bottom));
     }
 
+    .tts-op-page:has(.tts-mobile-pin-action) {
+      padding-bottom: calc(12.5rem + env(safe-area-inset-bottom));
+    }
+
     .tts-op-page .tts-mobile-action > * {
       margin-top: 0 !important;
       width: 100% !important;
       min-height: 3.25rem;
       border-radius: 0.5rem !important;
+    }
+
+    .tts-op-page .tts-mobile-pin-action {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      margin: 0 !important;
+      padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--tts-border);
+      background: color-mix(in oklab, var(--tts-surface) 94%, var(--tts-bg) 6%);
+      box-shadow: 0 -14px 28px rgba(0, 0, 0, 0.26);
+      backdrop-filter: blur(16px);
+    }
+
+    .tts-op-page .tts-mobile-pin-action .tts-field-label {
+      margin-top: 0 !important;
+      font-size: 0.78rem !important;
+    }
+
+    .tts-op-page .tts-mobile-pin-action .tts-fill-field {
+      margin-top: 0.45rem !important;
+      border-radius: 0.75rem !important;
+    }
+
+    .tts-op-page .tts-mobile-pin-action input {
+      min-height: 2.8rem;
+      padding-top: 0.65rem !important;
+      padding-bottom: 0.65rem !important;
+      font-size: 1rem !important;
+    }
+
+    .tts-op-page .tts-mobile-pin-action button {
+      margin-top: 0.65rem !important;
+      min-height: 3.15rem;
+      border-radius: 0.5rem !important;
+      padding-top: 0.75rem !important;
+      padding-bottom: 0.75rem !important;
+      font-size: 0.98rem !important;
+      font-weight: 900 !important;
     }
 
     .tts-op-page .tts-mobile-scroll {
