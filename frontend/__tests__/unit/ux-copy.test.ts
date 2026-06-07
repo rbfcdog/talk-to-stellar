@@ -298,8 +298,9 @@ describe("UX copy guardrails", () => {
 
   it("keeps BRL visible while sending TESOURO as the backend settlement asset", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
+    const utilsText = source("lib/pix-ramp-utils.ts");
 
-    expect(text).toContain('displayCode === "BRL" ? "TESOURO"');
+    expect(utilsText).toContain('displayCode === "BRL" ? "TESOURO"');
     expect(text).toContain("final_asset: settlementAssetCode(targetAsset)");
     expect(text).toContain("auto_pay_asset_code: settlementAssetCode(autoPaySourceAsset || autoPayAsset || targetAsset)");
     expect(text).toContain("asset_code: requestedAutoPayAsset");
@@ -311,6 +312,7 @@ describe("UX copy guardrails", () => {
 
   it("keeps BRL PIX top-up net-first and sends the receipt link back to chat", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
+    const utilsText = source("lib/pix-ramp-utils.ts");
     const webFeedbackText = source("lib/web-feedback.ts");
     const chatText = source("components/chat/chat-window.tsx");
 
@@ -322,8 +324,8 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("Exact USDC PIX target will be quoted by backend");
     expect(text).not.toContain("/api/financial/usdc-to-brl-preview");
     expect(text).toContain("refreshOrder(false)");
-    expect(text).toContain("function extractRampReceiptUrl(...sources: unknown[]): string");
-    expect(text).toContain("function buildRampReceiptFallbackUrl(reference: unknown): string");
+    expect(utilsText).toContain("function extractRampReceiptUrl(...sources: unknown[]): string");
+    expect(utilsText).toContain("function buildRampReceiptFallbackUrl(reference: unknown): string");
     expect(text).toContain("receiptUrl: extractRampReceiptUrl(completedTransaction, refreshed, payload)");
     expect(text).toContain("const backendReceiptUrl = extractRampReceiptUrl(");
     expect(text).toContain("if (backendReceiptUrl) return;");
@@ -333,11 +335,11 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("Taxa de conversão estimada");
     expect(text).not.toContain("formatFeeParts");
     expect(text).toContain("RampFeeBridge");
-    expect(text).toContain("TRADITIONAL_METHOD_ONRAMP_FEE_PCT");
-    expect(text).toContain("TRADITIONAL_METHOD_OFFRAMP_FEE_PCT");
-    expect(text).toContain("const TRADITIONAL_METHOD_ONRAMP_FEE_PCT = 0.0125");
-    expect(text).toContain("const TRADITIONAL_METHOD_OFFRAMP_FEE_PCT = 0.0167");
-    expect(text).toContain("function traditionalMethodFeePct(mode: RampMode)");
+    expect(utilsText).toContain("TRADITIONAL_METHOD_ONRAMP_FEE_PCT");
+    expect(utilsText).toContain("TRADITIONAL_METHOD_OFFRAMP_FEE_PCT");
+    expect(utilsText).toContain("const TRADITIONAL_METHOD_ONRAMP_FEE_PCT = 0.0125");
+    expect(utilsText).toContain("const TRADITIONAL_METHOD_OFFRAMP_FEE_PCT = 0.0167");
+    expect(utilsText).toContain("function traditionalMethodFeePct(mode: RampMode)");
     expect(text).toContain("const benchmarkTraditionalFeeBrl = comparableAmountBrl > 0");
     expect(text).toContain("estimated_traditional_fee_brl");
     expect(text).toContain("estimated_savings_brl");
@@ -395,7 +397,7 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain('L("Taxa da conta", "Account fee")');
     expect(text).not.toContain('L("Taxa total", "Total fee")');
     expect(text).not.toContain("Esse é o valor descontado nesta operação");
-    expect(text).toContain("finalConversionPending");
+    expect(utilsText).toContain("finalConversionPending");
     expect(text).toContain("onRampFinalAssetDelta");
     expect(text).toContain('finalAsset === "BRL"');
     expect(text).toContain("Conversão para");

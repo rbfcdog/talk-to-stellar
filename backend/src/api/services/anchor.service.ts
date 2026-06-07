@@ -37,6 +37,7 @@ import { verifyWalletPin } from '../../utils/pin-hash';
 import { logger } from '../../utils/logger';
 import { errorLogFields, errorLogMessage } from '../../utils/error-log';
 import { publicErrorCode } from '../../utils/public-error';
+import { sleep } from '../../utils/async';
 import crypto from 'crypto';
 
 interface InitiatePixDepositInput {
@@ -937,10 +938,6 @@ function onboardingBankAccountReady(value: unknown): boolean {
       !status ||
       ['approved', 'active', 'created', 'compliant', 'pending', 'verified'].includes(status),
   );
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 type NormalizedWalletBalance = {
