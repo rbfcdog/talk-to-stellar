@@ -523,6 +523,78 @@ describe('TransferNotificationService', () => {
     );
   });
 
+  it('uses the recipient saved language for incoming transfer notifications', async () => {
+    const saveMessage = jest.fn(async () => undefined);
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({
+        user_id: 'recipient-user',
+        email: 'recipient@example.com',
+        preferred_language: 'en',
+        language: 'pt-BR',
+      })),
+      getState: jest.fn(async () => null),
+      saveMessage,
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [
+        { provider: 'whatsapp', provider_user_id: '55 19 98180-8102', data: {} },
+      ],
+      userMappings: [],
+    }));
+
+    await TransferNotificationService.notifyIncomingTransfer({
+      recipientSessionId: 'recipient-session',
+      recipientUserId: 'recipient-user',
+      senderLabel: 'contatojpsobral@gmail.com',
+      amount: '100',
+      assetCode: 'USDC',
+    });
+
+    expect(saveMessage).toHaveBeenCalledWith(
+      'recipient-session',
+      'assistant',
+      expect.stringContaining('US$ 100.00 received in seconds.')
+    );
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    const sentText = String(sendTextMock.mock.calls[0][2] || '');
+    expect(sentText).toContain('US$ 100.00 received in seconds.');
+    expect(sentText).toContain('From: contatojpsobral@gmail.com');
+    expect(sentText).toContain('Receipt available in your history.');
+    expect(sentText).not.toContain('recebidos');
+    expect(sentText).not.toContain('Recibo disponível');
+  });
+
+  it('localizes image receipt WhatsApp fallbacks with the recipient saved language', async () => {
+    (TransferNotificationService as any).agentRepo = {
+      getSession: jest.fn(async () => ({
+        user_id: 'recipient-user',
+        email: 'recipient@example.com',
+        preferred_language: 'en',
+      })),
+      getState: jest.fn(async () => null),
+    };
+    (supabase.from as jest.Mock).mockImplementation(() => externalAccountsBySessionAndUser({
+      sessionMappings: [
+        { provider: 'whatsapp', provider_user_id: '55 19 98180-8102', data: {} },
+      ],
+      userMappings: [],
+    }));
+
+    await TransferNotificationService.notifyExternalChannelImage({
+      sessionId: 'recipient-session',
+      userId: 'recipient-user',
+      svg: '<svg></svg>',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'Receipt generated.\n\nReceipt image available in the web chat.',
+      { reliable: true }
+    );
+  });
+
   it('still sends welcome to WhatsApp when the session intro was already saved', async () => {
     (TransferNotificationService as any).agentRepo = {
       getSession: jest.fn(async () => ({ user_id: 'user-1', email: 'user@example.com' })),

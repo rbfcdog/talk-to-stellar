@@ -369,6 +369,8 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
     const receiptInput = receiptSpy.mock.calls[0][0] as any;
     expect(receiptInput.externalDeliveryText).toContain('Valor: 100.00 CETES');
     expect(receiptInput.externalDeliveryText).toContain('Destino: Ana Silva');
+    const recipientReceiptInput = receiptSpy.mock.calls[1][0] as any;
+    expect(recipientReceiptInput.language).toBeUndefined();
     expect(receiptSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
       type: 'payment_received',
       sessionId: 'recipient-session',
