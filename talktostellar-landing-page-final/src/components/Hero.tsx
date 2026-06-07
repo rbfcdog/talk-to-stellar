@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { MessageCircle, Send, CheckCircle2, Monitor, ArrowRight, DollarSign, Landmark } from 'lucide-react';
 import PhoneMockup from './PhoneMockup';
+import { StellarLogo } from './StellarLogo';
 
 export default function Hero() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -20,6 +21,11 @@ export default function Hero() {
 
   return (
     <section className="relative w-full min-h-screen flex items-center pt-28 pb-12 overflow-hidden px-4 sm:px-6 lg:px-8">
+      {/* Background logo */}
+      <div className="absolute top-1/2 -translate-y-1/2 -left-64 md:-left-48 pointer-events-none opacity-[0.02] z-0">
+        <StellarLogo className="w-[600px] h-[600px] md:w-[900px] md:h-[900px] text-white" />
+      </div>
+
       {/* Dynamic Background Glows */}
       <div className="absolute inset-0 pointer-events-none">
         <div

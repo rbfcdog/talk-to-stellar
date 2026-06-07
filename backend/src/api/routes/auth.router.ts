@@ -44,7 +44,7 @@ async function findReusableSession(email: string): Promise<any | null> {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
 
-  const selectSessionFields = "session_id, user_id, email, session_token, public_key, phone_number, pix_key, password_hash, session_password_hash, created_at, last_activity, updated_at";
+  const selectSessionFields = "session_id, user_id, email, session_token, public_key, phone_number, pix_key, password_hash, session_password_hash, login_password_hash, login_failed_attempts, login_locked_until, login_last_failed_at, created_at, last_activity, updated_at";
   const candidates = new Map<string, any>();
 
   async function collectByField(field: "email" | "user_id", value: string) {
@@ -168,8 +168,8 @@ export function googleExistingLoginPayload(input: { email: string; displayName: 
     display_name: input.displayName,
     reason: input.reason,
     message: isPt
-      ? "Conta encontrada. Entre com seu PIN ou use Esqueci o PIN para receber o link de configuração por e-mail."
-      : "Account found. Sign in with your PIN or use Forgot PIN to receive the setup link by email.",
+      ? "Conta encontrada. Entre com sua senha. Contas antigas podem usar o PIN como primeira senha; se esqueceu, use Esqueci senha ou PIN para receber o link por e-mail."
+      : "Account found. Sign in with your password. Older accounts can use the PIN as the first password; if you forgot it, use Forgot password or PIN to receive the email link.",
   };
 }
 
@@ -254,6 +254,10 @@ router.post("/google", async (req, res) => {
       pix_key: existing?.pix_key || undefined,
       password_hash: existing?.password_hash || undefined,
       session_password_hash: existing?.session_password_hash || undefined,
+      login_password_hash: existing?.login_password_hash || undefined,
+      login_failed_attempts: existing?.login_failed_attempts || 0,
+      login_locked_until: existing?.login_locked_until || undefined,
+      login_last_failed_at: existing?.login_last_failed_at || undefined,
       email_verified: true,
       email_verified_at: new Date().toISOString(),
       email_verification_source: "google_oauth",

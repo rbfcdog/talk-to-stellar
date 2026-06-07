@@ -9,7 +9,7 @@ function source(path: string) {
 }
 
 describe("external channel login", () => {
-  it("keeps resolved WhatsApp and Telegram login PIN-only without requiring email entry", () => {
+  it("keeps resolved WhatsApp and Telegram login password-only without requiring email entry", () => {
     const text = source("app/login/login-client.tsx");
 
     expect(text).toContain('["whatsapp", "phone", "telegram"].includes(externalProvider)');
@@ -21,7 +21,7 @@ describe("external channel login", () => {
     expect(text).toContain("...externalSessionContext");
   });
 
-  it("offers email PIN recovery from login and preserves external token context", () => {
+  it("offers email password/PIN recovery from login and preserves external token context", () => {
     const text = source("app/login/login-client.tsx");
     const securityProxy = source("app/api/security/[...path]/route.ts");
     const dictionary = source("lib/i18n.tsx");
@@ -33,8 +33,8 @@ describe("external channel login", () => {
     expect(text).toContain("token: canUseExternalRecovery ? externalToken : undefined");
     expect(text).toContain("provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId()");
     expect(text).toContain("login_forgot_pin");
-    expect(dictionary).toContain('login_forgot_pin: "Forgot PIN?"');
-    expect(dictionary).toContain('login_forgot_pin: "Esqueci o PIN"');
+    expect(dictionary).toContain('login_forgot_pin: "Forgot password or PIN?"');
+    expect(dictionary).toContain('login_forgot_pin: "Esqueci senha ou PIN"');
     expect(securityProxy).toContain('proxyBackendApi(req, "api/security"');
     expect(securePinGate).toContain('fetch("/api/security/reset-pin-init"');
     expect(securePinGate).toContain("forgot_pin: true");

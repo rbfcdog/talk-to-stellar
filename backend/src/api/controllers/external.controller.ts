@@ -23,6 +23,7 @@ import { isSessionExpired } from '../../utils/session-expiry';
 import { getRequiredJwtSecret } from '../../config/secrets';
 import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 import { publicErrorMessage } from '../../utils/public-error';
+import { LoginPasswordService, LoginPasswordVerification } from '../services/login-password.service';
 
 const externalService = new ExternalService(supabase);
 const agentRepo = new AgentRepository(supabase);
@@ -114,6 +115,10 @@ const LOGIN_SESSION_SELECT = [
   'session_token',
   'password_hash',
   'session_password_hash',
+  'login_password_hash',
+  'login_failed_attempts',
+  'login_locked_until',
+  'login_last_failed_at',
   'email_verified',
   'email_verified_at',
   'email_verification_source',
@@ -129,6 +134,10 @@ function loginSessionSnapshot(session: any, fallback: Record<string, unknown> = 
     session_token: String(session?.session_token || fallback.session_token || ''),
     password_hash: String(session?.password_hash || fallback.password_hash || ''),
     session_password_hash: String(session?.session_password_hash || fallback.session_password_hash || ''),
+    login_password_hash: String(session?.login_password_hash || fallback.login_password_hash || ''),
+    login_failed_attempts: Number(session?.login_failed_attempts ?? fallback.login_failed_attempts ?? 0),
+    login_locked_until: String(session?.login_locked_until || fallback.login_locked_until || ''),
+    login_last_failed_at: String(session?.login_last_failed_at || fallback.login_last_failed_at || ''),
     email_verified: Boolean(session?.email_verified ?? fallback.email_verified ?? false),
     email_verified_at: String(session?.email_verified_at || fallback.email_verified_at || ''),
     email_verification_source: String(session?.email_verification_source || fallback.email_verification_source || ''),
@@ -150,6 +159,69 @@ async function rehashSessionPinIfNeeded(sessionId: string, pin: string, session:
       updated_at: new Date().toISOString(),
     })
     .eq('session_id', sessionId);
+}
+
+function readLoginPassword(body: any): string {
+  return LoginPasswordService.normalizeSecret(
+    body?.login_password ??
+    body?.loginPassword ??
+    body?.password ??
+    body?.pin ??
+    ''
+  );
+}
+
+function loginLockedMessage(language: 'pt-BR' | 'en', lockedUntil?: string): string {
+  const suffix = lockedUntil
+    ? (language === 'en'
+      ? ` Try again after ${new Date(lockedUntil).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}.`
+      : ` Tente novamente após ${new Date(lockedUntil).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`)
+    : '';
+  return language === 'en'
+    ? `Too many password attempts. Login is temporarily locked.${suffix}`
+    : `Muitas tentativas de senha. O login foi bloqueado temporariamente.${suffix}`;
+}
+
+function invalidLoginMessage(language: 'pt-BR' | 'en'): string {
+  return language === 'en' ? 'Invalid email or password.' : 'E-mail ou senha inválido.';
+}
+
+async function authenticateLoginPassword(input: {
+  session: any;
+  password: string;
+  language: 'pt-BR' | 'en';
+}): Promise<
+  | { ok: true; verification: LoginPasswordVerification }
+  | { ok: false; status: number; message: string; locked?: boolean }
+> {
+  const lockState = LoginPasswordService.lockState(input.session);
+  if (lockState.locked) {
+    return {
+      ok: false,
+      status: 423,
+      locked: true,
+      message: loginLockedMessage(input.language, lockState.lockedUntil),
+    };
+  }
+
+  const verification = LoginPasswordService.verify(input.password, input.session);
+  if (!verification.valid) {
+    const failure = await LoginPasswordService.recordFailure(supabase as any, input.session);
+    return {
+      ok: false,
+      status: failure.locked ? 423 : 401,
+      locked: failure.locked,
+      message: failure.locked
+        ? loginLockedMessage(input.language, failure.lockedUntil)
+        : invalidLoginMessage(input.language),
+    };
+  }
+
+  await LoginPasswordService.clearFailures(supabase as any, input.session);
+  if (verification.usedLegacyPinFallback) {
+    await LoginPasswordService.persistPasswordHash(supabase as any, input.session, input.password);
+  }
+  return { ok: true, verification };
 }
 
 function normalizeEmailForCompare(value?: string): string {
@@ -197,12 +269,14 @@ async function ensureEmailConfirmation(req: Request, res: Response, input: {
   const sessionId = String(input.metadata?.session_id || '').trim();
   const userId = normalizeEmailForCompare(String(input.metadata?.user_id || ''));
 
-  const alreadyVerified = await EmailConfirmationService.isAccountEmailVerified({
-    email,
-    sessionId,
-    userId,
-  });
-  if (alreadyVerified) return true;
+  if (input.purpose !== 'login') {
+    const alreadyVerified = await EmailConfirmationService.isAccountEmailVerified({
+      email,
+      sessionId,
+      userId,
+    });
+    if (alreadyVerified) return true;
+  }
 
   try {
     const confirmation = await EmailConfirmationService.requireVerified({
@@ -647,7 +721,7 @@ export class ExternalController {
   }
 
   // POST /api/external/link-existing
-  // body: { provider, provider_user_id, email, pin }
+  // body: { provider, provider_user_id, email, password }
   static async linkExistingAccount(req: Request, res: Response) {
     try {
       let provider = String(req.body?.provider || '').trim().toLowerCase();
@@ -655,7 +729,7 @@ export class ExternalController {
       const externalToken = String(req.body?.token || '').trim();
       let language = normalizeLanguage(req.body?.language || req.body?.lang || req.body?.locale);
       let email = normalizeEmailForCompare(req.body?.email);
-      const pin = String(req.body?.pin || '').trim();
+      const loginPassword = readLoginPassword(req.body);
       let externalPayload: any = null;
 
       if (externalToken) {
@@ -688,11 +762,13 @@ export class ExternalController {
 
       const reqTag = `[link-existing provider=${provider || 'n/a'} user=${email || 'n/a'} provider_user_id=${providerUserId ? providerUserId.slice(0, 8) + '***' : 'n/a'}]`;
 
-      if (!provider || !providerUserId || !pin) {
+      if (!provider || !providerUserId || !loginPassword) {
         console.warn(`${reqTag} missing required fields`);
         return res.status(400).json({
           success: false,
-          message: 'provider, provider_user_id e pin são obrigatórios',
+          message: language === 'en'
+            ? 'provider, provider_user_id and password are required'
+            : 'provider, provider_user_id e senha são obrigatórios',
         });
       }
 
@@ -743,13 +819,20 @@ export class ExternalController {
           const emailMatchesMappedAccount = canonicalExternalLogin
             ? !email || email === canonicalExternalLogin
             : !email || email === linkedEmail || email === linkedUserId;
-          const pinMatchesMappedAccount = verifyPinAgainstSession(pin, linkedSession).valid;
-
-          if (!emailMatchesMappedAccount || !pinMatchesMappedAccount) {
+          if (!emailMatchesMappedAccount) {
             return res.status(409).json({
               success: false,
               notAssociated: true,
               message: `A conta informada não está associada a este ${providerLabel}. Faça login com a conta já vinculada.`,
+            });
+          }
+
+          const auth = await authenticateLoginPassword({ session: linkedSession, password: loginPassword, language });
+          if (!auth.ok) {
+            return res.status(auth.status).json({
+              success: false,
+              locked: auth.locked || undefined,
+              message: auth.message,
             });
           }
 
@@ -764,7 +847,6 @@ export class ExternalController {
         const lockedSession = await agentRepo.getSession(identityLock.sessionId);
         if (lockedSession) {
           const lockedLogin = resolveCanonicalSessionLogin(lockedSession);
-          const lockedPinMatches = verifyPinAgainstSession(pin, lockedSession).valid;
           if (lockedLogin && email && email !== lockedLogin) {
             return res.status(409).json({
               success: false,
@@ -772,10 +854,12 @@ export class ExternalController {
               message: `A conta informada não está associada a este ${providerLabel}. Use exatamente o e-mail vinculado originalmente.`,
             });
           }
-          if (!lockedPinMatches) {
-            return res.status(401).json({
+          const auth = await authenticateLoginPassword({ session: lockedSession, password: loginPassword, language });
+          if (!auth.ok) {
+            return res.status(auth.status).json({
               success: false,
-              message: 'PIN inválido para a conta já vinculada a este canal.',
+              locked: auth.locked || undefined,
+              message: auth.message,
             });
           }
           matched = loginSessionSnapshot(lockedSession, {
@@ -802,11 +886,12 @@ export class ExternalController {
               });
             }
 
-            const tokenPinMatches = verifyPinAgainstSession(pin, tokenSession).valid;
-            if (!tokenPinMatches) {
-              return res.status(401).json({
+            const auth = await authenticateLoginPassword({ session: tokenSession, password: loginPassword, language });
+            if (!auth.ok) {
+              return res.status(auth.status).json({
                 success: false,
-                message: 'PIN inválido para esta conta.',
+                locked: auth.locked || undefined,
+                message: auth.message,
               });
             }
 
@@ -826,7 +911,7 @@ export class ExternalController {
             success: false,
             message: provider === 'telegram'
               ? 'Este Telegram ainda não está vinculado a uma conta. Abra o cadastro enviado no chat para vincular primeiro.'
-              : 'E-mail ou PIN inválido.',
+              : invalidLoginMessage(language),
           });
         }
         const [sessionsByEmailResp, sessionsByUserIdResp] = await Promise.all([
@@ -893,20 +978,35 @@ export class ExternalController {
         });
         console.info(`${reqTag} candidates resolved: email=${(sessionsByEmailResp.data || []).length}, user_id=${(sessionsByUserIdResp.data || []).length}, mapped=${mappedSessionIds.length}, merged=${sessions.length}`);
 
-        matched = sessions.find((session: any) => {
-          return verifyPinAgainstSession(pin, session).valid;
-        });
+        let lockedAuth: { status: number; message: string; locked?: boolean } | null = null;
+        for (const session of sessions) {
+          const auth = await authenticateLoginPassword({ session, password: loginPassword, language });
+          if (auth.ok) {
+            matched = session;
+            break;
+          }
+          if (auth.locked && !lockedAuth) {
+            lockedAuth = auth;
+          }
+        }
+        if (!matched && lockedAuth) {
+          return res.status(lockedAuth.status).json({
+            success: false,
+            locked: true,
+            message: lockedAuth.message,
+          });
+        }
       }
 
       if (!matched?.session_id) {
-        console.warn(`${reqTag} pin mismatch or account not found for provided email.`);
+        console.warn(`${reqTag} password mismatch or account not found for provided email.`);
         return res.status(401).json({
           success: false,
-          message: 'E-mail ou PIN inválido.',
+          message: invalidLoginMessage(language),
         });
       }
       console.info(`${reqTag} matched session_id=${String(matched.session_id)} user_id=${String(matched.user_id || email)}`);
-      await rehashSessionPinIfNeeded(String(matched.session_id), pin, matched).catch((error) => {
+      await rehashSessionPinIfNeeded(String(matched.session_id), loginPassword, matched).catch((error) => {
         console.warn(`${reqTag} could not migrate PIN hash: ${error instanceof Error ? error.message : String(error)}`);
       });
 

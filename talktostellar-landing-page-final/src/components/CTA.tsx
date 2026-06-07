@@ -4,7 +4,7 @@ import { MessageCircle, Send, Monitor } from 'lucide-react';
 
 export default function CTA() {
   return (
-    <section id="cta" className="py-24 md:py-32 w-full flex flex-col items-center bg-[#080808] bg-dotted-pattern relative px-4 sm:px-8 border-t border-white/5 scroll-mt-24">
+    <section id="cta" className="py-24 md:py-32 w-full flex flex-col items-center relative px-4 sm:px-8 border-t border-white/5 scroll-mt-24">
       
       <div className="w-full max-w-7xl relative z-10 flex flex-col gap-16">
         

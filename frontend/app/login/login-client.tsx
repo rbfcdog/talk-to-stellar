@@ -44,7 +44,7 @@ function getPasskeyErrorMessage(error: any): string {
     return "Passkey must open on the correct domain with HTTPS."
   }
   if (normalized.includes("registrationrequired")) {
-    return "No Passkey is registered for this account yet. Sign in with PIN and enable biometrics during setup."
+    return "No Passkey is registered for this account yet. Sign in with password and enable biometrics during setup."
   }
 
   return message || "Could not sign in with Passkey."
@@ -472,7 +472,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           provider_user_id: hasExternalContext ? externalProviderUserId : getBrowserId(),
           token: hasExternalContext ? externalToken : undefined,
           email: loginEmail || undefined,
-          pin,
+          password: pin,
+          login_password: pin,
           email_confirmation_code: emailConfirmationCode || undefined,
           language,
           ...externalSessionContext,
@@ -486,8 +487,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           actionLockRef.current = false
           setStatus("error")
           setError(language === "pt-BR"
-            ? "Confirmação por e-mail está desativada neste ambiente. Peça um novo link no chat e entre com PIN."
-            : "Email confirmation is disabled in this environment. Request a new link in chat and sign in with PIN.")
+            ? "Confirmação por e-mail está desativada neste ambiente. Peça um novo link no chat e entre com senha."
+            : "Email confirmation is disabled in this environment. Request a new link in chat and sign in with password.")
           return
         }
         setEmailConfirmationRequired(true)
@@ -502,7 +503,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           redirectToUsed(message || "This link has already been used.")
           return
         }
-        throw new Error(payload?.message || "Could not sign in with email and PIN.")
+        throw new Error(payload?.message || "Could not sign in with email and password.")
       }
 
       saveClientSession()
@@ -517,7 +518,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
     } catch (err) {
       actionLockRef.current = false
       setStatus("error")
-      setError(err instanceof Error ? err.message : "Failed to sign in with email and PIN.")
+      setError(err instanceof Error ? err.message : "Failed to sign in with email and password.")
     }
   }
 
@@ -1096,8 +1097,8 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       {googleExistingLogin && (
         <div className="rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs leading-5 text-tts-deep">
           {language === "pt-BR"
-            ? "Conta encontrada pelo Google. Entre com seu PIN. Se ainda não definiu ou esqueceu, use Esqueci o PIN para receber o link por e-mail."
-            : "Account found with Google. Sign in with your PIN. If you have not set it or forgot it, use Forgot PIN to receive the email link."}
+            ? "Conta encontrada pelo Google. Entre com sua senha. Contas antigas podem usar o PIN como primeira senha. Se esqueceu, use Esqueci senha ou PIN para receber o link por e-mail."
+            : "Account found with Google. Sign in with your password. Older accounts can use the PIN as the first password. If you forgot it, use Forgot password or PIN to receive the email link."}
         </div>
       )}
 
@@ -1140,10 +1141,10 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
           <Input
             id="login-pin-input"
             value={pin}
-            onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+            onChange={(event) => setPin(event.target.value)}
             type="password"
-            inputMode="numeric"
-            maxLength={8}
+            autoComplete="current-password"
+            maxLength={128}
             disabled={externalLinkUsed}
             placeholder={t("login_pin_placeholder")}
           />

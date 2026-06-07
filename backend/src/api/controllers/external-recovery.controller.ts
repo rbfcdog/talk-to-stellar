@@ -194,7 +194,12 @@ export default class ExternalRecoveryController {
       const passwordHash = hashPassword(newPassword);
       const { error: updateSessionError } = await supabase
         .from('agent_sessions')
-        .update({ password_hash: passwordHash })
+        .update({
+          login_password_hash: passwordHash,
+          login_failed_attempts: 0,
+          login_locked_until: null,
+          login_last_failed_at: null,
+        })
         .eq('session_id', account.session_id);
 
       if (updateSessionError) {

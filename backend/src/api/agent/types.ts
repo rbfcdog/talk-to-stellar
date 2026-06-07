@@ -11,6 +11,10 @@ export interface SessionData {
   pix_key?: string;
   password_hash?: string;
   session_password_hash?: string;
+  login_password_hash?: string;
+  login_failed_attempts?: number;
+  login_locked_until?: string;
+  login_last_failed_at?: string;
   email_verified?: boolean;
   email_verified_at?: string;
   email_verification_source?: string;

@@ -523,7 +523,8 @@ export class PinResetController {
       const result = await PinResetService.applyNewPin(
         String(token),
         String(user_id),
-        newPinHash
+        newPinHash,
+        pinStr
       );
 
       if (!result.success) {

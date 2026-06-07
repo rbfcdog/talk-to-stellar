@@ -9,7 +9,7 @@ export default function Footer() {
   const { language } = useLanguage()
 
   return (
-    <footer className="w-full bg-[#080808] bg-dotted-pattern pt-24 pb-12 relative z-10 px-4 sm:px-8">
+    <footer className="w-full pt-24 pb-12 relative z-10 px-4 sm:px-8 border-t border-white/5">
       <div className="max-w-7xl mx-auto flex flex-col gap-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 text-left">
           <div className="lg:col-span-2 flex flex-col items-start pr-8">
@@ -34,9 +34,9 @@ export default function Footer() {
           <div className="flex flex-col gap-4">
             <h4 className="text-[10px] font-mono font-bold tracking-widest uppercase text-[#A1A1A1] mb-2">{t("footer", language, "contacts")}</h4>
             <div className="flex items-center gap-4">
-              <a href="#" className="text-white/80 hover:text-white transition-colors"><Instagram size={18} /></a>
-              <a href="#" className="text-white/80 hover:text-white transition-colors"><Linkedin size={18} /></a>
-              <a href="#" className="text-white/80 hover:text-white transition-colors"><Twitter size={18} /></a>
+              <a href="https://instagram.com/talktostellar" target="_blank" rel="noopener noreferrer" aria-label="TalkToStellar on Instagram" className="text-white/80 hover:text-white transition-colors"><Instagram size={18} /></a>
+              <a href="https://www.linkedin.com/company/talktostellar" target="_blank" rel="noopener noreferrer" aria-label="TalkToStellar on LinkedIn" className="text-white/80 hover:text-white transition-colors"><Linkedin size={18} /></a>
+              <a href="https://x.com/talktostellar" target="_blank" rel="noopener noreferrer" aria-label="TalkToStellar on X" className="text-white/80 hover:text-white transition-colors"><Twitter size={18} /></a>
             </div>
           </div>
         </div>
