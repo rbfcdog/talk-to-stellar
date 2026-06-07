@@ -138,7 +138,7 @@ describe("UX copy guardrails", () => {
     expect(text).not.toContain("min-w-[640px]");
   });
 
-  it("keeps conversion confirmation inside the web app with visible errors", () => {
+  it("keeps conversion confirmation visible for PIX returns and closes standalone success", () => {
     const text = source("app/confirm-conversion/confirm-conversion-client.tsx");
 
     expect(text).toContain('buildActionUrl("/transactions"');
@@ -146,8 +146,9 @@ describe("UX copy guardrails", () => {
     expect(text).toContain("visibleSupportCode");
     expect(text).toContain("O resultado é salvo no histórico da conta.");
     expect(text).toContain("isPixReturnTarget");
-    expect(text).not.toContain("closeIntermediatePage()");
-    expect(text).not.toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
+    expect(text).toContain('if (status !== "done" || !result?.success || pixReturnTarget) return');
+    expect(text).toContain("closeIntermediatePage()");
+    expect(text).toContain("INTERMEDIATE_PAGE_CLOSE_COPY");
     expect(text).toContain("PIX atualizado");
     expect(text).toContain("Volte ao PIX para continuar.");
     expect(text).toContain("Use o botão abaixo para voltar ao PIX e concluir a retirada.");
@@ -399,9 +400,9 @@ describe("UX copy guardrails", () => {
     expect(text).toContain('finalAsset === "BRL"');
     expect(text).toContain("Conversão para");
     expect(text).toContain("!returnToPath && !stayOpenAfterSuccess");
-    expect(text).toContain("ReturnAfterSuccessPopup");
+    expect(text).toContain("PixCompletionPopup");
     expect(text).toContain("role=\"dialog\"");
-    expect(text).toContain('L("PIX finalizado", "PIX complete")');
+    expect(text).toContain('L("PIX concluído", "PIX complete")');
     expect(text).not.toContain("receipt-top-return-cta");
     expect(text).not.toContain('L("Status", "Status")');
     expect(text).not.toContain('L("Saldo antes", "Balance before")');

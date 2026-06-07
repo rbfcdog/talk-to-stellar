@@ -111,7 +111,7 @@ export default function BalanceClient() {
   const distributionRows = useMemo(() => calculateAssetDistribution(rows), [rows]);
 
   return (
-    <main className="min-h-screen bg-[#070707] text-white">
+    <main className="tts-op-page min-h-screen bg-tts-bg text-white">
       <section className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
           <div className="min-w-0">

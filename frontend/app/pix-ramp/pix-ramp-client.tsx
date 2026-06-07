@@ -3279,7 +3279,6 @@ export default function PixRampClient({
           value: formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset),
         }
       : null,
-    { label: L("Status", "Status"), value: L("Concluído", "Completed") },
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   useEffect(() => {
@@ -4281,10 +4280,8 @@ function PixCompletionPopup({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-3 pb-3 pt-10 backdrop-blur-md sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="pix-completion-popup-title">
-      <div className="relative w-full max-w-[31rem] overflow-hidden rounded-[2rem] border border-tts-border2 bg-tts-surface text-tts-deep shadow-2xl shadow-black/50">
+      <div className="relative w-full max-w-[31rem] overflow-hidden rounded-lg border border-tts-border2 bg-tts-surface text-tts-deep shadow-2xl shadow-black/50">
         <div className="absolute inset-x-0 top-0 h-1 bg-tts-confirm" aria-hidden="true" />
-        <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-tts-confirm/20 blur-3xl" aria-hidden="true" />
-        <div className="absolute -left-20 bottom-16 h-40 w-40 rounded-full bg-tts-gold/15 blur-3xl" aria-hidden="true" />
 
         <div className="relative p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
@@ -4311,7 +4308,7 @@ function PixCompletionPopup({
             </button>
           </div>
 
-          <div className="mt-5 rounded-[1.5rem] border border-tts-border bg-tts-bg/70 p-4">
+          <div className="mt-5 rounded-lg border border-tts-border bg-tts-bg/70 p-4">
             <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{amountLabel}</p>
             <p className="mt-2 break-words text-4xl font-black leading-none tracking-normal text-tts-deep sm:text-5xl">
               {amountValue}

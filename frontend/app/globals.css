@@ -83,6 +83,9 @@
   --tts-dark-text: #f8fafc;
   --tts-dark-muted: #a9b4c7;
   --tts-dark-border: rgba(255, 255, 255, 0.12);
+  --tts-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --tts-focus-shadow: 0 0 0 3px color-mix(in oklab, var(--tts-gold) 24%, transparent);
+  --tts-hairline: color-mix(in oklab, var(--tts-deep) 8%, transparent);
 }
 
 .dark {
@@ -201,6 +204,30 @@
   }
   body {
     @apply bg-background text-foreground;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--tts-gold) 28%, transparent);
+    color: var(--tts-deep);
+  }
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  [role='button'],
+  summary {
+    touch-action: manipulation;
+  }
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--tts-gold) 78%, white 22%);
+    outline-offset: 2px;
   }
   body:has(.tts-op-page) {
     --tts-bg: #06070a;
@@ -272,6 +299,118 @@
 }
 
 @layer components {
+  [data-slot='button'],
+  .tts-command-button,
+  .tts-pressable {
+    user-select: none;
+    will-change: transform, box-shadow;
+  }
+
+  [data-slot='button']:focus-visible,
+  .tts-command-button:focus-visible,
+  .tts-pressable:focus-visible {
+    box-shadow: var(--tts-focus-shadow);
+    outline: none;
+  }
+
+  [data-slot='card'],
+  .tts-data-card {
+    position: relative;
+    overflow: hidden;
+  }
+
+  [data-slot='card']::before,
+  .tts-data-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--tts-hairline), transparent);
+  }
+
+  .tts-auth-page {
+    position: relative;
+    isolation: isolate;
+    min-height: 100dvh;
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--tts-bg) 86%, white 14%) 0%, var(--tts-bg) 52%),
+      var(--tts-bg);
+  }
+
+  .tts-auth-page::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(color-mix(in oklab, var(--tts-deep) 7%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklab, var(--tts-deep) 7%, transparent) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(180deg, black, transparent 72%);
+    -webkit-mask-image: linear-gradient(180deg, black, transparent 72%);
+  }
+
+  .tts-auth-card {
+    border-radius: 0.5rem;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.72) inset,
+      0 24px 70px rgba(28, 24, 18, 0.14);
+    backdrop-filter: blur(14px);
+  }
+
+  .tts-auth-card input,
+  .tts-auth-card select,
+  .tts-auth-card textarea {
+    min-height: 2.75rem;
+  }
+
+  .tts-console-page {
+    min-height: 100dvh;
+    color: var(--tts-deep);
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--tts-bg) 92%, var(--tts-surface) 8%) 0%, var(--tts-bg) 18rem),
+      var(--tts-bg);
+  }
+
+  .tts-console-page :is(button, a, input, select, textarea, details) {
+    transition:
+      transform 180ms var(--tts-ease-standard),
+      border-color 180ms var(--tts-ease-standard),
+      background-color 180ms var(--tts-ease-standard),
+      color 180ms var(--tts-ease-standard),
+      box-shadow 220ms var(--tts-ease-standard);
+  }
+
+  .tts-console-page :is(input, select, textarea):focus {
+    border-color: var(--tts-gold);
+    box-shadow: var(--tts-focus-shadow);
+    outline: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [data-slot='button']:not(:disabled):not([aria-disabled='true']):hover,
+    .tts-command-button:not(:disabled):not([aria-disabled='true']):hover,
+    .tts-pressable:not(:disabled):not([aria-disabled='true']):hover {
+      transform: translateY(-1px);
+    }
+
+    [data-slot='card']:hover,
+    .tts-data-card:hover {
+      border-color: color-mix(in oklab, var(--tts-gold) 22%, var(--tts-border) 78%);
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.72) inset,
+        0 16px 36px rgba(28, 24, 18, 0.11);
+    }
+  }
+
+  [data-slot='button']:not(:disabled):not([aria-disabled='true']):active,
+  .tts-command-button:not(:disabled):not([aria-disabled='true']):active,
+  .tts-pressable:not(:disabled):not([aria-disabled='true']):active {
+    transform: translateY(1px) scale(0.99);
+  }
+
   .tts-chat-user-bubble,
   .tts-chat-user-bubble * {
     color: #ffffff !important;
@@ -521,6 +660,21 @@
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.055) inset,
       0 10px 26px rgba(0, 0, 0, 0.2);
+  }
+
+  .tts-op-page :is(.tts-op-shell, .tts-op-card, .tts-op-header, .tts-op-stat, .tts-stage-panel, .tts-op-tile, [data-slot='card']) {
+    transition:
+      transform 180ms var(--tts-ease-standard),
+      border-color 180ms var(--tts-ease-standard),
+      background-color 180ms var(--tts-ease-standard),
+      box-shadow 220ms var(--tts-ease-standard);
+  }
+
+  .tts-op-page :is(.tts-op-card, .tts-op-header, .tts-stage-panel, .tts-op-tile, [data-slot='card']):focus-within {
+    border-color: color-mix(in oklab, var(--tts-gold) 52%, var(--tts-border) 48%) !important;
+    box-shadow:
+      var(--tts-elevation),
+      0 0 0 1px color-mix(in oklab, var(--tts-gold) 26%, transparent) !important;
   }
 
   .tts-op-page .tts-interactive-tile {
@@ -1150,6 +1304,13 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+
     .tts-op-page .tts-mobile-flow-card,
     .tts-op-page .tts-wait-ring::after,
     .tts-op-page .tts-pulse-track::after {
@@ -1315,11 +1476,6 @@
     -webkit-text-fill-color: var(--tts-dark-text) !important;
     box-shadow: 0 0 0 1000px var(--tts-dark-bg) inset !important;
   }
-}
-
-@keyframes hero-orb {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-  50%      { transform: translate(-50%, -50%) scale(1.12); opacity: 0.7; }
 }
 
 @media print {

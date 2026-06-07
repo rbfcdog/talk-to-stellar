@@ -61,16 +61,18 @@ export function LanguageToggle() {
     }).catch(() => undefined);
   }
 
+  if (isLandingPage) return null;
+
   return (
     <div
-      className={`fixed right-2 z-[100] inline-flex items-center gap-1 rounded-full border border-tts-border bg-tts-surface/95 p-1 text-tts-deep shadow-lg shadow-black/10 backdrop-blur transition sm:right-3 ${
+      className={`fixed right-2 z-[100] inline-flex items-center gap-1 rounded-lg border border-tts-border bg-tts-surface/95 p-1 text-tts-deep shadow-md shadow-black/10 backdrop-blur transition sm:right-3 ${
         isChatPage || isLandingPage ? "top-[4.25rem]" : "top-2 sm:top-3"
       }`}
     >
       <button
         type="button"
         onClick={toggleLanguage}
-        className="inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-12 sm:px-2"
+        className="tts-pressable inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-md px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-12 sm:px-2"
         aria-label={languageTitle}
         title={languageTitle}
       >
@@ -81,7 +83,7 @@ export function LanguageToggle() {
       <button
         type="button"
         onClick={() => setTheme(nextTheme)}
-        className="inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-16 sm:px-2"
+        className="tts-pressable inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-md px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-16 sm:px-2"
         aria-label={themeTitle}
         aria-pressed={isDark}
         title={themeTitle}
@@ -93,7 +95,7 @@ export function LanguageToggle() {
       <button
         type="button"
         onClick={toggleAmountPrivacy}
-        className="inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-16 sm:px-2"
+        className="tts-pressable inline-flex h-8 w-8 items-center justify-center gap-1.5 rounded-md px-0 text-[11px] font-bold leading-none text-tts-deep transition hover:bg-tts-bg focus:outline-none focus:ring-2 focus:ring-tts-gold sm:w-auto sm:min-w-16 sm:px-2"
         aria-label={privacyTitle}
         aria-pressed={hideAmounts}
         title={privacyTitle}
@@ -104,7 +106,7 @@ export function LanguageToggle() {
       <span className="h-4 w-px bg-tts-border" aria-hidden="true" />
       <Link
         href="/logout"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-tts-deep transition hover:bg-tts-error/10 hover:text-tts-error focus:outline-none focus:ring-2 focus:ring-tts-gold"
+        className="tts-pressable inline-flex h-8 w-8 items-center justify-center rounded-md text-tts-deep transition hover:bg-tts-error/10 hover:text-tts-error focus:outline-none focus:ring-2 focus:ring-tts-gold"
         aria-label={logoutTitle}
         title={logoutTitle}
       >

@@ -34,7 +34,7 @@ export function PaymentStepCard({
   return (
     <article
       className={cn(
-        'mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-tts-border bg-tts-surface shadow-sm',
+        'tts-data-card mx-auto w-full max-w-md overflow-hidden rounded-lg border border-tts-border bg-tts-surface shadow-sm transition-[transform,border-color,box-shadow] duration-200',
         'border-l-4',
         STATUS_ACCENT[status],
         className,
