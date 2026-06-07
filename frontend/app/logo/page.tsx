@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
-import { Logo } from "@/components/shared/logo";
 
 export const metadata: Metadata = {
-  title: "Logo | TalkToStellar",
-  description: "TalkToStellar logo on black.",
+  title: "Background | TalkToStellar",
+  description: "TalkToStellar landing-page background.",
 };
 
 export default function LogoPage() {
   return (
-    <main className="grid min-h-screen place-items-center bg-black text-white">
-      <Logo className="h-40 w-40 sm:h-56 sm:w-56" />
+    <main className="relative min-h-screen overflow-hidden bg-[#080808] text-white">
+      <div className="absolute inset-0 bg-grid-pattern" aria-hidden="true" />
+      <div
+        className="fixed inset-0 bg-gradient-to-b from-transparent via-[#080808]/70 to-[#080808]"
+        aria-hidden="true"
+      />
     </main>
   );
 }
