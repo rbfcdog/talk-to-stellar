@@ -5,6 +5,7 @@ const testPublicKey = testKeypair.publicKey();
 const testSecretKey = testKeypair.secret();
 const destinationKeypair = Keypair.random();
 const destinationPublicKey = destinationKeypair.publicKey();
+const accountLoginPassword = 'login-password-123';
 
 const finalizeSaveSessionMock = jest.fn();
 const finalizeSaveMessageMock = jest.fn();
@@ -286,7 +287,7 @@ describe('ExternalFinalizeController', () => {
     externalRepository.externalProviderAliases.mockImplementation((provider: string) => [String(provider || '').trim().toLowerCase()]);
   });
 
-  it('creates session, wallet and links the external account', async () => {
+  it('rejects new account creation without an explicit login password', async () => {
     const { default: ExternalFinalizeController } = await import(
       '../src/api/controllers/external-finalize.controller'
     );
@@ -304,7 +305,40 @@ describe('ExternalFinalizeController', () => {
 
     await ExternalFinalizeController.finalize(req, res);
 
+    expect(finalizeSaveSessionMock).not.toHaveBeenCalled();
+    expect(finalizeSaveWalletMock).not.toHaveBeenCalled();
+    expect(finalizeCreateMappingMock).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      message: 'Senha de login é obrigatória para criar a conta.',
+    }));
+  });
+
+  it('creates session, wallet and links the external account', async () => {
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    const req = {
+      body: {
+        token: 'signed-token',
+        name: 'User Example',
+        email: 'user@example.com',
+        login_password: accountLoginPassword,
+        pin: '1234',
+      },
+    } as any;
+
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
     expect(finalizeSaveSessionMock).toHaveBeenCalledTimes(1);
+    expect(finalizeSaveSessionMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      login_password_hash: expect.stringContaining(':'),
+      login_failed_attempts: 0,
+    }));
     expect(finalizeSaveWalletMock).toHaveBeenCalledTimes(1);
     expect(finalizeCreateMappingMock).toHaveBeenCalledTimes(1);
     expect(finalizeStoreSecretMock).toHaveBeenCalledTimes(1);
@@ -338,6 +372,7 @@ describe('ExternalFinalizeController', () => {
         name: 'User Example',
         email: 'user@example.com',
         phone_number: '+55 11 99999-9999',
+        login_password: accountLoginPassword,
         pin: '1234',
         browser_id: 'browser-opened-from-whatsapp-link',
       },
@@ -407,6 +442,7 @@ describe('ExternalFinalizeController', () => {
         name: 'WhatsApp User',
         email: 'whatsapp-user@example.com',
         phone_number: '+55 11 99999-9999',
+        login_password: accountLoginPassword,
         pin: '1234',
       },
     } as any;
@@ -445,6 +481,7 @@ describe('ExternalFinalizeController', () => {
         name: 'User Example',
         email: 'user@example.com',
         phone_number: '+55 21 98888-7777',
+        login_password: accountLoginPassword,
         pin: '1234',
       },
     } as any;
@@ -510,6 +547,7 @@ describe('ExternalFinalizeController', () => {
         token: 'signed-token',
         name: 'Google User',
         email: 'google-user@example.com',
+        login_password: accountLoginPassword,
         pin: '1234',
         browser_id: 'browser-123',
       },
@@ -589,6 +627,7 @@ describe('ExternalFinalizeController', () => {
         name: 'WhatsApp User',
         email: 'whatsapp-user@example.com',
         phone_number: '+55 11 99999-9999',
+        login_password: accountLoginPassword,
         pin: '1234',
       },
     } as any;

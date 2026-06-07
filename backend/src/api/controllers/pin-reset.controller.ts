@@ -7,6 +7,7 @@ import { supabase } from '../../config/supabase';
 import { isSessionExpired } from '../../utils/session-expiry';
 import { hashWalletPin } from '../../utils/pin-hash';
 import { getRequiredJwtSecret } from '../../config/secrets';
+import { LoginPasswordService } from '../services/login-password.service';
 import {
   ExternalRepository,
   normalizeExternalProvider,
@@ -304,12 +305,12 @@ function wantsLoginRecovery(req: Request): boolean {
 function genericRecoveryMessage(language: 'pt-BR' | 'en', maskedEmail?: string): string {
   if (language === 'en') {
     return maskedEmail
-      ? `If this account exists, we sent the PIN setup link to ${maskedEmail}.`
-      : 'If this account exists, we sent the PIN setup link by email.';
+      ? `If this account exists, we sent the password and PIN setup link to ${maskedEmail}.`
+      : 'If this account exists, we sent the password and PIN setup link by email.';
   }
   return maskedEmail
-    ? `Se esta conta existir, enviamos o link de configuração do PIN para ${maskedEmail}.`
-    : 'Se esta conta existir, enviamos o link de configuração do PIN por e-mail.';
+    ? `Se esta conta existir, enviamos o link de configuração de senha e PIN para ${maskedEmail}.`
+    : 'Se esta conta existir, enviamos o link de configuração de senha e PIN por e-mail.';
 }
 
 export class PinResetController {
@@ -500,7 +501,7 @@ export class PinResetController {
    */
   static async finalizePinReset(req: Request, res: Response) {
     try {
-      const { token, user_id, new_pin } = req.body;
+      const { token, user_id, new_pin, new_password } = req.body;
 
       if (!token || !user_id || !new_pin) {
         return res.status(400).json({
@@ -509,13 +510,29 @@ export class PinResetController {
         });
       }
 
-      // Validate PIN format (basic validation)
       const pinStr = String(new_pin);
       if (pinStr.length < 4 || pinStr.length > 8) {
         return res.status(400).json({
           success: false,
           message: 'PIN must be between 4 and 8 characters',
         });
+      }
+      if (!/^\d+$/.test(pinStr)) {
+        return res.status(400).json({
+          success: false,
+          message: 'PIN must contain numbers only',
+        });
+      }
+
+      const loginPassword = LoginPasswordService.normalizeSecret(new_password);
+      if (loginPassword) {
+        const passwordValidation = LoginPasswordService.validateNewPassword(loginPassword);
+        if (!passwordValidation.valid) {
+          return res.status(400).json({
+            success: false,
+            message: passwordValidation.message || 'Invalid login password',
+          });
+        }
       }
 
       const newPinHash = hashWalletPin(pinStr);
@@ -524,7 +541,7 @@ export class PinResetController {
         String(token),
         String(user_id),
         newPinHash,
-        pinStr
+        loginPassword || pinStr
       );
 
       if (!result.success) {

@@ -547,7 +547,11 @@ async function hasOnboardingCredentials(sessionId: string, userId: string, optio
     return false;
   }
 
-  if (String((session as any).password_hash || '').trim()) {
+  if (
+    String((session as any).login_password_hash || '').trim() ||
+    String((session as any).session_password_hash || '').trim() ||
+    String((session as any).password_hash || '').trim()
+  ) {
     return true;
   }
 

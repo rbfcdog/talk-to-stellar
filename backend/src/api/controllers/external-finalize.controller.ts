@@ -200,6 +200,12 @@ function localizedPasswordValidationMessage(message: string | undefined, languag
   return 'Informe uma senha válida.';
 }
 
+function localizedMissingLoginPasswordMessage(language: 'pt-BR' | 'en'): string {
+  return language === 'en'
+    ? 'Login password is required to create the account.'
+    : 'Senha de login é obrigatória para criar a conta.';
+}
+
 function resolveCompletionChannel(payload: any, body: any): { provider: string; providerUserId: string } {
   const rawProviderUserId = String(
     payload?.provider_user_id ||
@@ -3117,17 +3123,20 @@ export default class ExternalFinalizeController {
       }
       const pinHash = hashWalletPin(providedPin);
       const explicitLoginPassword = readLoginPassword(req.body);
-      const providedLoginPassword = explicitLoginPassword || providedPin;
-      const passwordValidation = explicitLoginPassword
-        ? LoginPasswordService.validateNewPassword(providedLoginPassword)
-        : { valid: true };
+      if (!explicitLoginPassword) {
+        return res.status(400).json({
+          success: false,
+          message: localizedMissingLoginPasswordMessage(language),
+        });
+      }
+      const passwordValidation = LoginPasswordService.validateNewPassword(explicitLoginPassword);
       if (!passwordValidation.valid) {
         return res.status(400).json({
           success: false,
           message: localizedPasswordValidationMessage(passwordValidation.message, language),
         });
       }
-      const loginPasswordHash = LoginPasswordService.hash(providedLoginPassword);
+      const loginPasswordHash = LoginPasswordService.hash(explicitLoginPassword);
 
       const normalizedEmail = normalizeEmailForCompare(email);
       if (email && !looksLikeEmail(normalizedEmail)) {
