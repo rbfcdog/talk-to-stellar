@@ -37,8 +37,8 @@ export function LanguageToggle() {
     ? (language === "pt-BR" ? "Mostrar valores" : "Show values")
     : (language === "pt-BR" ? "Ocultar valores" : "Hide values");
   const privacyLabel = hideAmounts
-    ? (language === "pt-BR" ? "Oculto" : "Hidden")
-    : (language === "pt-BR" ? "Valores" : "Values");
+    ? (language === "pt-BR" ? "Mostrar" : "Show")
+    : (language === "pt-BR" ? "Ocultar" : "Hide");
 
   function toggleAmountPrivacy() {
     const next = !hideAmounts;
