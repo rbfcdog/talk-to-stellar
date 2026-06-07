@@ -8733,7 +8733,6 @@ export class AnchorService {
           type: 'payment_received',
           sessionId: recipient.sessionId,
           userId: recipientSessionUserId || coalesceString(recipient.userId) || recipient.sessionId,
-          language,
           counterpartyLabel: senderLabel,
           counterpartyKey: senderLabel,
           sourceAmount: amount,

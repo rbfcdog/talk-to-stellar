@@ -125,6 +125,45 @@ export class TransferNotificationService {
     return 'pt-BR';
   }
 
+  private static objectLanguage(value?: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      try {
+        return this.objectLanguage(JSON.parse(value));
+      } catch {
+        return '';
+      }
+    }
+    if (typeof value !== 'object') return '';
+    const record = value as Record<string, any>;
+    return String(record.preferred_language || record.language || record.lang || record.locale || '').trim();
+  }
+
+  private static async resolveSessionLanguage(sessionId: string, session?: any, fallback?: string | null): Promise<'pt-BR' | 'en'> {
+    const sessionLanguage = String(
+      this.objectLanguage(session?.action_params) ||
+      session?.preferred_language ||
+      session?.language ||
+      ''
+    ).trim();
+    if (sessionLanguage) return this.normalizeLanguage(sessionLanguage);
+
+    try {
+      const state = await (this.agentRepo as any).getState?.(sessionId);
+      const stateLanguage = String(
+        this.objectLanguage(state?.action_params) ||
+        state?.preferred_language ||
+        state?.language ||
+        ''
+      ).trim();
+      if (stateLanguage) return this.normalizeLanguage(stateLanguage);
+    } catch (error) {
+      logger.debug(`[notification-language] could not load agent state for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return this.normalizeLanguage(fallback);
+  }
+
   private static text(language: 'pt-BR' | 'en', pt: string, en: string): string {
     return language === 'en' ? en : pt;
   }
@@ -137,7 +176,7 @@ export class TransferNotificationService {
     const userId = String(input.userId || session?.user_id || '').trim();
     const name = String(input.name || session?.email || '').trim();
     const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
-    const language = this.normalizeLanguage(input.language || (session as any)?.language || (session as any)?.preferred_language);
+    const language = await this.resolveSessionLanguage(sessionId, session, input.language);
     const mappings = this.dedupeMappings([
       ...(directMapping ? [directMapping] : []),
       ...(await this.findExternalMappings(sessionId, userId)),
@@ -211,7 +250,8 @@ export class TransferNotificationService {
       ...(directMapping ? [directMapping] : []),
       ...(await this.findExternalMappings(sessionId, userId)),
     ]);
-    const text = 'Logout concluído. Sua conta foi desconectada deste canal.';
+    const language = await this.resolveSessionLanguage(sessionId, session);
+    const text = this.text(language, 'Logout concluído. Sua conta foi desconectada deste canal.', 'Logout complete. Your account was disconnected from this channel.');
 
     try {
       await this.agentRepo.saveMessage(sessionId, 'assistant', text);
@@ -232,19 +272,20 @@ export class TransferNotificationService {
 
     const session = await this.safeGetSession(recipientSessionId);
     const recipientUserId = String(input.recipientUserId || session?.user_id || '').trim();
-    const rawSenderLabel = String(input.senderLabel || 'Alguem').trim();
+    const language = await this.resolveSessionLanguage(recipientSessionId, session);
+    const rawSenderLabel = String(input.senderLabel || (language === 'en' ? 'Someone' : 'Alguem')).trim();
     const senderLabel = /^G[A-Z2-7]{55}$/i.test(rawSenderLabel)
-      ? (await this.resolveHumanLabel({ publicKey: rawSenderLabel, sessionId: recipientSessionId, userId: recipientUserId })) || 'Alguem'
+      ? (await this.resolveHumanLabel({ publicKey: rawSenderLabel, sessionId: recipientSessionId, userId: recipientUserId })) || (language === 'en' ? 'Someone' : 'Alguem')
       : rawSenderLabel;
     const receivedLabel = formatCustomerAssetAmount(input.amount, input.assetCode);
     const sourceLine = input.sourceAmount && input.sourceAssetCode && input.sourceAssetCode !== input.assetCode
-      ? `Valor de origem: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
+      ? `${this.text(language, 'Valor de origem', 'Source amount')}: ${formatCustomerAssetAmount(input.sourceAmount, input.sourceAssetCode)}\n`
       : '';
     const text =
-      `${receivedLabel} recebidos em poucos segundos.\n` +
+      `${this.text(language, `${receivedLabel} recebidos em poucos segundos.`, `${receivedLabel} received in seconds.`)}\n` +
       sourceLine +
-      `De: ${senderLabel}\n` +
-      `Recibo disponível no seu histórico.`;
+      `${this.text(language, 'De', 'From')}: ${senderLabel}\n` +
+      this.text(language, 'Recibo disponível no seu histórico.', 'Receipt available in your history.');
 
     try {
       await this.agentRepo.saveMessage(recipientSessionId, 'assistant', text);
@@ -286,10 +327,14 @@ export class TransferNotificationService {
     const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
     const session = sessionId ? await this.safeGetSession(sessionId) : null;
     const userId = String(input.userId || session?.user_id || '').trim();
+    const language = sessionId ? await this.resolveSessionLanguage(sessionId, session) : 'pt-BR';
     const mappings = this.dedupeMappings([
       ...(directMapping ? [directMapping] : []),
       ...(sessionId || userId ? await this.findExternalMappings(sessionId, userId) : []),
     ]);
+    const whatsappText = caption
+      ? `${caption}\n\n${this.text(language, 'Imagem do recibo disponível no chat web.', 'Receipt image available in the web chat.')}`
+      : this.text(language, 'Comprovante gerado.\n\nImagem do recibo disponível no chat web.', 'Receipt generated.\n\nReceipt image available in the web chat.');
 
     await Promise.all([
       this.sendTelegramImageToMappings(
@@ -301,7 +346,7 @@ export class TransferNotificationService {
       this.sendWhatsAppToMappings(
         mappings,
         session?.phone_number,
-        `${caption || 'Comprovante gerado.'}\n\nImagem do recibo disponível no chat web.`
+        whatsappText
       ),
     ]);
   }

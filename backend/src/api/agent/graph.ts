@@ -4578,6 +4578,7 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
   }
 
   private async getLogoutConfirmationMessage(state?: AgentState): Promise<string> {
+    const language = this.getLanguage(state);
     const externalProvider = String((state?.action_params as any)?.external_provider || '').trim().toLowerCase();
     const externalProviderUserId = String((state?.action_params as any)?.external_provider_user_id || '').trim();
     const sessionId = String(state?.session_id || '').trim();
@@ -4590,7 +4591,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       ]);
       const logoutUrl = new URL(`${normalizedBase}/logout`);
       logoutUrl.searchParams.set('source', 'web');
-      return `Para sair só deste navegador, abra esta página e confirme:\n\n${logoutUrl.toString()}\n\nIsso não desconecta WhatsApp ou Telegram vinculados à mesma conta.`;
+      return this.text(
+        language,
+        `Para sair só deste navegador, abra esta página e confirme:\n\n${logoutUrl.toString()}\n\nIsso não desconecta WhatsApp ou Telegram vinculados à mesma conta.`,
+        `To sign out only from this browser, open this page and confirm:\n\n${logoutUrl.toString()}\n\nThis does not disconnect WhatsApp or Telegram linked to the same account.`
+      );
     }
 
     let logoutUrl = '';
@@ -4619,7 +4624,11 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       logoutUrl = fallback.toString();
     }
 
-    return `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl}`;
+    return this.text(
+      language,
+      `Para deslogar com segurança, abra esta página e confirme a saída:\n\n${logoutUrl}`,
+      `To sign out safely, open this page and confirm:\n\n${logoutUrl}`
+    );
   }
 
   private async handleWalletLogout(state: AgentState): Promise<AgentState> {
@@ -4645,9 +4654,18 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       : externalProvider === 'whatsapp' || externalProvider === 'phone'
         ? 'WhatsApp'
         : '';
+    const language = this.getLanguage(state);
     state.response_message = providerLabel
-      ? `Logout concluído. Sua conta foi desconectada. Volte ao ${providerLabel} para continuar.`
-      : 'Logout concluído. Sua conta foi desconectada com sucesso. Agora você pode entrar ou criar outra conta quando quiser.';
+      ? this.text(
+          language,
+          `Logout concluído. Sua conta foi desconectada. Volte ao ${providerLabel} para continuar.`,
+          `Logout complete. Your account was disconnected. Return to ${providerLabel} to continue.`
+        )
+      : this.text(
+          language,
+          'Logout concluído. Sua conta foi desconectada com sucesso. Agora você pode entrar ou criar outra conta quando quiser.',
+          'Logout complete. Your account was disconnected successfully. You can now sign in or create another account whenever you want.'
+        );
 
     await this.saveAssistantResponse(state);
     await this.repository.saveState(state.session_id, state);

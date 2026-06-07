@@ -787,6 +787,60 @@ describe('PaymentReceiptService', () => {
     notifySpy.mockRestore();
   });
 
+  it('uses the recipient session language instead of the sender operation language for received receipts', async () => {
+    const originalRepo = (PaymentReceiptService as any).agentRepo;
+    (PaymentReceiptService as any).agentRepo = {
+      getSession: jest.fn().mockResolvedValue({
+        session_id: 'recipient-session-english',
+        preferred_language: 'en',
+        language: 'pt-BR',
+      }),
+      getState: jest.fn().mockResolvedValue(null),
+    };
+    const saveSpy = jest.spyOn(PaymentReceiptService as any, 'saveReceiptMessage').mockResolvedValue(true);
+    const createSpy = jest
+      .spyOn(PaymentReceiptService, 'createReceiptLink')
+      .mockResolvedValueOnce('https://talk-to-stellar-owxg.vercel.app/receipt/recipient-language');
+    const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({
+      whatsapp: {
+        attempted: true,
+        delivered: 1,
+        recipients: 1,
+        instances: ['TalkToStellar'],
+        attempts: [],
+      },
+    });
+
+    await PaymentReceiptService.sendReceipt({
+      type: 'payment_received',
+      sessionId: 'recipient-session-english',
+      userId: 'recipient-user-english',
+      language: 'pt-BR',
+      provider: 'whatsapp',
+      providerUserId: '5519997624114',
+      counterpartyLabel: 'contatojpsobral@gmail.com',
+      counterpartyKey: 'contatojpsobral@gmail.com',
+      sourceAmount: '100',
+      sourceAssetCode: 'USDC',
+      destinationAmount: '100',
+      destinationAssetCode: 'USDC',
+      hash: 'tx-recipient-language',
+      status: 'completed',
+    });
+
+    const sentText = String(notifySpy.mock.calls[0]?.[0]?.text || '');
+    expect(sentText).toContain('You received US$ 100.00 from contatojpsobral@gmail.com.');
+    expect(sentText).toContain('Status: completed');
+    expect(sentText).toContain('Receipt: https://talk-to-stellar-owxg.vercel.app/receipt/recipient-language');
+    expect(sentText).not.toContain('Você recebeu');
+    expect(sentText).not.toContain('concluído');
+
+    (PaymentReceiptService as any).agentRepo = originalRepo;
+    saveSpy.mockRestore();
+    createSpy.mockRestore();
+    notifySpy.mockRestore();
+  });
+
   it('falls back to hosted receipt URL when the receipt viewer cannot be created', async () => {
     const createSpy = jest.spyOn(PaymentReceiptService, 'createReceiptLink').mockRejectedValue(new Error('receipt_images unavailable'));
     const notifySpy = jest.spyOn(TransferNotificationService, 'notifyExternalChannelMessage').mockResolvedValue({

@@ -106,7 +106,7 @@ export class PaymentReceiptService {
     }
     if (typeof value !== 'object') return '';
     const record = value as Record<string, any>;
-    return String(record.language || record.lang || record.locale || '').trim();
+    return String(record.preferred_language || record.preferredLanguage || record.language || record.lang || record.locale || '').trim();
   }
 
   private static booleanPreference(value: unknown): boolean | null {
@@ -139,6 +139,7 @@ export class PaymentReceiptService {
   }
 
   private static async resolveReceiptLanguage(input: PaymentReceiptInput): Promise<'pt-BR' | 'en'> {
+    const sessionId = String(input.sessionId || '').trim();
     const direct = String(
       input.language ||
       input.quote?.language ||
@@ -151,17 +152,15 @@ export class PaymentReceiptService {
       input.quote?.operationContext?.language ||
       ''
     ).trim();
-    if (direct) return this.normalizeReceiptLanguage(direct);
 
-    const sessionId = String(input.sessionId || '').trim();
-    if (!sessionId) return 'pt-BR';
+    if (!sessionId) return direct ? this.normalizeReceiptLanguage(direct) : 'pt-BR';
 
     try {
       const session = await this.agentRepo.getSession(sessionId);
       const sessionLanguage = String(
         this.objectLanguage((session as any)?.action_params) ||
-        (session as any)?.language ||
         (session as any)?.preferred_language ||
+        (session as any)?.language ||
         ''
       ).trim();
       if (sessionLanguage) return this.normalizeReceiptLanguage(sessionLanguage);
@@ -169,19 +168,16 @@ export class PaymentReceiptService {
       const state = await this.agentRepo.getState(sessionId);
       const stateLanguage = String(
         this.objectLanguage((state as any)?.action_params) ||
-        (state as any)?.language ||
         (state as any)?.preferred_language ||
+        (state as any)?.language ||
         ''
       ).trim();
       if (stateLanguage) return this.normalizeReceiptLanguage(stateLanguage);
-
-      return this.normalizeReceiptLanguage(
-        ''
-      );
     } catch (error) {
       logger.debug(`[receipt] could not resolve receipt language for session=${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
-      return 'pt-BR';
     }
+
+    return direct ? this.normalizeReceiptLanguage(direct) : 'pt-BR';
   }
 
   private static async resolveHideAmounts(input: PaymentReceiptInput): Promise<boolean> {
