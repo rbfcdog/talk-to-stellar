@@ -190,6 +190,131 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Seu saldo esta disponivel.', { reliable: true, attempts: 1 });
   });
 
+  it('queues incoming WhatsApp webhooks without waiting for the agent request', async () => {
+    process.env.EVOLUTION_INBOUND_RETRY_INITIAL_DELAY_MS = '300000';
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+
+    const result = await EvolutionService.queueWebhook({
+      event: 'MESSAGES_UPSERT',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519981808102@s.whatsapp.net',
+          id: 'evolution-inbox-queue-test-1',
+          fromMe: false,
+        },
+        message: {
+          conversation: 'quero mandar 50 dolares pra ana silva via pix',
+        },
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: false,
+      queued: true,
+      recipient: '5519981808102',
+      instance: 'main',
+    }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('evolution_inbound_queue');
+    expect(mockSupabaseInsert).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'whatsapp',
+      instance: 'main',
+      recipient: '5519981808102',
+      remote_jid: '5519981808102@s.whatsapp.net',
+      message_id: 'evolution-inbox-queue-test-1',
+      status: 'pending',
+      attempts: 0,
+      payload: expect.objectContaining({
+        event: 'MESSAGES_UPSERT',
+      }),
+    }));
+  });
+
+  it('drains queued inbound WhatsApp webhooks through the normal webhook processor', async () => {
+    const updatePayloads: any[] = [];
+    const queuedRow = {
+      dedupe_key: 'evolution_inbound_webhook_test',
+      instance: 'main',
+      recipient: '5519981808102',
+      attempts: 0,
+      max_attempts: 5,
+      next_attempt_at: new Date(Date.now() - 1000).toISOString(),
+      payload: {
+        event: 'MESSAGES_UPSERT',
+        instance: 'main',
+        data: {
+          key: {
+            remoteJid: '5519981808102@s.whatsapp.net',
+            id: 'evolution-inbox-drain-test-1',
+            fromMe: false,
+          },
+          message: {
+            conversation: 'olaa',
+          },
+        },
+      },
+    };
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table !== 'evolution_inbound_queue') {
+        return {
+          insert: mockSupabaseInsert,
+          update: mockSupabaseUpdate,
+          delete: mockSupabaseDelete,
+        };
+      }
+      const selectChain: any = {};
+      selectChain.select = jest.fn(() => selectChain);
+      selectChain.in = jest.fn(() => selectChain);
+      selectChain.lte = jest.fn(() => selectChain);
+      selectChain.order = jest.fn(() => selectChain);
+      selectChain.limit = jest.fn(() => Promise.resolve({ data: [queuedRow], error: null }));
+
+      return {
+        select: selectChain.select,
+        update: jest.fn((payload: any) => {
+          updatePayloads.push(payload);
+          const updateChain: any = {};
+          updateChain.eq = jest.fn(() => updateChain);
+          updateChain.in = jest.fn(() => Promise.resolve({ error: null }));
+          updateChain.lt = jest.fn(() => Promise.resolve({ error: null }));
+          updateChain.then = (resolve: any, reject: any) => Promise.resolve({ error: null }).then(resolve, reject);
+          if (payload.status === 'completed' || payload.status === 'dead_letter') {
+            updateChain.eq = jest.fn(() => Promise.resolve({ error: null }));
+          }
+          return updateChain;
+        }),
+      };
+    });
+    const handleWebhookSpy = jest.spyOn(EvolutionService, 'handleWebhook').mockResolvedValue({
+      received: true,
+      replied: true,
+      recipient: '5519981808102',
+      instance: 'main',
+    });
+
+    const result = await EvolutionService.processQueuedInboundWebhooks(5);
+
+    expect(result).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0,
+      remaining: 0,
+    });
+    expect(handleWebhookSpy).toHaveBeenCalledWith(queuedRow.payload);
+    expect(updatePayloads).toContainEqual(expect.objectContaining({ status: 'processing' }));
+    expect(updatePayloads).toContainEqual(expect.objectContaining({
+      status: 'completed',
+      attempts: 1,
+      last_error: null,
+      result: expect.objectContaining({
+        replied: true,
+      }),
+    }));
+  });
+
   it('replaces generic capability replies with the detailed WhatsApp help message', async () => {
     const fetchMock = jest.fn(async (...args: any[]) => {
       const [url] = args;
