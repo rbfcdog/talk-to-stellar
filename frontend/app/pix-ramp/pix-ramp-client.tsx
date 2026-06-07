@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
+import { ArrowRight, CheckCircle2, ExternalLink, ReceiptText, ShieldCheck, X } from "lucide-react";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { formatCustomerNumber } from "@/lib/customer-amount";
 import { useLanguage } from "@/lib/i18n";
@@ -1065,7 +1066,7 @@ export default function PixRampClient({
   const [autoRefreshingQuote, setAutoRefreshingQuote] = useState(false);
   const [error, setError] = useState("");
   const [offRampShortageOpen, setOffRampShortageOpen] = useState(false);
-  const [returnPopupOpen, setReturnPopupOpen] = useState(false);
+  const [completionPopupOpen, setCompletionPopupOpen] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const [temporaryTestResult, setTemporaryTestResult] = useState<RampResponse | null>(null);
   const [temporaryOffRampTestResult, setTemporaryOffRampTestResult] = useState<RampResponse | null>(null);
@@ -3251,10 +3252,37 @@ export default function PixRampClient({
     ? (temporaryOffRampTestResult?.final_transaction || temporaryOffRampTestResult?.transaction)
     : order;
   const onRampReceiptUrl = extractRampReceiptUrl(statusPayload, orderPayload);
+  const completionTitle = rampMode === "offramp"
+    ? L("PIX enviado", "PIX sent")
+    : transferFlow
+      ? L("PIX e envio concluídos", "PIX and transfer completed")
+      : L("PIX confirmado", "PIX confirmed");
+  const completionAmountLabel = rampMode === "offramp" ? L("Saiu da conta", "Left account") : L("Recebido", "Received");
+  const completionAmountValue = rampMode === "offramp" ? offRampReceiptAmount : onRampReceivedDisplay;
+  const completionCounterAmountLabel = rampMode === "offramp" ? L("Chegou no PIX", "Arrived in PIX") : L("Pago via PIX", "Paid with PIX");
+  const completionCounterAmountValue = rampMode === "offramp" ? offRampReceiptReceived : effectiveOnRampPixPayDisplay;
+  const completionDestination = rampMode === "offramp"
+    ? externalPixDestination
+    : transferFlow && transferRecipientLabel
+      ? transferRecipientLabel
+      : L("Sua conta TalkToStellar", "Your TalkToStellar account");
+  const completionReceiptUrl = extractRampReceiptUrl(temporaryOffRampTestResult, statusPayload, orderPayload, onRampReceiptUrl);
+  const completionRows = [
+    { label: completionCounterAmountLabel, value: completionCounterAmountValue },
+    { label: L("Destino", "Destination"), value: completionDestination },
+    transferFlow && transferRecipientDisplayKey ? { label: L("Chave", "Key"), value: transferRecipientDisplayKey } : null,
+    transferFlow && pixFundedTransferResult?.transaction_hash
+      ? {
+          label: L("Transferência", "Transfer"),
+          value: formatRampAsset(pixFundedTransferResult.amount || autoPayAmount || amountBrl, pixFundedTransferResult.asset_code || autoPayAsset || targetAsset),
+        }
+      : null,
+    { label: L("Status", "Status"), value: L("Concluído", "Completed") },
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   useEffect(() => {
-    setReturnPopupOpen(Boolean(step === "success" && successTransaction && returnToPath));
-  }, [returnToPath, step, successTransaction]);
+    setCompletionPopupOpen(Boolean(step === "success" && successTransaction));
+  }, [step, successTransaction]);
 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg px-3 py-5 text-tts-deep sm:px-6 sm:py-8 lg:px-8">
@@ -4197,12 +4225,20 @@ export default function PixRampClient({
           </section>
         )}
 
-        {returnPopupOpen && returnToPath && (
-          <ReturnAfterSuccessPopup
-            href={returnToPath}
-            label={returnLabel}
+        {completionPopupOpen && step === "success" && successTransaction && (
+          <PixCompletionPopup
             language={language}
-            onClose={() => setReturnPopupOpen(false)}
+            title={completionTitle}
+            amountLabel={completionAmountLabel}
+            amountValue={completionAmountValue}
+            rows={completionRows}
+            receiptUrl={completionReceiptUrl}
+            returnHref={returnToPath}
+            returnLabel={returnLabel}
+            autoClose={!returnToPath && !stayOpenAfterSuccess}
+            transferPending={Boolean(transferFlow && !pixFundedTransferResult?.transaction_hash && !pixFundedTransferError)}
+            transferError={pixFundedTransferError}
+            onClose={() => setCompletionPopupOpen(false)}
           />
         )}
       </div>
@@ -4210,49 +4246,134 @@ export default function PixRampClient({
   );
 }
 
-function ReturnAfterSuccessPopup({
-  href,
-  label,
+function PixCompletionPopup({
   language,
+  title,
+  amountLabel,
+  amountValue,
+  rows,
+  receiptUrl,
+  returnHref,
+  returnLabel,
+  autoClose,
+  transferPending,
+  transferError,
   onClose,
 }: {
-  href: string;
-  label: string;
   language: "pt-BR" | "en";
+  title: string;
+  amountLabel: string;
+  amountValue: string;
+  rows: Array<{ label: string; value: string }>;
+  receiptUrl?: string;
+  returnHref?: string;
+  returnLabel: string;
+  autoClose: boolean;
+  transferPending: boolean;
+  transferError: string;
   onClose: () => void;
 }) {
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
+  const hasReceipt = Boolean(receiptUrl);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 px-3 pb-3 pt-10 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="pix-return-popup-title">
-      <div className="w-full max-w-sm rounded-3xl border border-tts-border bg-tts-surface p-4 text-tts-deep shadow-2xl shadow-black/40 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-normal text-tts-confirm">
-              {L("Concluído", "Completed")}
-            </p>
-            <h2 id="pix-return-popup-title" className="mt-1 text-xl font-black tracking-normal">
-              {L("PIX finalizado", "PIX complete")}
-            </h2>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-3 pb-3 pt-10 backdrop-blur-md sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="pix-completion-popup-title">
+      <div className="relative w-full max-w-[31rem] overflow-hidden rounded-[2rem] border border-tts-border2 bg-tts-surface text-tts-deep shadow-2xl shadow-black/50">
+        <div className="absolute inset-x-0 top-0 h-1 bg-tts-confirm" aria-hidden="true" />
+        <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-tts-confirm/20 blur-3xl" aria-hidden="true" />
+        <div className="absolute -left-20 bottom-16 h-40 w-40 rounded-full bg-tts-gold/15 blur-3xl" aria-hidden="true" />
+
+        <div className="relative p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-tts-confirm text-tts-bg shadow-lg shadow-tts-confirm/20">
+                <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-normal text-tts-confirm">
+                  {L("Operação finalizada", "Operation complete")}
+                </p>
+                <h2 id="pix-completion-popup-title" className="mt-1 text-2xl font-black tracking-normal text-tts-deep sm:text-3xl">
+                  {title}
+                </h2>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-tts-border bg-tts-bg/70 text-tts-muted transition hover:border-tts-confirm hover:text-tts-deep"
+              aria-label={L("Fechar aviso", "Close notice")}
+              onClick={onClose}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
-          <button
-            type="button"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-tts-border bg-tts-bg text-sm font-black text-tts-muted transition hover:text-tts-deep"
-            aria-label={L("Fechar aviso", "Close notice")}
-            onClick={onClose}
-          >
-            x
-          </button>
+
+          <div className="mt-5 rounded-[1.5rem] border border-tts-border bg-tts-bg/70 p-4">
+            <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{amountLabel}</p>
+            <p className="mt-2 break-words text-4xl font-black leading-none tracking-normal text-tts-deep sm:text-5xl">
+              {amountValue}
+            </p>
+          </div>
+
+          <div className="mt-4 divide-y divide-tts-border overflow-hidden rounded-[1.25rem] border border-tts-border bg-tts-bg/45">
+            {rows.map((row) => (
+              <div key={`${row.label}:${row.value}`} className="grid grid-cols-[0.86fr_1.14fr] gap-3 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-normal text-tts-muted">{row.label}</p>
+                <p className="min-w-0 break-words text-right text-sm font-black text-tts-deep">{row.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {(transferPending || transferError) && (
+            <div className={`mt-4 rounded-[1.25rem] border p-4 ${transferError ? "border-tts-error bg-tts-error/10 text-tts-error" : "border-tts-gold bg-tts-gold-bg text-tts-gold"}`}>
+              <p className="flex items-center gap-2 text-sm font-black">
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                {transferError ? L("PIX confirmado, envio em revisão", "PIX confirmed, transfer needs review") : L("Envio automático em andamento", "Automatic transfer in progress")}
+              </p>
+              <p className="mt-2 text-xs font-bold leading-5">
+                {transferError || L("O PIX já foi confirmado. A transferência aparece assim que o envio terminar.", "PIX is already confirmed. The transfer appears as soon as the send finishes.")}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {hasReceipt && (
+              <a
+                href={receiptUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-tts-border bg-tts-bg px-4 py-3 text-sm font-black text-tts-deep transition hover:border-tts-confirm"
+              >
+                <ReceiptText className="h-4 w-4" aria-hidden="true" />
+                {L("Ver comprovante", "View receipt")}
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            )}
+            {returnHref ? (
+              <a
+                href={returnHref}
+                className={`${hasReceipt ? "" : "sm:col-span-2"} inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-black text-tts-bg shadow-lg shadow-tts-confirm/20 transition hover:bg-tts-confirm/90`}
+              >
+                {returnLabel}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                className={`${hasReceipt ? "" : "sm:col-span-2"} inline-flex min-h-12 items-center justify-center rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-black text-tts-bg shadow-lg shadow-tts-confirm/20 transition hover:bg-tts-confirm/90`}
+                onClick={onClose}
+              >
+                {L("Fechar", "Close")}
+              </button>
+            )}
+          </div>
+
+          {autoClose && (
+            <p className="mt-4 text-center text-xs font-semibold leading-5 text-tts-muted">
+              {INTERMEDIATE_PAGE_CLOSE_COPY}
+            </p>
+          )}
         </div>
-        <p className="mt-3 text-sm font-semibold leading-5 text-tts-muted">
-          {L("Sua operação foi concluída. Volte para continuar no fluxo anterior.", "Your operation is complete. Return to continue the previous flow.")}
-        </p>
-        <a
-          href={href}
-          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-tts-confirm px-5 py-4 text-sm font-black text-tts-deep shadow-sm shadow-tts-confirm/20 transition hover:bg-tts-confirm/90"
-        >
-          {label}
-        </a>
       </div>
     </div>
   );
