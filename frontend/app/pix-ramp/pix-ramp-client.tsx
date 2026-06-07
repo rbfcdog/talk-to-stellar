@@ -1052,6 +1052,7 @@ export default function PixRampClient({
   const [offRampFiatAmount, setOffRampFiatAmount] = useState("");
   const [offRampAmountLocked, setOffRampAmountLocked] = useState(false);
   const [offRampPixKey, setOffRampPixKey] = useState("");
+  const [offRampPaymentStageUnlocked, setOffRampPaymentStageUnlocked] = useState(false);
   const [intentId, setIntentId] = useState("");
   const [operationLocked, setOperationLocked] = useState(false);
   const [walletPublicKey, setWalletPublicKey] = useState("");
@@ -1331,6 +1332,7 @@ export default function PixRampClient({
     setOffRampAmount(formatApiAmount(nextAmount || offRampAlternativeBalance));
     setOffRampPreviewPayload(null);
     setTemporaryOffRampTestResult(null);
+    setOffRampPaymentStageUnlocked(false);
     setOffRampShortageOpen(false);
     setError("");
   }
@@ -1701,6 +1703,7 @@ export default function PixRampClient({
 
   useEffect(() => {
     setMobileStage("details");
+    setOffRampPaymentStageUnlocked(false);
   }, [rampMode]);
 
   useEffect(() => {
@@ -1708,10 +1711,7 @@ export default function PixRampClient({
       setMobileStage("receipt");
       return;
     }
-    if (rampMode === "offramp" && offRampQuote) {
-      setMobileStage("payment");
-    }
-  }, [offRampQuote, rampMode, step, temporaryOffRampTestResult]);
+  }, [step, temporaryOffRampTestResult]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2373,7 +2373,9 @@ export default function PixRampClient({
     if (offRampPreviewKeyRef.current === offRampPreviewInputKey) return;
 
     offRampPreviewKeyRef.current = offRampPreviewInputKey;
-    void run("Previewing PIX withdrawal", previewOffRampFees);
+    void previewOffRampFees().catch(() => {
+      offRampPreviewKeyRef.current = "";
+    });
   }, [
     hasOffRampPreviewInputs,
     loading,
@@ -2665,6 +2667,7 @@ export default function PixRampClient({
     setGeneratedOnRampOrderKey("");
     setStatusPayload(null);
     setOffRampPreviewPayload(null);
+    setOffRampPaymentStageUnlocked(false);
     setOnRampBalancesBefore([]);
     setOnRampBalancesAfter([]);
     setQrDataUrl("");
@@ -3085,7 +3088,7 @@ export default function PixRampClient({
       fiat_amount: targetBrlAmount || undefined,
       target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
       target_currency: "BRL",
-    }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
+    }, "POST", auth);
     const nextCustomerPayload = mergeRampCustomerPayload(customerResult, payload);
     if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
     setOffRampPreviewPayload(payload);
@@ -3123,7 +3126,7 @@ export default function PixRampClient({
             fiat_amount: targetBrlAmount || undefined,
             target_brl: offRampExactReceiveBrl ? targetBrlAmount : undefined,
           target_currency: "BRL",
-        }, "POST", auth, buildIdempotencyKey("preview-offramp-fees"));
+        }, "POST", auth);
         setOffRampPreviewPayload(previewPayload);
         const nextCustomerPayload = mergeRampCustomerPayload(customerPayload, previewPayload);
         if (nextCustomerPayload) setCustomerPayload(nextCustomerPayload);
@@ -3484,7 +3487,7 @@ export default function PixRampClient({
           language={language}
           loading={loading}
           status={statusLabel(status, language)}
-          hasPaymentStep={rampMode === "onramp" ? onRampPixCheckoutAvailable && !checkoutExpired && !orderFailed : Boolean(offRampQuote)}
+          hasPaymentStep={rampMode === "onramp" ? onRampPixCheckoutAvailable && !checkoutExpired && !orderFailed : offRampPaymentStageUnlocked || Boolean(temporaryOffRampTestResult)}
           hasReceiptStep={step === "success" || Boolean(temporaryOffRampTestResult)}
         />
 
@@ -3554,6 +3557,7 @@ export default function PixRampClient({
                       const next = event.target.value;
                       setOffRampPreviewPayload(null);
                       setTemporaryOffRampTestResult(null);
+                      setOffRampPaymentStageUnlocked(false);
                       if (offRampExactReceiveBrl) {
                         setOffRampFiatAmount(next);
                       } else if (offRampInputAsset === "BRL") {
@@ -3581,6 +3585,7 @@ export default function PixRampClient({
                     onChange={(event) => {
                       setOffRampPixKey(event.target.value);
                       setTemporaryOffRampTestResult(null);
+                      setOffRampPaymentStageUnlocked(false);
                     }}
                   />
                 </div>
@@ -3594,6 +3599,7 @@ export default function PixRampClient({
                     className="w-full rounded-2xl bg-tts-gold px-5 py-4 text-base font-black text-tts-deep transition disabled:opacity-50"
                     disabled={!canResolveWallet || Boolean(loading) || !normalizedOffRampPixKey || operationLocked}
                     onClick={() => {
+                      setOffRampPaymentStageUnlocked(true);
                       setMobileStage("payment");
                       if (!offRampQuote) void run("Previewing PIX withdrawal", previewOffRampFees);
                     }}
