@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { getRequiredJwtSecret } from '../../../config/secrets';
 
 const SENSITIVE_SHORT_LINK_MAX_AGE_MS = 15 * 60 * 1000;
+const PIX_RAMP_SHORT_LINK_MAX_AGE_MS = 45 * 60 * 1000;
 
 function getJwtSecret() {
   return getRequiredJwtSecret();
@@ -52,7 +53,7 @@ function shortCodeFromSeed(seed: string, purpose: string): string {
 function sensitiveShortLinkMaxAgeMs(purpose: unknown): number {
   const normalized = String(purpose || '').trim().toLowerCase();
   if (!normalized) return 0;
-  if (normalized.startsWith('pix_')) return SENSITIVE_SHORT_LINK_MAX_AGE_MS;
+  if (normalized.startsWith('pix_')) return PIX_RAMP_SHORT_LINK_MAX_AGE_MS;
   if ([
     'payment_confirm',
     'payment_claim',

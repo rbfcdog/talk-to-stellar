@@ -1344,6 +1344,7 @@ export default function PixRampClient({
     fiat_amount: offRampExactReceiveBrl ? offRampInputValue : "",
     target_brl: offRampExactReceiveBrl ? offRampInputValue : "",
     destination_pix_key: normalizedOffRampPixKey,
+    intent_id: intentId || atomicIntentKey,
     from: "pix-off",
     return_source: "pix-off",
     ...externalLinkContext,

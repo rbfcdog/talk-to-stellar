@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import crypto from "crypto";
 import { getStellarService } from "../services/core/stellar.service";
 import { StellarService as ApiStellarService } from "../services/stellar.service";
 import { UserService } from "../services/user.service";
@@ -633,7 +634,10 @@ async function shortenYieldUrl(rawUrl: string, purpose: string, sessionId?: stri
   if (!sessionId) return rawUrl;
   try {
     return await new ExternalService(supabase as any).shortenPublicUrl({
-      url: rawUrl, purpose, sessionId, expiresInHours: 24,
+      url: rawUrl,
+      purpose,
+      sessionId,
+      ...(purpose.startsWith('pix_') ? { expiresInMinutes: 45 } : { expiresInHours: 24 }),
     });
   } catch {
     const withSession = new URL(rawUrl);
@@ -710,6 +714,7 @@ function buildMoneyInterfaceUrl(input: {
   destinationPixKey?: unknown;
   language?: 'pt-BR' | 'en';
   sessionScope?: unknown;
+  intentId?: unknown;
 }): string {
   const action = normalizeMoneyInterfaceAction(input.action);
   const asset = frontendAssetCode(input.assetCode || 'BRL');
@@ -718,6 +723,7 @@ function buildMoneyInterfaceUrl(input: {
   const amount = String(input.amount || '').trim();
   const language = input.language || 'pt-BR';
   const sessionScope = normalizeToolSessionScope(input.sessionScope);
+  const intentId = String(input.intentId || '').trim();
   const hasPostConversion = Boolean(action === 'bring' && postConversionAsset && postConversionAsset !== asset);
   const hasExactReceiveAsset = Boolean(action === 'bring' && amount && asset !== 'BRL');
 
@@ -741,6 +747,7 @@ function buildMoneyInterfaceUrl(input: {
         destination_pix_key: input.destinationPixKey,
         from: 'chat',
         session_scope: sessionScope,
+        intent_id: intentId,
         autostart: amount ? '1' : '',
         lang: language,
       },
@@ -762,6 +769,7 @@ function buildMoneyInterfaceUrl(input: {
       currency: 'BRL',
       from: 'chat',
       session_scope: sessionScope,
+      intent_id: intentId,
       autostart: amount ? '1' : '',
       lang: language,
     },
@@ -3302,6 +3310,7 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       destinationPixKey: input.destination_pix_key || input.destinationPixKey || input.pix_key || input.pixKey,
       language,
       sessionScope,
+      intentId: input.intent_id || input.intentId || crypto.randomUUID(),
     });
     const purpose = action === 'keep' ? 'rendimentos' : action === 'send_out' ? 'pix_offramp' : 'pix_onramp';
     const frontendUrl = await shortenYieldUrl(rawUrl, purpose, sessionId);
