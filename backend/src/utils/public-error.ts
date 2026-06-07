@@ -30,6 +30,7 @@ export function publicErrorCode(error: unknown) {
   if (/schema cache|could not find the table|relation .* does not exist|violates row-level security|permission denied|migration/.test(normalized)) return 'setup_unavailable';
   if (/duplicate key|unique constraint|violates unique|idx_[a-z0-9_]+|23505/.test(normalized)) return 'identity_conflict';
   if (/friendbot|createaccountalreadyexist|failed to fund account|account.*prepar|conta.*prepar|horizon.*not found/.test(normalized)) return 'account_preparing';
+  if (/wallet not found for payment confirmation|wallet not found for conversion confirmation|wallet.*vault|vault[_\s-]?secret|source wallet secret|wallet private key|private key|failed to read secret from vault|get_private_key|not ready to sign|assinar esta operacao/.test(normalized)) return 'account_signing_unavailable';
   if (/pin.*(required|obrigator|obrigatorio)|pin da wallet|pin da conta/.test(normalized)) return 'missing_pin';
   if (/(invalid|incorrect|wrong|invalido).*(pin)|pin.*(invalid|incorrect|wrong|invalido)|senha/.test(normalized)) return 'invalid_pin';
   if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';

@@ -675,6 +675,46 @@ function isValidStellarPublicKey(value?: string) {
   }
 }
 
+async function resolveSigningWalletForSession(input: {
+  sessionId: string;
+  session?: any;
+  purpose: 'payment' | 'conversion';
+}) {
+  const sessionId = String(input.sessionId || '').trim();
+  if (!sessionId) return null;
+
+  const sessionWallet = await walletRepo.getWalletBySession(sessionId);
+  if (sessionWallet?.public_key && sessionWallet?.vault_secret_id) return sessionWallet;
+
+  const publicKey = String(sessionWallet?.public_key || input.session?.public_key || '').trim();
+  if (isValidStellarPublicKey(publicKey)) {
+    const publicKeyWallet = await walletRepo.getWalletByPublicKey(publicKey).catch((error) => {
+      logger.warn(`[external-finalize] could not resolve signing wallet by public key for session=${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    });
+
+    if (publicKeyWallet?.public_key && publicKeyWallet?.vault_secret_id) {
+      logger.warn(`[external-finalize] recovered ${input.purpose} signing wallet through public_key fallback session=${sessionId} public_key=${maskLogValue(publicKey)}`);
+
+      walletRepo.saveWallet({
+        ...publicKeyWallet,
+        session_id: sessionId,
+        public_key: publicKeyWallet.public_key,
+      }).catch((error) => {
+        logger.warn(`[external-finalize] could not persist recovered signing wallet for session=${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+
+      return {
+        ...publicKeyWallet,
+        session_id: sessionId,
+      };
+    }
+  }
+
+  logger.warn(`[external-finalize] signing wallet unavailable purpose=${input.purpose} session=${sessionId} session_wallet=${Boolean(sessionWallet)} public_key=${maskLogValue(publicKey) || 'none'} vault=${Boolean(sessionWallet?.vault_secret_id)}`);
+  return sessionWallet || null;
+}
+
 function pickContactTransferKey(contact?: any): string {
   if (!contact || typeof contact !== 'object') return '';
   const email = String(contact.email || contact.contact_profile?.email || '').trim().toLowerCase();
@@ -1650,11 +1690,6 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const wallet = await walletRepo.getWalletBySession(String(session_id));
-        if (!wallet?.public_key || !wallet?.vault_secret_id) {
-          return res.status(400).json({ success: false, message: 'wallet not found for conversion confirmation' });
-        }
-
         const session = await agentRepo.getSession(String(session_id));
         if (!session?.user_id) {
           return res.status(400).json({ success: false, message: 'session not found for conversion confirmation' });
@@ -1664,6 +1699,21 @@ export default class ExternalFinalizeController {
           return res.status(401).json({
             success: false,
             message: 'Sua sessão expirou. Entre novamente antes de confirmar a conversão.',
+          });
+        }
+
+        const wallet = await resolveSigningWalletForSession({
+          sessionId: String(session_id),
+          session,
+          purpose: 'conversion',
+        });
+        if (!wallet?.public_key || !wallet?.vault_secret_id) {
+          return res.status(409).json({
+            ...publicErrorPayload(new Error('wallet not found for conversion confirmation'), {
+              code: 'account_signing_unavailable',
+              includeSupportCode: true,
+            }),
+            ...(requestId ? { request_id: requestId } : {}),
           });
         }
 
@@ -2101,11 +2151,6 @@ export default class ExternalFinalizeController {
           });
         }
 
-        const wallet = await walletRepo.getWalletBySession(String(session_id));
-        if (!wallet?.public_key || !wallet?.vault_secret_id) {
-          return res.status(400).json({ success: false, message: 'wallet not found for payment confirmation' });
-        }
-
         const session = await agentRepo.getSession(String(session_id));
         if (!session?.user_id) {
           return res.status(400).json({ success: false, message: 'session not found for payment confirmation' });
@@ -2115,6 +2160,21 @@ export default class ExternalFinalizeController {
           return res.status(401).json({
             success: false,
             message: 'Sua sessão expirou. Entre novamente antes de confirmar o pagamento.',
+          });
+        }
+
+        const wallet = await resolveSigningWalletForSession({
+          sessionId: String(session_id),
+          session,
+          purpose: 'payment',
+        });
+        if (!wallet?.public_key || !wallet?.vault_secret_id) {
+          return res.status(409).json({
+            ...publicErrorPayload(new Error('wallet not found for payment confirmation'), {
+              code: 'account_signing_unavailable',
+              includeSupportCode: true,
+            }),
+            ...(requestId ? { request_id: requestId } : {}),
           });
         }
 

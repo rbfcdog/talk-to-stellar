@@ -726,6 +726,81 @@ describe('ExternalFinalizeController', () => {
     );
   });
 
+  it('recovers payment signing wallet by public key when the session wallet is incomplete', async () => {
+    const crypto = require('crypto');
+    const jwt = require('jsonwebtoken');
+    const { default: ExternalFinalizeController } = await import(
+      '../src/api/controllers/external-finalize.controller'
+    );
+
+    process.env.USDC_ISSUER = testPublicKey;
+    const pin = '1234';
+    const pinHash = crypto
+      .pbkdf2Sync(pin, process.env.PIN_SALT || 'salt', 100000, 64, 'sha256')
+      .toString('hex');
+
+    jwt.verify.mockReturnValueOnce({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      asset_code: 'USDC',
+      destination: testPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-1',
+      owner_id: 'user@example.com',
+      language: 'en',
+    });
+
+    finalizeGetSessionMock.mockResolvedValue({
+      user_id: 'user@example.com',
+      public_key: testPublicKey,
+      session_password_hash: pinHash,
+      last_activity: new Date().toISOString(),
+    });
+    finalizeGetWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-1',
+      public_key: testPublicKey,
+      vault_secret_id: null,
+    });
+    finalizeGetWalletByPublicKeyMock.mockResolvedValueOnce({
+      session_id: 'legacy-session',
+      public_key: testPublicKey,
+      vault_secret_id: 'source-secret-id',
+    });
+    finalizeLoadAccountMock.mockResolvedValue({
+      balances: [
+        { asset_type: 'native', balance: '100.0000000' },
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0.0000000' },
+      ],
+    });
+    finalizeGetAccountBalanceMock.mockResolvedValue([
+      { asset_code: 'USDC', asset_issuer: testPublicKey, balance: '0.0000000' },
+    ]);
+
+    const req = {
+      body: {
+        token: 'payment-token',
+        pin,
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalFinalizeController.finalize(req, res);
+
+    expect(finalizeGetWalletBySessionMock).toHaveBeenCalledWith('session-1');
+    expect(finalizeGetWalletByPublicKeyMock).toHaveBeenCalledWith(testPublicKey);
+    expect(finalizeGetSecretMock).toHaveBeenCalledWith('source-secret-id');
+    expect(finalizeBuildPathPaymentXdrMock).toHaveBeenCalled();
+    expect(finalizeSignAndSubmitXdrMock).toHaveBeenCalledWith(
+      'user@example.com',
+      testSecretKey,
+      'path-xdr',
+      expect.objectContaining({
+        source_public_key: testPublicKey,
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it('routes chat-origin payment completion back to WhatsApp when the provider id is a phone number', async () => {
     const crypto = require('crypto');
     const jwt = require('jsonwebtoken');

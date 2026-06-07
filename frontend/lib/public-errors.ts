@@ -60,6 +60,7 @@ const explicitErrorCopy = {
   setup_unavailable: ["Este ambiente ainda está finalizando uma configuração. Tente novamente em alguns segundos.", "This environment is still finishing setup. Try again in a few seconds."],
   identity_conflict: ["Já existe uma conta com esses dados. Entre na conta existente ou use outro e-mail, telefone ou CPF.", "An account already exists with this information. Sign in to the existing account or use another email, phone, or CPF."],
   account_preparing: ["Sua conta ainda está sendo preparada. Tente novamente em alguns segundos.", "Your account is still being prepared. Try again in a few seconds."],
+  account_signing_unavailable: ["Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.", "This account is not ready to sign this operation yet. Sign in again and try once more."],
   missing_pin: ["Digite o PIN da conta para confirmar.", "Enter the account PIN to confirm."],
   invalid_pin: ["Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again."],
   insufficient_balance: ["Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.", "Insufficient balance. Add funds with PIX and try again."],
@@ -126,6 +127,13 @@ export function mapPublicError(error: unknown, language?: string) {
     return {
       code: "account_preparing",
       message: copy(language, "Sua conta ainda está sendo preparada. Tente novamente em alguns segundos.", "Your account is still being prepared. Try again in a few seconds."),
+    };
+  }
+
+  if (/wallet not found for payment confirmation|wallet not found for conversion confirmation|wallet.*vault|vault[_\s-]?secret|source wallet secret|wallet private key|private key|failed to read secret from vault|get_private_key|not ready to sign|assinar esta operacao/.test(normalized)) {
+    return {
+      code: "account_signing_unavailable",
+      message: copy(language, "Esta conta ainda não está pronta para assinar esta operação. Entre novamente e tente outra vez.", "This account is not ready to sign this operation yet. Sign in again and try once more."),
     };
   }
 

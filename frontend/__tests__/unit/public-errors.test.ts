@@ -17,4 +17,12 @@ describe("public error mapping", () => {
     expect(mapped.message).toContain("Nenhum valor saiu")
     expect(mapped.message).not.toContain("Tente novamente em alguns segundos")
   })
+
+  it("shows wallet signing readiness guidance for incomplete legacy wallets", () => {
+    const mapped = mapPublicError("wallet not found for payment confirmation", "pt-BR")
+
+    expect(mapped.code).toBe("account_signing_unavailable")
+    expect(mapped.message).toContain("assinar")
+    expect(mapped.message).toContain("Entre novamente")
+  })
 })
