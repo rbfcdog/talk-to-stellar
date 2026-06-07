@@ -10,13 +10,6 @@ interface AuthShellProps {
   className?: string
 }
 
-const DOT_GRID_STYLE: React.CSSProperties = {
-  backgroundImage:
-    'radial-gradient(circle, var(--tts-gold) 1px, transparent 1px)',
-  backgroundSize: '28px 28px',
-  opacity: 0.06,
-}
-
 export function AuthShell({
   title,
   description,
@@ -25,16 +18,10 @@ export function AuthShell({
   className,
 }: AuthShellProps) {
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-tts-bg px-4 py-10">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={DOT_GRID_STYLE}
-        aria-hidden
-      />
-
+    <main className="tts-auth-page flex items-center justify-center overflow-hidden px-4 py-10">
       <section
         className={cn(
-          'relative w-full max-w-sm rounded-2xl border border-tts-border bg-tts-surface p-8 shadow-sm',
+          'tts-auth-card relative w-full max-w-sm border border-tts-border bg-tts-surface/95 p-6 shadow-sm sm:p-8',
           className,
         )}
       >

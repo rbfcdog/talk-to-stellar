@@ -120,18 +120,6 @@ export function Hero() {
         aria-hidden
       />
 
-      {/* ambient gold orb */}
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-        style={{
-          background:
-            'radial-gradient(circle, var(--tts-gold-bg) 0%, transparent 65%)',
-          animation: 'hero-orb 8s ease-in-out infinite',
-          opacity: 0.55,
-        }}
-        aria-hidden
-      />
-
       {/* giant faint Stellar mark */}
       <div
         className="pointer-events-none absolute -bottom-32 -right-32 text-tts-deep md:-bottom-40 md:-right-20"

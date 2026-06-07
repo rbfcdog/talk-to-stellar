@@ -752,7 +752,7 @@ export default function SettlementConsoleView() {
   const currentState = console.workflow?.current_state;
 
   return (
-    <main className="min-h-screen bg-tts-bg text-tts-deep">
+    <main className="tts-console-page min-h-screen bg-tts-bg text-tts-deep">
       <header className="border-b border-tts-border bg-tts-surface">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-4 px-4 pb-4 pt-14 sm:px-6 lg:py-4 lg:pr-52">
           <div className="flex items-center gap-3">

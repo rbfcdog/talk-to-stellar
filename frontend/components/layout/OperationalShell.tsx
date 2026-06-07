@@ -65,7 +65,7 @@ export function OperationalHeader({
   return (
     <header
       className={cn(
-        'tts-op-header rounded-2xl border border-tts-border bg-tts-surface p-6 shadow-sm sm:p-8',
+        'tts-op-header tts-op-shell border border-tts-border bg-tts-surface p-6 shadow-sm sm:p-8',
         className,
       )}
     >
@@ -101,7 +101,7 @@ export function OperationalCard({
   const Comp = as
   return (
     <Comp
-      className={cn('tts-op-card rounded-2xl border border-tts-border bg-tts-surface p-5 shadow-sm sm:p-6', className)}
+      className={cn('tts-op-card tts-op-shell border border-tts-border bg-tts-surface p-5 shadow-sm sm:p-6', className)}
       {...props}
     >
       {children}
@@ -132,7 +132,7 @@ export function OperationalStat({
   }[tone]
 
   return (
-    <div className={cn('tts-op-stat rounded-xl border border-tts-border bg-tts-bg/55 p-4', className)}>
+    <div className={cn('tts-op-stat tts-op-tile border border-tts-border bg-tts-bg/55 p-4', className)}>
       <p className="text-xs font-semibold text-tts-muted">{label}</p>
       <p className={cn('mt-2 text-lg font-bold', toneClass)}>{value}</p>
       {detail ? <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p> : null}
