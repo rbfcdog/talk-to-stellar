@@ -352,6 +352,82 @@ describe('agent Telegram identity binding', () => {
           }),
         })
       );
+      expect(repository.saveSession).toHaveBeenLastCalledWith(
+        linkedSessionId,
+        expect.objectContaining({
+          language: 'pt-BR',
+          preferred_language: 'pt-BR',
+        })
+      );
+    });
+  });
+
+  it('preserves amount privacy preferences on the final session save', async () => {
+    const linkedSessionId = '37373737-3737-4737-8737-373737373737';
+    const repository = createRepository(
+      {
+        [linkedSessionId]: {
+          user_id: 'whatsapp@example.com',
+          email: 'whatsapp@example.com',
+          session_token: 'linked-token',
+          password_hash: 'hashed-pin',
+          public_key: 'G'.padEnd(56, 'P'),
+          language: 'en',
+          last_activity: new Date().toISOString(),
+        },
+      },
+      {
+        [linkedSessionId]: {
+          session_id: linkedSessionId,
+          action_params: {
+            hide_amounts: true,
+            amounts_hidden: true,
+            value_privacy: 'hidden',
+          },
+        },
+      }
+    );
+    checkExternalAccountMock.mockResolvedValue({
+      provider: 'whatsapp',
+      provider_user_id: '5511999999999',
+      session_id: linkedSessionId,
+      user_id: 'whatsapp@example.com',
+      data: {},
+    });
+
+    await withAgentServer(repository, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-agent-ingest-secret': 'test-agent-ingest-secret' },
+        body: JSON.stringify({
+          query: 'show my balance',
+          language: 'en',
+          session_id: linkedSessionId,
+          source: 'whatsapp',
+          metadata: {
+            provider_user_id: '+55 11 99999-9999',
+            phone_number: '+55 11 99999-9999',
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(processInputMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: linkedSessionId,
+          action_params: expect.objectContaining({
+            hide_amounts: true,
+            amounts_hidden: true,
+            value_privacy: 'hidden',
+          }),
+        })
+      );
+      expect(repository.saveSession).toHaveBeenLastCalledWith(
+        linkedSessionId,
+        expect.objectContaining({
+          hide_amounts: true,
+        })
+      );
     });
   });
 

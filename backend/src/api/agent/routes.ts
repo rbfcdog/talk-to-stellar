@@ -1336,6 +1336,13 @@ export function createAgentRoutes(
         runtimeLanguageFromSession(sessionData);
       const storedLanguage = durableStoredLanguage || runtimeStoredLanguage;
       const preferredLanguage = explicitMessageLanguage || storedLanguage || requestLanguage;
+      sessionData.language = preferredLanguage;
+      if (durableStoredLanguage || explicitMessageLanguage) {
+        sessionData.preferred_language = explicitMessageLanguage || durableStoredLanguage;
+      }
+      if (durableStoredHideAmounts !== null) {
+        sessionData.hide_amounts = durableStoredHideAmounts;
+      }
       if (explicitMessageLanguage) {
         await persistLanguagePreference({
           sessionId,

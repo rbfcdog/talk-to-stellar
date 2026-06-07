@@ -46,6 +46,9 @@ export class AgentRepository {
       email_verified: sessionData.email_verified,
       email_verified_at: sessionData.email_verified_at,
       email_verification_source: sessionData.email_verification_source,
+      preferred_language: sessionData.preferred_language,
+      language: sessionData.language,
+      hide_amounts: sessionData.hide_amounts,
       created_at: sessionData.created_at,
       last_activity: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -73,6 +76,9 @@ export class AgentRepository {
         login_failed_attempts,
         login_locked_until,
         login_last_failed_at,
+        preferred_language,
+        language,
+        hide_amounts,
         ...sessionRecordWithoutEmailVerification
       } = sessionRecord;
       const retry = await this.supabase
@@ -87,11 +93,38 @@ export class AgentRepository {
         login_failed_attempts,
         login_locked_until,
         login_last_failed_at,
+        preferred_language,
+        language,
+        hide_amounts,
         ...sessionRecordWithoutLoginPassword
       } = sessionRecord;
       const retry = await this.supabase
         .from('agent_sessions')
         .upsert(sessionRecordWithoutLoginPassword, { onConflict: 'session_id' });
+      error = retry.error;
+    }
+
+    if (error && this.isMissingColumnError(error, 'preferred_language')) {
+      const {
+        preferred_language,
+        language,
+        hide_amounts,
+        ...sessionRecordWithoutPreferences
+      } = sessionRecord;
+      const retry = await this.supabase
+        .from('agent_sessions')
+        .upsert(sessionRecordWithoutPreferences, { onConflict: 'session_id' });
+      error = retry.error;
+    }
+
+    if (error && this.isMissingColumnError(error, 'hide_amounts')) {
+      const {
+        hide_amounts,
+        ...sessionRecordWithoutPrivacy
+      } = sessionRecord;
+      const retry = await this.supabase
+        .from('agent_sessions')
+        .upsert(sessionRecordWithoutPrivacy, { onConflict: 'session_id' });
       error = retry.error;
     }
 
