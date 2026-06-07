@@ -11,6 +11,7 @@ import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n"
 import { mapPublicError } from "@/lib/public-errors"
 import { resolveReturnTarget, type ReturnTarget } from "@/lib/return-target"
 import { decodeJwtPayload } from "@/lib/jwt"
+import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 
 type ValidationResult = {
   success?: boolean
@@ -196,6 +197,7 @@ export default function ConfirmConversionClient({
   const [progressStartedAt, setProgressStartedAt] = useState<number | null>(null)
   const [progressNow, setProgressNow] = useState(Date.now())
   const submitLockRef = useRef(false)
+  const closeAfterSuccessRef = useRef(false)
   const feedbackLanguage = useMemo(
     () => normalizeLanguage(searchParams.get("lang") || validation?.payload?.language || validation?.payload?.lang || decodeJwtPayload(token)?.language || language),
     [searchParams, validation?.payload, token, language]
@@ -267,6 +269,13 @@ export default function ConfirmConversionClient({
   })
   const pixReturnTarget = isPixReturnTarget(returnTarget)
   const pixOffRampReturnTarget = pixReturnTarget && isPixOffRampReturnTarget(returnTarget)
+
+  useEffect(() => {
+    if (status !== "done" || !result?.success || pixReturnTarget) return
+    if (closeAfterSuccessRef.current) return
+    closeAfterSuccessRef.current = true
+    closeIntermediatePage()
+  }, [pixReturnTarget, result?.success, status])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -551,12 +560,17 @@ export default function ConfirmConversionClient({
                     <p>{T(feedbackLanguage, "Economia estimada nesta operação", "Estimated savings on this operation")}: {formatBrl(estimatedSavingsBrl, feedbackLanguage)}</p>
                   )}
                   {!pixReturnTarget && (
-                    <a
-                      href={returnTarget.href}
-                      className="mt-3 inline-flex w-full items-center justify-center bg-tts-deep px-4 py-3 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
-                    >
-                      {returnTarget.label}
-                    </a>
+                    <>
+                      <p className="mt-3 text-xs font-semibold text-tts-muted">
+                        {T(feedbackLanguage, INTERMEDIATE_PAGE_CLOSE_COPY, "This screen closes automatically.")}
+                      </p>
+                      <a
+                        href={returnTarget.href}
+                        className="mt-3 inline-flex w-full items-center justify-center bg-tts-deep px-4 py-3 text-sm font-black text-tts-surface transition hover:bg-tts-deep2"
+                      >
+                        {returnTarget.label}
+                      </a>
+                    </>
                   )}
                 </motion.div>
               )}
