@@ -9,6 +9,7 @@ import { supabase } from '../../../config/supabase';
 import { logger } from '../../../utils/logger';
 import { getRequiredJwtSecret } from '../../../config/secrets';
 import { EmailConfirmationService } from '../email-confirmation.service';
+import { LoginPasswordService } from '../login-password.service';
 
 type PinResetLanguage = 'pt-BR' | 'en';
 
@@ -271,7 +272,8 @@ export class PinResetService {
   static async applyNewPin(
     resetToken: string,
     userId: string,
-    newPinHash: string
+    newPinHash: string,
+    newPinPlain?: string
   ): Promise<{ success: boolean; message: string }> {
     try {
       // Validate token first
@@ -290,9 +292,16 @@ export class PinResetService {
             return { success: false, message: 'Token antigo inválido. Solicite um novo link de redefinição de PIN.' };
           }
 
+          const patch: Record<string, unknown> = { session_password_hash: newPinHash };
+          if (newPinPlain) {
+            patch.login_password_hash = LoginPasswordService.hash(newPinPlain);
+            patch.login_failed_attempts = 0;
+            patch.login_locked_until = null;
+            patch.login_last_failed_at = null;
+          }
           const { error: updateError } = await supabase
             .from('agent_sessions')
-            .update({ session_password_hash: newPinHash })
+            .update(patch)
             .eq('session_id', sessionId);
 
           if (updateError) {
@@ -307,9 +316,16 @@ export class PinResetService {
       }
 
       // Update agent_sessions with new PIN hash
+      const patch: Record<string, unknown> = { session_password_hash: newPinHash };
+      if (newPinPlain) {
+        patch.login_password_hash = LoginPasswordService.hash(newPinPlain);
+        patch.login_failed_attempts = 0;
+        patch.login_locked_until = null;
+        patch.login_last_failed_at = null;
+      }
       const { error: updateError } = await supabase
         .from('agent_sessions')
-        .update({ session_password_hash: newPinHash })
+        .update(patch)
         .eq('session_id', tokenData.session_id);
 
       if (updateError) {

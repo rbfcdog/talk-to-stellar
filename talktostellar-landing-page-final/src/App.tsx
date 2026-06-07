@@ -12,9 +12,12 @@ import Footer from './components/Footer';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-[#080808] text-white selection:bg-[#E59E25]/30 selection:text-white font-sans">
+    <div className="min-h-screen bg-[#080808] text-white selection:bg-[#E59E25]/30 selection:text-white font-sans relative">
+      <div className="absolute inset-0 bg-grid-pattern pointer-events-none z-0" />
+      <div className="fixed inset-0 bg-gradient-to-b from-transparent via-[#080808]/70 to-[#080808] pointer-events-none z-0" />
+
       <Navbar />
-      
+
       <main className="relative z-10 flex flex-col items-center w-full">
         <Hero />
         <ProblemSection />
@@ -25,7 +28,7 @@ export default function App() {
         <FAQSection />
         <CTA />
       </main>
-      
+
       <Footer />
     </div>
   );

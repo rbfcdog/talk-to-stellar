@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   language TEXT,
   preferred_language TEXT,
   password_hash TEXT,
+  login_password_hash TEXT,
+  login_failed_attempts INTEGER DEFAULT 0,
+  login_locked_until TIMESTAMP,
+  login_last_failed_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -105,6 +109,10 @@ ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS pix_key TEXT;
 ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS language TEXT;
 ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS preferred_language TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS login_password_hash TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS login_failed_attempts INTEGER DEFAULT 0;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS login_locked_until TIMESTAMP;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS login_last_failed_at TIMESTAMP;
 ALTER TABLE operations ADD COLUMN IF NOT EXISTS source_public_key TEXT;
 ALTER TABLE operations ADD COLUMN IF NOT EXISTS source_session_id UUID;
 ALTER TABLE operations ADD COLUMN IF NOT EXISTS destination_session_id UUID;

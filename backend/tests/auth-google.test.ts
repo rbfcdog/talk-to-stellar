@@ -42,7 +42,7 @@ describe('Google auth PIN gate', () => {
     expect(selected?.session_id).toBe('older-with-pin');
   });
 
-  it('sends existing Google accounts without PIN to login instead of account creation', () => {
+  it('sends existing Google accounts without credentials to login instead of account creation', () => {
     const payload = googleExistingLoginPayload({
       email: 'ana@example.com',
       displayName: 'Ana',
@@ -53,6 +53,6 @@ describe('Google auth PIN gate', () => {
     expect(payload.existing_account).toBe(true);
     expect(payload.login_required).toBe(true);
     expect(payload.requires_pin_setup).toBe(false);
-    expect(payload.message).toContain('Esqueci o PIN');
+    expect(payload.message).toContain('senha');
   });
 });

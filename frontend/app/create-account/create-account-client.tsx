@@ -211,6 +211,8 @@ export default function CreateAccountClient({
   const [emailConfirmationCode, setEmailConfirmationCode] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [cpf, setCpf] = useState("")
+  const [password, setPassword] = useState("")
+  const [passwordConfirm, setPasswordConfirm] = useState("")
   const [pin, setPin] = useState("")
   const [pinConfirm, setPinConfirm] = useState("")
   const [pinError, setPinError] = useState("")
@@ -475,16 +477,16 @@ export default function CreateAccountClient({
 
     if (!browserSupportsWebAuthn()) {
       return L(
-        "Este navegador não suporta Passkey. A conta já funciona com PIN.",
-        "This browser does not support Passkey. The account already works with PIN.",
+        "Este navegador não suporta Passkey. A conta já funciona com senha e PIN.",
+        "This browser does not support Passkey. The account already works with password and PIN.",
       )
     }
 
     const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname)
     if (!window.isSecureContext && !isLocalhost) {
       return L(
-        "Passkey precisa abrir em HTTPS. A conta já funciona com PIN.",
-        "Passkey must open on HTTPS. The account already works with PIN.",
+        "Passkey precisa abrir em HTTPS. A conta já funciona com senha e PIN.",
+        "Passkey must open on HTTPS. The account already works with password and PIN.",
       )
     }
 
@@ -498,8 +500,8 @@ export default function CreateAccountClient({
     const platformAvailable = await platformAuthenticatorIsAvailable().catch(() => false)
     if (!platformAvailable) {
       return L(
-        "Este aparelho/navegador não liberou biometria agora. A conta já funciona com PIN.",
-        "This device/browser did not make biometrics available now. The account already works with PIN.",
+        "Este aparelho/navegador não liberou biometria agora. A conta já funciona com senha e PIN.",
+        "This device/browser did not make biometrics available now. The account already works with password and PIN.",
       )
     }
 
@@ -666,12 +668,20 @@ export default function CreateAccountClient({
     setPinError("")
     if (submitLockRef.current) return
 
+    if (password.trim().length < 8) {
+      setPinError(L("Senha deve conter pelo menos 8 caracteres.", "Password must contain at least 8 characters."))
+      return
+    }
+    if (password !== passwordConfirm) {
+      setPinError(L("Senha e confirmação devem ser iguais.", "Password and confirmation must match."))
+      return
+    }
     if (!/^\d{4,8}$/.test(pin)) {
-      setPinError("PIN must contain 4 to 8 numeric digits.")
+      setPinError(L("PIN deve conter de 4 a 8 dígitos numéricos.", "PIN must contain 4 to 8 numeric digits."))
       return
     }
     if (pin !== pinConfirm) {
-      setPinError("PIN and confirmation must match.")
+      setPinError(L("PIN e confirmação devem ser iguais.", "PIN and confirmation must match."))
       return
     }
 
@@ -727,6 +737,7 @@ export default function CreateAccountClient({
           email: email || undefined,
           phone_number: phoneNumber || undefined,
           cpf: cpf || undefined,
+          login_password: password,
           pin,
           email_confirmation_code: emailConfirmationCode || undefined,
           browser_id: browserId,
@@ -761,7 +772,7 @@ export default function CreateAccountClient({
       }
       if (payload?.emailConfirmationRequired) {
         if (!EMAIL_CONFIRMATION_ENABLED) {
-          throw new Error(L("Confirmação por e-mail está desativada neste ambiente. Peça um novo link no chat ou entre com PIN.", "Email confirmation is disabled in this environment. Request a new link in chat or sign in with PIN."))
+          throw new Error(L("Confirmação por e-mail está desativada neste ambiente. Peça um novo link no chat ou entre com senha.", "Email confirmation is disabled in this environment. Request a new link in chat or sign in with password."))
         }
         setEmailConfirmationRequired(true)
         setResult(payload)
@@ -994,6 +1005,8 @@ export default function CreateAccountClient({
   const STEPS = [L("Identidade", "Identity"), L("Segurança", "Security"), L("Conta pronta", "Account ready")]
   const submitDisabled =
     submitLocked ||
+    !password.trim() ||
+    !passwordConfirm.trim() ||
     !pin.trim() ||
     !pinConfirm.trim() ||
     (EMAIL_CONFIRMATION_ENABLED && emailConfirmationRequired && emailConfirmationCode.length !== 6)
@@ -1105,6 +1118,34 @@ export default function CreateAccountClient({
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-tts-deep">
+            {L("Senha de login (mín. 8 caracteres)", "Login password (min. 8 characters)")}
+          </span>
+          <Input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            autoComplete="new-password"
+            maxLength={128}
+            placeholder={L("Crie sua senha", "Create your password")}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">
+            {L("Confirmar senha", "Confirm password")}
+          </span>
+          <Input
+            value={passwordConfirm}
+            onChange={(event) => setPasswordConfirm(event.target.value)}
+            type="password"
+            autoComplete="new-password"
+            maxLength={128}
+            placeholder={L("Confirme sua senha", "Confirm your password")}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">
             {L("PIN (4 a 8 dígitos)", "PIN (4 to 8 digits)")}
           </span>
           <Input
@@ -1141,8 +1182,8 @@ export default function CreateAccountClient({
             />
             <span>
               {L(
-                "Opcional: ativar passkey agora. Você pode usar apenas PIN e ativar biometria depois.",
-                "Optional: enable passkey now. You can use PIN only and enable biometrics later.",
+                "Opcional: ativar passkey agora. Você pode usar senha e PIN e ativar biometria depois.",
+                "Optional: enable passkey now. You can use password and PIN and enable biometrics later.",
               )}
             </span>
           </label>
@@ -1255,13 +1296,13 @@ export default function CreateAccountClient({
                   onClick={finishWithoutPasskey}
                   className="w-full"
                 >
-                  {L("Pular e continuar com PIN", "Skip and continue with PIN")}
+                  {L("Pular e continuar com senha", "Skip and continue with password")}
                 </Button>
               )}
               <p className="text-[11px] text-tts-muted">
                 {L(
-                  "Passkey é opcional. Se demorar ou cancelar, continue com PIN.",
-                  "Passkey is optional. If it times out or cancels, continue with PIN.",
+                  "Passkey é opcional. Se demorar ou cancelar, continue com senha e PIN.",
+                  "Passkey is optional. If it times out or cancels, continue with password and PIN.",
                 )}
               </p>
               {passkeyHint && <p className="text-[11px] text-tts-gold">{passkeyHint}</p>}
@@ -1292,8 +1333,8 @@ export default function CreateAccountClient({
             <div className="mt-3 flex flex-col gap-2">
               <p className="text-[11px] text-tts-muted">
                 {L(
-                  "Use seu PIN para entrar e confirmar operações.",
-                  "Use your PIN to sign in and confirm operations.",
+                  "Use sua senha para entrar e seu PIN para confirmar operações.",
+                  "Use your password to sign in and your PIN to confirm operations.",
                 )}
               </p>
               <Button
@@ -1303,7 +1344,7 @@ export default function CreateAccountClient({
                 onClick={finishWithoutPasskey}
                 className="w-full"
               >
-                {L("Continuar com PIN", "Continue with PIN")}
+                {L("Continuar com senha", "Continue with password")}
               </Button>
             </div>
           )}

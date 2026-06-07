@@ -1,25 +1,50 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { MessageCircle, Send, CheckCircle2, Monitor } from "lucide-react"
 import PhoneMockup from "./PhoneMockup"
+import { StellarLogo } from "./StellarLogo"
 import { useLanguage } from "@/lib/i18n"
 import { t } from "./content"
 
 export default function Hero() {
   const { language } = useLanguage()
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      setMousePosition({
+        x: (event.clientX - window.innerWidth / 2) / 50,
+        y: (event.clientY - window.innerHeight / 2) / 50,
+      })
+    }
+
+    window.addEventListener("mousemove", handleMouseMove)
+    return () => window.removeEventListener("mousemove", handleMouseMove)
+  }, [])
 
   return (
     <section className="relative w-full min-h-screen flex items-center pt-28 pb-12 overflow-hidden px-4 sm:px-6 lg:px-8">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.08]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-        aria-hidden
-      />
+      <div className="absolute top-1/2 -translate-y-1/2 -left-64 md:-left-48 pointer-events-none opacity-[0.02] z-0">
+        <StellarLogo className="w-[600px] h-[600px] md:w-[900px] md:h-[900px] text-white" />
+      </div>
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-[#E59E25]/5 opacity-30 blur-3xl"
+          style={{
+            transform: `translate(${mousePosition.x}px, ${mousePosition.y}px)`,
+            transition: "transform 0.3s ease-out",
+          }}
+        />
+        <div
+          className="absolute bottom-1/4 right-1/4 h-80 w-80 rounded-full bg-[#D48C1C]/5 opacity-20 blur-3xl"
+          style={{
+            transform: `translate(${-mousePosition.x}px, ${-mousePosition.y}px)`,
+            transition: "transform 0.3s ease-out",
+          }}
+        />
+      </div>
       <div className="relative z-10 w-full max-w-7xl mx-auto">
         <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-8">
           <motion.div initial="hidden" animate="visible" variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.15 } } }}

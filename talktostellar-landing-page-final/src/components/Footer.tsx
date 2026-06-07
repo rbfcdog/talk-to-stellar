@@ -4,7 +4,7 @@ import { Instagram, Linkedin, Twitter } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-[#080808] bg-dotted-pattern pt-24 pb-12 relative z-10 px-4 sm:px-8">
+    <footer className="w-full pt-24 pb-12 relative z-10 px-4 sm:px-8 border-t border-white/5">
       <div className="max-w-7xl mx-auto flex flex-col gap-16">
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 text-left">

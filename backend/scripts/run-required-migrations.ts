@@ -73,6 +73,7 @@ const orderedMigrations = [
   '20260602_03_user_research_evidence.sql',
   '20260605_00_agent_session_language_preference.sql',
   '20260605_01_allow_channel_scoped_phone_reuse.sql',
+  '20260607_01_agent_session_login_passwords.sql',
 ];
 
 function resolveExecutionList(): string[] {

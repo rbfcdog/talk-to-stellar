@@ -38,14 +38,14 @@ export default function ScrollFeatures() {
     },
     {
       title: "2. Informe o destino",
-      description: "Diga para qual conta global você quer enviar ou salve seus contatos. Tudo de forma intuitiva, apenas conversando.",
+      description: "Diga para quem você quer enviar ou cadastre seus contatos (como o Pedro Banin). Tudo de forma intuitiva, apenas conversando.",
       color: "#4CA1EF",
       animIcon: <PhaseIconAnim Icon={UserPlus} color="#4CA1EF" delay={0.5} />,
       messages: [
-        { type: 'user', text: 'Quero cadastrar minha conta Nomad.', time: '09:45' },
-        { type: 'bot', text: 'Certo! Por favor, me informe o número da conta e o routing number (ABA) da sua Nomad.', time: '09:45' },
+        { type: 'user', text: 'Quero cadastrar a conta do Pedro Banin.', time: '09:45' },
+        { type: 'bot', text: 'Certo! Por favor, me informe o número da conta e o routing number (ABA) do Pedro.', time: '09:45' },
         { type: 'user', text: 'Conta 12345678, Routing 122105155', time: '09:46' },
-        { type: 'bot', text: 'Contato salvo com sucesso como "Minha Conta Nomad". ✅', time: '09:46' },
+        { type: 'bot', text: 'Contato salvo com sucesso como "Pedro Banin". ✅', time: '09:46' },
       ]
     },
     {
@@ -54,8 +54,8 @@ export default function ScrollFeatures() {
       color: "#00D2FF",
       animIcon: <PhaseIconAnim Icon={Send} color="#00D2FF" delay={1} />,
       messages: [
-        { type: 'user', text: 'Converter R$5.000 para dólar e enviar para minha conta Nomad', time: '09:50' },
-        { type: 'bot', text: 'Você está enviando R$5.000,00 para "Minha Conta Nomad".\n\nCotação comercial atual: 1 USD = R$ 5,02.\nVocê receberá: 994.50 USD.', time: '09:50' },
+        { type: 'user', text: 'Converter 5.000 reais e enviar para o Pedro Banin em dólares', time: '09:50' },
+        { type: 'bot', text: 'Você está enviando R$ 5.000,00 para Pedro Banin.\n\nCotação comercial atual: 1 USD = R$ 5,02.\nEle receberá: 994.50 USD.', time: '09:50' },
         { type: 'bot', text: 'Para prosseguir, escaneie o código abaixo ou copie o Pix Copia e Cola:', time: '09:50' },
         { type: 'bot', text: <div className="bg-[#080808] text-[#9BA4B5] p-2.5 rounded-lg border border-white/[0.05] break-all text-[11px] font-mono text-center shadow-inner">00020101021126580014br.gov.bcb.pix.gui<br/>...</div>, time: '09:50' },
       ]

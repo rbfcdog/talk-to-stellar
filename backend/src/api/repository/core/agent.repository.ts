@@ -39,6 +39,10 @@ export class AgentRepository {
       pix_key: sessionData.pix_key,
       password_hash: sessionData.password_hash,
       session_password_hash: sessionData.session_password_hash,
+      login_password_hash: sessionData.login_password_hash,
+      login_failed_attempts: sessionData.login_failed_attempts,
+      login_locked_until: sessionData.login_locked_until,
+      login_last_failed_at: sessionData.login_last_failed_at,
       email_verified: sessionData.email_verified,
       email_verified_at: sessionData.email_verified_at,
       email_verification_source: sessionData.email_verification_source,
@@ -65,11 +69,29 @@ export class AgentRepository {
         email_verified,
         email_verified_at,
         email_verification_source,
+        login_password_hash,
+        login_failed_attempts,
+        login_locked_until,
+        login_last_failed_at,
         ...sessionRecordWithoutEmailVerification
       } = sessionRecord;
       const retry = await this.supabase
         .from('agent_sessions')
         .upsert(sessionRecordWithoutEmailVerification, { onConflict: 'session_id' });
+      error = retry.error;
+    }
+
+    if (error && this.isMissingColumnError(error, 'login_password_hash')) {
+      const {
+        login_password_hash,
+        login_failed_attempts,
+        login_locked_until,
+        login_last_failed_at,
+        ...sessionRecordWithoutLoginPassword
+      } = sessionRecord;
+      const retry = await this.supabase
+        .from('agent_sessions')
+        .upsert(sessionRecordWithoutLoginPassword, { onConflict: 'session_id' });
       error = retry.error;
     }
 

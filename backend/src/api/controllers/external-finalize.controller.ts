@@ -39,6 +39,7 @@ import {
 import { getRequiredJwtSecret } from '../../config/secrets';
 import { hashWalletPin, verifyWalletPinAgainstAny } from '../../utils/pin-hash';
 import { publicErrorCode, publicErrorMessage, publicErrorPayload } from '../../utils/public-error';
+import { LoginPasswordService } from '../services/login-password.service';
 
 function buildSettlementEconomy(input: {
   sourceAmount: string;
@@ -180,6 +181,23 @@ function verifyPinAgainstSession(pin: string, session: any) {
     session?.session_password_hash,
     session?.password_hash,
   ]);
+}
+
+function readLoginPassword(body: any): string {
+  return LoginPasswordService.normalizeSecret(
+    body?.login_password ??
+    body?.loginPassword ??
+    body?.password ??
+    ''
+  );
+}
+
+function localizedPasswordValidationMessage(message: string | undefined, language: 'pt-BR' | 'en'): string {
+  const raw = String(message || '').trim();
+  if (language === 'en') return raw || 'Enter a valid password.';
+  if (raw.toLowerCase().includes('at least 8')) return 'Senha deve conter pelo menos 8 caracteres.';
+  if (raw.toLowerCase().includes('too long')) return 'Senha muito longa.';
+  return 'Informe uma senha válida.';
 }
 
 function resolveCompletionChannel(payload: any, body: any): { provider: string; providerUserId: string } {
@@ -3098,6 +3116,18 @@ export default class ExternalFinalizeController {
         return res.status(400).json({ success: false, message: 'CPF inválido. Informe 11 dígitos.' });
       }
       const pinHash = hashWalletPin(providedPin);
+      const explicitLoginPassword = readLoginPassword(req.body);
+      const providedLoginPassword = explicitLoginPassword || providedPin;
+      const passwordValidation = explicitLoginPassword
+        ? LoginPasswordService.validateNewPassword(providedLoginPassword)
+        : { valid: true };
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: localizedPasswordValidationMessage(passwordValidation.message, language),
+        });
+      }
+      const loginPasswordHash = LoginPasswordService.hash(providedLoginPassword);
 
       const normalizedEmail = normalizeEmailForCompare(email);
       if (email && !looksLikeEmail(normalizedEmail)) {
@@ -3209,6 +3239,10 @@ export default class ExternalFinalizeController {
             pix_key: pixKey,
             password_hash: pinHash,
             session_password_hash: pinHash,
+            login_password_hash: loginPasswordHash,
+            login_failed_attempts: 0,
+            login_locked_until: undefined,
+            login_last_failed_at: undefined,
             email_verified: Boolean(normalizedEmail) || Boolean((existingSession as any)?.email_verified),
             email_verified_at: normalizedEmail ? now : (existingSession as any)?.email_verified_at,
             email_verification_source: normalizedEmail
@@ -3342,6 +3376,10 @@ export default class ExternalFinalizeController {
             ...existingSession,
             email: (existingSession as any)?.email || normalizedEmail || '',
             phone_number: mergedPhone,
+            login_password_hash: (existingSession as any)?.login_password_hash || loginPasswordHash,
+            login_failed_attempts: 0,
+            login_locked_until: undefined,
+            login_last_failed_at: undefined,
           } as any);
 
           void configureWalletAssetsAndContacts({
@@ -3547,6 +3585,10 @@ export default class ExternalFinalizeController {
               pix_key: pixKey,
               password_hash: pinHash,
               session_password_hash: pinHash,
+              login_password_hash: loginPasswordHash,
+              login_failed_attempts: 0,
+              login_locked_until: undefined,
+              login_last_failed_at: undefined,
               email_verified: true,
               email_verified_at: now,
               email_verification_source: 'google_pin_setup',
@@ -3757,6 +3799,10 @@ export default class ExternalFinalizeController {
         pix_key: pixKey,
         password_hash: pinHash,
         session_password_hash: pinHash,
+        login_password_hash: loginPasswordHash,
+        login_failed_attempts: 0,
+        login_locked_until: undefined,
+        login_last_failed_at: undefined,
         email_verified: Boolean(normalizedEmail),
         email_verified_at: normalizedEmail ? now : undefined,
         email_verification_source: normalizedEmail ? 'email_confirmation_create_account' : undefined,
