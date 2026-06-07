@@ -11,11 +11,12 @@ function source(path: string) {
 describe("PIX asset defaults", () => {
   it("keeps generic PIX add-money links in BRL unless another asset is explicit", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
+    const utilsText = source("lib/pix-ramp-utils.ts");
 
     expect(text).toContain('normalizeTargetAsset(asset, "BRL")');
     expect(text).toContain("resolveOnRampTargetAssetFromQuery");
-    expect(text).toContain('const DEFAULT_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"]');
-    expect(text).toContain('amountCurrency === "BRL") return "BRL"');
+    expect(utilsText).toContain('const DEFAULT_TARGET_ASSETS: TargetAsset[] = ["BRL", "USDC", "CETES", "XLM"]');
+    expect(utilsText).toContain('amountCurrency === "BRL") return "BRL"');
     expect(text).toContain("const headerCurrencyAsset = rampMode === \"onramp\"");
     expect(text).not.toContain('mode === "onramp" ? "USDC" : "BRL"');
   });
@@ -31,13 +32,14 @@ describe("PIX asset defaults", () => {
 
   it("calculates non-BRL PIX withdrawal fees from the converted BRL destination", () => {
     const text = source("app/pix-ramp/pix-ramp-client.tsx");
+    const utilsText = source("lib/pix-ramp-utils.ts");
 
-    expect(text).toContain("function quoteBrlDestinationAmount");
-    expect(text).toContain("function estimatedBrlOffRampFeeParts");
-    expect(text).toContain('const brlDestinationAmount = mode === "offramp" ? quoteBrlDestinationAmount(quote) : NaN;');
-    expect(text).toContain('const brlOffRampFeeParts = mode === "offramp" ? estimatedBrlOffRampFeeParts(brlDestinationAmount) : null;');
-    expect(text).toContain('providerFeeFromBps = mode === "offramp" && brlOffRampFeeParts');
-    expect(text).toContain('mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.appFee)');
+    expect(utilsText).toContain("function quoteBrlDestinationAmount");
+    expect(utilsText).toContain("function estimatedBrlOffRampFeeParts");
+    expect(utilsText).toContain('const brlDestinationAmount = mode === "offramp" ? quoteBrlDestinationAmount(quote) : NaN;');
+    expect(utilsText).toContain('const brlOffRampFeeParts = mode === "offramp" ? estimatedBrlOffRampFeeParts(brlDestinationAmount) : null;');
+    expect(utilsText).toContain('providerFeeFromBps = mode === "offramp" && brlOffRampFeeParts');
+    expect(utilsText).toContain('mode === "offramp" && brlOffRampFeeParts && Number.isFinite(brlOffRampFeeParts.appFee)');
     expect(text).toContain('target_brl: quotePayload.target_brl || sourcePayload?.target_brl || sourcePayload?.destination_amount');
     expect(text).toContain('destination_amount: quotePayload.destination_amount || sourcePayload?.destination_amount || sourcePayload?.target_brl');
     expect(text).toContain('const offRampPreviewInputKey = stableHash(JSON.stringify([');

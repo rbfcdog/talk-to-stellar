@@ -6,6 +6,7 @@ import { getAssetIssuer, getStellarNetworkName, getTrustedPathAssetCodes, settle
 import { PlatformFeeService, PlatformSpreadFee } from './platform-fee.service';
 import { DEFAULT_NETWORK_FEE_XLM } from '../../utils/fee-display';
 import { assertSaneBrlUsdcQuote } from './quote-rate-sanity.service';
+import { sleep } from '../../utils/async';
 
 const STELLAR_BASE_FEE_STROOPS = '100';
 
@@ -130,10 +131,6 @@ function sanitizeMemoText(value: string): string | undefined {
 function isValidStellarPublicKey(key: string): boolean {
     // Stellar public keys: Start with 'G', 56 characters, base32 (A-Z, 2-7)
     return /^G[A-Z2-7]{55}$/.test(key);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isHorizonNotFound(error: any): boolean {

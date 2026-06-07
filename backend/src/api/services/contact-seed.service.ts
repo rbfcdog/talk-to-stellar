@@ -8,6 +8,7 @@ import VaultService from './core/vault.service';
 import { StellarService } from './stellar.service';
 import { TrustlineService } from './trustline.service';
 import { logger } from '../../utils/logger';
+import { sleep } from '../../utils/async';
 import { v4 as uuidv4 } from 'uuid';
 
 const INITIAL_USDC_MIN_SOURCE_XLM = 0.01;
@@ -80,10 +81,6 @@ function slug(value: string): string {
 
 function isLegacyStarterContact(contactName: string, publicKey: string): boolean {
   return CURRENT_STATIC_CONTACT_KEYS[contactName] === publicKey || LEGACY_STATIC_CONTACT_KEYS[contactName] === publicKey;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isRetryableInitialUsdcConversionError(error: unknown): boolean {

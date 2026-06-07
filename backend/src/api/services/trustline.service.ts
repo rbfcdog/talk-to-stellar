@@ -2,6 +2,7 @@ import { StellarService } from './stellar.service';
 import { DefindexYieldService } from './defindex-yield.service';
 import { logger } from '../../utils/logger';
 import { getDefaultTrustedAssets, getStellarNetworkName, isUsdcDefaultTrustlineEnabled } from '../../config/assets';
+import { sleep } from '../../utils/async';
 
 type TrustlineAsset = { code: string; issuer: string };
 type ExistingTrustlineSnapshot = { account: any; trustlines: Set<string> };
@@ -25,10 +26,6 @@ export class TrustlineService {
     return Array.from(
       new Map([...configured, ...vaultAssets].map((asset) => [`${asset.code}:${asset.issuer}`, asset])).values()
     ).filter((asset) => asset.code !== 'USDC' || isUsdcDefaultTrustlineEnabled());
-  }
-
-  private static sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private static trustlineKey(asset: TrustlineAsset): string {
@@ -145,7 +142,7 @@ export class TrustlineService {
         } catch (fundError: any) {
           lastError = this.errorMessage(fundError);
           if (attempt < maxAttempts && this.shouldRetryTrustline(lastError)) {
-            await this.sleep(1000 * attempt);
+            await sleep(1000 * attempt);
             continue;
           }
           break;
@@ -193,7 +190,7 @@ export class TrustlineService {
     }
 
     logger.info(`[trustline] reserve top-up submitted for ${publicKey}: ${topup.hash || 'hash unavailable'}`);
-    await this.sleep(1000);
+    await sleep(1000);
     return await StellarService.loadAccount(publicKey);
   }
 
@@ -316,7 +313,7 @@ export class TrustlineService {
       }
 
       if (attempt < maxAttempts && this.shouldRetryTrustline(lastError)) {
-        await this.sleep(750 * attempt);
+        await sleep(750 * attempt);
         continue;
       }
 

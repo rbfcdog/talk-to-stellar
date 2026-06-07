@@ -2,6 +2,7 @@ import { logger } from '../../../utils/logger';
 import { isProductionLikeEnvironment } from '../../../config/runtime';
 import { timingSafeEqualString } from '../../../utils/password';
 import { supabase } from '../../../config/supabase';
+import { sleep } from '../../../utils/async';
 import { buildCapabilityHelpMessage } from '../../agent/capability-help';
 import crypto from 'crypto';
 
@@ -605,10 +606,6 @@ function outboundWhatsAppNumberCandidates(value: unknown): string[] {
     `+${digits}`,
     `${digits}@s.whatsapp.net`,
   ]));
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function shouldTryAlternateSendPayload(error: unknown): boolean {
