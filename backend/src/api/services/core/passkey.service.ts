@@ -143,6 +143,19 @@ function isValidStellarPublicKey(value?: string) {
   }
 }
 
+async function resolveTransactionSourceWallet(sessionId: string, session?: any) {
+  const normalizedSessionId = String(sessionId || '').trim();
+  if (!normalizedSessionId) return null;
+
+  const sessionWallet = await walletRepo.getWalletBySession(normalizedSessionId);
+  if (sessionWallet?.public_key) return sessionWallet;
+
+  const publicKey = String(session?.public_key || '').trim();
+  if (!isValidStellarPublicKey(publicKey)) return sessionWallet || null;
+
+  return await walletRepo.getWalletByPublicKey(publicKey).catch(() => null);
+}
+
 function hashBase64Url(value: string) {
   return crypto.createHash('sha256').update(value).digest('base64url');
 }
@@ -1114,14 +1127,14 @@ export class PasskeyService {
       throw new Error('token missing payment data');
     }
 
-    const wallet = await walletRepo.getWalletBySession(String(session_id));
-    if (!wallet?.public_key) {
-      throw new Error('wallet not found for payment confirmation');
-    }
-
     const session = await agentRepo.getSession(String(session_id));
     if (!session?.user_id) {
       throw new Error('session not found for payment confirmation');
+    }
+
+    const wallet = await resolveTransactionSourceWallet(String(session_id), session);
+    if (!wallet?.public_key) {
+      throw new Error('wallet not found for payment confirmation');
     }
 
     const contactFromToken = destination_contact && typeof destination_contact === 'object'

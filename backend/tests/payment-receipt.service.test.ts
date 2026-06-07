@@ -197,6 +197,25 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toContain('Summary:');
   });
 
+  it('strips stored Summary prefixes from receipt context', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_received',
+      sessionId: 'session-summary-context',
+      userId: 'recipient-summary-context',
+      counterpartyLabel: 'Ana Silva',
+      sourceAmount: '50',
+      sourceAssetCode: 'CETES',
+      destinationAmount: '50',
+      destinationAssetCode: 'CETES',
+      status: 'completed',
+      language: 'en',
+      contextMessage: 'Summary: We chose the best route for this conversion.',
+    });
+
+    expect(receipt).toContain('We chose the best route for this conversion.');
+    expect(receipt).not.toContain('Summary:');
+  });
+
   it('shows the real PIX on-ramp fee from saved operation context', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_received',

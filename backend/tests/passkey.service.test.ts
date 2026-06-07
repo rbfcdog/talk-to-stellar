@@ -1,8 +1,13 @@
 import crypto from 'crypto';
+import { Keypair } from '@stellar/stellar-sdk';
+import jwt from 'jsonwebtoken';
 
 const mockFrom = jest.fn();
 const mockGetSession = jest.fn();
 const mockSaveSession = jest.fn();
+const mockGetWalletBySession = jest.fn();
+const mockGetWalletByPublicKey = jest.fn();
+const mockBuildPaymentXdr = jest.fn();
 
 jest.mock('../src/config/supabase', () => ({
   supabase: {
@@ -15,6 +20,19 @@ jest.mock('../src/api/repository/core/agent.repository', () => ({
     getSession: mockGetSession,
     saveSession: mockSaveSession,
   })),
+}));
+
+jest.mock('../src/api/repository/core/wallet.repository', () => ({
+  WalletRepository: jest.fn().mockImplementation(() => ({
+    getWalletBySession: mockGetWalletBySession,
+    getWalletByPublicKey: mockGetWalletByPublicKey,
+  })),
+}));
+
+jest.mock('../src/api/services/stellar.service', () => ({
+  StellarService: {
+    buildPaymentXdr: mockBuildPaymentXdr,
+  },
 }));
 
 type InsertedChallenge = {
@@ -34,6 +52,10 @@ describe('PasskeyService challenge generation', () => {
     mockFrom.mockReset();
     mockGetSession.mockReset();
     mockSaveSession.mockReset();
+    mockGetWalletBySession.mockReset();
+    mockGetWalletByPublicKey.mockReset();
+    mockBuildPaymentXdr.mockReset();
+    mockBuildPaymentXdr.mockResolvedValue('unsigned-xdr');
     mockPasskeys = [];
     insertedChallenges = [];
     captureChallengeInserts();
@@ -258,6 +280,51 @@ describe('PasskeyService challenge generation', () => {
       challenge: result.options.challenge,
     });
     expect(Buffer.from(result.options.challenge, 'base64url')).toHaveLength(32);
+  });
+
+  it('builds transaction context from public-key wallet fallback when the session wallet is incomplete', async () => {
+    const sourceKeypair = Keypair.random();
+    const destinationKeypair = Keypair.random();
+    const sourcePublicKey = sourceKeypair.publicKey();
+    const destinationPublicKey = destinationKeypair.publicKey();
+    const token = jwt.sign({
+      sub: 'external_payment_confirm',
+      amount: '10',
+      destination: destinationPublicKey,
+      destination_name: 'Ana Silva',
+      session_id: 'session-123',
+    }, process.env.JWT_SECRET || 'test-only-jwt-secret-with-enough-entropy');
+
+    mockGetSession.mockResolvedValue({
+      user_id: 'user-123',
+      public_key: sourcePublicKey,
+      last_activity: new Date().toISOString(),
+    });
+    mockGetWalletBySession.mockResolvedValue({
+      session_id: 'session-123',
+      public_key: null,
+    });
+    mockGetWalletByPublicKey.mockResolvedValue({
+      session_id: 'legacy-session',
+      public_key: sourcePublicKey,
+    });
+
+    const { default: PasskeyService } = await import('../src/api/services/core/passkey.service');
+    const result = await PasskeyService.buildTransactionContext({ token });
+
+    expect(mockGetWalletBySession).toHaveBeenCalledWith('session-123');
+    expect(mockGetWalletByPublicKey).toHaveBeenCalledWith(sourcePublicKey);
+    expect(mockBuildPaymentXdr).toHaveBeenCalledWith(expect.objectContaining({
+      sourcePublicKey,
+      destination: destinationPublicKey,
+      amount: '10',
+    }));
+    expect(result).toMatchObject({
+      userId: 'user-123',
+      sourcePublicKey,
+      destination: destinationPublicKey,
+      unsignedXdr: 'unsigned-xdr',
+    });
   });
 
   it('decodes WebAuthn P-256 COSE public keys for smart-account signer metadata', async () => {

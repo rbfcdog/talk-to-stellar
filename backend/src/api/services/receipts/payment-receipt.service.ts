@@ -859,6 +859,7 @@ export class PaymentReceiptService {
     const isEn = language === 'en';
     const normalized = raw
       .replace(/\s+/g, ' ')
+      .replace(/^(summary|resumo)\s*:\s*/i, '')
       .replace(/\bwallet\b/gi, isEn ? 'account' : 'conta')
       .replace(/\btestnet\b/gi, '')
       .replace(/\bsandbox\b/gi, '')
