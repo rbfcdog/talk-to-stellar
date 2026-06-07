@@ -15,6 +15,7 @@ export function LanguageToggle() {
   const [hideAmounts, setHideAmounts] = useState(false);
   const isChatPage = pathname === "/chat" || pathname?.startsWith("/chat/");
   const isLandingPage = pathname === "/";
+  const isLogoPage = pathname === "/logo";
 
   useEffect(() => {
     setMounted(true);
@@ -61,7 +62,7 @@ export function LanguageToggle() {
     }).catch(() => undefined);
   }
 
-  if (isLandingPage) return null;
+  if (isLandingPage || isLogoPage) return null;
 
   return (
     <div
