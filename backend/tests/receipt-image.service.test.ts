@@ -34,6 +34,30 @@ describe('ReceiptImageService', () => {
     expect(svg).not.toContain('Saldo restante');
   });
 
+  it('renders receipt text with uniform spacing attributes and without glyph stretching', () => {
+    const svg = ReceiptImageService.toSvg({
+      amount: '100.00',
+      currency: 'US$',
+      recipientName: 'contatojpsobral@gmail.com',
+      convertedAmount: '100.00',
+      convertedCurrency: 'US$',
+      quoteLabel: 'não aplicável',
+      completedAt: '2026-06-07T14:28:00.000Z',
+      operationId: 'OP-BXV87TRV',
+      savingsLabel: 'R$ 0,01',
+      savingsPercentLabel: 'estimativa',
+    });
+
+    expect(svg).not.toMatch(/\btextLength=|\blengthAdjust=|spacingAndGlyphs/);
+    const textTags = svg.match(/<text\b[^>]*>/g) || [];
+    expect(textTags.length).toBeGreaterThan(0);
+    for (const tag of textTags) {
+      expect(tag).toContain('letter-spacing="0"');
+      expect(tag).toContain('font-kerning="normal"');
+      expect(tag).toContain('text-rendering="geometricPrecision"');
+    }
+  });
+
   it('formats receipt payment values with user-facing symbols and the same executed quote', async () => {
     const receiptInput = {
       type: 'payment_sent' as const,
