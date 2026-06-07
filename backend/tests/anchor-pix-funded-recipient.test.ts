@@ -254,6 +254,48 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
     });
   });
 
+  it('resolves an existing TalkToStellar email even when it is not saved as a contact', async () => {
+    jest.spyOn(supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'contacts') {
+        return createContactsBuilder([]) as any;
+      }
+      if (table === 'wallets') {
+        return createFlexibleWalletsBuilder({
+          sessionRow: {
+            session_id: 'recipient-session',
+            user_id: 'recipient-user',
+            public_key: anaPublicKey,
+            vault_secret_id: 'recipient-vault',
+            pix_key: 'r238257@dac.unicamp.br',
+          },
+        }) as any;
+      }
+      if (table === 'agent_sessions') {
+        return createAgentSessionsBuilder({
+          session_id: 'recipient-session',
+          user_id: 'recipient-user',
+          email: 'r238257@dac.unicamp.br',
+        }) as any;
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const recipient = await (AnchorService as any).resolveTransferRecipient(
+      'owner-user',
+      'r238257@dac.unicamp.br'
+    );
+
+    expect(recipient).toMatchObject({
+      publicKey: anaPublicKey,
+      displayName: 'r238257@dac.unicamp.br',
+      pixKey: 'r238257@dac.unicamp.br',
+      recipientKey: 'r238257@dac.unicamp.br',
+      sessionId: 'recipient-session',
+      userId: 'recipient-user',
+      vaultSecretId: 'recipient-vault',
+    });
+  });
+
   it('completes CETES PIX-funded transfer and sends a concise WhatsApp callback receipt', async () => {
     const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/cetes-pix');
     jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({ sandbox: true });

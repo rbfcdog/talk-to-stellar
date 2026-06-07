@@ -1493,8 +1493,8 @@ export default function PixRampClient({
     ? needsBrowserLoginForPix
       ? pixLoginRequiredMessage
       : recipientVerificationLoading
-        ? L("Validando destinatário salvo...", "Validating saved recipient...")
-        : recipientVerificationError || L("Escolha um contato salvo real antes de gerar o PIX.", "Choose a real saved contact before creating PIX.")
+        ? L("Validando conta do destinatário...", "Validating recipient account...")
+        : recipientVerificationError || L("Informe uma conta TalkToStellar válida antes de gerar o PIX.", "Enter a valid TalkToStellar account before creating PIX.")
     : "";
   const canPrepareOnRampPix = Boolean(
     canResolveWallet &&
@@ -2169,7 +2169,7 @@ export default function PixRampClient({
     }, "POST");
     const timeoutRequest = new Promise<never>((_, reject) => {
       timeoutId = window.setTimeout(() => {
-        reject(new Error(L("A validação do contato demorou demais. Tente novamente ou volte ao chat e peça seus contatos.", "Contact validation took too long. Try again or return to chat and ask for your contacts.")));
+        reject(new Error(L("A validação do destinatário demorou demais. Tente novamente ou volte ao chat e peça um novo link.", "Recipient validation took too long. Try again or return to chat and request a new link.")));
       }, 15000);
     });
 
@@ -2221,7 +2221,7 @@ export default function PixRampClient({
         }
         const message = requestError instanceof Error
           ? publicRampErrorMessage(requestError, language)
-          : L("Esse destinatário não existe nos seus contatos salvos.", "This recipient does not exist in your saved contacts.");
+          : L("Não encontrei uma conta TalkToStellar ativa para esse destinatário.", "I could not find an active TalkToStellar account for this recipient.");
         setVerifiedTransferRecipient(null);
         setRecipientVerificationError(message);
       })
@@ -3304,7 +3304,7 @@ export default function PixRampClient({
                     ? transferFlow && safeTransferRecipientLabel
                       ? L(`Pagar ${safeTransferRecipientLabel} com PIX`, `Pay ${safeTransferRecipientLabel} with PIX`)
                       : transferFlow
-                        ? L("PIX para contato salvo", "PIX to saved contact")
+                        ? L("PIX para conta TalkToStellar", "PIX to TalkToStellar account")
                       : t("pix_add_title")
                     : t("pix_send_title")}
                 </h1>
@@ -3313,7 +3313,7 @@ export default function PixRampClient({
                     ? transferFlow && safeTransferRecipientLabel
                       ? t("pix_transfer_subtitle", { recipient: safeTransferRecipientLabel })
                       : transferFlow
-                        ? L("Antes de gerar o PIX, validamos se o destinatário existe nos seus contatos salvos.", "Before creating PIX, we verify that the recipient exists in your saved contacts.")
+                        ? L("Antes de gerar o PIX, validamos se o destinatário existe como conta TalkToStellar.", "Before creating PIX, we verify that the recipient exists as a TalkToStellar account.")
                       : t("pix_add_subtitle")
                     : t("pix_off_subtitle")}
                 </p>

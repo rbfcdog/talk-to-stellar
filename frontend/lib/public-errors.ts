@@ -63,7 +63,7 @@ const explicitErrorCopy = {
   missing_pin: ["Digite o PIN da conta para confirmar.", "Enter the account PIN to confirm."],
   invalid_pin: ["Não consegui validar o PIN. Confira e tente novamente.", "I could not validate the PIN. Check it and try again."],
   insufficient_balance: ["Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.", "Insufficient balance. Add funds with PIX and try again."],
-  recipient_not_found: ["Esse destinatário não está nos seus contatos salvos. Digite \"contatos\" no chat e escolha uma pessoa salva antes de gerar o PIX.", "This recipient is not in your saved contacts. Type \"contacts\" in chat and choose a saved person before creating PIX."],
+  recipient_not_found: ["Não encontrei uma conta TalkToStellar ativa para esse destinatário. Confira o telefone, e-mail ou chave antes de gerar o PIX.", "I could not find an active TalkToStellar account for this recipient. Check the phone, email, or key before creating PIX."],
   recipient_asset_not_ready: ["O destinatário ainda não está pronto para receber esse ativo. Peça para a pessoa entrar na conta TalkToStellar e ativar o ativo; depois gere um novo link.", "The recipient is not ready to receive this asset yet. Ask them to sign in and activate the asset, then create a new link."],
   pix_account_not_ready: ["Sua conta PIX está sendo preparada. Aguarde alguns segundos e toque em Gerar PIX novamente.", "Your PIX account is being prepared. Wait a few seconds and tap Generate PIX again."],
   pix_sandbox_settlement_unavailable: ["O PIX em testnet ainda está finalizando a configuração. Tente novamente em alguns segundos.", "The testnet PIX flow is still finishing setup. Try again in a few seconds."],
@@ -143,10 +143,10 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
-  if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) {
+  if (/recipient .*not found|destinatario.*nao encontrado|destinatario.*nao existe|active talktostellar account|conta talktostellar ativa|not found in your saved contacts|saved contacts|contatos salvos|choose a real recipient|escolha.*contato/.test(normalized)) {
     return {
       code: "recipient_not_found",
-      message: copy(language, "Esse destinatário não está nos seus contatos salvos. Digite \"contatos\" no chat e escolha uma pessoa salva antes de gerar o PIX.", "This recipient is not in your saved contacts. Type \"contacts\" in chat and choose a saved person before creating PIX."),
+      message: copy(language, "Não encontrei uma conta TalkToStellar ativa para esse destinatário. Confira o telefone, e-mail ou chave antes de gerar o PIX.", "I could not find an active TalkToStellar account for this recipient. Check the phone, email, or key before creating PIX."),
     };
   }
 
