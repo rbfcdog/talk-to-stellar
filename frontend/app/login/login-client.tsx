@@ -120,6 +120,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
   const nextPath = rawNextPath && rawNextPath.startsWith("/") && !rawNextPath.startsWith("//")
     ? rawNextPath
     : ""
+  const googleExistingLogin = searchParams.get("google_existing") === "1" || searchParams.get("google_login") === "existing"
   const loginSource = String(searchParams.get("source") || searchParams.get("from") || searchParams.get("origin") || "").trim().toLowerCase()
   const returnToChat = loginSource === "chat"
   const externalToken = searchParams.get("token") || ""
@@ -866,10 +867,35 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             throw new Error(payload?.message || "Google sign-in failed.")
           }
 
+          const googleEmail = String(payload?.email || payload?.user_id || "").trim()
+          const googleName = String(payload?.display_name || payload?.name || "").trim()
+          const googleReason = String(payload?.reason || "").trim()
+          const googleExistingAccount = Boolean(
+            payload?.requires_login ||
+              payload?.login_required ||
+              payload?.existing_account ||
+              payload?.existingAccount ||
+              (googleReason && googleReason !== "google_account_not_linked" && (payload?.requires_pin_setup || payload?.needs_pin_setup || payload?.needsPinSetup))
+          )
+
+          if (googleExistingAccount) {
+            const params = new URLSearchParams()
+            if (googleEmail) {
+              params.set("email", googleEmail)
+              params.set("provider_user_id", googleEmail)
+            }
+            params.set("provider", "google")
+            params.set("source", "google")
+            params.set("google_existing", "1")
+            params.set("google_login", "existing")
+            if (googleReason) params.set("reason", googleReason)
+            if (nextPath) params.set("next", nextPath)
+            window.location.replace(`/login?${params.toString()}`)
+            return
+          }
+
           if (payload?.requires_pin_setup || payload?.needs_pin_setup || payload?.needsPinSetup) {
             const params = new URLSearchParams()
-            const googleEmail = String(payload?.email || payload?.user_id || "").trim()
-            const googleName = String(payload?.display_name || payload?.name || "").trim()
             const googleToken = String(payload?.token || "").trim()
             if (googleEmail) params.set("email", googleEmail)
             if (googleName) params.set("name", googleName)
@@ -877,7 +903,6 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
             params.set("provider", "google")
             if (googleEmail) params.set("provider_user_id", googleEmail)
             params.set("source", "google")
-            params.set("force_new", "1")
             params.set("context", "google-login")
             if (nextPath) params.set("next", nextPath)
             window.location.replace(`/create-account?${params.toString()}`)
@@ -903,7 +928,7 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       width: googleButtonRef.current.clientWidth,
       shape: "rectangular",
     })
-  }, [googleScriptReady, language, isExternalLoginOnlyContext])
+  }, [googleScriptReady, language, isExternalLoginOnlyContext, nextPath])
 
   if (loginDone) {
     return (
@@ -1065,6 +1090,14 @@ export default function LoginClient({ expired }: { expired?: boolean }) {
       {expired && (
         <div className="rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs text-tts-deep">
           {t("login_expired")}
+        </div>
+      )}
+
+      {googleExistingLogin && (
+        <div className="rounded-lg border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs leading-5 text-tts-deep">
+          {language === "pt-BR"
+            ? "Conta encontrada pelo Google. Entre com seu PIN. Se ainda não definiu ou esqueceu, use Esqueci o PIN para receber o link por e-mail."
+            : "Account found with Google. Sign in with your PIN. If you have not set it or forgot it, use Forgot PIN to receive the email link."}
         </div>
       )}
 

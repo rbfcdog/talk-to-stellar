@@ -44,20 +44,72 @@ async function findReusableSession(email: string): Promise<any | null> {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
 
-  const { data, error } = await supabase
-    .from("agent_sessions")
-    .select("session_id, user_id, email, session_token, public_key, phone_number, pix_key, password_hash, session_password_hash, created_at, last_activity, updated_at")
-    .ilike("email", normalized)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const selectSessionFields = "session_id, user_id, email, session_token, public_key, phone_number, pix_key, password_hash, session_password_hash, created_at, last_activity, updated_at";
+  const candidates = new Map<string, any>();
 
-  if (error) {
-    throw new Error(`Failed to resolve Google session: ${error.message || JSON.stringify(error)}`);
+  async function collectByField(field: "email" | "user_id", value: string) {
+    const lookupValue = normalizeEmail(value);
+    if (!lookupValue) return;
+    const { data, error } = await supabase
+      .from("agent_sessions")
+      .select(selectSessionFields)
+      .ilike(field, lookupValue)
+      .order("updated_at", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      throw new Error(`Failed to resolve Google session: ${error.message || JSON.stringify(error)}`);
+    }
+
+    for (const row of data || []) {
+      const sessionId = String((row as any)?.session_id || "").trim();
+      if (sessionId) candidates.set(sessionId, row);
+    }
   }
 
-  if (!data || isSessionExpired(data)) return null;
-  return data;
+  async function collectBySessionId(sessionId: string) {
+    const normalizedSessionId = String(sessionId || "").trim();
+    if (!normalizedSessionId) return;
+    const { data, error } = await supabase
+      .from("agent_sessions")
+      .select(selectSessionFields)
+      .eq("session_id", normalizedSessionId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to resolve Google mapped session: ${error.message || JSON.stringify(error)}`);
+    }
+
+    if (data?.session_id) candidates.set(String(data.session_id), data);
+  }
+
+  await collectByField("email", normalized);
+  await collectByField("user_id", normalized);
+
+  try {
+    const mapped = await externalService.checkExternalAccount("google", normalized);
+    if (mapped?.session_id) {
+      await collectBySessionId(String(mapped.session_id));
+    }
+    if (mapped?.user_id) {
+      await collectByField("user_id", String(mapped.user_id));
+      await collectByField("email", String(mapped.user_id));
+    }
+    const mappedData = mapped?.data && typeof mapped.data === "object" ? mapped.data as Record<string, unknown> : {};
+    const mappedEmail = normalizeEmail(mappedData.email || mappedData.user_id || mappedData.userId);
+    if (mappedEmail) {
+      await collectByField("email", mappedEmail);
+      await collectByField("user_id", mappedEmail);
+    }
+  } catch (error: any) {
+    const message = String(error?.message || "").toLowerCase();
+    const missingExternalAccounts =
+      message.includes("external_accounts") &&
+      (message.includes("schema cache") || message.includes("does not exist") || message.includes("relation"));
+    if (!missingExternalAccounts) throw error;
+  }
+
+  return selectGoogleSessionCandidate(Array.from(candidates.values()));
 }
 
 export function sessionHasPin(session: any): boolean {
@@ -65,6 +117,16 @@ export function sessionHasPin(session: any): boolean {
     String(session?.session_password_hash || "").trim() ||
     String(session?.password_hash || "").trim()
   );
+}
+
+export function selectGoogleSessionCandidate(sessions: any[]): any | null {
+  const ordered = (sessions || []).filter(Boolean).sort((a: any, b: any) => {
+    const aTime = new Date(a?.updated_at || a?.last_activity || a?.created_at || 0).getTime();
+    const bTime = new Date(b?.updated_at || b?.last_activity || b?.created_at || 0).getTime();
+    return bTime - aTime;
+  });
+
+  return ordered.find(sessionHasPin) || ordered.find((session) => !isSessionExpired(session)) || ordered[0] || null;
 }
 
 function googlePinSetupPayload(input: { email: string; displayName: string; reason: string; language?: string }) {
@@ -90,6 +152,53 @@ function googlePinSetupPayload(input: { email: string; displayName: string; reas
     creationUrl: onboard.url,
     message: "Create your PIN to finish Google sign-in.",
   };
+}
+
+export function googleExistingLoginPayload(input: { email: string; displayName: string; reason: string; language?: string }) {
+  const isPt = String(input.language || "").trim().toLowerCase().startsWith("pt");
+  return {
+    success: true,
+    provider: "google",
+    existing_account: true,
+    requires_login: true,
+    login_required: true,
+    requires_pin_setup: false,
+    email: input.email,
+    user_id: input.email,
+    display_name: input.displayName,
+    reason: input.reason,
+    message: isPt
+      ? "Conta encontrada. Entre com seu PIN ou use Esqueci o PIN para receber o link de configuração por e-mail."
+      : "Account found. Sign in with your PIN or use Forgot PIN to receive the setup link by email.",
+  };
+}
+
+async function rememberGoogleMapping(input: { email: string; sessionId: string; userId: string; displayName?: string; picture?: string }) {
+  try {
+    await externalService.repo.createMapping({
+      provider: "google",
+      provider_user_id: input.email,
+      session_id: input.sessionId,
+      user_id: input.userId,
+      data: {
+        email: input.email,
+        name: input.displayName || undefined,
+        display_name: input.displayName || undefined,
+        picture: input.picture || undefined,
+        source: "google",
+        email_verified: true,
+        linked_at: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    const message = String(error?.message || "").toLowerCase();
+    const missingExternalAccounts =
+      message.includes("external_accounts") &&
+      (message.includes("schema cache") || message.includes("does not exist") || message.includes("relation"));
+    if (!missingExternalAccounts) {
+      console.warn("[auth-google] could not persist Google mapping:", error instanceof Error ? error.message : String(error));
+    }
+  }
 }
 
 router.post("/google", async (req, res) => {
@@ -125,7 +234,7 @@ router.post("/google", async (req, res) => {
     }
 
     if (!sessionHasPin(existing)) {
-      return res.status(200).json(googlePinSetupPayload({
+      return res.status(200).json(googleExistingLoginPayload({
         email,
         displayName,
         language,
@@ -153,6 +262,13 @@ router.post("/google", async (req, res) => {
     };
 
     await agentRepository.saveSession(sessionId, sessionData as any);
+    await rememberGoogleMapping({
+      email,
+      sessionId,
+      userId,
+      displayName,
+      picture: String(google?.picture || "").trim(),
+    });
 
     return res.status(200).json({
       success: true,
