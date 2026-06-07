@@ -8538,6 +8538,24 @@ export class AnchorService {
     }
   }
 
+  private static pixFundedTransferSenderLabel(context: SessionWalletContext, input?: RampSessionInput): string {
+    const email = coalesceString(context.email);
+    if (email) return email;
+
+    const externalProviderUserId = input ? externalChannelProviderUserId(input) : '';
+    if (externalProviderUserId) return externalProviderUserId;
+
+    const userId = coalesceString(context.userId);
+    if (userId && userId !== context.sessionId) return userId;
+
+    const publicKey = coalesceString(context.publicKey);
+    if (/^G[A-Z2-7]{55}$/i.test(publicKey)) {
+      return `${publicKey.slice(0, 7)}...${publicKey.slice(-7)}`;
+    }
+
+    return 'TalkToStellar account';
+  }
+
   static async submitPixFundedTransferForSession(input: PixFundedTransferInput): Promise<Record<string, unknown>> {
     if (!this.getRuntimeInfo().sandbox) {
       throw apiError('PIX-funded transfer automation is unavailable in the current payment mode.', 403);
@@ -8703,13 +8721,21 @@ export class AnchorService {
 
     if (recipient.sessionId) {
       try {
-        const recipientSession = await new AgentRepository(supabase).getSession(recipient.sessionId);
+        let recipientSessionUserId = '';
+        try {
+          const recipientSession = await new AgentRepository(supabase).getSession(recipient.sessionId);
+          recipientSessionUserId = coalesceString(recipientSession?.user_id);
+        } catch (sessionError) {
+          console.warn('[ramp] Could not load recipient session for PIX-funded transfer receipt:', debugErrorMessage(sessionError));
+        }
+        const senderLabel = this.pixFundedTransferSenderLabel(context, input);
         await PaymentReceiptService.sendReceipt({
           type: 'payment_received',
           sessionId: recipient.sessionId,
-          userId: coalesceString(recipientSession?.user_id) || recipient.sessionId,
+          userId: recipientSessionUserId || coalesceString(recipient.userId) || recipient.sessionId,
           language,
-          counterpartyLabel: 'PIX via TalkToStellar',
+          counterpartyLabel: senderLabel,
+          counterpartyKey: senderLabel,
           sourceAmount: amount,
           sourceAssetCode: userFacingAssetCode(sourceAsset.code),
           destinationAmount,

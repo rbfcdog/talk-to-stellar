@@ -174,6 +174,29 @@ describe('PaymentReceiptService', () => {
     expect(receipt).not.toMatch(/Etherfuse|anchor|provedor|provider/i);
   });
 
+  it('keeps the real sender on PIX-funded received receipts', async () => {
+    const receipt = await PaymentReceiptService.buildReceiptText({
+      type: 'payment_received',
+      sessionId: 'session-pix-funded-recipient',
+      userId: 'recipient-user',
+      counterpartyLabel: 'sender@example.com',
+      counterpartyKey: 'sender@example.com',
+      sourceAmount: '50',
+      sourceAssetCode: 'CETES',
+      destinationAmount: '50',
+      destinationAssetCode: 'CETES',
+      status: 'completed',
+      language: 'en',
+      contextMessage: 'We chose the best route for this conversion.',
+    });
+
+    expect(receipt).toContain('You received 50.00 CETES from sender@example.com.');
+    expect(receipt).toContain('Key: sender@example.com');
+    expect(receipt).not.toContain('from PIX');
+    expect(receipt).not.toContain('from TalkToStellar');
+    expect(receipt).not.toContain('Summary:');
+  });
+
   it('shows the real PIX on-ramp fee from saved operation context', async () => {
     const receipt = await PaymentReceiptService.buildReceiptText({
       type: 'payment_received',

@@ -296,12 +296,27 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
     });
   });
 
+  it('uses the sender external key as PIX-funded transfer origin when email is unavailable', () => {
+    const senderLabel = (AnchorService as any).pixFundedTransferSenderLabel({
+      sessionId: 'sender-session',
+      sessionToken: 'sender-token',
+      userId: 'sender-session',
+      publicKey: 'GB7L4QQQAMRJQI7GGRH2Y6TSDD2JTFNGEHPKLB3XU43YSOE6GJLMFZWT',
+    }, {
+      provider: 'whatsapp',
+      provider_user_id: '+5511999998888',
+    });
+
+    expect(senderLabel).toBe('+5511999998888');
+  });
+
   it('completes CETES PIX-funded transfer and sends a concise WhatsApp callback receipt', async () => {
     const receiptSpy = jest.spyOn(PaymentReceiptService, 'sendReceipt').mockResolvedValue('https://talktostellar.com/receipt/cetes-pix');
     jest.spyOn(AnchorService as any, 'getRuntimeInfo').mockReturnValue({ sandbox: true });
     jest.spyOn(AnchorService as any, 'resolveSessionWallet').mockResolvedValue({
       sessionId: 'sender-session',
       userId: 'sender-user',
+      email: 'sender@example.com',
       publicKey: 'GB7L4QQQAMRJQI7GGRH2Y6TSDD2JTFNGEHPKLB3XU43YSOE6GJLMFZWT',
       vaultSecretId: '',
     });
@@ -354,6 +369,18 @@ describe('AnchorService PIX-funded transfer recipient resolution', () => {
     const receiptInput = receiptSpy.mock.calls[0][0] as any;
     expect(receiptInput.externalDeliveryText).toContain('Valor: 100.00 CETES');
     expect(receiptInput.externalDeliveryText).toContain('Destino: Ana Silva');
+    expect(receiptSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      type: 'payment_received',
+      sessionId: 'recipient-session',
+      userId: 'ana-user',
+      counterpartyLabel: 'sender@example.com',
+      counterpartyKey: 'sender@example.com',
+      sourceAmount: '100',
+      sourceAssetCode: 'CETES',
+      destinationAmount: '100',
+      destinationAssetCode: 'CETES',
+      dedupeKey: 'pix-funded-autopay:page-1:recipient',
+    }));
   });
 
   it('converts the topped-up source asset before sending when recipient should receive another asset', async () => {
