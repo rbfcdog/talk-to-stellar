@@ -166,7 +166,7 @@ describe('ExternalService short-link expiry', () => {
     };
   }
 
-  it('rejects sensitive short links older than 15 minutes even with a future stored expiry', async () => {
+  it('keeps PIX ramp links valid beyond the confirmation-link 15 minute max age', async () => {
     const service = new ExternalService(createShortLinkSupabaseMock({
       url: 'https://app.example.com/pix-ramp?amount=100',
       purpose: 'pix_onramp',
@@ -177,10 +177,28 @@ describe('ExternalService short-link expiry', () => {
       expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString(),
     }) as any);
 
+    await expect(service.resolveShortLinkRecord('pix-link-after-conversion-detour')).resolves.toMatchObject({
+      url: 'https://app.example.com/pix-ramp?amount=100',
+      session_id: 'session-1',
+      user_id: 'user-1',
+    });
+  });
+
+  it('rejects PIX ramp links older than the 45 minute operational max age', async () => {
+    const service = new ExternalService(createShortLinkSupabaseMock({
+      url: 'https://app.example.com/pix-ramp?amount=100',
+      purpose: 'pix_offramp',
+      token_hash: null,
+      session_id: 'session-1',
+      user_id: 'user-1',
+      created_at: new Date(Date.now() - 46 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString(),
+    }) as any);
+
     await expect(service.resolveShortLinkRecord('old-pix-link')).resolves.toBeNull();
   });
 
-  it('keeps sensitive short links valid inside the 15 minute max age', async () => {
+  it('keeps PIX ramp short links valid inside the 45 minute max age', async () => {
     const service = new ExternalService(createShortLinkSupabaseMock({
       url: 'https://app.example.com/pix-ramp?amount=100',
       purpose: 'pix_onramp',
@@ -196,6 +214,20 @@ describe('ExternalService short-link expiry', () => {
       session_id: 'session-1',
       user_id: 'user-1',
     });
+  });
+
+  it('keeps confirmation links on the stricter 15 minute max age', async () => {
+    const service = new ExternalService(createShortLinkSupabaseMock({
+      url: 'https://app.example.com/confirm-conversion?token=abc',
+      purpose: 'conversion_confirm',
+      token_hash: null,
+      session_id: 'session-1',
+      user_id: 'user-1',
+      created_at: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString(),
+    }) as any);
+
+    await expect(service.resolveShortLinkRecord('old-conversion-confirm-link')).resolves.toBeNull();
   });
 });
 

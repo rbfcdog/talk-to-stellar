@@ -374,11 +374,13 @@ describe('Agent PIX off-ramp detection', () => {
         purpose: 'pix_onramp',
         sessionId: 'session-telegram',
         userId: 'user-telegram',
+        expiresInMinutes: 45,
       }));
       expect(parsed.pathname).toBe('/pix-on');
       expect(parsed.searchParams.get('amount')).toBe('100');
       expect(parsed.searchParams.get('asset')).toBe('BRL');
       expect(parsed.searchParams.get('currency')).toBe('BRL');
+      expect(parsed.searchParams.get('intent_id')).toMatch(/[0-9a-f-]{36}/);
       expect(parsed.searchParams.get('provider')).toBe('telegram');
       expect(parsed.searchParams.get('provider_user_id')).toBe('123456');
     } finally {

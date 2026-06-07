@@ -1766,7 +1766,7 @@ export class AgentGraph {
         purpose: `pix_${intent.direction}`,
         sessionId: state.session_id,
         userId: String(state.session_data?.user_id || '').trim() || undefined,
-        expiresInMinutes: 15,
+        expiresInMinutes: 45,
       });
     } catch (error) {
       logger.warn(`[pix-ramp-url] failed to shorten URL: ${error instanceof Error ? error.message : String(error)}`);
