@@ -216,6 +216,18 @@
     --tts-border2: rgba(255, 255, 255, 0.16);
     --tts-confirm: #c8aa68;
     --tts-error: #ef7777;
+    --tts-panel-bg: color-mix(in oklab, var(--tts-surface) 92%, white 8%);
+    --tts-panel-bg-strong: color-mix(in oklab, var(--tts-surface) 86%, white 14%);
+    --tts-tile-bg: color-mix(in oklab, var(--tts-bg) 78%, var(--tts-surface) 22%);
+    --tts-elevation:
+      0 1px 0 rgba(255, 255, 255, 0.065) inset,
+      0 18px 44px rgba(0, 0, 0, 0.34);
+    --tts-elevation-hover:
+      0 1px 0 rgba(255, 255, 255, 0.085) inset,
+      0 24px 60px rgba(0, 0, 0, 0.42);
+    --tts-action-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.2) inset,
+      0 16px 36px rgba(200, 170, 104, 0.2);
     background-color: var(--tts-bg);
     color: var(--tts-deep);
   }
@@ -332,9 +344,7 @@
 
   .tts-op-card,
   .tts-op-header {
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 14px 34px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--tts-elevation);
   }
 
   .tts-op-page .shadow-sm,
@@ -343,9 +353,7 @@
   .tts-op-page .shadow-lg,
   .tts-op-page .shadow-xl,
   .tts-op-page .shadow-2xl {
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 14px 34px rgba(0, 0, 0, 0.18) !important;
+    box-shadow: var(--tts-elevation) !important;
   }
 
   .tts-op-page .bg-tts-deep\/20,
@@ -397,11 +405,9 @@
   .tts-op-page :is(header, section)[class*='border-b'] {
     border: 1px solid var(--tts-border) !important;
     border-radius: 0.5rem;
-    background-color: color-mix(in oklab, var(--tts-surface) 94%, white 6%) !important;
+    background-color: var(--tts-panel-bg) !important;
     padding: 1.5rem !important;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 14px 34px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--tts-elevation);
   }
 
   .tts-op-page :is(header, section)[class*='border-b'] + * {
@@ -477,6 +483,69 @@
   .tts-op-page button,
   .tts-op-page a {
     text-underline-offset: 4px;
+    transition-property: transform, border-color, background-color, color, opacity, box-shadow;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .tts-op-page button:not(:disabled):active,
+  .tts-op-page a:not([aria-disabled='true']):active {
+    transform: translateY(1px) scale(0.995);
+  }
+
+  .tts-op-page .tts-op-shell {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--tts-border) !important;
+    border-radius: 0.5rem !important;
+    background:
+      linear-gradient(180deg, var(--tts-panel-bg-strong), var(--tts-panel-bg)) !important;
+    box-shadow: var(--tts-elevation) !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .tts-op-page .tts-op-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  }
+
+  .tts-op-page .tts-op-tile {
+    border-color: var(--tts-border) !important;
+    border-radius: 0.5rem !important;
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--tts-tile-bg) 86%, white 14%), var(--tts-tile-bg)) !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.055) inset,
+      0 10px 26px rgba(0, 0, 0, 0.2);
+  }
+
+  .tts-op-page .tts-interactive-tile {
+    cursor: pointer;
+    will-change: transform, box-shadow;
+  }
+
+  .tts-op-page .tts-interactive-tile:hover,
+  .tts-op-page .tts-choice-grid button:hover,
+  .tts-op-page .tts-stage-button:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--tts-gold) 42%, var(--tts-border2) 58%) !important;
+    box-shadow: var(--tts-elevation-hover);
+  }
+
+  .tts-op-page .tts-primary-action,
+  .tts-op-page :is(button, a)[class*='bg-tts-confirm'],
+  .tts-op-page :is(button, a)[class*='bg-tts-gold'] {
+    box-shadow: var(--tts-action-shadow) !important;
+  }
+
+  .tts-op-page .tts-primary-action:hover,
+  .tts-op-page :is(button, a)[class*='bg-tts-confirm']:hover,
+  .tts-op-page :is(button, a)[class*='bg-tts-gold']:hover {
+    transform: translateY(-1px);
   }
 
   .tts-op-page .rounded-\[2rem\],
@@ -552,7 +621,7 @@
     border: 1px solid rgba(255, 255, 255, 0.16) !important;
     background-color: var(--tts-deep) !important;
     color: var(--tts-bg) !important;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24) !important;
+    box-shadow: var(--tts-action-shadow) !important;
   }
 
   .tts-op-page :is(button, a)[class*='bg-tts-gold']:hover,
@@ -820,10 +889,9 @@
   .tts-op-page .tts-stage-panel {
     border: 1px solid var(--tts-border);
     border-radius: 0.5rem;
-    background: color-mix(in oklab, var(--tts-surface) 94%, white 6%);
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 14px 34px rgba(0, 0, 0, 0.18);
+    background: linear-gradient(180deg, var(--tts-panel-bg-strong), var(--tts-panel-bg));
+    box-shadow: var(--tts-elevation);
+    backdrop-filter: blur(12px);
   }
 
   .tts-op-page .tts-field-label {
@@ -846,7 +914,7 @@
   }
 
   .tts-op-page .tts-fill-field {
-    border-radius: 0.75rem !important;
+    border-radius: 0.5rem !important;
     border-color: color-mix(in oklab, var(--tts-border2) 86%, var(--tts-deep) 14%) !important;
     background:
       linear-gradient(180deg, color-mix(in oklab, var(--tts-bg) 82%, white 18%), var(--tts-bg)) !important;
@@ -860,6 +928,7 @@
     box-shadow:
       0 0 0 2px color-mix(in oklab, var(--tts-confirm) 72%, white 28%),
       0 14px 30px rgba(0, 0, 0, 0.24);
+    transform: translateY(-1px);
   }
 
   .tts-op-page .tts-fill-field input {
@@ -874,15 +943,13 @@
   }
 
   .tts-op-page .tts-choice-grid {
-    border-radius: 0.75rem !important;
+    border-radius: 0.5rem !important;
   }
 
   .tts-op-page .tts-action-guide {
     background:
       linear-gradient(180deg, color-mix(in oklab, var(--tts-surface) 92%, white 8%), var(--tts-surface));
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.05) inset,
-      0 12px 28px rgba(0, 0, 0, 0.16);
+    box-shadow: var(--tts-elevation);
   }
 
   .tts-op-page .tts-choice-grid button {
@@ -916,8 +983,11 @@
     gap: 0.35rem;
     border: 1px solid var(--tts-border);
     border-radius: 0.5rem;
-    background: var(--tts-bg);
+    background: color-mix(in oklab, var(--tts-bg) 84%, var(--tts-surface) 16%);
     padding: 0.25rem;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 12px 28px rgba(0, 0, 0, 0.22);
   }
 
   .tts-op-page .tts-stage-button {
@@ -948,6 +1018,9 @@
     border-radius: 0.5rem;
     background: color-mix(in oklab, var(--tts-bg) 78%, var(--tts-surface) 22%);
     padding: 0.85rem;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.05) inset,
+      0 12px 28px rgba(0, 0, 0, 0.2);
   }
 
   .tts-op-page .tts-wait-ring {
