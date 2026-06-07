@@ -402,7 +402,7 @@ export default function ConfirmConversionClient({
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <div className="mx-auto flex min-h-screen w-full max-w-4xl items-start px-4 py-3 sm:px-6 sm:py-10">
-        <div className="grid min-w-0 w-full gap-4 overflow-hidden border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] md:gap-6 md:p-8">
+        <div className="tts-op-shell grid min-w-0 w-full gap-4 overflow-hidden border border-tts-border bg-tts-surface p-4 shadow-sm backdrop-blur md:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] md:gap-6 md:p-8">
           <section className="min-w-0 space-y-3 overflow-hidden md:space-y-5">
             <div className="inline-flex border border-tts-confirm bg-tts-confirm/10 px-4 py-1 text-xs font-black uppercase tracking-normal text-tts-confirm">
               {T(feedbackLanguage, "Confirmação de conversão", "Conversion confirmation")}
@@ -429,13 +429,13 @@ export default function ConfirmConversionClient({
             </div>
 
             <div className="hidden min-w-0 gap-4 md:grid sm:grid-cols-2">
-              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
+              <div className="tts-op-tile min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm font-black uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Origem", "Source")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}
                 </p>
               </div>
-              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
+              <div className="tts-op-tile min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-4">
                 <p className="text-sm font-black uppercase tracking-normal text-tts-muted">{T(feedbackLanguage, "Destino", "Destination")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {formatAmount(destAmount, destAssetCode, feedbackLanguage)}
@@ -447,11 +447,11 @@ export default function ConfirmConversionClient({
             </p>
 
             <div className="hidden gap-3 md:grid md:grid-cols-2">
-              <a href={keepEarningUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
+              <a href={keepEarningUrl} className="tts-interactive-tile tts-op-tile border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Aplicar destino", "Apply destination")}</p>
                 <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Use o destino desta conversão em uma aplicação.", "Use this conversion destination in an application.")}</p>
               </a>
-              <a href={transactionsUrl} className="border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
+              <a href={transactionsUrl} className="tts-interactive-tile tts-op-tile border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
                 <p className="text-sm font-black text-tts-deep">{T(feedbackLanguage, "Histórico", "History")}</p>
                 <p className="mt-2 text-xs leading-5 text-tts-muted">{T(feedbackLanguage, "Veja conversões, PIX e ajustes da conta.", "See conversions, PIX, and account adjustments.")}</p>
               </a>
@@ -460,24 +460,24 @@ export default function ConfirmConversionClient({
 
           <section className="tts-mobile-flow-card tts-stage-panel min-w-0 overflow-hidden p-4 md:p-5">
             <form className={`${status === "submitting" || status === "done" ? "hidden md:block" : "block"} space-y-4`} onSubmit={handleSubmit}>
-	              <div className="min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-3 text-sm text-tts-deep">
-	                <p className="tts-field-label font-black text-tts-deep">{T(feedbackLanguage, "Confira os valores", "Review values")}</p>
-	                <div className="mt-3 grid gap-2">
-	                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
-	                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Sai da conta", "Leaves account")}</p>
-	                    <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
-	                  </div>
-	                  <div className="rounded-xl border border-tts-border bg-tts-surface p-3">
-	                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Entra na conta", "Enters account")}</p>
-	                    <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
-	                  </div>
-	                </div>
-	                <p className="tts-mobile-soft-hide mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
+              <div className="tts-op-tile min-w-0 overflow-hidden border border-tts-border bg-tts-bg p-3 text-sm text-tts-deep">
+                <p className="tts-field-label font-black text-tts-deep">{T(feedbackLanguage, "Confira os valores", "Review values")}</p>
+                <div className="mt-3 grid gap-2">
+                  <div className="tts-op-tile rounded-xl border border-tts-border bg-tts-surface p-3">
+                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Sai da conta", "Leaves account")}</p>
+                    <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(sourceAmount, sourceAssetCode, feedbackLanguage)}</p>
+                  </div>
+                  <div className="tts-op-tile rounded-xl border border-tts-border bg-tts-surface p-3">
+                    <p className="text-xs font-black text-tts-muted">{T(feedbackLanguage, "Entra na conta", "Enters account")}</p>
+                    <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
+                  </div>
+                </div>
+                <p className="tts-mobile-soft-hide mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
                 {showEstimatedFee && (
-	                  <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: {estimatedFeeDisplay}</p>
+                  <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: {estimatedFeeDisplay}</p>
                 )}
                 {isCrossAssetConversion && routeChain && (
-	                  <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.")}</p>
+                  <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Cotação aplicada antes do PIN.", "Quote applied before PIN.")}</p>
                 )}
                 {isCrossAssetConversion && formatBrl(estimatedSavingsBrl, feedbackLanguage) && (
                   <p className="text-tts-confirm">
@@ -498,7 +498,7 @@ export default function ConfirmConversionClient({
               )}
 
               <div className="space-y-2">
-	                <label htmlFor="pin" className="tts-field-label text-sm font-black text-tts-deep">PIN</label>
+                <label htmlFor="pin" className="tts-field-label text-sm font-black text-tts-deep">PIN</label>
                 <input
                   id="pin"
                   value={pin}
@@ -507,20 +507,20 @@ export default function ConfirmConversionClient({
                   inputMode="numeric"
                   maxLength={8}
                   placeholder={T(feedbackLanguage, "Digite seu PIN", "Enter your PIN")}
-	                  className="tts-fill-field w-full border-2 border-tts-border bg-tts-surface px-4 py-4 text-lg font-black text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
+                  className="tts-fill-field w-full border-2 border-tts-border bg-tts-surface px-4 py-4 text-lg font-black text-tts-deep outline-none transition placeholder:text-tts-muted focus:border-tts-confirm focus:bg-tts-surface"
                 />
               </div>
 
-	              <div className={status === "ready" || status === "submitting" ? "tts-mobile-action" : ""}>
-	                <button
-	                  type="submit"
-	                  disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
-	                  className="inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-4 text-base font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
+              <div className={status === "ready" || status === "submitting" ? "tts-mobile-action" : ""}>
+                <button
+                  type="submit"
+                  disabled={status === "submitting" || status === "done" || !token.trim() || !pin.trim()}
+                  className="tts-primary-action inline-flex w-full items-center justify-center bg-tts-confirm px-4 py-4 text-base font-black text-tts-deep transition hover:bg-tts-confirm disabled:cursor-not-allowed disabled:opacity-60"
                 >
-	                  {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
-	                </button>
-	              </div>
-	            </form>
+                  {status === "submitting" ? <span className="inline-flex items-center gap-2"><Spinner />{T(feedbackLanguage, "Confirmando conversão...", "Confirming conversion...")}</span> : T(feedbackLanguage, "Confirmar conversão", "Confirm conversion")}
+                </button>
+              </div>
+            </form>
 
 	            <div className={`mt-4 ${status === "ready" ? "hidden md:block" : "block"}`}>
 	              <OperationProgressPanel

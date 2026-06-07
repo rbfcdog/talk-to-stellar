@@ -3287,7 +3287,7 @@ export default function PixRampClient({
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg px-3 py-5 text-tts-deep sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:p-10">
+        <header className="tts-op-shell overflow-hidden rounded-2xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:p-10">
           <section className="min-w-0 space-y-2 overflow-hidden md:space-y-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className={`inline-flex w-fit rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-normal ${
@@ -3319,17 +3319,17 @@ export default function PixRampClient({
                 </p>
             </div>
             <div className="hidden min-w-0 gap-4 md:grid md:grid-cols-3">
-              <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
+              <div className="tts-op-tile min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                 <p className="text-sm uppercase tracking-normal text-tts-muted">{t("pix_value")}</p>
                 <p className="mt-2 text-sm text-tts-deep">
                   {rampMode === "onramp" ? onRampHeaderValueDisplay : offRampDisplayAmount}
                 </p>
               </div>
-              <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
+              <div className="tts-op-tile min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                 <p className="text-sm uppercase tracking-normal text-tts-muted">{L("Moeda", "Currency")}</p>
                 <p className="mt-2 text-sm font-black text-tts-deep">{headerCurrencyDisplay}</p>
               </div>
-                <div className="min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
+                <div className="tts-op-tile min-w-[76vw] overflow-hidden rounded-2xl border border-tts-border bg-tts-bg p-4 sm:min-w-0">
                   <p className="text-sm uppercase tracking-normal text-tts-muted">{t("pix_destination")}</p>
                   <p className="mt-2 text-sm text-tts-deep">{transferFlow && transferRecipientLabel ? transferRecipientLabel : rampMode === "onramp" ? t("pix_my_account") : t("pix_your_pix")}</p>
                   {transferFlow && transferRecipientDisplayKey && (
@@ -3505,9 +3505,9 @@ export default function PixRampClient({
         />
 
         {!lockedMode && (
-        <section className="mt-5 hidden gap-3 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:grid sm:grid-cols-2">
+        <section className="tts-op-shell mt-5 hidden gap-3 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm backdrop-blur md:grid sm:grid-cols-2">
           <button
-            className={`rounded-xl px-5 py-4 text-left transition ${rampMode === "onramp" ? "bg-tts-confirm text-tts-deep shadow-sm" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
+            className={`tts-interactive-tile rounded-xl px-5 py-4 text-left transition ${rampMode === "onramp" ? "bg-tts-confirm text-tts-deep shadow-sm" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
             onClick={() => {
               setRampMode("onramp");
               setError("");
@@ -3517,7 +3517,7 @@ export default function PixRampClient({
             <span className="mt-1 block text-lg font-black">{L("PIX para saldo", "PIX to balance")}</span>
           </button>
           <button
-            className={`rounded-xl px-5 py-4 text-left transition ${rampMode === "offramp" ? "bg-tts-gold text-tts-deep shadow-sm" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
+            className={`tts-interactive-tile rounded-xl px-5 py-4 text-left transition ${rampMode === "offramp" ? "bg-tts-gold text-tts-deep shadow-sm" : "bg-tts-bg/60 text-tts-deep hover:bg-tts-bg"}`}
             onClick={() => {
               setRampMode("offramp");
               setError("");
@@ -3531,7 +3531,7 @@ export default function PixRampClient({
 
         {rampMode === "offramp" && (
           <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className={`${mobileStage === "receipt" ? "hidden" : "block"} tts-mobile-flow-card rounded-xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+            <div className={`${mobileStage === "receipt" ? "hidden" : "block"} tts-mobile-flow-card tts-op-shell rounded-xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-gold">PIX</p>
                 <h2 className="mt-1 text-2xl font-bold text-tts-deep">{L("Enviar para PIX", "Send to PIX")}</h2>
 
@@ -3691,7 +3691,7 @@ export default function PixRampClient({
               </div>
             </div>
 
-            <div className={`${mobileStage === "receipt" ? "block" : "hidden"} tts-mobile-flow-card rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+            <div className={`${mobileStage === "receipt" ? "block" : "hidden"} tts-mobile-flow-card tts-op-shell rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
               <p className="text-xs font-black uppercase tracking-normal text-tts-gold">{L("Seu PIX", "Your PIX")}</p>
               <h2 className="mt-1 text-2xl font-black">{L("Envio para PIX", "Send to PIX")}</h2>
               {!temporaryOffRampTestResult ? (
@@ -3730,7 +3730,7 @@ export default function PixRampClient({
 
         {rampMode === "onramp" && (
         <section className="mt-6 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className={`${needsBrowserLoginForPix ? "hidden" : mobileStage === "details" ? "block" : "hidden"} tts-mobile-flow-card rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+          <div className={`${needsBrowserLoginForPix ? "hidden" : mobileStage === "details" ? "block" : "hidden"} tts-mobile-flow-card tts-op-shell rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-normal text-tts-confirm">PIX</p>
@@ -3960,7 +3960,7 @@ export default function PixRampClient({
             )}
           </div>
 
-          <div className={`${mobileStage === "payment" ? "block" : "hidden"} tts-mobile-flow-card rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
+          <div className={`${mobileStage === "payment" ? "block" : "hidden"} tts-mobile-flow-card tts-op-shell rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
             <button
               type="button"
               className="mb-4 rounded-full border border-tts-border px-4 py-2 text-xs font-black text-tts-muted md:hidden"

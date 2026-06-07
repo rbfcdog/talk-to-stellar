@@ -461,7 +461,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
       <section className="mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col gap-0 px-4 py-3 md:gap-5 md:py-6 sm:px-6 lg:px-8">
-        <header className="hidden flex-col gap-4 border-b border-tts-border pb-5 pr-24 md:flex">
+        <header className="tts-op-shell hidden flex-col gap-4 border-b border-tts-border pb-5 pr-24 md:flex">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 border border-tts-confirm bg-tts-confirm/10 px-3 py-2 text-xs font-black uppercase tracking-normal text-tts-confirm">
               <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
@@ -534,7 +534,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Valor e origem", "Amount and source")}</h1>
               </div>
 
-              <div className="shrink-0 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm">
+              <div className="tts-op-tile shrink-0 rounded-xl border border-tts-border bg-tts-surface p-3 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <label className="tts-field-label text-xs font-black text-tts-deep" htmlFor="convert-mobile-amount">
                     {amountMode === "receive" ? L("Quero receber", "I want to receive") : L("Vou converter", "I will convert")}
@@ -636,7 +636,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
                 <h1 className="mt-1 text-2xl font-black text-tts-deep">{L("Conferir e confirmar", "Review and confirm")}</h1>
               </div>
 
-              <div className="shrink-0 divide-y divide-tts-border border border-tts-border bg-tts-surface">
+              <div className="tts-op-tile shrink-0 divide-y divide-tts-border border border-tts-border bg-tts-surface">
                 <MobileSummaryLine label={L("Sai", "Leaves")} value={sourceSummaryValue} />
                 <MobileSummaryLine label={L("Recebe", "Receives")} value={destinationSummaryValue} />
                 <MobileSummaryLine label={L("Saldo", "Balance")} value={sourceBalanceDisplay} />
@@ -712,7 +712,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           />
         </section>
 
-        <section className="hidden border border-tts-border bg-tts-surface p-5 md:block" aria-label={L("Confirmação segura", "Secure confirmation")}>
+        <section className="tts-op-shell hidden border border-tts-border bg-tts-surface p-5 md:block" aria-label={L("Confirmação segura", "Secure confirmation")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
@@ -761,7 +761,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
         </section>
 
         <section className="hidden gap-5 md:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <section className="border border-tts-border bg-tts-surface p-5">
+          <section className="tts-op-shell border border-tts-border bg-tts-surface p-5">
             <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
               <WalletCards className="h-5 w-5 text-tts-confirm" aria-hidden="true" />
               {L("Sua conta", "Your account")}
@@ -796,7 +796,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             ) : null}
           </section>
 
-          <section className="border border-tts-border bg-tts-surface p-5">
+          <section className="tts-op-shell border border-tts-border bg-tts-surface p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
@@ -855,7 +855,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
           </section>
         </section>
 
-        <section className="hidden border border-tts-confirm bg-tts-confirm/10 p-5 md:block">
+        <section className="tts-op-shell hidden border border-tts-confirm bg-tts-confirm/10 p-5 md:block">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black text-tts-deep">
@@ -1013,7 +1013,7 @@ function AssetPicker({
               type="button"
               onClick={() => onSelect(asset.code)}
               aria-pressed={selected}
-              className={`rounded-xl border text-left transition ${
+              className={`tts-interactive-tile rounded-xl border text-left transition ${
                 compact ? "flex min-h-[3.35rem] items-center gap-2 px-2 py-2" : "min-h-[96px] p-3"
               } ${selected ? "tts-choice-selected border-tts-confirm shadow-sm ring-2 ring-tts-confirm/40" : "tts-choice-idle border-tts-border bg-tts-bg hover:border-tts-border2"} ${paired && !selected ? "opacity-70" : ""}`}
             >
@@ -1066,7 +1066,7 @@ function BalanceAvailabilityCard({
 }) {
   const isError = tone === "error";
   return (
-    <div className={`border ${compact ? "p-2" : "p-3"} ${isError ? "border-tts-error bg-tts-error/10" : "border-tts-confirm/60 bg-tts-confirm/10"}`}>
+    <div className={`tts-op-tile border ${compact ? "p-2" : "p-3"} ${isError ? "border-tts-error bg-tts-error/10" : "border-tts-confirm/60 bg-tts-confirm/10"}`}>
       <div className="flex gap-3">
         <div className={`mt-0.5 flex shrink-0 items-center justify-center border ${compact ? "h-7 w-7" : "h-8 w-8"} ${isError ? "border-tts-error text-tts-error" : "border-tts-confirm text-tts-confirm"}`}>
           {isError ? <AlertTriangle className="h-4 w-4" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
@@ -1085,7 +1085,7 @@ function BalanceAvailabilityCard({
       {actionHref && actionLabel ? (
         <a
           href={actionHref}
-          className={`${compact ? "mt-2 min-h-10 text-xs" : "mt-3 min-h-11 text-sm"} inline-flex w-full items-center justify-center gap-2 border border-tts-confirm bg-tts-confirm px-4 py-2 font-black text-tts-deep transition hover:bg-tts-confirm/90`}
+          className={`${compact ? "mt-2 min-h-10 text-xs" : "mt-3 min-h-11 text-sm"} tts-primary-action inline-flex w-full items-center justify-center gap-2 border border-tts-confirm bg-tts-confirm px-4 py-2 font-black text-tts-deep transition hover:bg-tts-confirm/90`}
         >
           {actionLabel}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -1097,7 +1097,7 @@ function BalanceAvailabilityCard({
 
 function Step({ title, body }: { title: string; body: string }) {
   return (
-    <div className="border border-tts-border bg-tts-surface p-3">
+    <div className="tts-op-tile border border-tts-border bg-tts-surface p-3">
       <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">{title}</p>
       <p className="mt-1 text-sm font-black text-tts-deep">{body}</p>
     </div>
@@ -1106,7 +1106,7 @@ function Step({ title, body }: { title: string; body: string }) {
 
 function MiniStat({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={`border border-tts-border bg-tts-bg ${compact ? "p-2" : "p-3"}`}>
+    <div className={`tts-op-tile border border-tts-border bg-tts-bg ${compact ? "p-2" : "p-3"}`}>
       <p className={`${compact ? "text-[10px]" : "text-[11px]"} font-black uppercase tracking-normal text-tts-muted`}>{label}</p>
       <p className={`${compact ? "mt-0.5 text-xs" : "mt-1 text-sm"} break-words font-black text-tts-deep`}>{value}</p>
     </div>
@@ -1115,7 +1115,7 @@ function MiniStat({ label, value, compact = false }: { label: string; value: str
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: ReactNode }) {
   return (
-    <div className="border border-tts-border bg-tts-surface p-4">
+    <div className="tts-op-tile border border-tts-border bg-tts-surface p-4">
       <p className="text-xs font-black uppercase tracking-normal text-tts-muted">{label}</p>
       <p className="mt-2 break-words text-xl font-black text-tts-deep">{value}</p>
       <p className="mt-1 text-sm leading-5 text-tts-muted">{detail}</p>
