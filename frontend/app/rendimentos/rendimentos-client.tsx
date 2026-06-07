@@ -29,6 +29,7 @@ import {
 import { formatCustomerNumber } from "@/lib/customer-amount";
 import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
+import { analyzePortfolioPeriod } from "@/lib/portfolio-period-analysis";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
 
 type ApiState = { loading: boolean; message: string; error: string };
@@ -246,31 +247,6 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
     date: shiftDate(daysAgo),
     value: Math.max(0, currentAmount),
   }));
-}
-
-function sortedHistoryPoints(history: PositionHistoryState | undefined) {
-  return [...(history?.points || [])]
-    .filter((point) => Number.isFinite(Date.parse(String(point.date || ""))))
-    .sort((a, b) => Date.parse(String(a.date || "")) - Date.parse(String(b.date || "")));
-}
-
-function periodAnalysisForRow(row: InvestmentRow, windowKey: AnalysisWindow) {
-  const windowOption = ANALYSIS_WINDOWS.find((item) => item.key === windowKey) || ANALYSIS_WINDOWS[0];
-  const cutoff = Date.now() - windowOption.days * 24 * 60 * 60 * 1000;
-  const history = sortedHistoryPoints(row.history);
-  const inWindow = history.filter((point) => Date.parse(String(point.date || "")) >= cutoff);
-  const previousPoint = [...history].reverse().find((point) => Date.parse(String(point.date || "")) < cutoff);
-  const baselinePoint = inWindow[0] || previousPoint;
-  const baseline = baselinePoint ? normalizeDecimal(baselinePoint.amount) : row.amount;
-  const change = row.amount - baseline;
-  const changePercent = baseline > 0 ? (change / baseline) * 100 : row.amount > 0 ? 100 : 0;
-  const lastPoint = history[history.length - 1];
-  return {
-    change,
-    changePercent,
-    pointCount: inWindow.length + 1,
-    lastPoint,
-  };
 }
 
 function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
@@ -899,7 +875,7 @@ function PortfolioOverview({ language, rows, isTestnet }: {
               <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Análise por período", "Period analysis")}</p>
             </div>
             <p className="mt-1 text-sm font-semibold text-tts-muted">
-              {L("Compare a variação recente por ativo e veja quantos pontos entraram na leitura.", "Compare recent movement by asset and see how many points fed the read.")}
+              {L("Compare o retorno recente por ativo sem contar aplicações, resgates ou dinheiro adicionado.", "Compare recent vault return by asset without counting deposits, withdrawals, or added cash.")}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-tts-border bg-tts-surface p-1">
@@ -930,15 +906,20 @@ function PortfolioOverview({ language, rows, isTestnet }: {
           <div className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-2 text-[10px] font-black uppercase tracking-wide text-tts-muted md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
             <span>{L("Ativo", "Asset")}</span>
             <span>{L("Atual", "Current")}</span>
-            <span>{L("Variação", "Change")}</span>
+            <span>{L("Retorno", "Return")}</span>
             <span className="hidden md:block">{L("Pontos", "Points")}</span>
             <span className="hidden md:block">{L("Último movimento", "Last movement")}</span>
           </div>
           {rows.map((row) => {
-            const analysis = periodAnalysisForRow(row, activeWindow.key);
+            const analysis = analyzePortfolioPeriod({
+              currentAmount: row.amount,
+              historyPoints: row.history?.points || [],
+              days: activeWindow.days,
+            });
             const positive = analysis.change > 0.0000001;
             const negative = analysis.change < -0.0000001;
             const tone = positive ? "text-tts-confirm" : negative ? "text-tts-error" : "text-tts-muted";
+            const hasIgnoredCashflow = Math.abs(analysis.cashflowChange) > 0.0000001;
             return (
               <div key={row.code} className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-3 last:border-b-0 md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
                 <div className="min-w-0">
@@ -952,6 +933,11 @@ function PortfolioOverview({ language, rows, isTestnet }: {
                 <div>
                   <p className={`text-sm font-black ${tone}`}>{formatSignedAmount(analysis.change, row.profile, language)}</p>
                   <p className={`text-[10px] font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</p>
+                  {hasIgnoredCashflow ? (
+                    <p className="mt-0.5 truncate text-[10px] font-semibold text-tts-muted">
+                      {L("Fluxo ignorado", "Cash flow ignored")}: {formatSignedAmount(analysis.cashflowChange, row.profile, language)}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="hidden md:block">
                   <p className="text-sm font-black text-tts-deep">{analysis.pointCount}</p>
