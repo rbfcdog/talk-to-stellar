@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { idempotentFetch } from "@/lib/idempotency"
+import { ConversionTestnetDisclaimer } from "@/components/shared/conversion-testnet-disclaimer"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
 import { SecureLinkState } from "@/components/shared/secure-link-state"
@@ -442,9 +443,7 @@ export default function ConfirmConversionClient({
                 </p>
               </div>
             </div>
-            <p className="tts-mobile-soft-hide text-xs leading-5 text-tts-muted md:block">
-              {T(feedbackLanguage, "Testnet: valores de conversão são estimados e podem variar.", "Testnet: conversion values are estimated and may vary.")}
-            </p>
+            <ConversionTestnetDisclaimer language={feedbackLanguage} className="hidden md:flex" />
 
             <div className="hidden gap-3 md:grid md:grid-cols-2">
               <a href={keepEarningUrl} className="tts-interactive-tile tts-op-tile border border-tts-border bg-tts-bg p-4 transition hover:border-tts-confirm">
@@ -472,7 +471,7 @@ export default function ConfirmConversionClient({
                     <p className="mt-1 text-lg font-black text-tts-deep">{formatAmount(destAmount, destAssetCode, feedbackLanguage)}</p>
                   </div>
                 </div>
-                <p className="tts-mobile-soft-hide mt-2 text-xs text-tts-muted">{T(feedbackLanguage, "Testnet: conversão estimada.", "Testnet: estimated conversion.")}</p>
+                <ConversionTestnetDisclaimer language={feedbackLanguage} compact className="mt-2 md:hidden" />
                 {showEstimatedFee && (
                   <p className="tts-mobile-soft-hide text-tts-deep">{T(feedbackLanguage, "Taxa estimada", "Estimated fee")}: {estimatedFeeDisplay}</p>
                 )}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { ArrowRight, CheckCircle2, ExternalLink, ReceiptText, ShieldCheck, X } from "lucide-react";
+import { ConversionTestnetDisclaimer } from "@/components/shared/conversion-testnet-disclaimer";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
 import { getClientSession } from "@/lib/session";
@@ -725,6 +726,11 @@ export default function PixRampClient({
       autoPayDestinationAsset &&
       autoPayDestinationAsset !== autoPayDisplaySourceAsset
   );
+  const onRampUsesAssetConversion = Boolean(
+    rampMode === "onramp" &&
+      (targetAsset !== "BRL" || hasPostOnRampConversion || autoPayShowsCrossAssetDestination)
+  );
+  const offRampUsesAssetConversion = Boolean(rampMode === "offramp" && offRampInputAsset !== "BRL");
   const autoPayDisplayAmount = autoPayShowsCrossAssetDestination
     ? `${formatRampAsset(autoPayDisplaySourceAmount, autoPayDisplaySourceAsset)} -> ${friendlyAssetName(autoPayDestinationAsset, language)}`
     : autoPayAmount && autoPayAsset
@@ -3202,6 +3208,9 @@ export default function PixRampClient({
                     </p>
                   </div>
                 )}
+                {offRampUsesAssetConversion && (
+                  <ConversionTestnetDisclaimer language={language} compact className="mt-4" />
+                )}
               </div>
               <div className={`${mobileStage === "payment" ? "tts-mobile-pin-action" : ""} mt-5`}>
 	              <label className="tts-field-label block text-sm font-black text-tts-deep">{L("Digite o PIN", "Enter PIN")}</label>
@@ -3398,6 +3407,9 @@ export default function PixRampClient({
                 ))}
               </div>
             </div>
+            {onRampUsesAssetConversion && (
+              <ConversionTestnetDisclaimer language={language} compact className="mt-4" />
+            )}
             {!quote && !exactOnRampValueContract && (
               <EtherfuseMeasuredFeeNotice
                 mode="onramp"
