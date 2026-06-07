@@ -334,6 +334,36 @@ describe('Defindex yield transaction flows', () => {
     }));
   });
 
+  it('keeps the investment review usable when vault compatibility lookup is unavailable', async () => {
+    process.env.DEFINDEX_ENABLE_EXECUTION = 'true';
+    process.env.DEFINDEX_COMPLIANCE_APPROVED = 'true';
+    (DefindexYieldService.getVaultAssetCompatibility as jest.Mock).mockRejectedValueOnce(new Error('Defindex vault info timeout'));
+    const buildSpy = jest.spyOn(DefindexYieldService, 'buildVaultAction');
+
+    const result = await AnchorService.prepareDefindexYieldForSession({
+      session_id: 'session-1',
+      session_token: 'token-1',
+      action: 'deposit',
+      amount: '100',
+      asset_code: 'USDC',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      prepared: true,
+      review_only: true,
+      execution_ready: false,
+      execution_blocked_code: 'yield_execution_unavailable',
+      setup_required: false,
+      action: 'deposit',
+      amount: '100',
+      amount_units: 1000000000,
+      vault: expect.objectContaining({ asset_code: 'USDC', vault_address: YIELD_VAULTS.USDC }),
+    });
+    expect(String(result.execution_blocked_reason)).toContain('confirmação de investimento');
+    expect(buildSpy).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['USDC', YIELD_VAULTS.USDC],
     ['CETES', YIELD_VAULTS.CETES],

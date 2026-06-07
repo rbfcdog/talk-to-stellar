@@ -7102,7 +7102,32 @@ export class AnchorService {
         setup_required: false,
       };
     }
-    const compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
+    let compatibility: Awaited<ReturnType<typeof DefindexYieldService.getVaultAssetCompatibility>>;
+    try {
+      compatibility = await DefindexYieldService.getVaultAssetCompatibility(vault);
+    } catch (error) {
+      logDefindex('warn', 'prepare_vault_asset_compatibility_unavailable', {
+        request_id: defindexRequestId(input),
+        session_id: maskLogValue(context.sessionId),
+        user_id: maskLogValue(context.userId),
+        public_key: maskLogValue(context.publicKey),
+        action,
+        amount,
+        amount_units: amountUnits,
+        asset_code: vault.asset_code,
+        vault_address: maskLogValue(vault.vault_address),
+        network: vault.network,
+        ...defindexErrorFields(error),
+      });
+      return {
+        ...reviewResponse,
+        review_only: true,
+        execution_ready: false,
+        execution_blocked_reason: 'Aplicação preparada, mas a confirmação de investimento está indisponível agora. Tente novamente em alguns segundos.',
+        execution_blocked_code: 'yield_execution_unavailable',
+        setup_required: false,
+      };
+    }
     if (!compatibility.compatible) {
       const reason = 'Aplicação preparada. Esta opção de teste usa uma moeda diferente da moeda que aparece no saldo da conta. Escolha outra opção ou aguarde uma opção compatível antes de confirmar.';
       logDefindex('warn', 'prepare_vault_asset_incompatible', {
