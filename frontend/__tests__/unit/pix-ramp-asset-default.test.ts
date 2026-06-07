@@ -57,8 +57,12 @@ describe("PIX asset defaults", () => {
     expect(text).toContain(') : hasOffRampFeePreviewBrlAmount ? (');
     expect(text).toContain('amount={offRampFeePreviewBrlAmount}');
     expect(text).toContain('void run("Previewing PIX withdrawal", previewOffRampFees);');
+    expect(text).toContain("setOffRampPaymentStageUnlocked(true)");
+    expect(text).toContain('offRampPaymentStageUnlocked || Boolean(temporaryOffRampTestResult)');
     expect(text).toContain('Calculando retirada automaticamente');
     expect(text).toContain('A taxa aparece automaticamente pelo valor PIX.');
+    expect(text).not.toContain('if (rampMode === "offramp" && offRampQuote)');
+    expect(text).not.toContain('buildIdempotencyKey("preview-offramp-fees")');
     expect(text).not.toContain('Cotação em reais sendo preparada.');
     expect(text).not.toContain('BRL quote is being prepared.');
     expect(text).not.toContain('Retirada em reais');
