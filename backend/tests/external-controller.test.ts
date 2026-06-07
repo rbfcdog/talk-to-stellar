@@ -187,6 +187,47 @@ describe('ExternalController', () => {
     );
   });
 
+  it('returns an existing account when the linked session has only a login password hash', async () => {
+    checkExternalAccountMock.mockResolvedValue({
+      session_id: 'session-123',
+      user_id: 'user-123',
+      data: { source: 'whatsapp' },
+    });
+    getWalletBySessionMock.mockResolvedValue({
+      session_id: 'session-123',
+      public_key: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+    getSessionMock.mockResolvedValue({
+      session_id: 'session-123',
+      user_id: 'user-123',
+      password_hash: null,
+      session_password_hash: null,
+      login_password_hash: 'hashed-login-password',
+      last_activity: new Date().toISOString(),
+    });
+    getUserPasskeysMock.mockResolvedValue([]);
+
+    const { ExternalController } = await import('../src/api/controllers/external.controller');
+    const req = {
+      body: {
+        provider: 'whatsapp',
+        provider_user_id: '555',
+      },
+    } as any;
+    const res = createResponse();
+
+    await ExternalController.checkAccount(req, res);
+
+    expect(createOnboardUrlMock).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      exists: true,
+      sessionId: 'session-123',
+      userId: 'user-123',
+    }));
+  });
+
   it('does not write a generic phone alias during WhatsApp login discovery', async () => {
     checkExternalAccountMock.mockResolvedValue({
       session_id: 'session-123',

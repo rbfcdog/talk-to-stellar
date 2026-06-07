@@ -13,6 +13,8 @@ interface ChangePinPageState {
   stage: 'verify' | 'change' | 'success' | 'error';
   token: string | null;
   userId: string | null;
+  newPassword: string;
+  confirmPassword: string;
   newPin: string;
   confirmPin: string;
   currentPin: string;
@@ -27,6 +29,8 @@ export default function ChangePinClient() {
     stage: 'verify',
     token: null,
     userId: null,
+    newPassword: '',
+    confirmPassword: '',
     newPin: '',
     confirmPin: '',
     currentPin: '',
@@ -79,7 +83,7 @@ export default function ChangePinClient() {
         token,
         userId,
         isLoading: false,
-        message: 'Create a new PIN (4-8 digits)',
+        message: 'Create a new login password and operation PIN.',
       }));
     } catch (error) {
       setState((prev) => ({
@@ -94,6 +98,15 @@ export default function ChangePinClient() {
   const handleChangePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const password = state.newPassword.trim();
+    if (password.length < 8) {
+      setState((prev) => ({ ...prev, errorMessage: 'Password must contain at least 8 characters' }));
+      return;
+    }
+    if (password !== state.confirmPassword.trim()) {
+      setState((prev) => ({ ...prev, errorMessage: 'Passwords do not match' }));
+      return;
+    }
     if (state.newPin.length < 4 || state.newPin.length > 8) {
       setState((prev) => ({ ...prev, errorMessage: 'PIN must be 4 to 8 characters long' }));
       return;
@@ -117,6 +130,7 @@ export default function ChangePinClient() {
         body: JSON.stringify({
           token: state.token,
           user_id: state.userId,
+          new_password: password,
           new_pin: state.newPin,
         }),
       });
@@ -136,10 +150,10 @@ export default function ChangePinClient() {
         ...prev,
         stage: 'success',
         isLoading: false,
-        message: 'PIN changed successfully.',
+        message: 'Password and PIN changed successfully.',
       }));
 
-      enqueueWebChatFeedback('PIN changed successfully.\nYour new PIN is now active.');
+      enqueueWebChatFeedback('Password and PIN changed successfully.\nYour account is ready to sign in.');
       closeIntermediatePage();
     } catch (error) {
       setState((prev) => ({
@@ -163,7 +177,7 @@ export default function ChangePinClient() {
   if (state.stage === 'success') {
     return (
       <AuthShell
-        title="PIN alterado com sucesso"
+        title="Senha e PIN alterados com sucesso"
         description={
           <>
             <p className="text-[10px] font-bold uppercase tracking-normal text-tts-confirm">
@@ -200,10 +214,48 @@ export default function ChangePinClient() {
   return (
     <AuthShell
       title="Redefinir PIN"
-      description="O PIN deve conter apenas números e ter de 4 a 8 dígitos."
+      description="Crie uma senha de login e um PIN numérico para confirmar operações."
     >
       <form onSubmit={handleChangePinSubmit} className="flex flex-col gap-4">
         <p className="text-sm text-tts-muted">{state.message}</p>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">Nova senha de login</span>
+          <Input
+            id="newPassword"
+            type="password"
+            autoComplete="new-password"
+            value={state.newPassword}
+            onChange={(e) =>
+              setState((prev) => ({
+                ...prev,
+                newPassword: e.target.value,
+                errorMessage: '',
+              }))
+            }
+            placeholder="Mínimo de 8 caracteres"
+            disabled={state.isLoading}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-tts-deep">Confirmar senha</span>
+          <Input
+            id="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            value={state.confirmPassword}
+            onChange={(e) =>
+              setState((prev) => ({
+                ...prev,
+                confirmPassword: e.target.value,
+                errorMessage: '',
+              }))
+            }
+            placeholder="Repita a senha"
+            disabled={state.isLoading}
+          />
+        </label>
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-tts-deep">Novo PIN</span>
@@ -254,10 +306,16 @@ export default function ChangePinClient() {
         <Button
           type="submit"
           size="lg"
-          disabled={state.isLoading || !state.newPin || !state.confirmPin}
+          disabled={
+            state.isLoading ||
+            !state.newPassword.trim() ||
+            !state.confirmPassword.trim() ||
+            !state.newPin ||
+            !state.confirmPin
+          }
           className="w-full bg-tts-deep text-tts-surface hover:bg-tts-deep/90"
         >
-          {state.isLoading ? 'Processando...' : 'Confirmar novo PIN'}
+          {state.isLoading ? 'Processando...' : 'Confirmar senha e PIN'}
         </Button>
       </form>
     </AuthShell>

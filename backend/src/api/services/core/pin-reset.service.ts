@@ -72,31 +72,31 @@ export class PinResetService {
     language: PinResetLanguage;
   }): Promise<void> {
     const subject = input.language === 'en'
-      ? 'Confirm your TalkToStellar PIN change'
-      : 'Confirme a troca do seu PIN TalkToStellar';
+      ? 'Confirm your TalkToStellar password and PIN change'
+      : 'Confirme a troca da senha e do PIN TalkToStellar';
     const text = input.language === 'en'
       ? [
-          'We received a request to change your TalkToStellar PIN.',
-          `Open this link to choose a new PIN: ${input.resetUrl}`,
+          'We received a request to change your TalkToStellar password and PIN.',
+          `Open this link to choose a new password and PIN: ${input.resetUrl}`,
           `This link expires in ${input.expiresInMinutes} minutes.`,
           'If this was not you, ignore this email.',
         ].join('\n')
       : [
-          'Recebemos um pedido para mudar seu PIN TalkToStellar.',
-          `Abra este link para escolher um novo PIN: ${input.resetUrl}`,
+          'Recebemos um pedido para mudar sua senha e seu PIN TalkToStellar.',
+          `Abra este link para escolher uma nova senha e um novo PIN: ${input.resetUrl}`,
           `Este link expira em ${input.expiresInMinutes} minutos.`,
           'Se não foi você, ignore este e-mail.',
         ].join('\n');
     const html = input.language === 'en'
       ? [
-          '<p>We received a request to change your TalkToStellar PIN.</p>',
-          `<p><a href="${input.resetUrl}">Change my PIN</a></p>`,
+          '<p>We received a request to change your TalkToStellar password and PIN.</p>',
+          `<p><a href="${input.resetUrl}">Change my password and PIN</a></p>`,
           `<p>This link expires in ${input.expiresInMinutes} minutes.</p>`,
           '<p>If this was not you, ignore this email.</p>',
         ].join('')
       : [
-          '<p>Recebemos um pedido para mudar seu PIN TalkToStellar.</p>',
-          `<p><a href="${input.resetUrl}">Mudar meu PIN</a></p>`,
+          '<p>Recebemos um pedido para mudar sua senha e seu PIN TalkToStellar.</p>',
+          `<p><a href="${input.resetUrl}">Mudar minha senha e PIN</a></p>`,
           `<p>Este link expira em ${input.expiresInMinutes} minutos.</p>`,
           '<p>Se não foi você, ignore este e-mail.</p>',
         ].join('');
@@ -308,8 +308,8 @@ export class PinResetService {
             throw new Error(`Failed to update PIN: ${updateError.message}`);
           }
 
-          logger.info(`PIN successfully reset via JWT fallback for user ${userId}`);
-          return { success: true, message: 'PIN changed successfully' };
+          logger.info(`Password and PIN successfully reset via JWT fallback for user ${userId}`);
+          return { success: true, message: 'Password and PIN changed successfully' };
         }
 
         return { success: false, message: 'Token data not found' };
@@ -345,9 +345,9 @@ export class PinResetService {
         logger.warn(`Failed to mark token as used: ${markError.message}`);
       }
 
-      logger.info(`PIN successfully reset for user ${userId}`);
+      logger.info(`Password and PIN successfully reset for user ${userId}`);
 
-      return { success: true, message: 'PIN changed successfully' };
+      return { success: true, message: 'Password and PIN changed successfully' };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to apply new PIN: ${errorMessage}`);

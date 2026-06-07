@@ -205,9 +205,91 @@ describe('PinResetController security', () => {
     expect(PinResetService.generateResetToken).not.toHaveBeenCalled();
     const payload = (res.json as jest.Mock).mock.calls[0][0];
     expect(payload.success).toBe(true);
-    expect(payload.message).toBe('If this account exists, we sent the PIN setup link by email.');
+    expect(payload.message).toBe('If this account exists, we sent the password and PIN setup link by email.');
     expect(payload).not.toHaveProperty('reset_url');
     expect(payload).not.toHaveProperty('token');
+  });
+
+  it('finalizes recovery with a separate login password and numeric PIN', async () => {
+    jest.spyOn(PinResetService, 'applyNewPin').mockResolvedValue({
+      success: true,
+      message: 'PIN changed successfully',
+    });
+
+    const req: any = {
+      body: {
+        token: 'reset-token',
+        user_id: 'user@example.com',
+        new_password: 'new-password-123',
+        new_pin: '1234',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.finalizePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(PinResetService.applyNewPin).toHaveBeenCalledWith(
+      'reset-token',
+      'user@example.com',
+      expect.any(String),
+      'new-password-123'
+    );
+  });
+
+  it('rejects weak recovery login passwords before changing the PIN', async () => {
+    jest.spyOn(PinResetService, 'applyNewPin').mockResolvedValue({
+      success: true,
+      message: 'PIN changed successfully',
+    });
+
+    const req: any = {
+      body: {
+        token: 'reset-token',
+        user_id: 'user@example.com',
+        new_password: 'short',
+        new_pin: '1234',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.finalizePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      message: 'Password must contain at least 8 characters.',
+    }));
+    expect(PinResetService.applyNewPin).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-numeric recovery PIN values before changing credentials', async () => {
+    jest.spyOn(PinResetService, 'applyNewPin').mockResolvedValue({
+      success: true,
+      message: 'PIN changed successfully',
+    });
+
+    const req: any = {
+      body: {
+        token: 'reset-token',
+        user_id: 'user@example.com',
+        new_password: 'new-password-123',
+        new_pin: 'abcd',
+      },
+      headers: {},
+    };
+    const res = mockResponse();
+
+    await PinResetController.finalizePinReset(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      message: 'PIN must contain numbers only',
+    }));
+    expect(PinResetService.applyNewPin).not.toHaveBeenCalled();
   });
 
   it('can recover from an external login token that carries the linked session', async () => {
