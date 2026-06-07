@@ -3651,21 +3651,20 @@ export default function PixRampClient({
                   </div>
                 )}
               </div>
-	              <label className="tts-field-label mt-5 block text-sm font-black text-tts-deep">{L("Digite o PIN", "Enter PIN")}</label>
-              <WalletPinInput
-                value={walletPin}
-                onChange={updateWalletPin}
-                tone="cyan"
-                placeholder={L("Digite seu PIN", "Enter your PIN")}
-                clearLabel={L("Limpar", "Clear")}
-                inputRef={(node) => {
-                  walletPinInputRef.current = node;
-                }}
-              />
-
-              <div className="tts-mobile-action mt-4">
+              <div className={`${mobileStage === "payment" ? "tts-mobile-pin-action" : ""} mt-5`}>
+	              <label className="tts-field-label block text-sm font-black text-tts-deep">{L("Digite o PIN", "Enter PIN")}</label>
+                <WalletPinInput
+                  value={walletPin}
+                  onChange={updateWalletPin}
+                  tone="cyan"
+                  placeholder={L("Digite seu PIN", "Enter your PIN")}
+                  clearLabel={L("Limpar", "Clear")}
+                  inputRef={(node) => {
+                    walletPinInputRef.current = node;
+                  }}
+                />
                 <button
-                  className={`w-full rounded-2xl px-5 py-5 text-base font-black text-tts-deep shadow-sm transition disabled:opacity-50 ${
+                  className={`mt-4 w-full rounded-2xl px-5 py-5 text-base font-black text-tts-deep shadow-sm transition disabled:opacity-50 ${
                     offRampInsufficientBalance
                       ? "bg-tts-error shadow-red-950/20 hover:bg-tts-error/90"
                       : "bg-tts-gold shadow-cyan-950/30 hover:bg-tts-gold"
@@ -3688,7 +3687,7 @@ export default function PixRampClient({
                         : L("Confirmar retirada", "Confirm withdrawal")}
                 </button>
               </div>
-              </div>
+            </div>
             </div>
 
             <div className={`${mobileStage === "receipt" ? "block" : "hidden"} tts-mobile-flow-card tts-op-shell rounded-2xl border border-tts-border bg-tts-surface p-5 text-tts-deep shadow-sm md:block sm:p-6`}>
