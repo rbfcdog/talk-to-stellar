@@ -18,7 +18,11 @@ export interface SessionData {
   email_verified?: boolean;
   email_verified_at?: string;
   email_verification_source?: string;
+  preferred_language?: string;
+  language?: string;
   hide_amounts?: boolean;
+  amounts_hidden?: boolean;
+  value_privacy?: string;
   created_at: string;
   last_activity: string;
 }
