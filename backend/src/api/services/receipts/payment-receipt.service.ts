@@ -850,7 +850,7 @@ export class PaymentReceiptService {
   private static contextLine(contextMessage?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
     const sanitized = this.sanitizeContextMessage(contextMessage, language);
     if (!sanitized) return '';
-    return `${language === 'en' ? 'Summary' : 'Resumo'}: ${sanitized}`;
+    return sanitized;
   }
 
   private static sanitizeContextMessage(contextMessage?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {

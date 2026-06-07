@@ -326,7 +326,9 @@ describe('PaymentReceiptService', () => {
       contextMessage: 'Retirada via PIX concluída: o saldo saiu da conta TalkToStellar e entrou no seu PIX.',
     });
 
-    expect(receipt).toContain('Resumo: PIX enviado à chave.');
+    expect(receipt).toContain('PIX enviado à chave.');
+    expect(receipt).not.toContain('Resumo:');
+    expect(receipt).not.toContain('Summary:');
     expect(receipt).not.toContain('Retirada via PIX concluída');
     expect(receipt).not.toContain('Liquidação: confirmada');
   });
@@ -353,7 +355,9 @@ describe('PaymentReceiptService', () => {
       },
     });
 
-    expect(receipt).toContain('Resumo: PIX enviado à chave.');
+    expect(receipt).toContain('PIX enviado à chave.');
+    expect(receipt).not.toContain('Resumo:');
+    expect(receipt).not.toContain('Summary:');
     expect(receipt).toContain('Taxa: R$ 0.25');
     expect(receipt).not.toContain('Taxa: indisponível');
     expect(receipt).not.toContain('Taxa: indisponivel');
