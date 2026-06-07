@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { idempotentFetch } from "@/lib/idempotency"
+import { ConversionTestnetDisclaimer } from "@/components/shared/conversion-testnet-disclaimer"
 import { closeIntermediatePage, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback"
 import { Spinner, TypingDots } from "@/components/shared/feedback"
 import { OperationProgressPanel, type OperationProgressStatus } from "@/components/ui/operation-progress"
@@ -694,6 +695,9 @@ export default function ConfirmPaymentClient({
                 </p>
               </div>
             </div>
+            {isCrossCurrency && (
+              <ConversionTestnetDisclaimer language={feedbackLanguage} className="hidden md:flex" />
+            )}
             {mobileSyncStatus && (
               <p className="rounded-xl border border-tts-gold bg-tts-gold-bg px-3 py-2 text-sm text-tts-gold">
                 {mobileSyncStatus}
@@ -722,6 +726,9 @@ export default function ConfirmPaymentClient({
 	                    {destinationKeyLabel && <p className="tts-mobile-soft-hide mt-1 text-xs font-bold text-tts-muted">{destinationKeyLabel}</p>}
 	                  </div>
 	                </div>
+                  {isCrossCurrency && (
+                    <ConversionTestnetDisclaimer language={feedbackLanguage} compact className="mt-2 md:hidden" />
+                  )}
 	              </div>
 
 	              <div className="space-y-2">

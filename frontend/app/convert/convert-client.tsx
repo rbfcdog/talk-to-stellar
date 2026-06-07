@@ -12,6 +12,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { AccountStatusCard } from "@/components/shared/account-status";
+import { ConversionTestnetDisclaimer } from "@/components/shared/conversion-testnet-disclaimer";
 import { SecurePinGate } from "@/components/shared/secure-pin-gate";
 import { formatCustomerNumber } from "@/lib/customer-amount";
 import { normalizeLanguage, useLanguage, type AppLanguage } from "@/lib/i18n";
@@ -473,6 +474,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             <p className="mt-3 max-w-2xl text-sm leading-6 text-tts-muted md:text-base">
               {L("Escolha origem, destino e valor. O PIN vem só no final.", "Choose source, destination, and amount. PIN comes only at the end.")}
             </p>
+            <ConversionTestnetDisclaimer language={language} className="mt-3 max-w-2xl" />
           </div>
         </header>
 
@@ -526,6 +528,7 @@ export default function ConvertClient({ initialQuery = "" }: { initialQuery?: st
             reviewStatus={reviewStatus}
             numericAmount={numericAmount}
           />
+          <ConversionTestnetDisclaimer language={language} compact className="mt-3 md:hidden" />
 
           {mobileStage === "source" ? (
             <div className="flex min-h-0 flex-1 flex-col gap-3 py-3">
