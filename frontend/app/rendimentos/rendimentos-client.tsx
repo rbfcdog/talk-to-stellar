@@ -75,6 +75,7 @@ type InvestmentRow = {
 };
 type YieldSuccessNotice = { action: "deposit" | "withdraw"; reviewedAmount: string; reviewedAsset: string; vaultAmount?: string; vaultAsset?: string; hash?: string; };
 type AnalysisWindow = "daily" | "weekly";
+type ChartWindow = "weekly" | "monthly";
 
 const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: string }> = {
   USDC: { namePt: "Dólares", nameEn: "Dollars", short: "USD" },
@@ -125,6 +126,10 @@ const RETURN_PERIODS = [
 const ANALYSIS_WINDOWS: Array<{ key: AnalysisWindow; days: number; labelPt: string; labelEn: string; detailPt: string; detailEn: string }> = [
   { key: "daily", days: 1, labelPt: "Diário", labelEn: "Daily", detailPt: "Últimas 24h", detailEn: "Last 24h" },
   { key: "weekly", days: 7, labelPt: "Semanal", labelEn: "Weekly", detailPt: "Últimos 7 dias", detailEn: "Last 7 days" },
+];
+const CHART_WINDOWS: Array<{ key: ChartWindow; days: number; labelPt: string; labelEn: string; detail: string }> = [
+  { key: "weekly", days: 7, labelPt: "Semanal", labelEn: "Weekly", detail: "7d" },
+  { key: "monthly", days: 30, labelPt: "Mensal", labelEn: "Monthly", detail: "30d" },
 ];
 function periodReturnPercent(ratePercent: number, years: number) {
   const annualRate = Math.max(0, ratePercent) / 100;
@@ -206,28 +211,30 @@ function shiftDate(daysAgo: number) {
   return date.toISOString();
 }
 
-function buildGrowthPathPoints(amount: number, ratePercent: number, language: AppLanguage): ChartPoint[] {
+function buildGrowthPathPoints(amount: number, ratePercent: number, language: AppLanguage, days: number): ChartPoint[] {
   const base = Math.max(0, amount);
   const annualRate = Math.max(0, ratePercent) / 100;
-  const labels = [
-    { days: 0, label: localCopy(language, "Hoje", "Today") },
-    { days: 30, label: "30d" },
-    { days: 90, label: "90d" },
-    { days: 180, label: "6m" },
-    { days: 365, label: "12m" },
-  ];
+  const offsets = days <= 7 ? [0, 1, 2, 4, 7] : [0, 7, 14, 21, 30];
+  const labels = offsets.map((offset) => ({
+    days: offset,
+    label: offset === 0 ? localCopy(language, "Hoje", "Today") : `${offset}d`,
+  }));
   return labels.map((item) => ({
     label: item.label,
     value: annualRate > 0 ? base * Math.pow(1 + annualRate, item.days / 365) : base,
   }));
 }
 
-function buildPositionLinePoints(history: PositionHistoryState | undefined, currentAmount: number, language: AppLanguage): ChartPoint[] {
+function buildPositionLinePoints(history: PositionHistoryState | undefined, currentAmount: number, language: AppLanguage, days: number): ChartPoint[] {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const sorted = [...(history?.points || [])]
     .filter((point) => Number.isFinite(Date.parse(String(point.date || ""))))
     .sort((a, b) => Date.parse(String(a.date || "")) - Date.parse(String(b.date || "")));
+  const previousPoint = [...sorted].reverse().find((point) => Date.parse(String(point.date || "")) < cutoff);
+  const scoped = sorted.filter((point) => Date.parse(String(point.date || "")) >= cutoff);
+  const displayPoints = scoped.length && previousPoint ? [previousPoint, ...scoped] : scoped;
 
-  const points: ChartPoint[] = sorted.map((point) => ({
+  const points: ChartPoint[] = displayPoints.map((point) => ({
     label: formatChartDate(point.date, language),
     date: point.date,
     value: normalizeDecimal(point.amount),
@@ -242,7 +249,8 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
     return points;
   }
 
-  return [30, 14, 7, 0].map((daysAgo) => ({
+  const fallbackDays = days <= 7 ? [7, 4, 2, 0] : [30, 21, 14, 7, 0];
+  return fallbackDays.map((daysAgo) => ({
     label: daysAgo === 0 ? localCopy(language, "Hoje", "Today") : formatChartDate(shiftDate(daysAgo), language),
     date: shiftDate(daysAgo),
     value: Math.max(0, currentAmount),
@@ -256,14 +264,15 @@ function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
   tone?: "primary" | "muted";
 }) {
   const stroke = tone === "primary" ? "var(--tts-deep)" : "var(--tts-confirm)";
+  const showDots = data.length <= 10;
   return (
-    <div className="h-28 w-full">
+    <div className="h-24 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 6, bottom: 0, left: 6 }}>
+        <LineChart data={data} margin={{ top: 8, right: 6, bottom: 2, left: 6 }}>
           <XAxis dataKey="label" hide />
           <YAxis hide domain={["auto", "auto"]} />
           <Tooltip
-            cursor={{ stroke: "rgba(113, 113, 122, 0.25)", strokeWidth: 1 }}
+            cursor={{ stroke: "rgba(113, 113, 122, 0.18)", strokeWidth: 1 }}
             content={({ active, payload, label }) => {
               if (!active || !payload?.length) return null;
               const value = Number(payload[0]?.value || 0);
@@ -276,13 +285,14 @@ function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
             }}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="value"
             stroke={stroke}
-            strokeWidth={2.25}
-            dot={false}
-            activeDot={{ r: 4, strokeWidth: 0, fill: stroke }}
-            isAnimationActive
+            strokeOpacity={tone === "primary" ? 0.72 : 0.62}
+            strokeWidth={1.45}
+            dot={showDots ? { r: 1.75, strokeWidth: 0, fill: stroke, fillOpacity: 0.55 } : false}
+            activeDot={{ r: 3, strokeWidth: 0, fill: stroke, fillOpacity: 0.85 }}
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -292,37 +302,69 @@ function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
 
 function InvestmentGraphs({ language, row }: { language: AppLanguage; row: InvestmentRow }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const growthPoints = buildGrowthPathPoints(row.amount, row.rate, language);
-  const historyPoints = buildPositionLinePoints(row.history, row.amount, language);
+  const [chartWindow, setChartWindow] = useState<ChartWindow>("weekly");
+  const activeWindow = CHART_WINDOWS.find((item) => item.key === chartWindow) || CHART_WINDOWS[0];
+  const growthPoints = buildGrowthPathPoints(row.amount, row.rate, language, activeWindow.days);
+  const historyPoints = buildPositionLinePoints(row.history, row.amount, language, activeWindow.days);
   const growthValue = growthPoints[growthPoints.length - 1]?.value || row.amount;
   const hasMovements = Boolean(row.history.points.length);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-2xl border border-tts-border bg-tts-bg p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Caminho estimado", "Growth path")}</p>
-            <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(growthValue, row.profile, language)}</p>
-          </div>
-          <span className="text-xs font-black text-tts-confirm">
-            {formatReturnPercent(periodReturnPercent(row.rate, 1), language)}
-          </span>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-wide text-tts-muted">
+          {L("Visualização do gráfico", "Chart view")}
+        </p>
+        <div className="grid grid-cols-2 gap-1 rounded-lg border border-tts-border bg-tts-bg p-1">
+          {CHART_WINDOWS.map((item) => {
+            const active = item.key === chartWindow;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setChartWindow(item.key)}
+                className={[
+                  "min-w-20 rounded-md px-2.5 py-1.5 text-left transition",
+                  active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-surface",
+                ].join(" ")}
+                aria-pressed={active}
+              >
+                <span className="block text-[10px] font-black">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
+                <span className={active ? "block text-[9px] font-semibold text-tts-surface/70" : "block text-[9px] font-semibold text-tts-muted"}>
+                  {item.detail}
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <InvestmentLineChart data={growthPoints} profile={row.profile} language={language} tone="muted" />
       </div>
 
-      <div className="rounded-2xl border border-tts-border bg-tts-bg p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha real", "Real balance line")}</p>
-            <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Caminho estimado", "Growth path")}</p>
+              <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(growthValue, row.profile, language)}</p>
+            </div>
+            <span className="text-xs font-black text-tts-confirm">
+              {formatReturnPercent(periodReturnPercent(row.rate, activeWindow.days / 365), language)}
+            </span>
           </div>
-          <span className="text-[11px] font-bold text-tts-muted">
-            {row.history.loading ? L("Carregando", "Loading") : hasMovements ? L("Movimentos", "Movements") : L("Atual", "Current")}
-          </span>
+          <InvestmentLineChart data={growthPoints} profile={row.profile} language={language} tone="muted" />
         </div>
-        <InvestmentLineChart data={historyPoints} profile={row.profile} language={language} />
+
+        <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha real", "Real balance line")}</p>
+              <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
+            </div>
+            <span className="text-[11px] font-bold text-tts-muted">
+              {row.history.loading ? L("Carregando", "Loading") : hasMovements ? L("Movimentos", "Movements") : L("Atual", "Current")}
+            </span>
+          </div>
+          <InvestmentLineChart data={historyPoints} profile={row.profile} language={language} />
+        </div>
       </div>
     </div>
   );
