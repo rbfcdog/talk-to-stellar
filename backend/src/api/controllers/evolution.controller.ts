@@ -32,6 +32,11 @@ function configuredEvolutionInstance(): string {
   ).trim();
 }
 
+function shouldProcessWebhookSynchronously(): boolean {
+  const value = String(process.env.EVOLUTION_WEBHOOK_SYNC_PROCESSING || '').trim().toLowerCase();
+  return value === 'true' || value === '1' || value === 'yes' || value === 'on';
+}
+
 export default class EvolutionController {
   static async webhook(req: Request, res: Response) {
     try {
@@ -43,6 +48,13 @@ export default class EvolutionController {
       const payload = req.params.event
         ? { ...req.body, event: req.body?.event || req.params.event }
         : req.body;
+      if (!shouldProcessWebhookSynchronously()) {
+        const queued = await EvolutionService.queueWebhook(payload);
+        if (!queued.unavailable) {
+          return res.status(200).json({ success: true, async: true, ...queued });
+        }
+      }
+
       const result = await EvolutionService.handleWebhook(payload);
       return res.status(200).json({ success: true, ...result });
     } catch (error) {
@@ -164,6 +176,30 @@ export default class EvolutionController {
     const limit = Number(req.body?.limit || req.query?.limit || process.env.EVOLUTION_OUTBOUND_DRAIN_LIMIT || 20);
     try {
       const result = await EvolutionService.processQueuedOutboundDeliveries(limit);
+      return res.status(200).json({
+        success: true,
+        result,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  static async drainInbox(req: Request, res: Response) {
+    if (!hasDiagnosticAuthorization(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Internal authorization is required to drain the Evolution inbox.',
+      });
+    }
+
+    const limit = Number(req.body?.limit || req.query?.limit || process.env.EVOLUTION_INBOUND_DRAIN_LIMIT || 10);
+    try {
+      const result = await EvolutionService.processQueuedInboundWebhooks(limit);
       return res.status(200).json({
         success: true,
         result,

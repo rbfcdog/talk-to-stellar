@@ -93,6 +93,7 @@ app.use('/webhooks', webhooksRouter);
 DailySummaryService.startScheduler();
 FxRateAlertService.startScheduler();
 EvolutionService.startWebhookAutoConfiguration();
+EvolutionService.startInboundWebhookWorker();
 EvolutionService.startOutboundDeliveryWorker();
 
 app.use((req, res) => {

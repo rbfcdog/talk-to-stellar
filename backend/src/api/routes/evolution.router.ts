@@ -8,6 +8,7 @@ router.post('/', EvolutionController.webhook);
 router.post('/test-send', EvolutionController.testSend);
 router.post('/test-notify', EvolutionController.testNotify);
 router.post('/outbox/drain', EvolutionController.drainOutbox);
+router.post('/inbox/drain', EvolutionController.drainInbox);
 router.get('/webhook', EvolutionController.ping);
 router.post('/webhook', EvolutionController.webhook);
 router.post('/webhook/:event', EvolutionController.webhook);
