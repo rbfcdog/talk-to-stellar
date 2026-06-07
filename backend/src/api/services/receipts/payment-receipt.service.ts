@@ -8,6 +8,7 @@ import { TransferNotificationService } from '../transfer-notification.service';
 import { ReceiptImageService } from './receipt-image.service';
 import { EconomyEngineService } from '../economy-engine.service';
 import { PlatformFeeService } from '../platform-fee.service';
+import { stripUserFacingSummaryLabels } from '../../../utils/user-facing-text';
 
 type ReceiptType = 'payment_sent' | 'payment_received' | 'conversion' | 'claim_redeemed';
 
@@ -215,7 +216,7 @@ export class PaymentReceiptService {
   }
 
   private static sanitizeUserFacingText(value?: string | null): string {
-    return String(value || '')
+    return stripUserFacingSummaryLabels(value)
       .split('\n')
       .map((line) => {
         if (/https?:\/\//i.test(line)) return line;
@@ -322,12 +323,13 @@ export class PaymentReceiptService {
     content: string;
     dedupeKey: string;
   }): Promise<boolean> {
+    const content = stripUserFacingSummaryLabels(input.content);
     const { error } = await supabase
       .from('agent_messages')
       .insert({
         session_id: input.sessionId,
         role: 'assistant',
-        content: input.content,
+        content,
         dedupe_key: input.dedupeKey,
         created_at: new Date().toISOString(),
       });
@@ -336,7 +338,7 @@ export class PaymentReceiptService {
       if (this.isUniqueViolation(error)) return false;
       const message = String(error?.message || '').toLowerCase();
       if (message.includes('dedupe_key') || message.includes('schema cache')) {
-        await this.agentRepo.saveMessage(input.sessionId, 'assistant', input.content);
+        await this.agentRepo.saveMessage(input.sessionId, 'assistant', content);
         return true;
       }
       throw error;
@@ -854,12 +856,12 @@ export class PaymentReceiptService {
   }
 
   private static sanitizeContextMessage(contextMessage?: string | null, language: 'pt-BR' | 'en' = 'pt-BR'): string {
-    const raw = String(contextMessage || '').trim();
+    const raw = stripUserFacingSummaryLabels(contextMessage);
     if (!raw) return '';
     const isEn = language === 'en';
     const normalized = raw
       .replace(/\s+/g, ' ')
-      .replace(/^(summary|resumo)\s*:\s*/i, '')
+      .replace(/^(summary|resumo)\s*[:\-–—]\s*/i, '')
       .replace(/\bwallet\b/gi, isEn ? 'account' : 'conta')
       .replace(/\btestnet\b/gi, '')
       .replace(/\bsandbox\b/gi, '')

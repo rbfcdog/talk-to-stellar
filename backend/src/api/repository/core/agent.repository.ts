@@ -4,6 +4,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
+import { stripUserFacingSummaryLabels } from '../../../utils/user-facing-text';
 import { SessionData, AgentState } from '../../agent/types';
 
 export class AgentRepository {
@@ -157,12 +158,15 @@ export class AgentRepository {
     role: 'user' | 'assistant',
     content: string
   ): Promise<void> {
+    const storedContent = role === 'assistant'
+      ? stripUserFacingSummaryLabels(content)
+      : content;
     const { error } = await this.supabase
       .from('agent_messages')
       .insert({
         session_id: sessionId,
         role,
-        content,
+        content: storedContent,
         created_at: new Date().toISOString(),
       });
 
@@ -178,8 +182,11 @@ export class AgentRepository {
     dedupeKey: string
   ): Promise<boolean> {
     const normalizedDedupeKey = String(dedupeKey || '').trim();
+    const storedContent = role === 'assistant'
+      ? stripUserFacingSummaryLabels(content)
+      : content;
     if (!normalizedDedupeKey) {
-      await this.saveMessage(sessionId, role, content);
+      await this.saveMessage(sessionId, role, storedContent);
       return true;
     }
 
@@ -188,7 +195,7 @@ export class AgentRepository {
       .insert({
         session_id: sessionId,
         role,
-        content,
+        content: storedContent,
         dedupe_key: normalizedDedupeKey,
         created_at: new Date().toISOString(),
       });
@@ -206,7 +213,7 @@ export class AgentRepository {
       const isSessionIntro = normalizedDedupeKey.startsWith('session_intro:');
       const alreadyHasSameIntro = recentMessages.some((message) => (
         String(message?.role || '') === role && (
-          String(message?.content || '').trim() === String(content || '').trim() ||
+          String(message?.content || '').trim() === String(storedContent || '').trim() ||
           (
             isSessionIntro &&
             (
@@ -219,7 +226,7 @@ export class AgentRepository {
         )
       ));
       if (alreadyHasSameIntro) return false;
-      await this.saveMessage(sessionId, role, content);
+      await this.saveMessage(sessionId, role, storedContent);
       return true;
     }
 

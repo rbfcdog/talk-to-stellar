@@ -61,6 +61,22 @@ describe('TransferNotificationService', () => {
     );
   });
 
+  it('strips assistant summary labels before sending WhatsApp callbacks', async () => {
+    await TransferNotificationService.notifyExternalChannelMessage({
+      provider: 'whatsapp',
+      providerUserId: '55 19 98180-8102',
+      text: 'Summary: We chose the best route for this conversion: CETES direct.\nThe final balance was already in CETES.',
+    });
+
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock).toHaveBeenCalledWith(
+      'main',
+      '5519981808102',
+      'We chose the best route for this conversion: CETES direct.\nThe final balance was already in CETES.',
+      { reliable: true }
+    );
+  });
+
   it('queues completion callbacks when Evolution delivery times out', async () => {
     sendTextMock.mockRejectedValueOnce(new Error('This operation was aborted'));
 
