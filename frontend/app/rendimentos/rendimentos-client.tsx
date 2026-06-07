@@ -471,6 +471,32 @@ async function yieldApi(path: string, init?: RequestInit, timeoutMs = 18000, pre
   return payload;
 }
 
+function recoverableYieldCode(error: unknown) {
+  const code = String((error as YieldApiError)?.code || "").trim();
+  return [
+    "yield_unavailable",
+    "yield_execution_unavailable",
+    "yield_asset_conversion_unavailable",
+    "yield_execution_disabled",
+    "provider_unavailable",
+    "service_timeout",
+    "temporary_unavailable",
+    "execution_unavailable",
+  ].includes(code) ? code : "";
+}
+
+function yieldFallbackMessage(error: unknown, language: AppLanguage) {
+  const raw = String(error instanceof Error ? error.message : error || "").trim();
+  const rawLooksGeneric = /não foi possível atualizar|nao foi possivel atualizar|não consegui concluir|nao consegui concluir|tente novamente em alguns segundos/i.test(raw);
+  const rawLooksPortuguese = /[ãáàâéêíóôõúç]|aplicação|confirm[aã]ção|indisponível|não|nao/i.test(raw);
+  if (raw && !rawLooksGeneric && !(language === "en" && rawLooksPortuguese)) return raw;
+  return localCopy(
+    language,
+    "Aplicação preparada, mas a confirmação de investimento está indisponível agora. Tente novamente em alguns segundos.",
+    "Application prepared, but investment confirmation is unavailable right now. Try again in a few seconds.",
+  );
+}
+
 export default function RendimentosClient({
   initialLanguage, initialQuery, view: initialView = "returns",
 }: {
@@ -684,7 +710,31 @@ export default function RendimentosClient({
       setYieldResult(payload);
       setActiveStep("review");
       setApiState({ loading: false, message: payload?.execution_ready === false ? (String(payload?.execution_blocked_code || "") ? String(payload?.execution_blocked_reason || "") : "") : "", error: "" });
-    } catch (error) { setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) }); }
+    } catch (error) {
+      const recoverableCode = recoverableYieldCode(error);
+      if (recoverableCode) {
+        const reason = yieldFallbackMessage(error, language);
+        setYieldResult({
+          success: true,
+          prepared: true,
+          review_only: true,
+          execution_ready: false,
+          execution_blocked_code: recoverableCode,
+          execution_blocked_reason: reason,
+          action,
+          amount,
+          amount_units: 0,
+          vault: {
+            ...actionableOption,
+            display_asset_code: optionCode(actionableOption),
+          },
+        });
+        setActiveStep("review");
+        setApiState({ loading: false, message: reason, error: "" });
+        return;
+      }
+      setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
+    }
   }
 
   async function confirmYield() {
@@ -696,7 +746,22 @@ export default function RendimentosClient({
       setPin("");
       setSuccessNotice({ action, reviewedAmount: amount, reviewedAsset: selectedProfile.short, vaultAmount: String(payload?.amount || "").trim(), vaultAsset: String(payload?.vault?.display_asset_code || payload?.vault?.asset_code || "").trim(), hash: String(payload?.hash || "").trim() });
       setApiState({ loading: false, message: L("Operação confirmada.", "Operation confirmed."), error: "" });
-    } catch (error) { setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) }); }
+    } catch (error) {
+      const recoverableCode = recoverableYieldCode(error);
+      if (recoverableCode) {
+        const reason = yieldFallbackMessage(error, language);
+        setYieldResult({
+          ...yieldResult,
+          review_only: true,
+          execution_ready: false,
+          execution_blocked_code: recoverableCode,
+          execution_blocked_reason: reason,
+        });
+        setApiState({ loading: false, message: reason, error: "" });
+        return;
+      }
+      setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
+    }
   }
 
   return (
