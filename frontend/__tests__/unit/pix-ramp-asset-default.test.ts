@@ -41,6 +41,16 @@ describe("PIX asset defaults", () => {
     expect(text).toContain('target_brl: quotePayload.target_brl || sourcePayload?.target_brl || sourcePayload?.destination_amount');
     expect(text).toContain('destination_amount: quotePayload.destination_amount || sourcePayload?.destination_amount || sourcePayload?.target_brl');
     expect(text).toContain('const offRampPreviewInputKey = stableHash(JSON.stringify([');
+    const previewKeyBlock = text.slice(
+      text.indexOf("const offRampPreviewInputKey = stableHash(JSON.stringify(["),
+      text.indexOf("const hasOffRampPreviewInputs = Boolean("),
+    );
+    const previewInputsBlock = text.slice(
+      text.indexOf("const hasOffRampPreviewInputs = Boolean("),
+      text.indexOf("const offRampInsufficientBalance = Boolean("),
+    );
+    expect(previewKeyBlock).not.toContain("normalizedOffRampPixKey");
+    expect(previewInputsBlock).not.toContain("normalizedOffRampPixKey");
     expect(text).toContain('const offRampFeePreviewBrlAmount = offRampExactReceiveBrl || offRampInputAsset === "BRL"');
     expect(text).toContain('const hasOffRampFeePreviewBrlAmount = Boolean(normalizeHumanAmount(offRampFeePreviewBrlAmount));');
     expect(text).toContain(') : hasOffRampFeePreviewBrlAmount ? (');

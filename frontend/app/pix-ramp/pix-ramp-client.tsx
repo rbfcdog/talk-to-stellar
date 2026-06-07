@@ -1302,7 +1302,6 @@ export default function PixRampClient({
     offRampInputValue,
     offRampFiatAmount,
     offRampInputAsset,
-    normalizedOffRampPixKey,
     rampEmail,
   ]));
   const hasOffRampPreviewInputs = Boolean(
@@ -1311,7 +1310,6 @@ export default function PixRampClient({
     sessionReady &&
     canResolveWallet &&
     normalizeHumanAmount(offRampInputValue) &&
-    normalizedOffRampPixKey &&
     !operationLocked
   );
   const offRampInsufficientBalance = Boolean(rampMode === "offramp" && isInsufficientBalanceText(error));
@@ -3581,7 +3579,6 @@ export default function PixRampClient({
                     aria-label={L("Chave PIX de destino", "Destination PIX key")}
                     onChange={(event) => {
                       setOffRampPixKey(event.target.value);
-                      setOffRampPreviewPayload(null);
                       setTemporaryOffRampTestResult(null);
                     }}
                   />
