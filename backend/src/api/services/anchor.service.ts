@@ -8652,8 +8652,8 @@ export class AnchorService {
     };
     const routeContext = rampText(
       language,
-      `Escolhemos a melhor rota para essa conversão: ${route.selected}. ${route.reason}`,
-      `We chose the best route for this conversion: ${route.selected}. ${route.reason}`
+      'Escolhemos a melhor rota para essa conversão.',
+      'We chose the best route for this conversion.'
     );
     const displayAmount = formatDisplayAmount(destinationAmount, destinationAsset.code);
     const explicitReceiptDedupeKey = coalesceString(input.dedupe_key, input.dedupeKey);
