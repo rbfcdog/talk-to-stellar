@@ -2,6 +2,7 @@ import { supabase } from '../../../config/supabase';
 import { AgentRepository } from '../../repository/core/agent.repository';
 import { logger } from '../../../utils/logger';
 import { formatCustomerAssetAmount } from '../../../utils/fee-display';
+import { stripUserFacingSummaryLabels } from '../../../utils/user-facing-text';
 import { EvolutionService } from '../evolution.service';
 
 type ExternalMapping = {
@@ -95,7 +96,7 @@ export class TransferNotificationService {
 
   private static normalizeReceiptLinkCopy(text: string, fallbackUrl?: string | null): string {
     const url = String(fallbackUrl || '').trim();
-    let normalized = String(text || '').replace(/\r\n/g, '\n').trim();
+    let normalized = stripUserFacingSummaryLabels(String(text || '').replace(/\r\n/g, '\n'));
     if (!normalized) return '';
 
     normalized = normalized.replace(
@@ -281,6 +282,7 @@ export class TransferNotificationService {
 
   static async notifyExternalChannelImage(input: ExternalChannelImageNotification): Promise<void> {
     const sessionId = String(input.sessionId || '').trim();
+    const caption = stripUserFacingSummaryLabels(input.caption || '');
     const directMapping = this.buildDirectMapping(input.provider, input.providerUserId);
     const session = sessionId ? await this.safeGetSession(sessionId) : null;
     const userId = String(input.userId || session?.user_id || '').trim();
@@ -293,13 +295,13 @@ export class TransferNotificationService {
       this.sendTelegramImageToMappings(
         mappings,
         input.svg,
-        String(input.caption || '').trim(),
+        caption,
         String(input.filename || 'recibo-talktostellar.svg').trim()
       ),
       this.sendWhatsAppToMappings(
         mappings,
         session?.phone_number,
-        `${String(input.caption || 'Comprovante gerado.').trim()}\n\nImagem do recibo disponível no chat web.`
+        `${caption || 'Comprovante gerado.'}\n\nImagem do recibo disponível no chat web.`
       ),
     ]);
   }
@@ -493,6 +495,7 @@ export class TransferNotificationService {
     text: string,
     options?: { buttonText?: string | null; buttonUrl?: string | null }
   ): Promise<void> {
+    const safeText = stripUserFacingSummaryLabels(text);
     const telegramIds = Array.from(new Set(
       mappings
         .filter((mapping) => String(mapping.provider || '').toLowerCase() === 'telegram')
@@ -500,7 +503,7 @@ export class TransferNotificationService {
         .filter(Boolean)
     ));
 
-    if (telegramIds.length === 0) return;
+    if (telegramIds.length === 0 || !safeText) return;
 
     const notifyUrl = String(process.env.TELEGRAM_NOTIFY_URL || '').trim();
     const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
@@ -511,7 +514,7 @@ export class TransferNotificationService {
 
     await Promise.all(telegramIds.map(async (chatId) => {
       if (notifyUrl) {
-        const delivered = await this.sendTelegramViaNotifyUrl(notifyUrl, chatId, text, options);
+        const delivered = await this.sendTelegramViaNotifyUrl(notifyUrl, chatId, safeText, options);
         if (delivered) return;
       }
 
@@ -531,7 +534,7 @@ export class TransferNotificationService {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: chatId,
-            text,
+            text: safeText,
             ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           }),
         });
@@ -619,7 +622,7 @@ export class TransferNotificationService {
     input: { imageSvgBase64: string; caption?: string; filename?: string }
   ): Promise<boolean> {
     const secret = String(process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
-    const caption = String(input.caption || 'Comprovante TalkToStellar').trim();
+    const caption = stripUserFacingSummaryLabels(input.caption || 'Comprovante TalkToStellar');
     const safeCaption = caption.length > 1000 ? `${caption.slice(0, 997).trimEnd()}...` : caption;
     try {
       const response = await fetch(notifyUrl, {
@@ -656,8 +659,10 @@ export class TransferNotificationService {
     options?: { buttonText?: string | null; buttonUrl?: string | null }
   ): Promise<boolean> {
     const secret = String(process.env.TELEGRAM_NOTIFY_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+    const safeText = stripUserFacingSummaryLabels(text);
     const buttonText = String(options?.buttonText || '').trim();
     const buttonUrl = String(options?.buttonUrl || '').trim();
+    if (!safeText) return false;
     try {
       const response = await fetch(notifyUrl, {
         method: 'POST',
@@ -667,7 +672,7 @@ export class TransferNotificationService {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          text,
+          text: safeText,
           disable_web_page_preview: true,
           ...(buttonText && buttonUrl ? { button_text: buttonText, button_url: buttonUrl } : {}),
         }),
@@ -721,16 +726,17 @@ export class TransferNotificationService {
     sessionPhoneNumber: string | undefined,
     text: string
   ): Promise<WhatsAppDeliveryReport> {
+    const safeText = stripUserFacingSummaryLabels(text);
     const whatsappMappings = mappings
       .filter((mapping) => this.isWhatsAppDeliveryMapping(mapping));
-    if (whatsappMappings.length === 0) {
+    if (whatsappMappings.length === 0 || !safeText) {
       return {
         attempted: false,
         delivered: 0,
         recipients: 0,
         instances: [],
         attempts: [],
-        skipped_reason: 'no_whatsapp_mapping',
+        skipped_reason: whatsappMappings.length === 0 ? 'no_whatsapp_mapping' : 'empty_message',
       };
     }
 
@@ -777,7 +783,7 @@ export class TransferNotificationService {
         for (const evolutionInstance of evolutionInstances) {
           if (deliveredByEvolution.has(phone) || queuedByEvolution.has(phone)) break;
           try {
-            await EvolutionService.sendText(evolutionInstance, phone, text, { reliable: true });
+            await EvolutionService.sendText(evolutionInstance, phone, safeText, { reliable: true });
             deliveredByEvolution.add(phone);
             attempts.push({
               phone_tail: phone.slice(-4),
@@ -791,7 +797,7 @@ export class TransferNotificationService {
               const queueResult = await EvolutionService.queueText({
                 instance: evolutionInstance,
                 recipient: phone,
-                text,
+                text: safeText,
                 reason: message,
                 metadata: { source: 'transfer_notification' },
               });
@@ -856,7 +862,7 @@ export class TransferNotificationService {
 
     await Promise.all(recipients.map(async (to) => {
       try {
-        const body = new URLSearchParams({ From: from, To: to, Body: text });
+        const body = new URLSearchParams({ From: from, To: to, Body: safeText });
         const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
           method: 'POST',
           headers: {
