@@ -38,7 +38,7 @@ type EvolutionSendTextOptions = {
   timeoutMs?: number;
 };
 
-type EvolutionSendTextBodyVariant = 'v2' | 'v1' | 'hybrid';
+type EvolutionSendTextBodyVariant = 'v2' | 'v1';
 type EvolutionReplyDeliveryStatus = 'sent' | 'queued';
 
 let webhookAutoConfigurationStarted = false;
@@ -646,9 +646,8 @@ function isMissingEvolutionInstanceError(error: unknown): boolean {
 
 function sendTextBodyVariants(): EvolutionSendTextBodyVariant[] {
   const configured = String(process.env.EVOLUTION_SEND_TEXT_BODY_VERSION || '').trim().toLowerCase();
-  if (configured === 'v1') return ['v1', 'v2', 'hybrid'];
-  if (configured === 'hybrid') return ['hybrid', 'v2', 'v1'];
-  return ['v2', 'v1', 'hybrid'];
+  if (configured === 'v1') return ['v1', 'v2'];
+  return ['v2', 'v1'];
 }
 
 function normalizeEvent(value: unknown): string {
@@ -1801,21 +1800,14 @@ export class EvolutionService {
             linkPreview: false,
           },
         }
-      : input.bodyVariant === 'hybrid'
-        ? {
-            number: input.number,
-            text: outboundText,
-            options: {
-              delay: 300,
-              presence: 'composing',
-              linkPreview: false,
-            },
-          }
-        : {
+      : {
           number: input.number,
           text: outboundText,
-          delay: 300,
-          linkPreview: false,
+          options: {
+            delay: 300,
+            presence: 'composing',
+            linkPreview: false,
+          },
         };
 
     logger.trace(`[evolution-send] sending variant=${input.bodyVariant} to=${input.number.replace(/\D+/g, '').slice(-4)} instance=${input.instance} text=${truncate(outboundText,80)} timeout=${input.timeoutMs}ms`);
