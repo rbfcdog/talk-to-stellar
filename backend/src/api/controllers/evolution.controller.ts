@@ -3,6 +3,7 @@ import { EvolutionService } from '../services/evolution.service';
 import { TransferNotificationService } from '../services/transfer-notification.service';
 import { isProductionLikeEnvironment } from '../../config/runtime';
 import { timingSafeEqualString } from '../../utils/password';
+import { logger, startTimer, truncate } from '../../utils/logger';
 
 function readBearerToken(req: Request): string {
   const auth = String(req.headers.authorization || '').trim();
@@ -37,29 +38,59 @@ function shouldProcessWebhookSynchronously(): boolean {
   return value === 'true' || value === '1' || value === 'yes' || value === 'on';
 }
 
+function summarizeEvent(payload: any): string {
+  try {
+    const event = payload?.event || payload?.data?.event || payload?.type || '?';
+    const body = payload?.data ?? payload;
+    const messages = Array.isArray(body?.messages) ? body.messages : (body?.message ? [body.message] : []);
+    const jids = messages
+      .map((m: any) => m?.key?.remoteJid || m?.remoteJid || '')
+      .filter(Boolean);
+    const uniqueJids = [...new Set(jids)].map((jid: unknown) => String(jid).split('@')[0].replace(/\D+/g, '').slice(-4));
+    const texts = messages
+      .map((m: any) => (m?.message?.conversation || m?.message?.extendedTextMessage?.text || '').trim())
+      .filter(Boolean);
+    return `event=${truncate(String(event),40)} msgs=${messages.length} remote=${uniqueJids.join(',') || '?'} text=${truncate(texts.join(' | '),80)} bodyKB=${(JSON.stringify(body || {}).length / 1024).toFixed(1)}`;
+  } catch {
+    const raw = JSON.stringify(payload || {});
+    return `bodyKB=${(raw.length / 1024).toFixed(1)} raw_preview=${truncate(raw, 120)}`;
+  }
+}
+
 export default class EvolutionController {
   static async webhook(req: Request, res: Response) {
+    const t = startTimer();
     try {
       const secret = req.query.secret || req.get('x-evolution-webhook-secret');
-      if (!EvolutionService.verifyWebhookSecret(secret)) {
+      const secretValid = EvolutionService.verifyWebhookSecret(secret);
+      logger.info(`[evolution-webhook] request received ${summarizeEvent(req.body)} path=${truncate(req.path, 80)} secret_ok=${secretValid} remote=${req.ip || '?'}`);
+      if (!secretValid) {
+        logger.warn(`[evolution-webhook] rejected invalid webhook secret remote=${req.ip || '?'} elapsed=${t.elapsed()}ms`);
         return res.status(401).json({ success: false, error: 'Invalid webhook secret.' });
       }
 
       const payload = req.params.event
         ? { ...req.body, event: req.body?.event || req.params.event }
         : req.body;
-      if (!shouldProcessWebhookSynchronously()) {
+      const syncMode = shouldProcessWebhookSynchronously();
+      logger.trace(`[evolution-webhook] processing mode sync=${syncMode} event_param=${truncate(String(req.params.event || 'none'), 40)}`);
+
+      if (!syncMode) {
         const queued = await EvolutionService.queueWebhook(payload);
+        logger.info(`[evolution-webhook] queue result queued=${queued.queued} duplicate=${queued.duplicate || false} unavailable=${queued.unavailable || false} dedupe_key=${truncate(queued.dedupeKey || 'none', 30)} skipped=${queued.skipped || 'none'} elapsed=${t.elapsed()}ms`);
         if (!queued.unavailable) {
           EvolutionService.scheduleInboundDirectFallback(payload, queued);
           return res.status(200).json({ success: true, async: true, ...queued });
         }
+        logger.warn(`[evolution-webhook] queue unavailable, processing synchronously as fallback`);
       }
 
       const result = await EvolutionService.handleWebhook(payload);
+      logger.info(`[evolution-webhook] sync processing done replied=${result.replied} skipped=${result.skipped || 'none'} queued=${result.queued || false} recipient=${truncate(result.recipient || '?',16)} elapsed=${t.elapsed()}ms`);
       return res.status(200).json({ success: true, ...result });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[evolution-webhook] webhook handler crashed ${truncate(message, 300)} elapsed=${t.elapsed()}ms`);
       return res.status(500).json({ success: false, error: message });
     }
   }
