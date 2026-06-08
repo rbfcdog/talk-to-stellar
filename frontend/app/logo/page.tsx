@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function LogoPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#080808] text-white">
+    <main className="relative min-h-screen overflow-hidden bg-[#0a0e1a] text-white">
       <div className="absolute inset-0 bg-grid-pattern" aria-hidden="true" />
       <div
         className="pointer-events-none absolute top-1/2 -left-64 z-0 -translate-y-1/2 opacity-20 md:-left-48"
@@ -17,7 +17,7 @@ export default function LogoPage() {
         <StellarLogo className="h-[600px] w-[600px] text-white md:h-[900px] md:w-[900px]" />
       </div>
       <div
-        className="fixed inset-0 bg-gradient-to-b from-transparent via-[#080808]/30 to-[#080808]"
+        className="fixed inset-0 bg-gradient-to-b from-transparent via-[#0a0e1a]/30 to-[#0a0e1a]"
         aria-hidden="true"
       />
     </main>
