@@ -104,7 +104,7 @@ export class AgentRepository {
       error = retry.error;
     }
 
-    if (error && this.isMissingColumnError(error, 'preferred_language')) {
+    if (error && (this.isMissingColumnError(error, 'preferred_language') || this.isMissingColumnError(error, 'language'))) {
       const {
         preferred_language,
         language,
