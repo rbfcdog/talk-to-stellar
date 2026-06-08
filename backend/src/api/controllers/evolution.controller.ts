@@ -99,6 +99,49 @@ export default class EvolutionController {
     return res.status(200).json({ success: true, webhook: 'evolution' });
   }
 
+  static async health(_req: Request, res: Response) {
+    try {
+      const instance = configuredEvolutionInstance();
+      const baseUrl = process.env.EVOLUTION_API_URL || '';
+      const apiKey = process.env.EVOLUTION_API_KEY || process.env.AUTHENTICATION_API_KEY || '';
+      const backendUrl = process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_PUBLIC_URL || '';
+      const webhookUrl = baseUrl && apiKey && instance
+        ? `${baseUrl}/webhook/find/${encodeURIComponent(instance)}`
+        : '';
+
+      const result: any = {
+        success: true,
+        backend: {
+          evolution_api_url: baseUrl || 'not set',
+          evolution_instance: instance || 'not set',
+          public_backend_url: backendUrl || 'not set',
+          webhook_sync_processing: shouldProcessWebhookSynchronously(),
+        },
+      };
+
+      if (webhookUrl) {
+        try {
+          const res = await fetch(webhookUrl, { headers: { apikey: apiKey } });
+          const body = await res.json().catch(() => ({}));
+          result.evolution_webhook = {
+            reachable: true,
+            status: res.status,
+            config: body,
+          };
+        } catch (e) {
+          result.evolution_webhook = {
+            reachable: false,
+            error: e instanceof Error ? e.message : String(e),
+          };
+        }
+      }
+
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(200).json({ success: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   static async testSend(req: Request, res: Response) {
     if (!hasDiagnosticAuthorization(req)) {
       return res.status(403).json({

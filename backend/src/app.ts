@@ -92,9 +92,12 @@ app.use('/webhooks', webhooksRouter);
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
 FxRateAlertService.startScheduler();
+
+logger.info(`[evolution-startup] Evolution services starting. base_url=${process.env.EVOLUTION_API_URL || '?'} instance=${process.env.EVOLUTION_INSTANCE || '?'} public_backend=${process.env.PUBLIC_BACKEND_URL || '?'} agent_url=${process.env.EVOLUTION_AGENT_URL || 'default'} webhook_sync=${process.env.EVOLUTION_WEBHOOK_SYNC_PROCESSING || 'false'}`);
 EvolutionService.startWebhookAutoConfiguration();
 EvolutionService.startInboundWebhookWorker();
 EvolutionService.startOutboundDeliveryWorker();
+logger.info('[evolution-startup] Evolution services registered (auto-config, inbound worker, outbound worker)');
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
