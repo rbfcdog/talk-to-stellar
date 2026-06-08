@@ -105,9 +105,6 @@ export default class EvolutionController {
       const baseUrl = process.env.EVOLUTION_API_URL || '';
       const apiKey = process.env.EVOLUTION_API_KEY || process.env.AUTHENTICATION_API_KEY || '';
       const backendUrl = process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_PUBLIC_URL || '';
-      const webhookUrl = baseUrl && apiKey && instance
-        ? `${baseUrl}/webhook/find/${encodeURIComponent(instance)}`
-        : '';
 
       const result: any = {
         success: true,
@@ -117,11 +114,13 @@ export default class EvolutionController {
           public_backend_url: backendUrl || 'not set',
           webhook_sync_processing: shouldProcessWebhookSynchronously(),
         },
+        recent_webhooks: EvolutionService.getRecentWebhooks(),
       };
 
-      if (webhookUrl) {
+      if (baseUrl && apiKey && instance) {
+        const webhookFindUrl = `${baseUrl}/webhook/find/${encodeURIComponent(instance)}`;
         try {
-          const res = await fetch(webhookUrl, { headers: { apikey: apiKey } });
+          const res = await fetch(webhookFindUrl, { headers: { apikey: apiKey } });
           const body = await res.json().catch(() => ({}));
           result.evolution_webhook = {
             reachable: true,

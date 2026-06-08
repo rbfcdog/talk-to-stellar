@@ -49,6 +49,10 @@ let inboundWorkerStarted = false;
 let inboundQueueDrainTimer: NodeJS.Timeout | null = null;
 let inboundQueueDrainRunning = false;
 
+// In-memory ring buffer of recent webhook receipts for diagnostics.
+const recentWebhooks: Array<{ ts: string; remote: string; text: string; result: string }> = [];
+const MAX_RECENT_WEBHOOKS = 20;
+
 class EvolutionSendTextError extends Error {
   status?: number;
   body?: unknown;
@@ -1039,6 +1043,10 @@ async function sendAgentQuery(input: {
 }
 
 export class EvolutionService {
+  static getRecentWebhooks(): Array<{ ts: string; remote: string; text: string; result: string }> {
+    return [...recentWebhooks];
+  }
+
   static buildWebhookUrl(): string {
     const baseUrl = publicBackendBaseUrl();
     if (!baseUrl) {
@@ -1053,6 +1061,7 @@ export class EvolutionService {
 
   static async configureWebhook(): Promise<any> {
     const instance = configuredInstance();
+    const instanceId = process.env.EVOLUTION_INSTANCE_ID || '';
     const { baseUrl, apiKey } = assertEvolutionConfig(instance);
     const webhookUrl = this.buildWebhookUrl();
     const t = startTimer();
@@ -1062,8 +1071,14 @@ export class EvolutionService {
       const findUrl = `${baseUrl}/webhook/find/${encodeURIComponent(instance)}`;
       const findRes = await fetch(findUrl, { headers: { apikey: apiKey } });
       if (findRes.ok) {
-        const findBody = await findRes.json().catch(() => ({}));
-        logger.info(`[evolution-webhook] current webhook state: ${truncate(JSON.stringify(findBody), 500)}`);
+        const findBody: any = await findRes.json().catch(() => ({}));
+        const currentUrl = findBody?.url || findBody?.webhook?.url || '';
+        const currentEnabled = findBody?.enabled ?? findBody?.webhook?.enabled;
+        logger.info(`[evolution-webhook] current webhook state: enabled=${currentEnabled} url=${currentUrl ? maskWebhookUrl(String(currentUrl)) : 'none'} raw=${truncate(JSON.stringify(findBody), 400)}`);
+        if (currentEnabled && currentUrl === webhookUrl) {
+          logger.info(`[evolution-webhook] webhook already correctly configured, skipping`);
+          return { success: true, webhookUrl, alreadyConfigured: true, response: findBody };
+        }
       } else {
         logger.trace(`[evolution-webhook] could not read current webhook: status=${findRes.status}`);
       }
@@ -1071,45 +1086,60 @@ export class EvolutionService {
       logger.trace(`[evolution-webhook] webhook/find error: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // Evolution v2 accepts various body shapes. Try multiple formats.
+    // Try both instance name and instance ID in the URL path.
+    const instanceKeys = [...new Set([instance, instanceId].filter(Boolean))];
+    if (instanceKeys.length === 0) instanceKeys.push(instance || 'main');
+
+    // Evolution v2 body formats, from most to least complete.
     const bodies = [
+      { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'], webhook_by_events: false },
       { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'] },
-      { enabled: true, url: webhookUrl, webhook_by_events: false, events: ['MESSAGES_UPSERT'] },
-      { enabled: true, url: webhookUrl, webhook_by_events: false },
       { url: webhookUrl, events: ['MESSAGES_UPSERT'] },
     ];
 
     let lastStatus = 0;
     let lastBody: any = null;
 
-    for (const body of bodies) {
-      try {
-        const response = await fetch(`${baseUrl}/webhook/set/${encodeURIComponent(instance)}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: apiKey,
-          },
-          body: JSON.stringify(body),
-        });
+    for (const instanceKey of instanceKeys) {
+      const encodedKey = encodeURIComponent(instanceKey);
+      for (const body of bodies) {
+        try {
+          const response = await fetch(`${baseUrl}/webhook/set/${encodedKey}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: apiKey,
+            },
+            body: JSON.stringify(body),
+          });
 
-        const responseBody = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
-        const status = response.status;
-        lastStatus = status;
-        lastBody = responseBody;
-        logger.info(`[evolution-webhook] configureWebhook attempt status=${status} body_keys=${JSON.stringify(Object.keys(body))} url=${maskWebhookUrl(webhookUrl)} elapsed=${t.elapsed()}ms`);
+          const responseBody = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+          const status = response.status;
+          lastStatus = status;
+          lastBody = responseBody;
+          logger.info(`[evolution-webhook] configureWebhook instance=${instanceKey} status=${status} body_keys=${JSON.stringify(Object.keys(body))} url=${maskWebhookUrl(webhookUrl)} elapsed=${t.elapsed()}ms`);
 
-        if (status === 200 || status === 201) {
-          return { success: true, webhookUrl, response: responseBody };
+          if (status === 200 || status === 201) {
+            logger.info(`[evolution-webhook] webhook successfully configured instance=${instanceKey} url=${maskWebhookUrl(webhookUrl)} elapsed=${t.elapsed()}ms`);
+            return { success: true, webhookUrl, instance: instanceKey, response: responseBody };
+          }
+
+          logger.warn(`[evolution-webhook] configureWebhook rejected status=${status} instance=${instanceKey} body=${truncate(JSON.stringify(responseBody), 400)}`);
+        } catch (error) {
+          logger.trace(`[evolution-webhook] configureWebhook network error instance=${instanceKey}: ${error instanceof Error ? error.message : String(error)}`);
         }
-
-        logger.warn(`[evolution-webhook] configureWebhook rejected status=${status} body=${truncate(JSON.stringify(responseBody), 400)}`);
-      } catch (error) {
-        logger.trace(`[evolution-webhook] configureWebhook network error: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    throw new Error(`Evolution webhook setup failed after trying ${bodies.length} body formats (last status: ${lastStatus}): ${truncate(JSON.stringify(lastBody), 300)}`);
+    // All formats failed. This is normal when Evolution uses global webhook
+    // (WEBHOOK_GLOBAL_URL env var) — the per-instance API is blocked.
+    logger.warn(
+      `[evolution-webhook] configureWebhook could not set per-instance webhook (${bodies.length * instanceKeys.length} attempts, last status=${lastStatus}). ` +
+      `This is OK if Evolution's WEBHOOK_GLOBAL_URL is set to: ${maskWebhookUrl(webhookUrl)}. ` +
+      `Verify this value in Evolution's Railway environment variables. ` +
+      `Per-instance response: ${truncate(JSON.stringify(lastBody), 200)}`
+    );
+    return { success: false, webhookUrl, notice: 'per-instance webhook blocked, relying on Evolution global webhook (WEBHOOK_GLOBAL_URL)', lastStatus, lastBody };
   }
 
   static startWebhookAutoConfiguration(): void {
@@ -1955,6 +1985,9 @@ export class EvolutionService {
     const textPreview = truncate(text, 80);
     logger.info(`[evolution-webhook] step=1 received remote=***${recipient.slice(-4)} instance=${instance} msg_id=${truncate(message.messageId || '?',16)} text=${textPreview} elapsed=${t.elapsed()}ms`);
 
+    recentWebhooks.unshift({ ts: new Date().toISOString(), remote: `***${recipient.slice(-4)}`, text: textPreview, result: 'processing' });
+    if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) recentWebhooks.length = MAX_RECENT_WEBHOOKS;
+
     if (!text) {
       logger.trace(`[evolution-webhook] step=2 empty_text skipped=empty_or_unsupported_message elapsed=${t.elapsed()}ms`);
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
@@ -2026,6 +2059,7 @@ export class EvolutionService {
         };
       }
       logger.info(`[evolution-webhook] step=8 done replied_with=agent remote=***${recipient.slice(-4)} instance=${instance} elapsed=${t.elapsed()}ms`);
+      if (recentWebhooks.length > 0) recentWebhooks[0].result = 'replied_agent';
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn(`[evolution-webhook] step=7 agent_reply_failed remote=***${recipient.slice(-4)} instance=${instance} error=${truncate(errorMessage,200)} step6_elapsed=${Date.now() - step6Start}ms total_elapsed=${t.elapsed()}ms`);
@@ -2072,6 +2106,7 @@ export class EvolutionService {
         markProcessed(exactMessageKey);
         await completePersistentDedupeKey(persistentClaim.key);
         logger.info(`[evolution-webhook] step=9 done replied_with=fallback remote=***${recipient.slice(-4)} instance=${instance} elapsed=${t.elapsed()}ms`);
+        if (recentWebhooks.length > 0) recentWebhooks[0].result = 'replied_fallback';
       } catch (fallbackError) {
         await releasePersistentDedupeKey(persistentClaim.key);
         throw fallbackError;
