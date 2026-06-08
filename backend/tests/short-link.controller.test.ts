@@ -209,6 +209,43 @@ describe('ShortLinkController security validation', () => {
       url: 'https://app.example.com/pix-ramp?source=whatsapp&session_scope=whatsapp',
       purpose: 'pix_onramp',
       session_source: 'whatsapp',
+      already_completed: false,
+      completed: false,
+      completion_status: null,
+    });
+  });
+
+  it('passes completed short-link metadata without exposing the consumed confirmation URL to public callers', async () => {
+    mockResolveShortLinkRecord.mockResolvedValue({
+      url: 'https://app.example.com/confirm-payment?token=secret-token',
+      purpose: 'payment_confirm',
+      session_id: 'session-1',
+      user_id: 'user-1',
+      already_completed: true,
+      completed: true,
+      completion_status: 'completed',
+    });
+
+    const req = createRequest(
+      {},
+      {},
+      { code: 'done-link' },
+      { include_session: '1' }
+    );
+    const res = createResponse();
+
+    await ShortLinkController.resolve(req, res);
+
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      url: null,
+      purpose: 'payment_confirm',
+      session_source: null,
+      already_completed: true,
+      completed: true,
+      completion_status: 'completed',
     });
   });
 

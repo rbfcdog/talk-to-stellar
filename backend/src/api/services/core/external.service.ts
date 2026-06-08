@@ -12,6 +12,14 @@ import { getRequiredJwtSecret } from '../../../config/secrets';
 const SENSITIVE_SHORT_LINK_MAX_AGE_MS = 15 * 60 * 1000;
 const PIX_RAMP_SHORT_LINK_MAX_AGE_MS = 45 * 60 * 1000;
 
+type ShortLinkConfirmationState = {
+  consumed: boolean;
+  completed: boolean;
+  expired: boolean;
+  used: boolean;
+  status: string;
+};
+
 function getJwtSecret() {
   return getRequiredJwtSecret();
 }
@@ -422,6 +430,9 @@ export class ExternalService {
     purpose?: string | null;
     session_id?: string | null;
     user_id?: string | null;
+    already_completed?: boolean;
+    completed?: boolean;
+    completion_status?: string | null;
   } | null> {
     const normalized = String(code || '').trim();
     if (!normalized) return null;
@@ -437,24 +448,30 @@ export class ExternalService {
     }
 
     if (!data?.url) return null;
+    const confirmationState = await this.shortLinkConfirmationState(data);
+    const completedMoneyLink = this.isCompletedMoneyShortLink(data.purpose, confirmationState);
     const expiresAt = data.expires_at ? Date.parse(String(data.expires_at)) : 0;
-    if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now()) return null;
+    if (expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now() && !completedMoneyLink) return null;
     const sensitiveMaxAgeMs = sensitiveShortLinkMaxAgeMs(data.purpose);
     const createdAt = data.created_at ? Date.parse(String(data.created_at)) : 0;
     if (
       sensitiveMaxAgeMs > 0 &&
       createdAt &&
       Number.isFinite(createdAt) &&
-      Date.now() - createdAt > sensitiveMaxAgeMs
+      Date.now() - createdAt > sensitiveMaxAgeMs &&
+      !completedMoneyLink
     ) {
       return null;
     }
-    if (await this.isShortLinkConfirmationConsumed(data)) return null;
+    if (confirmationState.consumed && !completedMoneyLink) return null;
     return {
       url: String(data.url),
       purpose: data.purpose || null,
       session_id: data.session_id || null,
       user_id: data.user_id || null,
+      already_completed: completedMoneyLink,
+      completed: completedMoneyLink,
+      completion_status: confirmationState.status || null,
     };
   }
 
@@ -479,10 +496,17 @@ export class ExternalService {
     }
   }
 
-  private async isShortLinkConfirmationConsumed(data: any): Promise<boolean> {
+  private isCompletedMoneyShortLink(purpose: unknown, state: ShortLinkConfirmationState): boolean {
+    const normalized = String(purpose || '').trim().toLowerCase();
+    if (!['payment_confirm', 'payment_claim', 'conversion_confirm'].includes(normalized)) return false;
+    return Boolean(state.completed);
+  }
+
+  private async shortLinkConfirmationState(data: any): Promise<ShortLinkConfirmationState> {
     const table = this.confirmationTableForShortLinkPurpose(data?.purpose);
     const hash = this.tokenHashFromShortLinkData(data);
-    if (!table || !hash) return false;
+    const empty = { consumed: false, completed: false, expired: false, used: false, status: '' };
+    if (!table || !hash) return empty;
 
     try {
       const { data: confirmation, error } = await this.supabase
@@ -491,15 +515,23 @@ export class ExternalService {
         .eq('token_hash', hash)
         .maybeSingle();
 
-      if (error || !confirmation) return false;
+      if (error || !confirmation) return empty;
       const status = String((confirmation as any)?.status || '').trim().toLowerCase();
-      const consumed = Boolean((confirmation as any)?.used) || status === 'completed' || status === 'claimed';
-      if (consumed) return true;
+      const used = Boolean((confirmation as any)?.used);
+      const failed = ['failed', 'failure', 'expired', 'cancelled', 'canceled', 'rejected'].includes(status);
+      const completed = ['completed', 'claimed', 'success', 'succeeded'].includes(status) || (used && !failed);
       const expiresAt = (confirmation as any)?.expires_at ? Date.parse(String((confirmation as any).expires_at)) : 0;
-      return Boolean(expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now());
+      const expired = !completed && Boolean(expiresAt && Number.isFinite(expiresAt) && expiresAt < Date.now());
+      return {
+        consumed: used || completed || expired,
+        completed,
+        expired,
+        used,
+        status,
+      };
     } catch (error) {
       logger.warn(`[short-links] could not check confirmation consumption: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
+      return empty;
     }
   }
 
