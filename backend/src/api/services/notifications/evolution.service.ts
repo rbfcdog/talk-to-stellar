@@ -1057,13 +1057,29 @@ export class EvolutionService {
     const webhookUrl = this.buildWebhookUrl();
     const t = startTimer();
 
-    // Evolution v2 accepts either a simple body or an expanded one. Try both.
+    // First, read the current webhook config to diagnose the state.
+    try {
+      const findUrl = `${baseUrl}/webhook/find/${encodeURIComponent(instance)}`;
+      const findRes = await fetch(findUrl, { headers: { apikey: apiKey } });
+      if (findRes.ok) {
+        const findBody = await findRes.json().catch(() => ({}));
+        logger.info(`[evolution-webhook] current webhook state: ${truncate(JSON.stringify(findBody), 500)}`);
+      } else {
+        logger.trace(`[evolution-webhook] could not read current webhook: status=${findRes.status}`);
+      }
+    } catch (e) {
+      logger.trace(`[evolution-webhook] webhook/find error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    // Evolution v2 accepts various body shapes. Try multiple formats.
     const bodies = [
       { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'] },
       { enabled: true, url: webhookUrl, webhook_by_events: false, events: ['MESSAGES_UPSERT'] },
+      { enabled: true, url: webhookUrl, webhook_by_events: false },
+      { url: webhookUrl, events: ['MESSAGES_UPSERT'] },
     ];
 
-    let lastError: unknown = null;
+    let lastStatus = 0;
     let lastBody: any = null;
 
     for (const body of bodies) {
@@ -1078,39 +1094,22 @@ export class EvolutionService {
         });
 
         const responseBody = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
-        logger.info(`[evolution-webhook] configureWebhook status=${response.status} instance=${instance} body_format=${JSON.stringify(Object.keys(body))} url=${maskWebhookUrl(webhookUrl)} elapsed=${t.elapsed()}ms`);
+        const status = response.status;
+        lastStatus = status;
+        lastBody = responseBody;
+        logger.info(`[evolution-webhook] configureWebhook attempt status=${status} body_keys=${JSON.stringify(Object.keys(body))} url=${maskWebhookUrl(webhookUrl)} elapsed=${t.elapsed()}ms`);
 
-        if (!response.ok) {
-          logger.warn(`[evolution-webhook] configureWebhook failed status=${response.status} body=${truncate(JSON.stringify(responseBody), 300)}`);
-          lastError = new Error(`Evolution webhook setup failed: ${response.status} ${JSON.stringify(responseBody)}`);
-          lastBody = responseBody;
-          continue;
+        if (status === 200 || status === 201) {
+          return { success: true, webhookUrl, response: responseBody };
         }
 
-        return {
-          success: true,
-          webhookUrl,
-          response: responseBody,
-        };
+        logger.warn(`[evolution-webhook] configureWebhook rejected status=${status} body=${truncate(JSON.stringify(responseBody), 400)}`);
       } catch (error) {
-        lastError = error;
+        logger.trace(`[evolution-webhook] configureWebhook network error: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    // Fallback: try to read the existing webhook config so we can surface what's actually set
-    try {
-      const infoRes = await fetch(`${baseUrl}/webhook/find/${encodeURIComponent(instance)}`, {
-        headers: { apikey: apiKey },
-      });
-      if (infoRes.ok) {
-        const info = await infoRes.json().catch(() => ({}));
-        logger.warn(`[evolution-webhook] configureWebhook all formats failed. Existing webhook config: ${truncate(JSON.stringify(info), 500)}`);
-      }
-    } catch {
-      // best-effort
-    }
-
-    throw lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown webhook configuration error'));
+    throw new Error(`Evolution webhook setup failed after trying ${bodies.length} body formats (last status: ${lastStatus}): ${truncate(JSON.stringify(lastBody), 300)}`);
   }
 
   static startWebhookAutoConfiguration(): void {
@@ -1448,6 +1447,10 @@ export class EvolutionService {
       let completed = 0;
       let failed = 0;
 
+      if (rows.length > 0) {
+        logger.trace(`[evolution-inbox] worker cycle found ${rows.length} pending rows`);
+      }
+
       for (const row of rows) {
         const dedupeKey = String(row?.dedupe_key || '').trim();
         if (!dedupeKey) continue;
@@ -1750,11 +1753,10 @@ export class EvolutionService {
     timeoutMs: number;
     bodyVariant: EvolutionSendTextBodyVariant;
   }): Promise<any> {
+    const t = startTimer();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
     let response: Response;
-    // Preserve WhatsApp Markdown markers. Evolution/Baileys applies native
-    // formatting, so escaping '*' or '_' here would make receipts look broken.
     const outboundText = String(input.text ?? '');
     const body = input.bodyVariant === 'v1'
       ? {
@@ -1785,6 +1787,8 @@ export class EvolutionService {
           linkPreview: false,
         };
 
+    logger.trace(`[evolution-send] sending variant=${input.bodyVariant} to=${input.number.replace(/\D+/g, '').slice(-4)} instance=${input.instance} text=${truncate(outboundText,80)} timeout=${input.timeoutMs}ms`);
+
     try {
       response = await fetch(`${input.baseUrl}/message/sendText/${encodeURIComponent(input.instance)}`, {
         method: 'POST',
@@ -1801,6 +1805,7 @@ export class EvolutionService {
 
     const responseBody = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
     if (!response.ok) {
+      logger.warn(`[evolution-send] sendText failed status=${response.status} to=${input.number.replace(/\D+/g, '').slice(-4)} variant=${input.bodyVariant} body=${truncate(JSON.stringify(responseBody),200)} elapsed=${t.elapsed()}ms`);
       throw new EvolutionSendTextError(
         `Evolution sendText failed: ${response.status} ${JSON.stringify(responseBody)}`,
         response.status,
@@ -1808,12 +1813,14 @@ export class EvolutionService {
       );
     }
     if (!evolutionResponseLooksAccepted(responseBody)) {
+      logger.warn(`[evolution-send] sendText response rejected status=${response.status} to=${input.number.replace(/\D+/g, '').slice(-4)} variant=${input.bodyVariant} body=${truncate(JSON.stringify(responseBody),200)} elapsed=${t.elapsed()}ms`);
       throw new EvolutionSendTextError(
         `Evolution sendText returned an unsuccessful body after HTTP ${response.status}: ${JSON.stringify(responseBody)}`,
         502,
         responseBody
       );
     }
+    logger.trace(`[evolution-send] sendText ok status=${response.status} to=${input.number.replace(/\D+/g, '').slice(-4)} variant=${input.bodyVariant} elapsed=${t.elapsed()}ms`);
     return responseBody;
   }
 
@@ -1840,6 +1847,8 @@ export class EvolutionService {
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       let shouldTryRetry = true;
+
+      logger.trace(`[evolution-send] attempt ${attempt}/${attempts} to ***${normalizeOutboundWhatsAppNumber(numberCandidates[0] || number).slice(-4)} candidates=${numberCandidates.length}`);
 
       for (const candidateNumber of numberCandidates) {
         for (const bodyVariant of bodyVariants) {
