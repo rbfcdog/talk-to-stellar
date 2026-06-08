@@ -1,7 +1,14 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import EvolutionController from '../controllers/evolution.controller';
+import { logger, truncate } from '../../utils/logger';
 
 const router = Router();
+
+router.use((req: Request, _res: Response, next: NextFunction) => {
+  const bodySize = JSON.stringify(req.body || {}).length;
+  logger.info(`[evolution-router] request method=${req.method} path=${truncate(req.path, 80)} content_type=${truncate(String(req.get('content-type') || '?'), 40)} body_bytes=${bodySize} ip=${req.ip || '?'}`);
+  next();
+});
 
 router.get('/', EvolutionController.ping);
 router.post('/', EvolutionController.webhook);
