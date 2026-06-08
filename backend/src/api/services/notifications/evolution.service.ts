@@ -1055,32 +1055,62 @@ export class EvolutionService {
     const instance = configuredInstance();
     const { baseUrl, apiKey } = assertEvolutionConfig(instance);
     const webhookUrl = this.buildWebhookUrl();
+    const t = startTimer();
 
-    const response = await fetch(`${baseUrl}/webhook/set/${encodeURIComponent(instance)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: apiKey,
-      },
-      body: JSON.stringify({
-        enabled: true,
-        url: webhookUrl,
-        webhookByEvents: false,
-        webhookBase64: false,
-        events: ['MESSAGES_UPSERT'],
-      }),
-    });
+    // Evolution v2 accepts either a simple body or an expanded one. Try both.
+    const bodies = [
+      { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'] },
+      { enabled: true, url: webhookUrl, webhook_by_events: false, events: ['MESSAGES_UPSERT'] },
+    ];
 
-    const body = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
-    if (!response.ok) {
-      throw new Error(`Evolution webhook setup failed: ${response.status} ${JSON.stringify(body)}`);
+    let lastError: unknown = null;
+    let lastBody: any = null;
+
+    for (const body of bodies) {
+      try {
+        const response = await fetch(`${baseUrl}/webhook/set/${encodeURIComponent(instance)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: apiKey,
+          },
+          body: JSON.stringify(body),
+        });
+
+        const responseBody = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+        logger.info(`[evolution-webhook] configureWebhook status=${response.status} instance=${instance} body_format=${JSON.stringify(Object.keys(body))} url=${maskWebhookUrl(webhookUrl)} elapsed=${t.elapsed()}ms`);
+
+        if (!response.ok) {
+          logger.warn(`[evolution-webhook] configureWebhook failed status=${response.status} body=${truncate(JSON.stringify(responseBody), 300)}`);
+          lastError = new Error(`Evolution webhook setup failed: ${response.status} ${JSON.stringify(responseBody)}`);
+          lastBody = responseBody;
+          continue;
+        }
+
+        return {
+          success: true,
+          webhookUrl,
+          response: responseBody,
+        };
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    return {
-      success: true,
-      webhookUrl,
-      response: body,
-    };
+    // Fallback: try to read the existing webhook config so we can surface what's actually set
+    try {
+      const infoRes = await fetch(`${baseUrl}/webhook/find/${encodeURIComponent(instance)}`, {
+        headers: { apikey: apiKey },
+      });
+      if (infoRes.ok) {
+        const info = await infoRes.json().catch(() => ({}));
+        logger.warn(`[evolution-webhook] configureWebhook all formats failed. Existing webhook config: ${truncate(JSON.stringify(info), 500)}`);
+      }
+    } catch {
+      // best-effort
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown webhook configuration error'));
   }
 
   static startWebhookAutoConfiguration(): void {
@@ -1104,6 +1134,9 @@ export class EvolutionService {
       return;
     }
 
+    const expectedUrl = EvolutionService.buildWebhookUrl();
+    logger.info(`[evolution-webhook] auto configuration starting instance=${configuredInstance()} backend_base=${publicBackendBaseUrl()} target_webhook_url=${maskWebhookUrl(expectedUrl)} evolution_api=${evolutionBaseUrl()}`);
+
     const reconcileIntervalMs = clampNumber(
       process.env.EVOLUTION_WEBHOOK_RECONCILE_INTERVAL_MS,
       60000,
@@ -1112,8 +1145,8 @@ export class EvolutionService {
     );
     const initialDelayMs = clampNumber(
       process.env.EVOLUTION_WEBHOOK_CONFIGURE_INITIAL_DELAY_MS,
-      2000,
-      0,
+      5000,
+      1000,
       60000
     );
     let running = false;
@@ -1122,13 +1155,14 @@ export class EvolutionService {
       if (running) return;
       running = true;
       try {
-        const result = await this.configureWebhook();
+        const result = await EvolutionService.configureWebhook();
         logger.info(
           `[evolution-webhook] configured on ${reason}: instance=${configuredInstance()} url=${maskWebhookUrl(result.webhookUrl)}`
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`[evolution-webhook] auto configuration failed on ${reason}: ${message}`);
+        logger.warn(`[evolution-webhook] auto configuration failed on ${reason}: ${truncate(message, 400)}`);
+        logger.warn(`[evolution-webhook] Hint: if Evolution has WEBHOOK_GLOBAL_ENABLED=true with WEBHOOK_GLOBAL_URL set, instance-level /webhook/set may return 400. Either fix WEBHOOK_GLOBAL_URL to ${maskWebhookUrl(expectedUrl)} or disable the global webhook on Evolution to allow per-instance configuration.`);
       } finally {
         running = false;
       }
