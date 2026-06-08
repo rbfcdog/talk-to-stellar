@@ -12,6 +12,7 @@ router.use((req: Request, _res: Response, next: NextFunction) => {
 
 router.get('/', EvolutionController.ping);
 router.get('/health', EvolutionController.health);
+router.post('/echo', EvolutionController.echo);
 router.post('/', EvolutionController.webhook);
 router.post('/test-send', EvolutionController.testSend);
 router.post('/test-notify', EvolutionController.testNotify);
@@ -19,6 +20,7 @@ router.post('/outbox/drain', EvolutionController.drainOutbox);
 router.post('/inbox/drain', EvolutionController.drainInbox);
 router.get('/webhook', EvolutionController.ping);
 router.get('/webhook/health', EvolutionController.health);
+router.post('/webhook/echo', EvolutionController.echo);
 router.post('/webhook', EvolutionController.webhook);
 router.post('/webhook/:event', EvolutionController.webhook);
 router.post('/:event', EvolutionController.webhook);
