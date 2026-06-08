@@ -190,6 +190,128 @@ describe('EvolutionService', () => {
     expect(sendTextSpy).toHaveBeenCalledWith('main', '5519981808102', 'Seu saldo esta disponivel.', { reliable: true, attempts: 1 });
   });
 
+  it('handles the current Evolution top-level inbound payload shape even when status is DELIVERY_ACK', async () => {
+    process.env.EVOLUTION_INSTANCE = 'TalkToStellar';
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Estou respondendo pelo WhatsApp.',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const result = await EvolutionService.handleWebhook({
+      key: {
+        remoteJid: '5519997624114@s.whatsapp.net',
+        remoteJidAlt: '5519997624114@s.whatsapp.net',
+        fromMe: false,
+        id: 'evolution-top-level-delivery-ack-test-1',
+        participant: '',
+        addressingMode: 'lid',
+      },
+      pushName: 'rodrigo banin (dog)',
+      status: 'DELIVERY_ACK',
+      message: {
+        conversation: 'teste',
+        messageContextInfo: {
+          threadId: [],
+          deviceListMetadataVersion: 2,
+        },
+      },
+      contextInfo: undefined,
+      messageType: 'conversation',
+      messageTimestamp: 1780914665,
+      instanceId: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+      source: 'android',
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+      recipient: '5519997624114',
+      instance: 'TalkToStellar',
+    }));
+    expect(sendTextSpy).toHaveBeenCalledWith(
+      'TalkToStellar',
+      '5519997624114',
+      'Estou respondendo pelo WhatsApp.',
+      { reliable: true, attempts: 1 }
+    );
+
+    const agentCall = fetchMock.mock.calls.find(([url]) => String(url) === 'http://backend.local/api/agent/query');
+    const agentBody = JSON.parse(String((agentCall?.[1] as RequestInit | undefined)?.body || '{}'));
+    expect(agentBody).toMatchObject({
+      query: 'teste',
+      source: 'whatsapp',
+      metadata: {
+        provider_user_id: '5519997624114',
+        instance: 'TalkToStellar',
+        instance_id: '635afaa8-b4d2-4e04-8b35-3093d16ba1af',
+        message_id: 'evolution-top-level-delivery-ack-test-1',
+      },
+    });
+  });
+
+  it('does not drop inbound text when Evolution posts it under a messages.update event', async () => {
+    const fetchMock = jest.fn(async (...args: any[]) => {
+      const [url] = args;
+      const normalizedUrl = String(url);
+      if (normalizedUrl === 'http://backend.local/api/external/check-account') {
+        return new Response(JSON.stringify({
+          success: true,
+          exists: true,
+          sessionId: '22222222-2222-4222-8222-222222222222',
+        }), { status: 200 });
+      }
+      if (normalizedUrl === 'http://backend.local/api/agent/query') {
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Resposta para evento update.',
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch URL: ${normalizedUrl}`);
+    });
+    global.fetch = fetchMock as any;
+    const sendTextSpy = jest.spyOn(EvolutionService, 'sendText').mockResolvedValue({ success: true });
+
+    const result = await EvolutionService.handleWebhook({
+      event: 'messages.update',
+      instance: 'main',
+      data: {
+        key: {
+          remoteJid: '5519997624114@s.whatsapp.net',
+          id: 'evolution-messages-update-text-test-1',
+          fromMe: false,
+        },
+        status: 'DELIVERY_ACK',
+        message: {
+          conversation: 'olaa',
+        },
+      },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      received: true,
+      replied: true,
+      recipient: '5519997624114',
+      instance: 'main',
+    }));
+    expect(sendTextSpy).toHaveBeenCalledWith('main', '5519997624114', 'Resposta para evento update.', { reliable: true, attempts: 1 });
+  });
+
   it('queues incoming WhatsApp webhooks without waiting for the agent request', async () => {
     process.env.EVOLUTION_INBOUND_RETRY_INITIAL_DELAY_MS = '300000';
     const fetchMock = jest.fn();
