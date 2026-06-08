@@ -2468,8 +2468,11 @@ export class AgentGraph {
     const savingsPct = this.toAmountNumber(quoteResult?.savings_estimate?.savings_percentage_over_traditional_fee);
     const ttlSeconds = this.toAmountNumber(quoteResult?.quote_ttl_seconds);
 
+    const feeNumeric = totalFeeDisplay ? parseFloat(totalFeeDisplay.replace(/[^0-9.,]/g, '').replace(',', '.')) : 0;
+    const feeIsTrivial = !totalFeeDisplay || (Number.isFinite(feeNumeric) && feeNumeric < 0.001);
+
     const lines: string[] = [];
-    if (totalFeeDisplay) {
+    if (totalFeeDisplay && !feeIsTrivial) {
       lines.push(this.text(language, `Taxa estimada: ${totalFeeDisplay}.`, `Estimated fee: ${totalFeeDisplay}.`));
     }
     if (savingsBrl > 0) {
@@ -2487,7 +2490,7 @@ export class AgentGraph {
         ));
       }
     }
-    if (ttlSeconds > 0) {
+    if (ttlSeconds > 0 && !feeIsTrivial) {
       lines.push(this.text(
         language,
         `Cotação válida por ${formatQuoteTtl(ttlSeconds, 'pt-BR')}.`,
