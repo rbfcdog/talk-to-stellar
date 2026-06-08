@@ -33,6 +33,18 @@ describe("web chat response guarantee", () => {
     expect(routeText).not.toContain("No valid response received from the agent API.");
   });
 
+  it("only shows the retry banner while the submitted message has no real assistant completion", () => {
+    const chatText = source("components/chat/chat-window.tsx");
+
+    expect(chatText).toContain("const [retryMessageId, setRetryMessageId] = useState('');");
+    expect(chatText).toContain("setRetryMessageId(userMessage.id);");
+    expect(chatText).toContain("completionOnly: true");
+    expect(chatText).toContain("isLocalNonCompletionAssistantMessage");
+    expect(chatText).toContain("const pendingRetryText = retryText && retryMessageId");
+    expect(chatText).toContain("setRetryMessageId(\"\");");
+    expect(chatText).toContain("window.setTimeout(fetchServerMessages, 500);");
+  });
+
   it("does not clear the browser session for logout confirmation links", () => {
     const chatText = source("components/chat/chat-window.tsx");
 
