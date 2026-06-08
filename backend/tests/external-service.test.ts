@@ -157,10 +157,11 @@ describe('ExternalService.checkExternalAccount', () => {
 });
 
 describe('ExternalService short-link expiry', () => {
-  function createShortLinkSupabaseMock(row: any) {
+  function createShortLinkSupabaseMock(row: any, confirmationRow: any = null) {
     return {
       from: jest.fn((table: string) => {
         if (table === 'short_links') return createQuery(row ? [row] : []);
+        if (table === 'payment_confirmations') return createQuery(confirmationRow ? [confirmationRow] : []);
         return createQuery([]);
       }),
     };
@@ -228,6 +229,32 @@ describe('ExternalService short-link expiry', () => {
     }) as any);
 
     await expect(service.resolveShortLinkRecord('old-conversion-confirm-link')).resolves.toBeNull();
+  });
+
+  it('returns a completed marker instead of expiring a completed money confirmation link', async () => {
+    const service = new ExternalService(createShortLinkSupabaseMock({
+      url: 'https://app.example.com/confirm-payment?token=secret-token',
+      purpose: 'payment_confirm',
+      token_hash: 'hash-1',
+      session_id: 'session-1',
+      user_id: 'user-1',
+      created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() - 60 * 1000).toISOString(),
+    }, {
+      token_hash: 'hash-1',
+      used: true,
+      status: 'completed',
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    }) as any);
+
+    await expect(service.resolveShortLinkRecord('completed-payment-link')).resolves.toMatchObject({
+      url: 'https://app.example.com/confirm-payment?token=secret-token',
+      session_id: 'session-1',
+      user_id: 'user-1',
+      already_completed: true,
+      completed: true,
+      completion_status: 'completed',
+    });
   });
 });
 

@@ -83,6 +83,18 @@ function linkUsedRedirect(req: NextRequest) {
   return response;
 }
 
+function linkCompletedRedirect(req: NextRequest) {
+  const url = new URL("/link-used", req.url);
+  url.searchParams.set("state", "completed");
+  url.searchParams.set(
+    "message",
+    "This operation was already completed. The receipt was sent in chat and saved in history.",
+  );
+  const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  return response;
+}
+
 function isAccountAccessUrl(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl);
@@ -105,14 +117,14 @@ async function resolveShortLinkPayload(req: NextRequest, encodedCode: string) {
     },
   ).catch(() => null as any);
   const directPayload = await direct?.json().catch(() => ({}));
-  if (direct?.ok && directPayload?.url) return directPayload;
+  if (direct?.ok && (directPayload?.url || directPayload?.already_completed || directPayload?.completed)) return directPayload;
 
   const proxied = await fetch(
     `${req.nextUrl.origin}/api/external/short-links/${encodedCode}?include_session=1`,
     { cache: "no-store" },
   ).catch(() => null as any);
   const proxiedPayload = await proxied?.json().catch(() => ({}));
-  if (proxied?.ok && proxiedPayload?.url) return proxiedPayload;
+  if (proxied?.ok && (proxiedPayload?.url || proxiedPayload?.already_completed || proxiedPayload?.completed)) return proxiedPayload;
   return null;
 }
 
@@ -124,6 +136,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
 
   const payload = await resolveShortLinkPayload(req, encodedCode);
 
+  if (payload?.already_completed || payload?.completed) {
+    return linkCompletedRedirect(req);
+  }
   if (!payload?.url) {
     return linkUsedRedirect(req);
   }

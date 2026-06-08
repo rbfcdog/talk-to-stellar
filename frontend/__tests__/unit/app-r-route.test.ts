@@ -144,4 +144,29 @@ describe("/r short-link session handoff", () => {
     expect(cookies).not.toContain("tts_session_source_whatsapp=");
     expect(cookies).not.toContain("Max-Age=0");
   });
+
+  it("shows a completed state for already completed confirmation links without exposing the old token", async () => {
+    process.env.BACKEND_URL = "https://backend.test";
+    process.env.SHORT_LINK_PROXY_SECRET = "secret";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        url: null,
+        purpose: "payment_confirm",
+        already_completed: true,
+        completed: true,
+        completion_status: "completed",
+      }),
+    } as Response);
+
+    const request = new NextRequest("https://app.test/r/done-link");
+    const response = await GET(request, { params: Promise.resolve({ code: "done-link" }) });
+    const location = response.headers.get("location") || "";
+
+    expect(location).toContain("https://app.test/link-used?");
+    expect(location).toContain("state=completed");
+    expect(location).not.toContain("token=");
+    expect(new URL(location).searchParams.get("message")).toContain("operation was already completed");
+  });
 });

@@ -123,6 +123,15 @@ function sourceFromUrl(rawUrl: string): string {
   }
 }
 
+function shortLinkCompletionFields(record: any) {
+  const alreadyCompleted = Boolean(record?.already_completed || record?.completed);
+  return {
+    already_completed: alreadyCompleted,
+    completed: alreadyCompleted,
+    completion_status: record?.completion_status || null,
+  };
+}
+
 async function resolveSessionSource(sessionId: string, rawUrl: string): Promise<string> {
   const fromUrl = sourceFromUrl(rawUrl);
   if (fromUrl === 'telegram' || fromUrl === 'whatsapp') return fromUrl;
@@ -227,16 +236,20 @@ export class ShortLinkController {
       }
 
       const includeSession = String(req.query.include_session || req.query.includeSession || '').trim() === '1';
+      const trustedProxy = hasTrustedProxySecret(req);
+      const completionFields = shortLinkCompletionFields(record);
+      const publicUrl = completionFields.already_completed && !trustedProxy ? null : record.url;
       const canAttachSession = includeSession &&
-        hasTrustedProxySecret(req) &&
+        trustedProxy &&
         Boolean(record.session_id);
 
       if (!canAttachSession) {
         return res.status(200).json({
           success: true,
-          url: record.url,
+          url: publicUrl,
           purpose: record.purpose || null,
           session_source: sourceFromUrl(record.url) || null,
+          ...completionFields,
         });
       }
 
@@ -254,6 +267,7 @@ export class ShortLinkController {
           url: record.url,
           purpose: record.purpose || null,
           session_source: sessionSource || null,
+          ...completionFields,
         });
       }
 
@@ -264,6 +278,7 @@ export class ShortLinkController {
           url: record.url,
           purpose: record.purpose || null,
           session_source: sessionSource || null,
+          ...completionFields,
         });
       }
 
@@ -282,6 +297,7 @@ export class ShortLinkController {
         session_id: String(session.session_id || record.session_id || ''),
         session_token: String(session.session_token || ''),
         session_source: sessionSource || null,
+        ...completionFields,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error?.message || String(error) });
