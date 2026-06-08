@@ -1090,11 +1090,12 @@ export class EvolutionService {
     const instanceKeys = [...new Set([instance, instanceId].filter(Boolean))];
     if (instanceKeys.length === 0) instanceKeys.push(instance || 'main');
 
-    // Evolution v2 body formats, from most to least complete.
+    // Evolution v2 /webhook/set requires body wrapped in "webhook" key:
+    // { "webhook": { "enabled": true, "url": "...", "events": [...], "webhook_by_events": false } }
     const bodies = [
-      { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'], webhook_by_events: false },
-      { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'] },
-      { url: webhookUrl, events: ['MESSAGES_UPSERT'] },
+      { webhook: { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'], webhook_by_events: false } },
+      { webhook: { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'] } },
+      { webhook: { url: webhookUrl, events: ['MESSAGES_UPSERT'] } },
     ];
 
     let lastStatus = 0;
