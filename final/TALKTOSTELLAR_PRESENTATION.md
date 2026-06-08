@@ -1,32 +1,34 @@
 # TalkToStellar
 
-### Converta reais em dólares pelo chat. Taxa clara. Evidência Stellar.
+### Sua conta global no WhatsApp. Fale, mova dinheiro, invista.
 
 ---
 
 ## O Problema
 
-Converter reais para dólares no Brasil é caro, fragmentado e opaco.
+Brasileiros querem uma conta global simples — guardar reais e dólares, converter, investir, pagar contatos. Mas o que existe é fragmentado:
 
-- Spreads escondidos de 2% a 5% em bancos tradicionais
-- Múltiplas plataformas: banco → corretora → conta internacional
-- Nenhuma evidência verificável de taxas e câmbio aplicado
-- Experiência complexa, cheia de fricção
+- Bancos cobram spreads escondidos de 2% a 5%
+- Cada função exige um app diferente: banco, corretora, conta internacional
+- Não há evidência verificável de taxas e câmbio aplicado
+- Abrir conta lá fora é burocrático e excludente
 
 ---
 
 ## A Solução
 
-**TalkToStellar** transforma PIX em uma rota conversacional de conversão BRL → USD.
+**TalkToStellar é a conta global que você opera pelo chat.**
 
-O usuário fala com o assistente por **WhatsApp, Telegram ou chat web**, descreve o que quer fazer, e o sistema estrutura a operação com:
+Você fala com o assistente por **WhatsApp, Telegram ou chat web** e ele resolve:
 
-- **Cotação transparente** antes de confirmar
-- **Taxas discriminadas** (on-ramp, spread TalkToStellar 0.30%, off-ramp)
-- **Liquidação em Stellar** com hash de transação verificável
-- **Comprovante com evidência** — valor enviado, taxa aplicada, valor entregue, economia vs. métodos tradicionais
+- **Saldo em reais e dólares** — veja quanto tem em cada moeda
+- **PIX para entrar e sair** — coloque reais via PIX, saque para sua chave quando quiser
+- **Conversão BRL ↔ USD** — cotação transparente, taxa de 0.30%, economia vs. bancos
+- **Pagamentos** — envie para qualquer contato salvo, email, CPF, telefone ou chave
+- **Rendimentos** — seu saldo aplicado rende, com posição visível e resgate a qualquer momento
+- **Comprovante com evidência** — toda operação gera comprovante com hash Stellar verificável
 
-> **"PIX é a interface. Stellar é o trilho de liquidação."**
+> **"Fale com seu dinheiro. Sua conta global no chat."**
 
 ---
 
@@ -78,12 +80,7 @@ O usuário escolhe o canal. A experiência é consistente.
 - PIN de 6 dígitos para confirmar operações
 - Passkeys (WebAuthn) para dispositivos compatíveis
 - Sessão com token criptografado
-- Logout com link de confirmação por email
-
-### 🌐 Internacional (em desenvolvimento)
-- Transferência BRL → USD para conta internacional
-- Wise, Mercury, Revolut como destinos (metadados)
-- Cotação, taxa, status e reconciliação
+- Logout com link de confirmação
 
 ---
 
@@ -162,20 +159,20 @@ Usuário envia mensagem (WhatsApp/Telegram/Web)
 
 ## Diferenciais
 
-### 1. PIX como interface
-Ninguém precisa aprender blockchain. A experiência é PIX → conversão → conta destino. O Stellar resolve liquidação e evidência sem aparecer.
+### 1. Conta global no chat
+O usuário não precisa de outro app. WhatsApp, Telegram ou web — fala com o assistente como se falasse com um gerente. Saldo, conversão, pagamento, extrato: tudo por mensagem.
 
-### 2. Taxa transparente
-Spread fixo de 0.30% + taxas de provedor visíveis antes de confirmar. Comparativo automático com custo tradicional (~3.5%).
+### 2. O produto é a conta
+TalkToStellar não é um intermediário que manda dinheiro pra fora. É a conta onde o dinheiro mora. Reais entram por PIX, dólares são convertidos e mantidos, investimentos rendem, pagamentos saem. Tudo dentro do mesmo ambiente.
 
-### 3. Comprovante verificável
-Toda operação gera comprovante com hash Stellar. Imutável. Auditável.
+### 3. Taxa transparente — sem surpresa
+Spread fixo de 0.30% + taxas de provedor visíveis antes de confirmar. Comparativo automático com custo tradicional (~3.5%). O usuário vê exatamente o que paga.
 
-### 4. Multi-canal
-Mesmo backend, mesma experiência. WhatsApp, Telegram, web. Troca de canal mantém sessão e histórico.
+### 4. Comprovante com evidência Stellar
+Toda operação gera comprovante com hash na blockchain. Imutável. Auditável. Não depende de fé no extrato do banco.
 
-### 5. Modular e extensível
-O backend expõe endpoints REST. O agente usa tools com interface padronizada. Adaptadores para provedores (payout, PIX, yield) são plugáveis.
+### 5. Mesma experiência em qualquer canal
+WhatsApp, Telegram, web chat — mesmo backend, mesma conta, mesmo histórico. Troca de canal sem perder nada.
 
 ---
 
@@ -184,11 +181,10 @@ O backend expõe endpoints REST. O agente usa tools com interface padronizada. A
 | Fonte de Receita | Descrição |
 |---|---|
 | **Spread por conversão** | 0.30% (30 bps) sobre cada conversão BRL ↔ USD |
-| **Taxa de PIX on-ramp** | Taxa de provedor + margem |
-| **Taxa de PIX off-ramp** | Taxa estimada antes da confirmação |
-| **Transferências B2B** | Taxa por operação para empresas |
-| **SaaS/API** | Acesso à infraestrutura como serviço |
-| **Produtos financeiros** | Futuro: rendimento proprietário, seguros |
+| **Taxa de PIX on-ramp** | Taxa de provedor ao entrar com reais |
+| **Taxa de PIX off-ramp** | Taxa ao sacar para conta bancária via PIX |
+| **Rendimentos** | Spread sobre produtos de investimento |
+| **Produtos financeiros** | Futuro: cartão, crédito, seguros |
 
 ---
 
@@ -196,10 +192,10 @@ O backend expõe endpoints REST. O agente usa tools com interface padronizada. A
 
 | Persona | Dor | Valor |
 |---|---|---|
-| **Pessoa física** | Spread escondido, comparação manual | Cotação clara, PIX, comprovante |
-| **Freelancer/Criador** | Receber em dólar é complicado | Fluxo conversacional, contatos salvos |
-| **Pequena empresa** | Conciliação, custo FX | Histórico, evidência, reconciliação |
-| **Fintech/Plataforma** | Precisa de rota BRL→USD | Backend modular, adaptadores |
+| **Pessoa física** | Quer uma conta com dólar sem abrir conta lá fora | Conta global no WhatsApp, PIX, conversão, extrato |
+| **Freelancer/Criador** | Recebe em dólar e gasta em real | Conta multimoeda, conversão quando precisar, contatos salvos |
+| **Pequena empresa** | Precisa guardar e movimentar em dólar | Histórico, evidência Stellar, reconciliação |
+| **Investidor** | Quer exposição ao dólar com rendimento | Saldo em dólar aplicado, resgate rápido, taxas visíveis |
 
 ---
 
@@ -228,9 +224,9 @@ O backend expõe endpoints REST. O agente usa tools com interface padronizada. A
 | **Agora** | Validação com usuários reais, coleta de feedback |
 | **Curto prazo** | Parceria com provedor de PIX regulado |
 | **Curto prazo** | Ativação controlada em Stellar Mainnet |
-| **Médio prazo** | Integração com contas internacionais (Wise, Mercury) |
-| **Médio prazo** | SaaS/API para fintechs e plataformas |
-| **Longo prazo** | Produtos financeiros proprietários |
+| **Médio prazo** | Cartão de débito internacional atrelado à conta |
+| **Médio prazo** | Múltiplas moedas além de BRL e USD |
+| **Longo prazo** | Crédito, seguros e produtos proprietários |
 
 ---
 
