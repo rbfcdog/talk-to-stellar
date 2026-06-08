@@ -1,4 +1,4 @@
-import { logger } from '../../../utils/logger';
+import { logger, startTimer, truncate } from '../../../utils/logger';
 import { isProductionLikeEnvironment } from '../../../config/runtime';
 import { timingSafeEqualString } from '../../../utils/password';
 import { supabase } from '../../../config/supabase';
@@ -930,8 +930,11 @@ async function resolveExistingSession(input: {
   instanceId?: string;
   messageId: string;
 }): Promise<string> {
+  const t = startTimer();
   try {
-    const response = await fetch(`${internalBackendBaseUrl()}/api/external/check-account`, {
+    const url = `${internalBackendBaseUrl()}/api/external/check-account`;
+    logger.trace(`[evolution-webhook] session_lookup starting phone=***${input.phoneNumber.slice(-4)} url=${url}`);
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -947,12 +950,18 @@ async function resolveExistingSession(input: {
         lookup_only: true,
       }),
     });
-    if (!response.ok) return '';
+    if (!response.ok) {
+      logger.trace(`[evolution-webhook] session_lookup not_found status=${response.status} phone=***${input.phoneNumber.slice(-4)} elapsed=${t.elapsed()}ms`);
+      return '';
+    }
     const payload = await response.json().catch(() => ({})) as any;
-    return payload?.exists && payload?.sessionId ? String(payload.sessionId) : '';
+    const found = Boolean(payload?.exists && payload?.sessionId);
+    const sessionIdTail = found ? truncate(String(payload.sessionId), 16) : '?';
+    logger.trace(`[evolution-webhook] session_lookup result=${found ? 'found' : 'not_found'} session_id=${sessionIdTail} phone=***${input.phoneNumber.slice(-4)} elapsed=${t.elapsed()}ms`);
+    return found ? String(payload.sessionId) : '';
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.warn(`[evolution-webhook] external account preflight failed for ***${input.phoneNumber.slice(-4)}: ${message}`);
+    logger.warn(`[evolution-webhook] session_lookup failed phone=***${input.phoneNumber.slice(-4)} error=${truncate(message,120)} elapsed=${t.elapsed()}ms`);
     return '';
   }
 }
@@ -966,6 +975,7 @@ async function sendAgentQuery(input: {
   instanceId?: string;
   messageId: string;
 }): Promise<AgentResponse> {
+  const t = startTimer();
   const payload = {
     query: input.text,
     ...(input.sessionId ? { session_id: input.sessionId } : {}),
@@ -987,11 +997,15 @@ async function sendAgentQuery(input: {
     .update(`${input.instance}:${input.remoteJid}:${input.messageId}:${input.text}`)
     .digest('hex')}`;
 
+  const timeoutMs = Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 45000);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number(process.env.EVOLUTION_AGENT_TIMEOUT_MS || 45000));
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const ingestSecret = readAgentIngestSecret();
+  const agentUrl = agentQueryUrl();
+
+  logger.trace(`[evolution-agent] request_start url=${agentUrl} query=${truncate(input.text,80)} session=${input.sessionId ? truncate(input.sessionId,16) : 'none'} phone=***${input.phoneNumber.slice(-4)} timeout=${timeoutMs}ms`);
   try {
-    const response = await fetch(agentQueryUrl(), {
+    const response = await fetch(agentUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1004,10 +1018,14 @@ async function sendAgentQuery(input: {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
+      const errorPreview = truncate(errorText, 200);
+      logger.warn(`[evolution-agent] response_failed status=${response.status} error=${errorPreview} phone=***${input.phoneNumber.slice(-4)} elapsed=${t.elapsed()}ms`);
       throw new Error(`Agent API Error: ${response.status} ${errorText}`);
     }
 
     const body = await response.json().catch(() => ({})) as any;
+    const messagePreview = truncate(normalizeAgentResponse(body), 120);
+    logger.info(`[evolution-agent] response_ok intent=${truncate(String(body?.intent || '?'),30)} action=${truncate(String(body?.action || '?'),30)} success=${body?.success ?? '?'} message=${messagePreview} phone=***${input.phoneNumber.slice(-4)} elapsed=${t.elapsed()}ms`);
     return {
       success: body?.success,
       intent: body?.intent,
@@ -1871,53 +1889,73 @@ export class EvolutionService {
   }
 
   static async handleWebhook(payload: any): Promise<EvolutionWebhookResult> {
+    const t = startTimer();
     const message = extractMessage(payload);
-    if (!message) return { received: true, replied: false, skipped: 'not_messages_upsert' };
-    if (message.fromMe) return { received: true, replied: false, skipped: 'from_me' };
+    if (!message) {
+      logger.trace(`[evolution-webhook] step=1 extract_message result=skipped reason=not_messages_upsert elapsed=${t.elapsed()}ms`);
+      return { received: true, replied: false, skipped: 'not_messages_upsert' };
+    }
+    if (message.fromMe) {
+      logger.trace(`[evolution-webhook] step=1 extract_message result=skipped reason=from_me remote=${truncate(message.remoteJid,20)} elapsed=${t.elapsed()}ms`);
+      return { received: true, replied: false, skipped: 'from_me' };
+    }
 
     const messageKey = `${message.instance || configuredInstance()}:${message.remoteJid}:${message.messageId}`;
     const recipient = numberFromRemoteJid(message.remoteJid);
     if (!recipient) {
+      logger.trace(`[evolution-webhook] step=1 extract_message result=skipped reason=recipient_not_number remote=${truncate(message.remoteJid,20)} elapsed=${t.elapsed()}ms`);
       return { received: true, replied: false, skipped: 'recipient_not_number', instance: message.instance };
     }
 
     const instance = message.instance || configuredInstance();
-    const instanceIdLog = message.instanceId ? ` instance_id=${message.instanceId}` : '';
-    logger.info(`[evolution-webhook] received message from ***${recipient.slice(-4)} on instance ${instance}${instanceIdLog} message_id=${message.messageId || 'none'}`);
     const text = String(message.text || '').trim();
+    const textPreview = truncate(text, 80);
+    logger.info(`[evolution-webhook] step=1 received remote=***${recipient.slice(-4)} instance=${instance} msg_id=${truncate(message.messageId || '?',16)} text=${textPreview} elapsed=${t.elapsed()}ms`);
+
     if (!text) {
+      logger.trace(`[evolution-webhook] step=2 empty_text skipped=empty_or_unsupported_message elapsed=${t.elapsed()}ms`);
       return { received: true, replied: false, skipped: 'empty_or_unsupported_message', recipient, instance };
     }
+
     const exactMessageKey = `${messageKey}:${dedupeHash(normalizeDedupeText(text))}`;
 
+    // step 3: in-memory dedupe
     if (isProcessed(exactMessageKey)) {
+      logger.trace(`[evolution-webhook] step=3 dedupe_in_memory duplicate_key=${truncate(exactMessageKey,30)} elapsed=${t.elapsed()}ms`);
       return { received: true, replied: false, skipped: 'duplicate', recipient, instance };
     }
 
+    // step 4: in-flight dedupe
     const activeReply = activeWebhookReplies.get(exactMessageKey);
     if (activeReply) {
+      logger.trace(`[evolution-webhook] step=4 dedupe_in_flight duplicate_key=${truncate(exactMessageKey,30)} elapsed=${t.elapsed()}ms`);
       await activeReply.catch(() => undefined);
       return { received: true, replied: false, skipped: 'duplicate_in_flight', recipient, instance };
     }
 
-    // Claim before account lookup, LLM execution, or outbound delivery. Evolution can
-    // deliver the same webhook to multiple backend workers at the same time.
+    // step 5: persistent dedupe (Supabase)
     const persistentClaim = await reserveEvolutionWebhookDedupe({
       instance,
       remoteJid: message.remoteJid,
       messageId: message.messageId,
       text,
     });
+    logger.trace(`[evolution-webhook] step=5 dedupe_persistent status=${persistentClaim.status} key=${truncate(persistentClaim.key || 'none',30)} elapsed=${t.elapsed()}ms`);
+
     if (persistentClaim.status === 'duplicate') {
+      logger.trace(`[evolution-webhook] step=5 persistent duplicate skipped=duplicate_persistent elapsed=${t.elapsed()}ms`);
       return { received: true, replied: false, skipped: 'duplicate_persistent', recipient, instance };
     }
     if (persistentClaim.status === 'unavailable' && shouldRequireDurableWebhookDedupe()) {
       throw new Error('Durable WhatsApp webhook dedupe is unavailable.');
     }
     if (persistentClaim.status === 'unavailable') {
-      logger.warn(`[evolution-webhook] durable dedupe unavailable; continuing with in-memory dedupe for ***${recipient.slice(-4)} on instance ${instance}`);
+      logger.warn(`[evolution-webhook] step=5 durable dedupe unavailable; continuing with in-memory dedupe for ***${recipient.slice(-4)} instance=${instance} elapsed=${t.elapsed()}ms`);
     }
 
+    // step 6: dispatch agent reply
+    const step6Start = Date.now();
+    logger.trace(`[evolution-webhook] step=6 dispatching agent reply remote=***${recipient.slice(-4)} text=${textPreview}`);
     const replyPromise = this.replyWithAgent({
       instance,
       recipient,
@@ -1930,10 +1968,12 @@ export class EvolutionService {
 
     try {
       const replyStatus = await replyPromise;
+      logger.info(`[evolution-webhook] step=7 reply_result status=${replyStatus} remote=***${recipient.slice(-4)} step6_elapsed=${Date.now() - step6Start}ms total_elapsed=${t.elapsed()}ms`);
+
       markProcessed(exactMessageKey);
       await completePersistentDedupeKey(persistentClaim.key);
       if (replyStatus === 'queued') {
-        logger.warn(`[evolution-webhook] agent reply queued for retry to ***${recipient.slice(-4)} on instance ${instance}`);
+        logger.warn(`[evolution-webhook] step=8 agent reply queued for retry remote=***${recipient.slice(-4)} instance=${instance} elapsed=${t.elapsed()}ms`);
         return {
           received: true,
           replied: true,
@@ -1942,20 +1982,25 @@ export class EvolutionService {
           instance,
         };
       }
-      logger.info(`[evolution-webhook] replied with agent to ***${recipient.slice(-4)} on instance ${instance}`);
+      logger.info(`[evolution-webhook] step=8 done replied_with=agent remote=***${recipient.slice(-4)} instance=${instance} elapsed=${t.elapsed()}ms`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.warn(`[evolution-webhook] failed to process agent reply for ***${recipient.slice(-4)} on instance ${instance}: ${errorMessage}`);
+      logger.warn(`[evolution-webhook] step=7 agent_reply_failed remote=***${recipient.slice(-4)} instance=${instance} error=${truncate(errorMessage,200)} step6_elapsed=${Date.now() - step6Start}ms total_elapsed=${t.elapsed()}ms`);
       if (error instanceof EvolutionReplyDeliveryError) {
         await releasePersistentDedupeKey(persistentClaim.key);
         throw error;
       }
       try {
-        if (!shouldSendFailureFallback()) throw error;
+        if (!shouldSendFailureFallback()) {
+          logger.trace(`[evolution-webhook] step=9 fallback_disabled rethrowing elapsed=${t.elapsed()}ms`);
+          throw error;
+        }
+        const fallbackText = buildEvolutionFallbackReply();
+        logger.trace(`[evolution-webhook] step=9 sending_fallback text=${truncate(fallbackText,80)} elapsed=${t.elapsed()}ms`);
         try {
-          await this.sendText(instance, recipient, buildEvolutionFallbackReply(), { reliable: true, attempts: 1 });
+          await this.sendText(instance, recipient, fallbackText, { reliable: true, attempts: 1 });
         } catch (fallbackDeliveryError) {
-          const fallbackText = buildEvolutionFallbackReply();
+          logger.warn(`[evolution-webhook] step=9 fallback_send_failed queueing_for_retry error=${truncate(fallbackDeliveryError instanceof Error ? fallbackDeliveryError.message : String(fallbackDeliveryError),120)} elapsed=${t.elapsed()}ms`);
           const queued = await this.queueText({
             instance,
             recipient,
@@ -1968,7 +2013,7 @@ export class EvolutionService {
           if (queued.queued) {
             markProcessed(exactMessageKey);
             await completePersistentDedupeKey(persistentClaim.key);
-            logger.warn(`[evolution-webhook] fallback reply queued for retry to ***${recipient.slice(-4)} on instance ${instance}`);
+            logger.warn(`[evolution-webhook] step=9 fallback_queued remote=***${recipient.slice(-4)} instance=${instance} dedupe_key=${truncate(queued.dedupeKey || '?',30)} elapsed=${t.elapsed()}ms`);
             return {
               received: true,
               replied: true,
@@ -1977,12 +2022,13 @@ export class EvolutionService {
               instance,
             };
           }
+          logger.warn(`[evolution-webhook] step=9 fallback_queue_failed unavailable=${queued.unavailable || false} elapsed=${t.elapsed()}ms`);
           await releasePersistentDedupeKey(persistentClaim.key);
           throw fallbackDeliveryError;
         }
         markProcessed(exactMessageKey);
         await completePersistentDedupeKey(persistentClaim.key);
-        logger.info(`[evolution-webhook] replied with fallback to ***${recipient.slice(-4)} on instance ${instance}`);
+        logger.info(`[evolution-webhook] step=9 done replied_with=fallback remote=***${recipient.slice(-4)} instance=${instance} elapsed=${t.elapsed()}ms`);
       } catch (fallbackError) {
         await releasePersistentDedupeKey(persistentClaim.key);
         throw fallbackError;
@@ -2007,6 +2053,10 @@ export class EvolutionService {
     instanceId?: string;
     text: string;
   }): Promise<EvolutionReplyDeliveryStatus> {
+    const rt = startTimer();
+    const textPreview = truncate(input.text, 80);
+    logger.trace(`[evolution-webhook] replyWithAgent start remote=***${input.recipient.slice(-4)} text=${textPreview}`);
+
     const sessionId = await resolveExistingSession({
       phoneNumber: input.recipient,
       remoteJid: input.remoteJid,
@@ -2014,6 +2064,8 @@ export class EvolutionService {
       instanceId: input.instanceId,
       messageId: input.messageId,
     });
+    logger.trace(`[evolution-webhook] replyWithAgent session_resolved session=${sessionId ? truncate(sessionId,16) : 'none'} remote=***${input.recipient.slice(-4)} elapsed=${rt.elapsed()}ms`);
+
     const response = await sendAgentQuery({
       text: input.text,
       sessionId: sessionId || undefined,
@@ -2023,23 +2075,33 @@ export class EvolutionService {
       instanceId: input.instanceId,
       messageId: input.messageId,
     });
+    const agentElapsed = rt.elapsed();
+
     const replyText = buildUsefulEvolutionReply(response);
+    const replyPreview = truncate(replyText, 120);
+    logger.trace(`[evolution-webhook] replyWithAgent reply_built intent=${truncate(String(response.intent || '?'),20)} reply=${replyPreview} is_generic=${isGenericAgentReply(String(response.message || ''))} remote=***${input.recipient.slice(-4)} agent_elapsed=${agentElapsed}ms`);
+
     try {
-      // An ambiguous provider timeout may mean the message was accepted. Retrying
-      // an interactive reply here can duplicate it.
       await this.sendText(input.instance, input.recipient, replyText, { reliable: true, attempts: 1 });
+      logger.info(`[evolution-webhook] replyWithAgent sent remote=***${input.recipient.slice(-4)} instance=${input.instance} elapsed=${rt.elapsed()}ms`);
       return 'sent';
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn(`[evolution-webhook] replyWithAgent send_failed remote=***${input.recipient.slice(-4)} error=${truncate(errorMessage,120)} queueing_for_retry elapsed=${rt.elapsed()}ms`);
       const queued = await this.queueText({
         instance: input.instance,
         recipient: input.recipient,
         remoteJid: input.remoteJid,
         messageId: input.messageId,
         text: replyText,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: errorMessage,
         metadata: { source: 'evolution_webhook_agent_reply' },
       });
-      if (queued.queued) return 'queued';
+      if (queued.queued) {
+        logger.warn(`[evolution-webhook] replyWithAgent queued remote=***${input.recipient.slice(-4)} dedupe_key=${truncate(queued.dedupeKey || '?',30)} elapsed=${rt.elapsed()}ms`);
+        return 'queued';
+      }
+      logger.warn(`[evolution-webhook] replyWithAgent queue_failed unavailable=${queued.unavailable || false} remote=***${input.recipient.slice(-4)} elapsed=${rt.elapsed()}ms`);
       throw new EvolutionReplyDeliveryError(error);
     }
   }
