@@ -141,6 +141,20 @@ export default class EvolutionController {
     }
   }
 
+  static async echo(req: Request, res: Response) {
+    logger.info(`[evolution-webhook] echo received body_size=${JSON.stringify(req.body || {}).length} headers=${JSON.stringify({ ct: req.get('content-type'), host: req.get('host') })}`);
+    return res.status(200).json({
+      received: true,
+      body: req.body,
+      query: req.query,
+      headers: {
+        'content-type': req.get('content-type'),
+        host: req.get('host'),
+        'user-agent': req.get('user-agent'),
+      },
+    });
+  }
+
   static async testSend(req: Request, res: Response) {
     if (!hasDiagnosticAuthorization(req)) {
       return res.status(403).json({
