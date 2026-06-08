@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { ArrowRight, CheckCircle2, ExternalLink, ReceiptText, ShieldCheck, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, ShieldCheck, X } from "lucide-react";
 import { ConversionTestnetDisclaimer } from "@/components/shared/conversion-testnet-disclaimer";
 import { closeIntermediatePage, enqueueWebChatFeedback, INTERMEDIATE_PAGE_CLOSE_COPY } from "@/lib/web-feedback";
 import { useLanguage } from "@/lib/i18n";
@@ -2823,7 +2823,6 @@ export default function PixRampClient({
     : transferFlow && transferRecipientLabel
       ? transferRecipientLabel
       : L("Sua conta TalkToStellar", "Your TalkToStellar account");
-  const completionReceiptUrl = extractRampReceiptUrl(temporaryOffRampTestResult, statusPayload, orderPayload, onRampReceiptUrl);
   const completionRows = [
     { label: completionCounterAmountLabel, value: completionCounterAmountValue },
     { label: L("Destino", "Destination"), value: completionDestination },
@@ -3795,7 +3794,6 @@ export default function PixRampClient({
             amountLabel={completionAmountLabel}
             amountValue={completionAmountValue}
             rows={completionRows}
-            receiptUrl={completionReceiptUrl}
             returnHref={returnToPath}
             returnLabel={returnLabel}
             autoClose={!returnToPath && !stayOpenAfterSuccess}
@@ -3815,7 +3813,6 @@ function PixCompletionPopup({
   amountLabel,
   amountValue,
   rows,
-  receiptUrl,
   returnHref,
   returnLabel,
   autoClose,
@@ -3828,7 +3825,6 @@ function PixCompletionPopup({
   amountLabel: string;
   amountValue: string;
   rows: Array<{ label: string; value: string }>;
-  receiptUrl?: string;
   returnHref?: string;
   returnLabel: string;
   autoClose: boolean;
@@ -3837,7 +3833,6 @@ function PixCompletionPopup({
   onClose: () => void;
 }) {
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
-  const hasReceipt = Boolean(receiptUrl);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-3 pb-3 pt-10 backdrop-blur-md sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="pix-completion-popup-title">
@@ -3897,23 +3892,11 @@ function PixCompletionPopup({
             </div>
           )}
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {hasReceipt && (
-              <a
-                href={receiptUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-tts-border bg-tts-bg px-4 py-3 text-sm font-black text-tts-deep transition hover:border-tts-confirm"
-              >
-                <ReceiptText className="h-4 w-4" aria-hidden="true" />
-                {L("Ver comprovante", "View receipt")}
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              </a>
-            )}
+          <div className="mt-5 grid gap-3">
             {returnHref ? (
               <a
                 href={returnHref}
-                className={`${hasReceipt ? "" : "sm:col-span-2"} inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-black text-tts-bg shadow-lg shadow-tts-confirm/20 transition hover:bg-tts-confirm/90`}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-black text-tts-bg shadow-lg shadow-tts-confirm/20 transition hover:bg-tts-confirm/90"
               >
                 {returnLabel}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -3921,7 +3904,7 @@ function PixCompletionPopup({
             ) : (
               <button
                 type="button"
-                className={`${hasReceipt ? "" : "sm:col-span-2"} inline-flex min-h-12 items-center justify-center rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-black text-tts-bg shadow-lg shadow-tts-confirm/20 transition hover:bg-tts-confirm/90`}
+                className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-tts-confirm px-5 py-3 text-sm font-black text-tts-bg shadow-lg shadow-tts-confirm/20 transition hover:bg-tts-confirm/90"
                 onClick={onClose}
               >
                 {L("Fechar", "Close")}
