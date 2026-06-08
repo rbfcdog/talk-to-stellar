@@ -131,6 +131,33 @@ async function idempotentFetchWithTimeout(input: RequestInfo | URL, init: Reques
   }
 }
 
+function isLocalNonCompletionAssistantMessage(message: Message): boolean {
+  if (message.role !== "assistant") return false;
+  return /^(error|silent-fallback|session-expired)-/.test(message.id);
+}
+
+function hasAssistantAfterMessage(
+  messagesToCheck: Message[],
+  messageId: string,
+  options: { completionOnly?: boolean; userContent?: string } = {},
+) {
+  let userIndex = messagesToCheck.findIndex((message) => message.id === messageId);
+  const userContent = String(options.userContent || "").trim();
+  if (userIndex < 0 && userContent) {
+    userIndex = messagesToCheck.findIndex((message) => (
+      message.role === "user" &&
+      isDuplicateChatMessage(message, { role: "user", content: userContent })
+    ));
+  }
+  if (userIndex < 0) return true;
+  return messagesToCheck
+    .slice(userIndex + 1)
+    .some((message) => {
+      if (message.role !== "assistant" || !String(message.content || "").trim()) return false;
+      return !options.completionOnly || !isLocalNonCompletionAssistantMessage(message);
+    });
+}
+
 export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: string; onBack?: () => void; initialPrompt?: string }) {
   const { language, t } = useLanguage();
   const L = (pt: string, en: string) => language === "pt-BR" ? pt : en;
@@ -171,6 +198,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [retryText, setRetryText] = useState('');
+  const [retryMessageId, setRetryMessageId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [browserSessionExpired, setBrowserSessionExpired] = useState(false);
@@ -575,14 +603,6 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     );
   }, [language]);
 
-  const hasAssistantAfterMessage = (messagesToCheck: Message[], messageId: string) => {
-    const userIndex = messagesToCheck.findIndex((message) => message.id === messageId);
-    if (userIndex < 0) return true;
-    return messagesToCheck
-      .slice(userIndex + 1)
-      .some((message) => message.role === "assistant" && String(message.content || "").trim());
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -631,6 +651,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setRetryText('');
+    setRetryMessageId('');
     setIsLoading(true);
 
     try {
@@ -711,7 +732,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         if (shouldAppendImmediateAssistantMessage(prev, botMessage, userMessage.createdAt)) {
           return [...prev, botMessage];
         }
-        return hasAssistantAfterMessage(prev, userMessage.id) ? prev : [...prev, botMessage];
+        return hasAssistantAfterMessage(prev, userMessage.id, { completionOnly: true }) ? prev : [...prev, botMessage];
       });
       if (!loginRequired) {
         browserSessionExpiredRef.current = false;
@@ -741,6 +762,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       console.error("Error in handleSubmit:", error);
       const publicError = publicErrorPayload(error, { language });
       setRetryText(userMessage.content);
+      setRetryMessageId(userMessage.id);
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
@@ -748,6 +770,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
         createdAt: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+      window.setTimeout(fetchServerMessages, 500);
     } finally {
       setMessages((prev) => {
         if (hasAssistantAfterMessage(prev, userMessage.id)) return prev;
@@ -768,6 +791,14 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       inputRef.current?.focus(); 
     }
   };
+
+  useEffect(() => {
+    if (!retryText || !retryMessageId) return;
+    if (hasAssistantAfterMessage(messages, retryMessageId, { completionOnly: true, userContent: retryText })) {
+      setRetryText("");
+      setRetryMessageId("");
+    }
+  }, [messages, retryMessageId, retryText]);
 
   const formatTime = (timestamp?: Date) => {
     if (!timestamp) return "";
@@ -813,6 +844,10 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       </div>
     );
   };
+
+  const pendingRetryText = retryText && retryMessageId && !hasAssistantAfterMessage(messages, retryMessageId, { completionOnly: true, userContent: retryText })
+    ? retryText
+    : "";
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-tts-bg/80">
@@ -923,7 +958,7 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
       </div>
 
       <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-tts-border bg-tts-surface/95 px-4 py-3 shadow-sm backdrop-blur">
-        {retryText && !isLoading && chatId === "agent" && (
+        {pendingRetryText && !isLoading && chatId === "agent" && (
           <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border-l-4 border-tts-gold bg-tts-gold-bg px-3 py-2 text-xs font-semibold text-tts-deep">
             <span>{L("A última mensagem não concluiu.", "The last message did not complete.")}</span>
             <Button
@@ -931,8 +966,9 @@ export function ChatWindow({ chatId, onBack, initialPrompt = "" }: { chatId: str
               size="sm"
               variant="outline"
               onClick={() => {
-                setInput(retryText);
+                setInput(pendingRetryText);
                 setRetryText("");
+                setRetryMessageId("");
                 window.setTimeout(() => inputRef.current?.focus(), 0);
               }}
               className="shrink-0"
