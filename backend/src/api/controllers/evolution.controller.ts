@@ -51,6 +51,7 @@ export default class EvolutionController {
       if (!shouldProcessWebhookSynchronously()) {
         const queued = await EvolutionService.queueWebhook(payload);
         if (!queued.unavailable) {
+          EvolutionService.scheduleInboundDirectFallback(payload, queued);
           return res.status(200).json({ success: true, async: true, ...queued });
         }
       }

@@ -539,6 +539,14 @@ function inboundQueueInitialDelayMs(): number {
   return clampNumber(process.env.EVOLUTION_INBOUND_RETRY_INITIAL_DELAY_MS, 0, 0, 300_000);
 }
 
+function inboundDirectFallbackDelayMs(): number {
+  return clampNumber(process.env.EVOLUTION_INBOUND_DIRECT_FALLBACK_DELAY_MS, 1500, 0, 60_000);
+}
+
+function shouldUseInboundDirectFallback(): boolean {
+  return !isEnvDisabled(process.env.EVOLUTION_INBOUND_DIRECT_FALLBACK_ENABLED);
+}
+
 function outboundQueueBackoffMs(attempts: number): number {
   const base = clampNumber(process.env.EVOLUTION_OUTBOUND_RETRY_BACKOFF_MS, 30_000, 1_000, 600_000);
   const max = clampNumber(process.env.EVOLUTION_OUTBOUND_RETRY_MAX_DELAY_MS, 30 * 60_000, base, 24 * 60 * 60_000);
@@ -648,12 +656,31 @@ function isMessagesUpsertEvent(value: unknown): boolean {
   return !event || event === 'MESSAGES_UPSERT';
 }
 
+function isInboundTextMessageEvent(value: unknown): boolean {
+  const event = normalizeEvent(value);
+  if (!event) return true;
+  return [
+    'MESSAGES_UPSERT',
+    'MESSAGES_UPDATE',
+    'MESSAGES_SET',
+    'MESSAGES_NOTIFY',
+    'SEND_MESSAGE',
+  ].includes(event);
+}
+
 function messageCandidates(payload: any): any[] {
-  const data = payload?.data;
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.messages)) return data.messages;
-  if (Array.isArray(payload?.messages)) return payload.messages;
-  return [data || payload].filter(Boolean);
+  const roots = [payload, payload?.body].filter(Boolean);
+  const candidates: any[] = [];
+  for (const root of roots) {
+    const data = root?.data;
+    if (Array.isArray(data)) candidates.push(...data);
+    else if (Array.isArray(data?.messages)) candidates.push(...data.messages);
+    else if (data) candidates.push(data);
+
+    if (Array.isArray(root?.messages)) candidates.push(...root.messages);
+    candidates.push(root);
+  }
+  return candidates.filter(Boolean);
 }
 
 function unwrapMessageContainer(message: any): any {
@@ -698,7 +725,7 @@ function extractTextFromCandidate(candidate: any): string {
 }
 
 function extractMessage(payload: any): EvolutionMessage | null {
-  if (!isMessagesUpsertEvent(payload?.event || payload?.type)) return null;
+  const event = payload?.event || payload?.type || payload?.data?.event || payload?.data?.type;
 
   for (const candidate of messageCandidates(payload)) {
     const key = candidate?.key || candidate?.message?.key || {};
@@ -722,6 +749,8 @@ function extractMessage(payload: any): EvolutionMessage | null {
     const instance = extractEvolutionInstanceName(payload, candidate);
     const instanceId = extractEvolutionInstanceId(payload, candidate);
     const text = extractTextFromCandidate(candidate);
+    if (!text && !isMessagesUpsertEvent(event)) continue;
+    if (!isInboundTextMessageEvent(event) && !text) continue;
 
     return {
       instance,
@@ -1182,6 +1211,55 @@ export class EvolutionService {
       });
     }, clampedDelay);
     inboundQueueDrainTimer.unref?.();
+  }
+
+  private static async markInboundQueueCompleted(
+    dedupeKey: string | undefined,
+    result: EvolutionWebhookResult
+  ): Promise<void> {
+    if (!dedupeKey) return;
+    try {
+      const processedAt = new Date().toISOString();
+      const update = supabase
+        .from('evolution_inbound_queue')
+        .update({
+          status: 'completed',
+          processed_at: processedAt,
+          locked_at: null,
+          last_error: null,
+          result,
+          updated_at: processedAt,
+        })
+        .eq('dedupe_key', dedupeKey);
+      if (typeof (update as any).in === 'function') {
+        await (update as any).in('status', ['pending', 'failed', 'processing']);
+      } else if (typeof (update as any).then === 'function') {
+        await update;
+      }
+    } catch (error) {
+      logger.warn(`[evolution-inbox] could not mark direct fallback as completed for ${dedupeKey}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  static scheduleInboundDirectFallback(payload: any, queued: EvolutionInboundQueueResult): void {
+    if (!shouldUseInboundDirectFallback()) return;
+    if (!queued.queued) return;
+
+    const delayMs = inboundDirectFallbackDelayMs();
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await this.handleWebhook(payload);
+          await this.markInboundQueueCompleted(queued.dedupeKey, result);
+          if (result.replied) {
+            logger.info(`[evolution-inbox] direct fallback replied for queued inbound webhook dedupe_key=${queued.dedupeKey || 'none'}`);
+          }
+        } catch (error) {
+          logger.warn(`[evolution-inbox] direct fallback failed for queued inbound webhook dedupe_key=${queued.dedupeKey || 'none'}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      })();
+    }, delayMs);
+    timer.unref?.();
   }
 
   private static scheduleOutboundQueueDrain(delayMs = 0): void {
