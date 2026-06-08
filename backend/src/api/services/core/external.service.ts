@@ -9,8 +9,8 @@ import { getAssetIssuer, normalizeAssetCode } from '../../../config/assets';
 import crypto from 'crypto';
 import { getRequiredJwtSecret } from '../../../config/secrets';
 
-const SENSITIVE_SHORT_LINK_MAX_AGE_MS = 15 * 60 * 1000;
-const PIX_RAMP_SHORT_LINK_MAX_AGE_MS = 45 * 60 * 1000;
+const SENSITIVE_SHORT_LINK_MAX_AGE_MS = 30 * 60 * 1000;
+const PIX_RAMP_SHORT_LINK_MAX_AGE_MS = 90 * 60 * 1000;
 
 type ShortLinkConfirmationState = {
   consumed: boolean;
