@@ -11,16 +11,16 @@ const c = {
       en: "PRODUCT IN VALIDATION",
     },
     title1: {
-      "pt-BR": "Envie para o mundo.",
-      en: "Send to the world.",
+      "pt-BR": "Converta ativos.",
+      en: "Convert assets.",
     },
     title2: {
-      "pt-BR": "Em uma mensagem.",
-      en: "In one message.",
+      "pt-BR": "Com uma mensagem.",
+      en: "With one message.",
     },
     subtitle: {
-      "pt-BR": "O jeito mais rápido e barato de abastecer suas contas globais. Faça o Pix e converta para dólar diretamente pelo WhatsApp ou Telegram, sem precisar baixar nenhum aplicativo novo.",
-      en: "The fastest and cheapest way to fund your global accounts. Pay with Pix and convert to dollars directly from WhatsApp or Telegram, without downloading any new app.",
+      "pt-BR": "O jeito mais rápido e barato de converter entre ativos com taxa transparente. Faça o Pix e converta para dólar direto pelo WhatsApp ou Telegram, com o melhor custo de roteamento do mercado.",
+      en: "The fastest and cheapest way to convert between assets with transparent fees. Pay with Pix and convert to dollars directly from WhatsApp or Telegram, with the best routing cost in the market.",
     },
     btnTelegram: { "pt-BR": "Telegram", en: "Telegram" },
     btnWhatsApp: { "pt-BR": "WhatsApp", en: "WhatsApp" },
@@ -32,12 +32,12 @@ const c = {
   },
   problem: {
     title: {
-      "pt-BR": "Converter não precisa ser caro e muito menos difícil.",
-      en: "Converting doesn't have to be expensive or difficult.",
+      "pt-BR": "Mover dinheiro entre ativos não precisa ser caro.",
+      en: "Moving money between assets shouldn't be expensive.",
     },
     subtitle: {
-      "pt-BR": "Bancos lucram com a sua paciência e corretoras com a sua pressa. Nós usamos a tecnologia da rede Stellar para cortar os intermediários, dolarizando seu capital em segundos, com taxas transparentes e uma fração do custo tradicional.",
-      en: "Banks profit from your patience and brokerages from your haste. We use Stellar network technology to cut out intermediaries, converting your capital in seconds with transparent fees and a fraction of traditional costs.",
+      "pt-BR": "Bancos lucram com spread escondido e corretoras com tarifas abusivas. Nós usamos a rede Stellar para cortar intermediários, liquidando transações em segundos com taxas transparentes e custo até 20x menor que o mercado tradicional.",
+      en: "Banks profit from hidden spreads and brokerages from abusive fees. We use the Stellar network to cut out intermediaries, settling transactions in seconds with transparent fees at up to 20x less than traditional markets.",
     },
     f1Title: { "pt-BR": "Esqueça novos downloads.", en: "Forget new downloads." },
     f1Body: {
@@ -57,8 +57,8 @@ const c = {
   },
   solution: {
     title: {
-      "pt-BR": "Sua conta local com o poder de uma carteira global.",
-      en: "Your local account with the power of a global wallet.",
+      "pt-BR": "Transações entre ativos com o menor custo do mercado.",
+      en: "Asset-to-asset transactions at the lowest market cost.",
     },
     subtitle: {
       "pt-BR": "Toda a eficiência e segurança da infraestrutura financeira moderna, totalmente invisível aos seus olhos. Você só interage com o aplicativo de mensagens que já sabe usar.",
