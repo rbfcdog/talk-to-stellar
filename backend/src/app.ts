@@ -13,6 +13,7 @@ import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
 import rampRouter from './api/routes/ramp.router';
 import evolutionRouter from './api/routes/evolution.router';
+import bridgeWebhookRouter from './api/routes/bridge-webhook.router';
 import quotesRouter from './api/routes/quotes.router';
 import internationalTransfersRouter from './api/routes/international-transfers.router';
 import webhooksRouter from './api/routes/webhooks.router';
@@ -20,6 +21,7 @@ import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import { FxRateAlertService } from './api/services/fx-rate-alert.service';
 import { EvolutionService } from './api/services/evolution.service';
+import { initBridgeService } from './integrations/bridge';
 import {
   buildCorsOptions,
   globalRateLimit,
@@ -87,6 +89,7 @@ app.use('/api/transfers', internationalTransfersRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/evolution', evolutionRouter);
 app.use('/webhook/evolution', evolutionRouter);
+app.use('/webhook/bridge', bridgeWebhookRouter);
 app.use('/webhooks', webhooksRouter);
 
 // Start background summary scheduler (idempotent per process).
@@ -97,6 +100,7 @@ logger.info(`[evolution-startup] Evolution services starting. base_url=${process
 EvolutionService.startWebhookAutoConfiguration();
 EvolutionService.startInboundWebhookWorker();
 EvolutionService.startOutboundDeliveryWorker();
+initBridgeService();
 logger.info('[evolution-startup] Evolution services registered (auto-config, inbound worker, outbound worker)');
 
 app.use((req, res) => {
