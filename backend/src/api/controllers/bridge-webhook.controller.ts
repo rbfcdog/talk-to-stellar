@@ -8,6 +8,7 @@
 
 import { Request, Response } from 'express';
 import { getBridgeService } from '../../integrations/bridge';
+import { BridgePixAchService } from '../services/bridge-pix-ach.service';
 import { logger } from '../../utils/logger';
 
 export default class BridgeWebhookController {
@@ -37,15 +38,27 @@ export default class BridgeWebhookController {
       logger.info(`[bridge-webhook] received event=${event.type} id=${event.id}`);
 
       switch (event.type) {
-        case 'transfer.completed':
-          logger.info(`[bridge-webhook] transfer completed id=${(event.data as any)?.id || '?'}`);
+        case 'transfer.completed': {
+          const transferId = (event.data as any)?.id || '';
+          logger.info(`[bridge-webhook] transfer completed id=${transferId}`);
+          // If this transfer is part of a PIX → ACH flow, mark it completed
+          void new BridgePixAchService().onAchCompleted(transferId);
           break;
-        case 'transfer.failed':
-          logger.warn(`[bridge-webhook] transfer failed id=${(event.data as any)?.id || '?'}`);
+        }
+        case 'transfer.failed': {
+          const transferId = (event.data as any)?.id || '';
+          const error = (event.data as any)?.error || '';
+          logger.warn(`[bridge-webhook] transfer failed id=${transferId} error=${error}`);
+          void new BridgePixAchService().onAchFailed(transferId, error);
           break;
-        case 'virtual_account.deposit_received':
-          logger.info(`[bridge-webhook] virtual account deposit received va=${(event.data as any)?.virtual_account_id || '?'}`);
+        }
+        case 'virtual_account.deposit_received': {
+          const vaId = (event.data as any)?.virtual_account_id || '';
+          logger.info(`[bridge-webhook] virtual account deposit received va=${vaId}`);
+          // Auto-trigger ACH off-ramp if this is a PIX → ACH order
+          void new BridgePixAchService().onPixDepositReceived(vaId);
           break;
+        }
         case 'customer.kyc_approved':
           logger.info(`[bridge-webhook] customer KYC approved cust=${(event.data as any)?.customer_id || '?'}`);
           break;
