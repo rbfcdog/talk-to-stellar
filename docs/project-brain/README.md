@@ -50,6 +50,8 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [operations/ADMIN.md](./operations/ADMIN.md) | You need the ops dashboard, admin wallet, or receipts. |
 | [operations/incidents/rota-2-4-stall.md](./operations/incidents/rota-2-4-stall.md) | "rota calculada 2/4 — operação parou". |
 | [operations/incidents/duplicate-receipts.md](./operations/incidents/duplicate-receipts.md) | 2 comprovantes for 1 on-ramp. |
+| [operations/forensics/orchestration-logs.md](./operations/forensics/orchestration-logs.md) | You need orchestration event log reference/schema. |
+| [operations/forensics/transfer-record-example.md](./operations/forensics/transfer-record-example.md) | You need a full transfer record template to copy. |
 
 ### Product
 | File | Read when... |
