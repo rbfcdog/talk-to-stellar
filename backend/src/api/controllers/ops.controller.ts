@@ -8,16 +8,12 @@
 import crypto from 'crypto';
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import {
-  OPS_HISTORY_SOURCES,
+import type {
   OpsHistoryCategory,
   OpsHistoryRecord,
   OpsHistorySource,
-  opsHistoryRepository,
 } from '../repository/ops-history.repository';
-import { transferRepository } from '../repository/transfer.repository';
-import { opsAdminAuthService, OpsAdminUser } from '../services/ops-admin-auth.service';
-import { orchestrator } from '../../orchestration/TransferOrchestrator';
+import type { OpsAdminUser } from '../services/ops-admin-auth.service';
 import { isProductionLikeEnvironment } from '../../config/runtime';
 import { getRequiredJwtSecret } from '../../config/secrets';
 import {
@@ -31,6 +27,12 @@ import {
   renderTransferDetailPage,
 } from '../views/ops-dashboard.view';
 
+const OPS_HISTORY_SOURCES = [
+  'transfers',
+  'international_transfers',
+  'operations',
+  'payment_logs',
+] as const;
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 const STUCK_ACTIVE_MS = 2 * 60 * 60 * 1000;
@@ -60,6 +62,22 @@ type OpsAuthContext = {
   admin?: OpsAdminUser;
   csrfToken?: string;
 };
+
+function getOpsAdminAuthService(): typeof import('../services/ops-admin-auth.service').opsAdminAuthService {
+  return require('../services/ops-admin-auth.service').opsAdminAuthService;
+}
+
+function getOpsHistoryRepository(): typeof import('../repository/ops-history.repository').opsHistoryRepository {
+  return require('../repository/ops-history.repository').opsHistoryRepository;
+}
+
+function getTransferRepository(): typeof import('../repository/transfer.repository').transferRepository {
+  return require('../repository/transfer.repository').transferRepository;
+}
+
+function getOrchestrator(): typeof import('../../orchestration/TransferOrchestrator').orchestrator {
+  return require('../../orchestration/TransferOrchestrator').orchestrator;
+}
 
 function configuredOpsToken(): string {
   const configured = String(process.env.OPS_DASHBOARD_TOKEN || process.env.TRANSFER_API_TOKEN || '').trim();
@@ -191,7 +209,7 @@ async function sessionAuth(req: Request): Promise<OpsAuthContext | null> {
   try {
     const decoded = jwt.verify(token, getRequiredJwtSecret()) as Partial<OpsSessionPayload>;
     if (decoded.typ !== OPS_SESSION_TYPE || !decoded.sub || !decoded.login || !decoded.csrf) return null;
-    const admin = await opsAdminAuthService.getActiveById(decoded.sub);
+    const admin = await getOpsAdminAuthService().getActiveById(decoded.sub);
     if (!admin || admin.login !== decoded.login) return null;
     return {
       method: 'session',
@@ -598,7 +616,7 @@ export class OpsController {
     }
 
     try {
-      const result = await opsAdminAuthService.verifyLogin(login, req.body?.password);
+      const result = await getOpsAdminAuthService().verifyLogin(login, req.body?.password);
       if (!result.ok) {
         const lockedDetail = result.reason === 'locked' && result.lockedUntil
           ? ` Account locked until ${new Date(result.lockedUntil).toISOString()}.`
@@ -648,7 +666,7 @@ export class OpsController {
     const updatedAt = new Date().toISOString();
 
     try {
-      const history = await opsHistoryRepository.list({
+      const history = await getOpsHistoryRepository().list({
         source: filters.source || undefined,
       });
       const filtered = applyDashboardFilters(history.records, filters);
@@ -691,7 +709,7 @@ export class OpsController {
     const auth = await requireDashboardAuth(req, res);
     if (!auth) return;
 
-    const { transfer, events } = await orchestrator.getTransferWithEvents(req.params.id);
+    const { transfer, events } = await getOrchestrator().getTransferWithEvents(req.params.id);
     const sortedEvents = [...events].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -710,15 +728,15 @@ export class OpsController {
     if (!await requireApiAuth(req, res)) return;
     const state = req.query.state ? String(req.query.state) : undefined;
     const limit = Math.min(parseInt(String(req.query.limit || '50'), 10) || 50, 200);
-    const transfers = await transferRepository.list({ state, limit });
-    const total = await transferRepository.count(state ? { state } : undefined);
+    const transfers = await getTransferRepository().list({ state, limit });
+    const total = await getTransferRepository().count(state ? { state } : undefined);
     res.json({ success: true, total, count: transfers.length, transfers });
   }
 
   async apiListHistory(req: Request, res: Response): Promise<void> {
     if (!await requireApiAuth(req, res)) return;
     const status = queryString(req.query.status || req.query.state);
-    const history = await opsHistoryRepository.list({
+    const history = await getOpsHistoryRepository().list({
       source: queryString(req.query.source) || undefined,
       category: queryString(req.query.category) || undefined,
       status: status || undefined,
@@ -733,7 +751,7 @@ export class OpsController {
 
   async apiGetTransfer(req: Request, res: Response): Promise<void> {
     if (!await requireApiAuth(req, res)) return;
-    const { transfer, events } = await orchestrator.getTransferWithEvents(req.params.id);
+    const { transfer, events } = await getOrchestrator().getTransferWithEvents(req.params.id);
     res.json({ success: true, transfer, events });
   }
 
@@ -745,7 +763,7 @@ export class OpsController {
         res.status(400).json({ success: false, error: 'amount_brl_in required' });
         return;
       }
-      const transfer = await orchestrator.createTransfer({
+      const transfer = await getOrchestrator().createTransfer({
         amount_brl_in: String(amount_brl_in),
         source_endpoint: source_endpoint || { institution_type: 'api', masked_identifier: 'api-client' },
         destination_endpoint: destination_endpoint || { provider_type: 'usd_bank', country: 'US', masked_account: '****' },
