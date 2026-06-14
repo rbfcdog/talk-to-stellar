@@ -108,3 +108,20 @@
 
 **Files**: `backend/src/api/controllers/ops.controller.ts`, `backend/src/api/repository/ops-history.repository.ts`, `backend/src/api/routes/ops.router.ts`
 **Related**: Pain point #42
+
+## 8. Supabase SQL Editor rejects `\if` in ops admin migration (FIXED)
+
+**Symptom**: Running `backend/migrations/20260614_00_ops_admin_auth.sql` in Supabase SQL Editor fails with `ERROR: 42601: syntax error at or near "\" LINE 160: \if :{?ops_admin_login}`.
+
+**Status**: Fixed by `949db79`. The migration is now plain SQL only; optional admin creation is performed separately.
+
+**Recovery steps**:
+1. Pull `main` and re-open `backend/migrations/20260614_00_ops_admin_auth.sql`.
+2. Confirm the file has no `\if`, `\echo`, or other backslash commands.
+3. Run the migration in Supabase SQL Editor.
+4. Generate a password hash locally: `OPS_ADMIN_PASSWORD='...' npm --prefix backend run ops:hash-password --silent`.
+5. In Supabase SQL Editor, run `select public.upsert_ops_admin_user(lower('admin@example.com'), 'generated-salt-hash', null);`.
+6. Open `/ops/login` and sign in with that login and plaintext password.
+
+**Files**: `backend/migrations/20260614_00_ops_admin_auth.sql`, `backend/scripts/run-required-migrations.ts`
+**Related**: Pain point #43

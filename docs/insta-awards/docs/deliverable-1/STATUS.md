@@ -5,7 +5,7 @@ Updated: 2026-06-14
 ## Acceptance Criteria
 
 - [x] `transfers` + `transfer_events` migration exists; DB-backed ops admin login migration exists; rollback SQL is intentionally excluded and DB backup is required before applying
-- [ ] Migrations run cleanly against Supabase and schema inspection pasted in `MIGRATIONS.md`
+- [ ] Updated plain-SQL migrations run cleanly against Supabase and schema inspection pasted in `MIGRATIONS.md`
 - [x] State machine module with explicit transition map; illegal transitions throw; covered by tests
 - [x] Orchestrator coordinates normalized PIX intake, conversion, Stellar settlement, payout routing hook, reconciliation, and full lifecycle management
 - [x] Existing international transfer API/service mirrors real Etherfuse/Stellar/payout stages into normalized `transfers`
@@ -61,7 +61,7 @@ npm --prefix backend test -- --runInBand tests/ops.routes.test.ts tests/ops-hist
 
 ## Current Blockers Before Declaring Done
 
-1. Apply `backend/migrations/20260613_00_full_schema.sql` and `backend/migrations/20260614_00_ops_admin_auth.sql` to the target Supabase database.
+1. Apply the updated plain-SQL `backend/migrations/20260613_00_full_schema.sql` and `backend/migrations/20260614_00_ops_admin_auth.sql` to the target Supabase database.
 2. Run schema inspection and paste output into `MIGRATIONS.md`.
 3. Execute a real Stellar testnet D1 transfer with `LOG_FILE` enabled.
 4. Start backend and capture `/ops` list/detail screenshots for that same transfer.

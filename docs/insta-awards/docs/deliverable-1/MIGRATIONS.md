@@ -7,7 +7,7 @@ Updated: 2026-06-14
 | File | Purpose |
 |------|---------|
 | `backend/migrations/20260613_00_full_schema.sql` | Creates the complete TalkToStellar database from zero, including D1 `transfers`, `transfer_events`, append-only guards, public-ref generation, and atomic lifecycle RPCs. |
-| `backend/migrations/20260614_00_ops_admin_auth.sql` | Adds DB-backed `/ops/login` admin auth through `ops_admin_users` and optional admin bootstrap from env-provided login/password hash. |
+| `backend/migrations/20260614_00_ops_admin_auth.sql` | Adds DB-backed `/ops/login` admin auth through `ops_admin_users`. The file is plain SQL for Supabase SQL Editor compatibility; admin creation is a separate function call or migration-runner step. |
 
 ## Run Commands
 
@@ -18,7 +18,7 @@ cd backend
 DATABASE_URL=postgresql://... npm run migrate:required
 ```
 
-Create or rotate the first ops admin during migration:
+Create or rotate the first ops admin through the migration runner:
 
 ```bash
 read -rs OPS_ADMIN_PASSWORD
@@ -33,11 +33,26 @@ Direct `psql`:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/20260613_00_full_schema.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -v ops_admin_login="admin@example.com" \
-  -v ops_admin_password_hash="$OPS_ADMIN_PASSWORD_HASH" \
-  -f backend/migrations/20260614_00_ops_admin_auth.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/20260614_00_ops_admin_auth.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+  "select public.upsert_ops_admin_user(lower('admin@example.com'), '$OPS_ADMIN_PASSWORD_HASH', null);"
 ```
+
+Supabase SQL Editor:
+
+1. Run `backend/migrations/20260614_00_ops_admin_auth.sql`.
+2. Generate a hash locally with `OPS_ADMIN_PASSWORD='...' npm --prefix backend run ops:hash-password --silent`.
+3. Run this SQL in the editor, replacing only the login and generated hash:
+
+```sql
+select public.upsert_ops_admin_user(
+  lower('admin@example.com'),
+  'paste-generated-scrypt-hash-here',
+  null
+);
+```
+
+Do not paste the plaintext password into Supabase. Only paste the generated `salt:hash` value.
 
 The repository no longer carries a generic rollback migration. Back up an existing database before applying the consolidated bootstrap.
 
