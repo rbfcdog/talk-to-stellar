@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-13. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-41 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+42 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -248,7 +248,7 @@
 
 ---
 
-## Cluster F — Copy & Verbosity (4 incidents, SEVERITY: MEDIUM)
+## Cluster F — Copy & Verbosity (5 incidents, SEVERITY: MEDIUM)
 
 ### #2 — "Summary" Banned
 > **Quote**: "nao precisa falar summary, so precisa falar, escolhemos a melhor rota, faça o mais simples pro usuario" and stronger: "nao coloque em nenhum caso summary, eh so pra falar q escolheu a melhor rota!!"
@@ -285,6 +285,15 @@
 - **Root cause**: Default PIN component includes developer-friendly labels that don't need to be shown to users.
 - **Status**: **Still open**.
 - **Lesson**: **PIN screen should have: (1) masked PIN dots, (2) numeric keypad, (3) cancel button**. Nothing else.
+
+### #45 — Ops Login Copy Exposes Implementation Details
+> **Quote**: "make so in this only say stuff about the trabsfers, dont maenting database, tikesns or anything, make user friendly. teel me which user and password to use"
+> **Gloss**: The ops login screen should speak only about transfers, not database tables, tokens, cookies, or migration details.
+
+- **Where**: `backend/src/api/views/ops-dashboard.view.ts`.
+- **Root cause**: The secure login implementation shipped with implementation-facing explanatory copy on the visible login page.
+- **Status**: **Fixed by `34ce523`**. The login page now says "Transfers console", "Operator email", "Open transfers", and a transfer-focused helper line. The route tests assert the visible screen no longer contains `ops_admin_users`.
+- **Lesson**: **Operator-facing screens should describe the job, not the plumbing**. Security details belong in docs and runbooks, not visible product copy.
 
 ---
 
@@ -406,7 +415,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 41 documented incidents:
+Ranked by frequency × severity across the 42 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -416,17 +425,17 @@ Ranked by frequency × severity across the 41 documented incidents:
 | 4 | **B — Ledger & Balance** | 4 | HIGH | Balance not credited, distribution math wrong, duplicate receipts |
 | 5 | **H — Reliability** | 7 | HIGH | Admin history incomplete, dashboard access, migration setup, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 5 | MEDIUM | SVG spacing, shadows, charts, dark mode |
-| 7 | **F — Copy & Verbosity** | 4 | MEDIUM | "Summary" banned, stray words, receipts auto-shown |
+| 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 16 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44)
+- **Confirmed fixed**: 17 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 16 of 41 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 17 of 42 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -450,3 +459,4 @@ Fixing commits verified in codebase:
 | #42 | Commit pending | Aggregate all authoritative transaction tables in `/ops`; verified 1,540 live database records |
 | #43 | `949db79` | Make ops admin auth migration plain SQL for Supabase SQL Editor; move bootstrap to runner/function call |
 | #44 | `f321a52` | Rewrite frontend `/ops` paths to the backend ops dashboard |
+| #45 | `34ce523` | Replace implementation-facing ops login copy with transfer-focused operator copy |
