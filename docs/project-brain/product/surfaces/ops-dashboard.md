@@ -44,7 +44,7 @@ This matches the existing `tts-op-page` dark operations language in `frontend/ap
 ## Current Behavior
 
 - `/ops/login` is the browser entry point. It uses a CSRF cookie + hidden token, checks the submitted login/password against `public.ops_admin_users`, then signs a short-lived HTTP-only session cookie with `JWT_SECRET`.
-- The login page renders before admin database credentials are needed. Supabase is lazy-loaded only after the operator submits credentials, so setup/configuration errors should not replace the form with generic JSON.
+- The login page renders before admin database or dashboard data modules are needed. Supabase-backed modules are lazy-loaded only after the operator submits credentials or opens an authenticated dashboard, so setup/configuration errors should not replace the form with generic JSON.
 - Visible login copy is transfer-focused only: title "Transfers console", operator email/password fields, and helper text about reviewing transfer status, payout progress, and reconciliation evidence. Implementation terms such as database table names, dashboard tokens, cookies, and migrations stay out of the screen.
 - The deployed frontend serves `/ops/login` through the `frontend/next.config.mjs` rewrite to the backend. The frontend environment must set `BACKEND_URL` or `NEXT_PUBLIC_BACKEND_URL` to the backend origin.
 - `backend/migrations/20260614_00_ops_admin_auth.sql` is plain SQL so it can run in Supabase SQL Editor. The first admin is created by `public.upsert_ops_admin_user(...)` after the migration, or automatically by `backend/scripts/run-required-migrations.ts` when `OPS_ADMIN_LOGIN` and `OPS_ADMIN_PASSWORD_HASH` are set.

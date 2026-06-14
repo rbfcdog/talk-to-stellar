@@ -147,10 +147,10 @@
 
 **Symptom**: `/ops/login` returns JSON like `success: false`, `code: temporary_unavailable`, `support_code: TTS-...`, and status 500 instead of the transfer operator login screen.
 
-**Status**: Fixed by `4b10d31`. The login page renders before admin database credentials are needed, and Supabase is lazy-loaded only during submitted credential verification.
+**Status**: Fixed by `4b10d31` and `c4d38bd`. The login page renders before admin database credentials are needed, and Supabase-backed dashboard modules are lazy-loaded only during submitted credential verification or authenticated dashboard access.
 
 **Diagnosis steps**:
-1. Confirm the deployed backend includes `4b10d31` or later.
+1. Confirm the deployed backend includes `c4d38bd` or later.
 2. Open `/ops/login` with `Accept: text/html`; it should return HTML containing `Transfers console`.
 3. If the page renders but submit fails, check backend env: `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and that `backend/migrations/20260614_00_ops_admin_auth.sql` has run.
 4. If the frontend domain returns 404, follow runbook section 9 for the Next.js rewrite/env.

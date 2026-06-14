@@ -379,9 +379,9 @@
 > **Quote**: "success false message \"Não consegui concluir agora. Tente novamente em alguns segundos.\" code \"temporary_unavailable\" support_code \"TTS-20260614192005-WTC3UF\" error \"Não consegui concluir agora. Tente novamente em alguns segundos.\" status 500 gave this pn login!!!!!, why dindt show teh screen??"
 > **Gloss**: `/ops/login` returned a generic JSON 500 response instead of rendering the transfer operator login screen.
 
-- **Where**: `backend/src/api/services/ops-admin-auth.service.ts`, `backend/src/api/routes/ops.router.ts`, `backend/tests/ops.routes.test.ts`.
-- **Root cause**: The ops admin auth service imported the Supabase client at module load. If backend admin DB configuration failed during route initialization, the global JSON error handler could answer before the login page rendered. Async ops routes also lacked a shared wrapper for forwarding unexpected failures consistently.
-- **Status**: **Fixed by `4b10d31`**. Supabase is lazy-loaded only when credential verification needs it, `/ops/login` renders before database credentials are required, and ops routes now use a shared async wrapper. A regression test confirms `/ops/login` returns HTML even when `JWT_SECRET` and Supabase env vars are absent.
+- **Where**: `backend/src/api/controllers/ops.controller.ts`, `backend/src/api/services/ops-admin-auth.service.ts`, `backend/src/api/routes/ops.router.ts`, `backend/tests/ops.routes.test.ts`.
+- **Root cause**: The ops controller and ops admin auth service imported Supabase-backed dashboard modules at module load. If backend admin DB configuration failed during route initialization, the global JSON error handler could answer before the login page rendered. Async ops routes also lacked a shared wrapper for forwarding unexpected failures consistently.
+- **Status**: **Fixed by `4b10d31` and `c4d38bd`**. Supabase and dashboard data modules are lazy-loaded only when credential verification or an authenticated dashboard request needs them; `/ops/login` renders before database credentials are required. Ops routes now use a shared async wrapper. A regression test confirms `/ops/login` returns HTML even when `JWT_SECRET` and Supabase env vars are absent, and a direct module-load check confirms `ops.router` loads with Supabase env removed.
 - **Lesson**: **Login pages must render before protected dependencies are needed**. Do dependency checks on submit, not while preparing the public form.
 
 ### #13 — Investments Page Failing
@@ -469,4 +469,4 @@ Fixing commits verified in codebase:
 | #43 | `949db79` | Make ops admin auth migration plain SQL for Supabase SQL Editor; move bootstrap to runner/function call |
 | #44 | `f321a52` | Rewrite frontend `/ops` paths to the backend ops dashboard |
 | #45 | `34ce523` | Replace implementation-facing ops login copy with transfer-focused operator copy |
-| #46 | `4b10d31` | Render `/ops/login` before admin DB access and lazy-load Supabase during credential verification |
+| #46 | `4b10d31`, `c4d38bd` | Render `/ops/login` before admin DB/dashboard access and lazy-load Supabase-backed modules |
