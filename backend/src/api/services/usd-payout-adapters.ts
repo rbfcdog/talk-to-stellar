@@ -101,18 +101,45 @@ function providerTimeoutMs(): number {
   return Math.max(1000, Math.min(120000, Math.floor(configured)));
 }
 
+function uuidFromStableText(value: string): string {
+  const hash = crypto.createHash('sha256').update(value).digest('hex').slice(0, 32).split('');
+  hash[12] = '4';
+  hash[16] = ((parseInt(hash[16], 16) & 0x3) | 0x8).toString(16);
+  const hex = hash.join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+function uuidOrStableText(value: unknown, fallbackSeed: string): string {
+  const normalized = readText(value);
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)) {
+    return normalized;
+  }
+  return uuidFromStableText(normalized || fallbackSeed);
+}
+
 function redactPayoutFields(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactPayoutFields);
   if (!value || typeof value !== 'object') return value;
 
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+  const source = value as Record<string, unknown>;
+  const objectLooksLikeSensitiveIdReference = Boolean(source.id && (
+    readText(source.type) ||
+    Object.keys(source).length === 1
+  ));
+  return Object.fromEntries(Object.entries(source).map(([key, item]) => {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normalized === 'id' && objectLooksLikeSensitiveIdReference) {
+      return [key, item ? `[REDACTED_HASH:${crypto.createHash('sha256').update(readText(item)).digest('hex').slice(0, 12)}]` : item];
+    }
     if (normalized === 'accountholdername') return [key, item ? '[REDACTED]' : item];
     if (normalized === 'accountnumber' || normalized === 'routingnumber') {
       const lastFour = readText(item).replace(/\D+/g, '').slice(-4);
       return [key, lastFour ? `[REDACTED_LAST4:${lastFour}]` : '[REDACTED]'];
     }
     if (normalized === 'iban') return [key, item ? '[REDACTED]' : item];
+    if (normalized === 'providerdestinationid' || normalized === 'circlebankaccountid') {
+      return [key, item ? `[REDACTED_HASH:${crypto.createHash('sha256').update(readText(item)).digest('hex').slice(0, 12)}]` : item];
+    }
     return [key, redactPayoutFields(item)];
   }));
 }
@@ -138,7 +165,18 @@ function providerResponseStatus(payload: Record<string, unknown>): unknown {
 
 function providerResponseError(payload: Record<string, unknown>, status: number): string {
   const data = record(payload.data);
-  return readText(payload.message || payload.error || data.message || data.error) || String(status);
+  const firstError = Array.isArray(payload.errors) ? record(payload.errors[0]) : {};
+  return readText(
+    payload.message ||
+    payload.error ||
+    payload.code ||
+    data.message ||
+    data.error ||
+    data.errorCode ||
+    firstError.message ||
+    firstError.error ||
+    firstError.code,
+  ) || String(status);
 }
 
 function assertExecutableDestination(destination: UsdBankDestination): void {
@@ -490,6 +528,280 @@ export class CircleCompatibilityAdapter extends CompatibilityPayoutAdapter {
   createUrlEnvName = 'CIRCLE_PAYOUT_CREATE_URL';
   statusUrlEnvName = 'CIRCLE_PAYOUT_STATUS_URL';
   webhookSecretEnvName = 'CIRCLE_PAYOUT_WEBHOOK_SECRET';
+
+  getCapabilities(): PayoutProviderCapabilities {
+    const apiKey = readText(process.env.CIRCLE_API_KEY);
+    const destinationId = readText(process.env.CIRCLE_PAYOUT_DESTINATION_ID || process.env.CIRCLE_BANK_ACCOUNT_ID);
+    const createUrl = this.createUrl();
+    const statusUrl = this.statusUrlTemplate();
+    const executionEnabled = shouldExecuteRealPayouts();
+    const configured = Boolean(apiKey && createUrl && destinationId);
+    const blockers = [
+      ...(!apiKey ? ['CIRCLE_API_KEY is missing.'] : []),
+      ...(!destinationId ? ['CIRCLE_PAYOUT_DESTINATION_ID or CIRCLE_BANK_ACCOUNT_ID is missing. Circle payouts require a linked bank account ID.'] : []),
+      ...(!executionEnabled ? ['ENABLE_REAL_PAYOUT_EXECUTION is false.'] : []),
+    ];
+    const sandbox = this.isSandboxUrl(createUrl);
+
+    return executionCapability({
+      providerName: 'circle',
+      displayName: 'Circle Mint USD payout adapter',
+      executionMode: configured && executionEnabled ? (sandbox ? 'sandbox_api' : 'live_api') : 'compatibility',
+      requirements: [
+        'CIRCLE_API_KEY',
+        'CIRCLE_PAYOUT_DESTINATION_ID or payout_destination.providerDestinationId',
+        'ENABLE_REAL_PAYOUT_EXECUTION',
+      ],
+      configured,
+      executionEnabled: configured && executionEnabled,
+      supportsStatusPolling: Boolean(apiKey && statusUrl),
+      supportsWebhooks: Boolean(readText(process.env.CIRCLE_PAYOUT_WEBHOOK_SECRET) || readText(process.env.PAYOUT_WEBHOOK_SECRET)),
+      usdBankDestination: true,
+      blockers,
+      notes: [
+        configured && executionEnabled
+          ? `Circle Mint payout execution is enabled against ${sandbox ? 'sandbox' : 'production'} API defaults.`
+          : 'Builds a Circle Mint /v1/businessAccount/payouts compatibility payload without executing a bank payout.',
+        'Circle live execution requires the destination bank account to be linked in Circle first; raw routing/account numbers are evidence only.',
+      ],
+    });
+  }
+
+  protected buildProviderPayload(input: CreatePayoutInput): Record<string, unknown> {
+    const options = record(input.providerOptions);
+    const sourceWalletId = readText(options.circle_source_wallet_id || options.circleSourceWalletId || process.env.CIRCLE_SOURCE_WALLET_ID);
+    return omitUndefined({
+      idempotencyKey: this.idempotencyKey(input),
+      destination: omitUndefined({
+        type: this.destinationType(input),
+        id: this.destinationId(input) || undefined,
+      }),
+      amount: {
+        amount: input.amountUsd,
+        currency: 'USD',
+      },
+      source: sourceWalletId ? { id: sourceWalletId } : undefined,
+      metadata: omitUndefined({
+        transfer_id: input.transferId,
+        payout_reference: `tts:${input.transferId}`,
+        sender_legal_name_present: Boolean(readText(input.senderLegalName)),
+        recipient_legal_name_present: Boolean(readText(input.recipientLegalName)),
+        stellar_tx_hash: input.stellarTxHash,
+        stellar_memo: input.stellarMemo,
+        ...(input.metadata || {}),
+        ...destinationCompatibilityMetadata(input.destination),
+      }),
+    });
+  }
+
+  async createPayoutInstruction(input: CreatePayoutInput): Promise<PayoutInstruction> {
+    const apiKey = readText(process.env.CIRCLE_API_KEY);
+    const createUrl = this.createUrl();
+    const realExecution = shouldExecuteRealPayouts();
+    const destinationId = this.destinationId(input);
+    const providerPayload = this.buildProviderPayload(input);
+    const providerPayloadEvidence = payoutProviderEvidenceSnapshot(providerPayload);
+    const destinationEvidence = payoutProviderEvidenceSnapshot({
+      account_holder_name: input.destination.accountHolderName,
+      account_holder_type: input.destination.accountHolderType,
+      bank_name: input.destination.bankName,
+      routing_number: input.destination.routingNumber,
+      account_number: input.destination.accountNumber,
+      account_type: input.destination.accountType,
+      swift_bic: input.destination.swiftBic,
+      iban: input.destination.iban,
+      country: input.destination.country,
+      provider_destination_id: input.destination.providerDestinationId || input.destination.circleBankAccountId,
+      provider_label: input.destination.providerLabel,
+    });
+
+    if (isWiseDestination(input.destination)) {
+      return createInstruction(input, 'circle', 'wise_metadata_only', {
+        mode: 'wise_metadata_only',
+        provider_api: 'circle_mint_business_account_payouts',
+        provider_api_key_present: Boolean(apiKey),
+        provider_destination_id_present: Boolean(destinationId),
+        real_execution_enabled: false,
+        provider_payload: providerPayloadEvidence,
+        destination_metadata: destinationEvidence,
+        ...destinationCompatibilityMetadata(input.destination),
+        note: 'Wise is destination metadata only for this sprint. No Wise API, ACH, wire, Circle, or provider payout was executed.',
+      });
+    }
+
+    if (!apiKey || !createUrl || !destinationId || !realExecution) {
+      return createInstruction(input, 'circle', 'compatibility', {
+        mode: 'compatibility',
+        provider_api: 'circle_mint_business_account_payouts',
+        provider_api_key_present: Boolean(apiKey),
+        provider_destination_id_present: Boolean(destinationId),
+        real_execution_enabled: realExecution,
+        provider_payload: providerPayloadEvidence,
+        destination_metadata: destinationEvidence,
+        linked_bank_account_required: true,
+        docs_reference: 'Circle Mint Create a payout: POST /v1/businessAccount/payouts',
+        ...destinationCompatibilityMetadata(input.destination),
+        note: 'Circle compatibility adapter prepared the official payout payload but did not execute a bank payout.',
+      });
+    }
+
+    assertCircleExecutableDestination(input, destinationId);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    let response: Response;
+    try {
+      response = await fetch(createUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(providerPayload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    const payload = record(await response.json().catch(() => ({})));
+    if (!response.ok) {
+      throw new Error(`circle payout API rejected instruction: ${providerResponseError(payload, response.status)}`);
+    }
+
+    const providerPayoutId = providerResponseId(payload) || crypto.randomUUID();
+    const createdAt = now();
+    const rawStatus = providerResponseStatus(payload) || 'pending';
+    const status = normalizePayoutStatus(rawStatus, 'circle');
+    const executionMode: PayoutExecutionMode = this.isSandboxUrl(createUrl) ? 'sandbox_api' : 'live_api';
+
+    return {
+      payout_instruction_id: `circle_instruction_${crypto.randomUUID()}`,
+      provider_name: 'circle',
+      provider_payout_id: providerPayoutId,
+      status,
+      execution_mode: executionMode,
+      destination: input.destination,
+      amount_usd: input.amountUsd,
+      currency: 'USD',
+      created_at: createdAt,
+      updated_at: createdAt,
+      status_history: [statusObservation('circle', providerPayoutId, rawStatus, 'create', payload)],
+      metadata: {
+        mode: executionMode,
+        provider_api: 'circle_mint_business_account_payouts',
+        ...destinationCompatibilityMetadata(input.destination),
+        provider_payload: providerPayloadEvidence,
+        provider_response: payoutProviderEvidenceSnapshot(payload),
+        destination_metadata: destinationEvidence,
+      },
+    };
+  }
+
+  async getPayoutStatus(providerPayoutId: string): Promise<PayoutStatusObservation> {
+    const apiKey = readText(process.env.CIRCLE_API_KEY);
+    const template = this.statusUrlTemplate();
+    if (!apiKey || !template || !shouldExecuteRealPayouts()) {
+      return statusObservation('circle', providerPayoutId, 'pending', 'poll', {
+        mode: 'compatibility',
+        provider_api: 'circle_mint_business_account_payouts',
+        note: 'Circle payout status API is not configured and enabled.',
+      });
+    }
+    const url = template.includes('{id}')
+      ? template.replace('{id}', encodeURIComponent(providerPayoutId))
+      : `${template.replace(/\/+$/, '')}/${encodeURIComponent(providerPayoutId)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), providerTimeoutMs());
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${apiKey}`,
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    const payload = record(await response.json().catch(() => ({})));
+    if (!response.ok) {
+      throw new Error(`circle payout status API rejected request: ${providerResponseError(payload, response.status)}`);
+    }
+    return statusObservation(
+      'circle',
+      providerPayoutId,
+      providerResponseStatus(payload) || 'pending',
+      'poll',
+      payload,
+    );
+  }
+
+  private baseUrl(): string {
+    const configured = readText(process.env.CIRCLE_API_BASE_URL);
+    if (configured) return configured.replace(/\/+$/, '');
+    const environment = readText(process.env.CIRCLE_ENVIRONMENT || process.env.CIRCLE_API_ENVIRONMENT || 'sandbox').toLowerCase();
+    return environment === 'production' || environment === 'prod'
+      ? 'https://api.circle.com'
+      : 'https://api-sandbox.circle.com';
+  }
+
+  private createUrl(): string {
+    return readText(process.env.CIRCLE_PAYOUT_CREATE_URL) || `${this.baseUrl()}/v1/businessAccount/payouts`;
+  }
+
+  private statusUrlTemplate(): string {
+    return readText(process.env.CIRCLE_PAYOUT_STATUS_URL) || `${this.baseUrl()}/v1/businessAccount/payouts/{id}`;
+  }
+
+  private destinationId(input: CreatePayoutInput): string {
+    const options = record(input.providerOptions);
+    return readText(
+      options.circle_destination_id ||
+      options.circleDestinationId ||
+      options.provider_destination_id ||
+      input.destination.providerDestinationId ||
+      input.destination.circleBankAccountId ||
+      process.env.CIRCLE_PAYOUT_DESTINATION_ID ||
+      process.env.CIRCLE_BANK_ACCOUNT_ID,
+    );
+  }
+
+  private destinationType(input: CreatePayoutInput): string {
+    const options = record(input.providerOptions);
+    return readText(
+      options.circle_destination_type ||
+      options.circleDestinationType ||
+      options.provider_destination_type ||
+      input.destination.providerDestinationType ||
+      process.env.CIRCLE_PAYOUT_DESTINATION_TYPE,
+    ) || 'wire';
+  }
+
+  private idempotencyKey(input: CreatePayoutInput): string {
+    const options = record(input.providerOptions);
+    return uuidOrStableText(
+      options.circle_idempotency_key ||
+      options.circleIdempotencyKey ||
+      options.idempotency_key ||
+      options.idempotencyKey,
+      `circle:payout:${input.transferId}`,
+    );
+  }
+
+  private isSandboxUrl(url: string): boolean {
+    if (/api-sandbox\.circle\.com/i.test(url)) return true;
+    if (/api\.circle\.com/i.test(url)) return false;
+    return readText(process.env.CIRCLE_ENVIRONMENT || process.env.CIRCLE_API_ENVIRONMENT || 'sandbox').toLowerCase() === 'sandbox';
+  }
+}
+
+function assertCircleExecutableDestination(input: CreatePayoutInput, destinationId: string): void {
+  if (!readText(destinationId)) {
+    throw new Error('Circle payout execution requires CIRCLE_PAYOUT_DESTINATION_ID or payout_destination.providerDestinationId for a linked bank account.');
+  }
+  if (!readText(input.destination.accountHolderName) || !readText(input.destination.country)) {
+    throw new Error('Circle payout execution requires account holder and destination country metadata for same-name controls and evidence.');
+  }
 }
 
 export class BridgeCompatibilityAdapter extends CompatibilityPayoutAdapter {

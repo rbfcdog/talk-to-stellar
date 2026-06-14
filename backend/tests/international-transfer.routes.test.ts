@@ -275,7 +275,7 @@ describe('international transfer HTTP routes', () => {
       repository: {
         url: 'https://github.com/rbfcdog/talk-to-stellar',
         branch: 'main',
-        evidence_map_path: 'insta-awards/evidence-map.md',
+        evidence_map_path: 'docs/insta-awards/evidence-map.md',
       },
       dashboard: {
         path: '/institution-settlement',
@@ -557,7 +557,7 @@ describe('international transfer HTTP routes', () => {
       repository: {
         url: 'https://github.com/rbfcdog/talk-to-stellar',
         branch: 'main',
-        evidence_map_path: 'insta-awards/evidence-map.md',
+        evidence_map_path: 'docs/insta-awards/evidence-map.md',
       },
       dashboard: {
         path: '/institution-settlement',

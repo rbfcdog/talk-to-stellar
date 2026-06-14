@@ -763,7 +763,7 @@ export class SettlementEvidenceService {
       repository: {
         url: repositoryUrl,
         branch: 'main',
-        evidence_map_path: 'insta-awards/evidence-map.md',
+        evidence_map_path: 'docs/insta-awards/evidence-map.md',
       },
       dashboard: {
         path: '/institution-settlement',

@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { MessageCircle, Send, Monitor } from "lucide-react"
 import { useLanguage } from "@/lib/i18n"
 import { t } from "./content"
+import EarlyAccessSignup from "./EarlyAccessSignup"
 
 export default function CTA() {
   const { language } = useLanguage()
@@ -31,6 +32,11 @@ export default function CTA() {
             <a href="/chat"
               className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/[0.05] px-8 py-4 text-sm font-bold text-white transition hover:bg-white/10"
             ><Monitor className="h-4 w-4 text-[#D48C1C]" /> <span>{language === "pt-BR" ? "Abrir chat web" : "Open web chat"}</span></a>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }}
+            className="mt-2 w-full"
+          >
+            <EarlyAccessSignup />
           </motion.div>
         </div>
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}

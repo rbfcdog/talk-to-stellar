@@ -46,7 +46,13 @@ describe('PayoutProviderAdapter contract', () => {
       MOCK_USD_PAYOUT_AUTO_COMPLETE: 'false',
       ENABLE_REAL_PAYOUT_EXECUTION: 'false',
       CIRCLE_API_KEY: '',
+      CIRCLE_API_BASE_URL: '',
+      CIRCLE_ENVIRONMENT: 'sandbox',
+      CIRCLE_PAYOUT_DESTINATION_ID: '',
+      CIRCLE_PAYOUT_DESTINATION_TYPE: '',
+      CIRCLE_SOURCE_WALLET_ID: '',
       CIRCLE_PAYOUT_CREATE_URL: '',
+      CIRCLE_PAYOUT_STATUS_URL: '',
       BRIDGE_API_KEY: '',
       BRIDGE_PAYOUT_CREATE_URL: '',
     };
@@ -104,14 +110,21 @@ describe('PayoutProviderAdapter contract', () => {
       status: 'pending',
       metadata: {
         mode: 'compatibility',
+        provider_api: 'circle_mint_business_account_payouts',
         provider_api_key_present: false,
+        provider_destination_id_present: false,
         real_execution_enabled: false,
       },
     });
-    expect((instruction.metadata as any).provider_payload.destination.account_holder_name).toBe('[REDACTED]');
-    expect((instruction.metadata as any).provider_payload.destination.routing_number).toBe('[REDACTED_LAST4:0021]');
-    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[REDACTED_LAST4:6789]');
-    expect((instruction.metadata as any).provider_payload.destination.provider_label).toBe('other');
+    expect((instruction.metadata as any).provider_payload).toMatchObject({
+      destination: { type: 'wire' },
+      amount: { amount: '99.50', currency: 'USD' },
+    });
+    expect((instruction.metadata as any).provider_payload.destination).not.toHaveProperty('account_number');
+    expect((instruction.metadata as any).destination_metadata.account_holder_name).toBe('[REDACTED]');
+    expect((instruction.metadata as any).destination_metadata.routing_number).toBe('[REDACTED_LAST4:0021]');
+    expect((instruction.metadata as any).destination_metadata.account_number).toBe('[REDACTED_LAST4:6789]');
+    expect((instruction.metadata as any).destination_metadata.provider_label).toBe('other');
   });
 
   it('creates a Bridge compatibility payload with sensitive account fields redacted', async () => {
@@ -141,37 +154,79 @@ describe('PayoutProviderAdapter contract', () => {
   it('sends executable destination details while persisting only redacted evidence', async () => {
     process.env.ENABLE_REAL_PAYOUT_EXECUTION = 'true';
     process.env.CIRCLE_API_KEY = 'circle-test-key';
-    process.env.CIRCLE_PAYOUT_CREATE_URL = 'https://circle.example.test/payouts';
+    process.env.CIRCLE_PAYOUT_DESTINATION_ID = 'circle-bank-account-1';
     const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({
       ok: true,
       status: 201,
       json: async () => ({
-        id: 'circle-payout-live-1',
-        status: 'pending',
-        destination: {
-          account_number: '123456789',
-          routing_number: '021000021',
+        data: {
+          id: 'circle-payout-live-1',
+          status: 'pending',
+          destination: {
+            type: 'wire',
+            id: 'circle-bank-account-1',
+            name: 'Destination Bank ****6789',
+          },
         },
       }),
     } as any);
 
     const instruction = await new CircleCompatibilityAdapter().createPayoutInstruction(baseInput);
 
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api-sandbox.circle.com/v1/businessAccount/payouts');
     const request = fetchSpy.mock.calls[0][1] as RequestInit;
     const sentPayload = JSON.parse(String(request.body));
+    expect(sentPayload.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
     expect(sentPayload.destination).toMatchObject({
-      account_holder_name: 'Destination USD Institution LLC',
-      account_number: '123456789',
-      routing_number: '021000021',
+      type: 'wire',
+      id: 'circle-bank-account-1',
     });
+    expect(sentPayload.amount).toMatchObject({
+      amount: '99.50',
+      currency: 'USD',
+    });
+    expect(JSON.stringify(sentPayload)).not.toMatch(/123456789|021000021/);
     expect(instruction).toMatchObject({
       provider_name: 'circle',
       provider_payout_id: 'circle-payout-live-1',
-      execution_mode: 'live_api',
+      execution_mode: 'sandbox_api',
     });
-    expect((instruction.metadata as any).provider_payload.destination.account_number).toBe('[REDACTED_LAST4:6789]');
-    expect((instruction.metadata as any).provider_response.destination.account_number).toBe('[REDACTED_LAST4:6789]');
-    expect((instruction.status_history?.[0].evidence as any).destination.account_number).toBe('[REDACTED_LAST4:6789]');
+    expect((instruction.metadata as any).provider_payload.destination.id).toMatch(/^\[REDACTED_HASH:/);
+    expect((instruction.metadata as any).provider_response.data.destination.id).toMatch(/^\[REDACTED_HASH:/);
+    expect((instruction.metadata as any).destination_metadata.account_number).toBe('[REDACTED_LAST4:6789]');
+    expect((instruction.status_history?.[0].evidence as any).data.destination.id).toMatch(/^\[REDACTED_HASH:/);
+  });
+
+  it('polls Circle payout status with the default sandbox endpoint', async () => {
+    process.env.ENABLE_REAL_PAYOUT_EXECUTION = 'true';
+    process.env.CIRCLE_API_KEY = 'circle-test-key';
+    const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          id: 'circle-payout-live-1',
+          status: 'complete',
+          trackingRef: 'CIR-TEST-1',
+          destination: {
+            type: 'wire',
+            id: 'circle-bank-account-1',
+          },
+        },
+      }),
+    } as any);
+
+    const observation = await new CircleCompatibilityAdapter().getPayoutStatus('circle-payout-live-1');
+
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api-sandbox.circle.com/v1/businessAccount/payouts/circle-payout-live-1');
+    expect(observation).toMatchObject({
+      provider_name: 'circle',
+      provider_payout_id: 'circle-payout-live-1',
+      status: 'completed',
+      raw_status: 'complete',
+      source: 'poll',
+    });
+    expect((observation.evidence as any).data.destination.id).toMatch(/^\[REDACTED_HASH:/);
   });
 
   it('rejects unknown payout adapters instead of falling back to mock', () => {

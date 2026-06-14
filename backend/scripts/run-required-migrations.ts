@@ -1,283 +1,54 @@
 /**
- * Runs the required TalkToStellar migrations in a deterministic order.
+ * Applies the single TalkToStellar database bootstrap through psql.
  *
  * Usage:
- *   npm run migrate:required
+ *   DATABASE_URL=postgresql://... npm run migrate:required
  *
  * Optional:
- *   MIGRATION_FROM=20260512_03_financial_assistant_modules.sql npm run migrate:required
  *   MIGRATION_DRY_RUN=1 npm run migrate:required
- *   ALLOW_LEGACY_EXEC_SQL_MIGRATIONS=true npm run migrate:required
- *
- * This is a legacy bootstrap runner. It depends on public.exec_sql and must
- * not be used in hosted/production projects.
  */
 
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import { createClient } from '@supabase/supabase-js';
+import { spawnSync } from 'child_process';
 
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+const migrationPath = path.resolve(__dirname, '../migrations/20260613_00_full_schema.sql');
+const databaseUrl = String(process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || '').trim();
+const dryRun = String(process.env.MIGRATION_DRY_RUN || '').trim() === '1';
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.');
+if (!fs.existsSync(migrationPath)) {
+  console.error(`Consolidated migration not found: ${migrationPath}`);
   process.exit(1);
 }
 
-function isProductionLikeEnvironment(): boolean {
-  return Boolean(
-    process.env.NODE_ENV === 'production' ||
-      process.env.RAILWAY_PUBLIC_DOMAIN ||
-      process.env.RENDER_EXTERNAL_URL ||
-      process.env.FLY_APP_NAME ||
-      process.env.VERCEL_URL
-  );
+console.log(`Consolidated migration: ${migrationPath}`);
+
+if (dryRun) {
+  console.log('DRY RUN only. No migration executed.');
+  process.exit(0);
 }
 
-if (isProductionLikeEnvironment()) {
-  console.error('Refusing to run legacy exec_sql migrations in a hosted/production environment.');
+if (!databaseUrl) {
+  console.error('Missing DATABASE_URL or SUPABASE_DB_URL.');
   process.exit(1);
 }
 
-if (String(process.env.ALLOW_LEGACY_EXEC_SQL_MIGRATIONS || '').trim() !== 'true') {
-  console.error('Refusing to run legacy exec_sql migrations without ALLOW_LEGACY_EXEC_SQL_MIGRATIONS=true.');
+const result = spawnSync(
+  'psql',
+  [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-f', migrationPath],
+  { stdio: 'inherit' }
+);
+
+if (result.error) {
+  console.error(`Could not execute psql: ${result.error.message}`);
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const orderedMigrations = [
-  '20260512_00_payment_infra_prereqs.sql',
-  '20260512_01_smart_contacts_and_treasury.sql',
-  '20260512_02_activity_feed_insights_economy.sql',
-  '20260512_03_financial_assistant_modules.sql',
-  '20260512_04_remove_non_payment_assistant_modules.sql',
-  '20260512_05_savings_feed_spread.sql',
-  '20260512_06_global_idempotency_uniqueness.sql',
-  '20260513_00_payment_confirmation_single_use.sql',
-  '20260513_01_onboarding_finalization_idempotency.sql',
-  '20260513_02_receipt_images.sql',
-  '20260513_03_payment_link_expiry_and_transaction_nickname.sql',
-  '20260513_04_logout_confirmation_single_use.sql',
-  '20260513_05_identity_uniqueness_email_phone_cpf.sql',
-  '20260514_00_payment_logs_destination_name.sql',
-  '20260514_01_external_bank_accounts.sql',
-  '20260515_00_email_confirmations.sql',
-  '20260602_00_legacy_email_verification_backfill.sql',
-  '20260602_01_legacy_email_verification_null_created_backfill.sql',
-  '20260602_02_passkey_login_pairing_codes.sql',
-  '20260602_03_user_research_evidence.sql',
-  '20260605_00_agent_session_language_preference.sql',
-  '20260605_01_allow_channel_scoped_phone_reuse.sql',
-  '20260607_01_agent_session_login_passwords.sql',
-];
-
-function resolveExecutionList(): string[] {
-  const from = String(process.env.MIGRATION_FROM || '').trim();
-  if (!from) return orderedMigrations;
-
-  const idx = orderedMigrations.indexOf(from);
-  if (idx === -1) {
-    throw new Error(
-      `MIGRATION_FROM=${from} is not in the required list. Valid values: ${orderedMigrations.join(', ')}`
-    );
-  }
-  return orderedMigrations.slice(idx);
+if (result.status !== 0) {
+  process.exit(result.status ?? 1);
 }
 
-async function runSingleMigration(filename: string): Promise<void> {
-  const migrationPath = path.resolve(__dirname, '../migrations', filename);
-  if (!fs.existsSync(migrationPath)) {
-    throw new Error(`Migration file not found: ${migrationPath}`);
-  }
-
-  const sql = fs.readFileSync(migrationPath, 'utf8');
-  const sanitizedSql = sanitizeSqlForExec(sql);
-  const statements = splitSqlStatements(sanitizedSql).filter((statement) => {
-    const normalized = statement.replace(/^\s*(--[^\n]*\n)*/g, '').trim();
-    return !/^(BEGIN|COMMIT|ROLLBACK)$/i.test(normalized);
-  });
-  console.log(`\n-> Running ${filename}`);
-
-  for (let i = 0; i < statements.length; i += 1) {
-    const statement = statements[i];
-    const { error } = await supabase.rpc('exec_sql', { sql: statement });
-    if (error) {
-      const message = [
-        error.message,
-        error.code ? `code=${error.code}` : '',
-        error.details ? `details=${error.details}` : '',
-        error.hint ? `hint=${error.hint}` : '',
-      ]
-        .filter(Boolean)
-        .join(' | ');
-      throw new Error(`Migration failed for ${filename} (statement ${i + 1}/${statements.length}): ${message}`);
-    }
-  }
-
-  console.log(`   OK ${filename}`);
-}
-
-function sanitizeSqlForExec(sql: string): string {
-  // Supabase exec_sql rejects top-level transaction control statements.
-  // Remove only envelope BEGIN/COMMIT/ROLLBACK, never PL/pgSQL function BEGIN blocks.
-  return sql
-    .replace(/^\s*BEGIN\s*;\s*/i, '')
-    .replace(/\s*(COMMIT|ROLLBACK)\s*;?\s*$/i, '')
-    .trim();
-}
-
-function splitSqlStatements(sql: string): string[] {
-  const statements: string[] = [];
-  let current = '';
-  let i = 0;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-  let dollarTag: string | null = null;
-
-  while (i < sql.length) {
-    const ch = sql[i];
-    const next = i + 1 < sql.length ? sql[i + 1] : '';
-
-    if (inLineComment) {
-      current += ch;
-      if (ch === '\n') inLineComment = false;
-      i += 1;
-      continue;
-    }
-
-    if (inBlockComment) {
-      current += ch;
-      if (ch === '*' && next === '/') {
-        current += next;
-        i += 2;
-        inBlockComment = false;
-        continue;
-      }
-      i += 1;
-      continue;
-    }
-
-    if (dollarTag) {
-      current += ch;
-      if (ch === '$' && sql.startsWith(dollarTag, i)) {
-        const rest = dollarTag.slice(1);
-        current += rest;
-        i += dollarTag.length;
-        dollarTag = null;
-      } else {
-        i += 1;
-      }
-      continue;
-    }
-
-    if (!inSingleQuote && !inDoubleQuote) {
-      if (ch === '-' && next === '-') {
-        current += ch + next;
-        i += 2;
-        inLineComment = true;
-        continue;
-      }
-      if (ch === '/' && next === '*') {
-        current += ch + next;
-        i += 2;
-        inBlockComment = true;
-        continue;
-      }
-      if (ch === '$') {
-        const match = sql.slice(i).match(/^\$[A-Za-z0-9_]*\$/);
-        if (match) {
-          dollarTag = match[0];
-          current += dollarTag;
-          i += dollarTag.length;
-          continue;
-        }
-      }
-    }
-
-    if (ch === "'" && !inDoubleQuote) {
-      inSingleQuote = !inSingleQuote;
-      current += ch;
-      i += 1;
-      continue;
-    }
-    if (ch === '"' && !inSingleQuote) {
-      inDoubleQuote = !inDoubleQuote;
-      current += ch;
-      i += 1;
-      continue;
-    }
-
-    if (ch === ';' && !inSingleQuote && !inDoubleQuote) {
-      const trimmed = current.trim();
-      if (trimmed) statements.push(trimmed);
-      current = '';
-      i += 1;
-      continue;
-    }
-
-    current += ch;
-    i += 1;
-  }
-
-  const tail = current.trim();
-  if (tail) statements.push(tail);
-  return statements;
-}
-
-async function verifyCoreObjects(): Promise<void> {
-  const checks = [
-    'public.idempotency_keys',
-    'public.short_links',
-    'public.telegram_update_dedupes',
-    'public.email_confirmations',
-  ];
-
-  for (const objectName of checks) {
-    const { data, error } = await supabase.rpc('exec_sql', {
-      sql: `SELECT to_regclass('${objectName}')::text AS result;`,
-    });
-
-    if (error) {
-      throw new Error(`Verification failed for ${objectName}: ${error.message}`);
-    }
-
-    const value = String((data as any)?.[0]?.result || '');
-    if (!value || value === 'null') {
-      throw new Error(`Verification failed: ${objectName} does not exist.`);
-    }
-    console.log(`   Verified ${objectName}`);
-  }
-}
-
-async function main(): Promise<void> {
-  const dryRun = String(process.env.MIGRATION_DRY_RUN || '').trim() === '1';
-  const executionList = resolveExecutionList();
-
-  console.log('Required migration order:');
-  executionList.forEach((item, index) => console.log(`${index + 1}. ${item}`));
-
-  if (dryRun) {
-    console.log('\nDRY RUN only. No migration executed.');
-    return;
-  }
-
-  for (const migration of executionList) {
-    await runSingleMigration(migration);
-  }
-
-  console.log('\nVerifying core idempotency objects...');
-  await verifyCoreObjects();
-  console.log('\nAll required migrations executed successfully.');
-}
-
-main().catch((error) => {
-  console.error(`Migration execution failed: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-});
+console.log('Consolidated database bootstrap completed successfully.');

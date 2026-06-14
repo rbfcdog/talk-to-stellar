@@ -5,6 +5,8 @@ import { timingSafeEqualString } from '../../utils/password';
 import { logger } from '../../utils/logger';
 import { applyApiRequestContext, readApiRequestContext, responseContext } from './request-context';
 import { usdPayoutCoordinationService } from '../services/usd-payout-coordination.service';
+import { orchestrator } from '../../orchestration/TransferOrchestrator';
+import { transferRepository } from '../repository/transfer.repository';
 
 function statusFromError(error: any): number {
   const explicit = Number(error?.status || error?.statusCode || 0);
@@ -46,14 +48,21 @@ function readBearerToken(req: Request): string {
 }
 
 function hasInternalOpsAuthorization(req: Request): boolean {
-  const expected = String(process.env.INTERNATIONAL_TRANSFER_OPS_SECRET || process.env.INTERNAL_API_SECRET || '').trim();
+  const expectedValues = [
+    process.env.INTERNATIONAL_TRANSFER_OPS_SECRET,
+    process.env.INTERNAL_API_SECRET,
+    process.env.OPS_DASHBOARD_TOKEN,
+    process.env.TRANSFER_API_TOKEN,
+  ].map((value) => String(value || '').trim()).filter(Boolean);
   const provided = String(
     req.headers['x-international-transfer-ops-secret'] ||
       req.headers['x-internal-api-secret'] ||
+      req.headers['x-ops-token'] ||
+      req.headers['x-api-key'] ||
       readBearerToken(req) ||
       ''
   ).trim();
-  return Boolean(expected && provided && timingSafeEqualString(expected, provided));
+  return Boolean(provided && expectedValues.some((expected) => timingSafeEqualString(expected, provided)));
 }
 
 function requireInternalOpsAuthorization(req: Request, res: Response, context?: ReturnType<typeof readApiRequestContext>): boolean {
@@ -84,6 +93,21 @@ function requirePayoutProviderAuthorization(
 }
 
 export class InternationalTransfersController {
+  static async listOrchestrationTransfers(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      if (!requireInternalOpsAuthorization(req, res, context)) return;
+      const state = req.query.state ? String(req.query.state) : undefined;
+      const limit = Math.min(Number(req.query.limit || 50) || 50, 200);
+      const transfers = await transferRepository.list({ state, limit });
+      const total = await transferRepository.count(state ? { state } : undefined);
+      res.status(200).json({ success: true, ...responseContext(context), total, count: transfers.length, transfers });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
   static async getPayoutProviders(req: Request, res: Response) {
     const context = readApiRequestContext(req);
     applyApiRequestContext(res, context);
@@ -127,6 +151,25 @@ export class InternationalTransfersController {
     const context = readApiRequestContext(req);
     applyApiRequestContext(res, context);
     try {
+      const isNormalizedIntent = Boolean(req.body?.amount_brl_in || req.body?.amountBrlIn) && !req.body?.quote_id && !req.body?.quoteId;
+      if (isNormalizedIntent) {
+        if (!requireInternalOpsAuthorization(req, res, context)) return;
+        const transfer = await orchestrator.createTransfer({
+          amount_brl_in: String(req.body?.amount_brl_in || req.body?.amountBrlIn),
+          source_endpoint: req.body?.source_endpoint || req.body?.sourceEndpoint || { institution_type: 'api', masked_identifier: 'api-client' },
+          destination_endpoint: req.body?.destination_endpoint || req.body?.destinationEndpoint || { provider_type: 'usd_bank', country: 'US', masked_account: '****' },
+          actor: 'api',
+          correlation_id: context.correlation_id,
+        });
+        lifecycleLog('orchestration_transfer_created', context, {
+          transfer_id: transfer.id,
+          public_ref: transfer.public_ref,
+          state: transfer.state,
+        });
+        res.status(201).json({ success: true, ...responseContext(context), transfer });
+        return;
+      }
+
       const transfer = await internationalTransferService.createTransfer({
         quote_id: String(req.body?.quote_id || req.body?.quoteId || ''),
         user_id: req.body?.user_id || req.body?.userId,
@@ -250,8 +293,15 @@ export class InternationalTransfersController {
     applyApiRequestContext(res, context);
     try {
       if (!requireInternalOpsAuthorization(req, res, context)) return;
-      const transfer = await internationalTransferService.getTransfer(String(req.params.id));
-      res.status(200).json({ success: true, ...responseContext(context), transfer });
+      try {
+        const transfer = await internationalTransferService.getTransfer(String(req.params.id));
+        res.status(200).json({ success: true, ...responseContext(context), transfer });
+        return;
+      } catch (error: any) {
+        if (!String(error?.message || error).toLowerCase().includes('not found')) throw error;
+      }
+      const { transfer, events } = await orchestrator.getTransferWithEvents(String(req.params.id));
+      res.status(200).json({ success: true, ...responseContext(context), transfer, events });
     } catch (error: any) {
       res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
     }

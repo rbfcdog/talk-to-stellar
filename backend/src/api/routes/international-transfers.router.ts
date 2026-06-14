@@ -5,6 +5,7 @@ const router = Router();
 
 router.get('/payout-providers', InternationalTransfersController.getPayoutProviders);
 router.post('/payout-events/:provider', InternationalTransfersController.receivePayoutProviderEvent);
+router.get('/', InternationalTransfersController.listOrchestrationTransfers);
 router.post('/', InternationalTransfersController.createTransfer);
 router.post('/:id/pix-intent', InternationalTransfersController.createPixIntent);
 router.post('/:id/funding-confirmation', InternationalTransfersController.confirmSandboxFunding);

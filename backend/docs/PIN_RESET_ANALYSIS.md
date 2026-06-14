@@ -79,7 +79,7 @@ Aplica novo PIN após validação
 
 ### 3. Database - Schema ✅
 
-**Arquivo:** `backend/migrations/add_pin_reset_tokens.sql`
+**Arquivo:** `backend/migrations/20260613_00_full_schema.sql`
 
 #### Tabela `pin_reset_tokens`:
 ```sql

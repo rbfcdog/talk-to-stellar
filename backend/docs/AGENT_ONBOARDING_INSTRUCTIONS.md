@@ -389,7 +389,7 @@ message = `Sua carteira foi criada! ${response.public_key}`;
    - Não blame o user
 
 6. **Forneça URLs Clicáveis**
-   - Use markdown: `[Clique aqui para Passkey](url)`
+   - Use markdown links with the generated Passkey URL
    - Ou: `http://link...`
 
 ---

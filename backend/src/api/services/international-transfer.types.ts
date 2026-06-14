@@ -74,6 +74,9 @@ export type UsdBankDestination = {
   swiftBic?: string;
   iban?: string;
   country: string;
+  providerDestinationId?: string;
+  providerDestinationType?: string;
+  circleBankAccountId?: string;
   providerLabel?: 'wise' | 'mercury' | 'revolut' | 'other';
 };
 
@@ -259,6 +262,8 @@ export type InternationalTransfer = {
   transfer_id: string;
   quote_id: string;
   status: InternationalTransferState;
+  orchestration_transfer_id?: string;
+  orchestration_public_ref?: string;
   user_id?: string;
   institution_id?: string;
   sender_identity: IdentityProfile;

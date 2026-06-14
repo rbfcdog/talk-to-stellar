@@ -37,6 +37,9 @@ import { StellarSettlementService, stellarSettlementService } from './stellar-se
 import { payoutProviderEvidenceSnapshot, PayoutProviderAdapter } from './usd-payout-adapters';
 import { UsdPayoutCoordinationService, usdPayoutCoordinationService } from './usd-payout-coordination.service';
 import { redactSensitive } from '../../utils/redaction';
+import { orchestrator } from '../../orchestration/TransferOrchestrator';
+import { TransferActor } from '../../orchestration/types';
+import { logger } from '../../utils/logger';
 
 type ServiceDeps = {
   repository?: InternationalTransferRepository;
@@ -198,7 +201,7 @@ export class InternationalTransferService {
     const created = await this.repository.createTransfer(transfer);
     await this.repository.updateQuote(quote.quote_id, { quote_status: 'ACCEPTED' });
     await this.refreshReconciliation(created);
-    return created;
+    return this.syncOrchestration(created, 'api', input.correlation_id || input.request_id);
   }
 
   async createPixIntent(transferId: string, input: {
@@ -226,7 +229,7 @@ export class InternationalTransferService {
         },
       });
       await this.refreshReconciliation(updated);
-      return updated;
+      return this.syncOrchestration(updated, 'api', input.correlation_id || input.request_id);
     } catch (error) {
       await this.repository.updateTransfer(transfer.transfer_id, {
         status: 'FAILED',
@@ -261,7 +264,7 @@ export class InternationalTransferService {
       correlation_id: String(input.correlation_id || input.correlationId || input.request_id || input.requestId || '').trim(),
     };
     if (pixFailureStatus(status)) {
-      if (transfer.status === 'FAILED') return transfer;
+      if (transfer.status === 'FAILED') return this.syncOrchestration(transfer, 'webhook:etherfuse', trace.correlation_id || trace.request_id);
       this.assertTransition(transfer, 'FAILED');
       const updated = await this.repository.updateTransfer(transfer.transfer_id, {
         status: 'FAILED',
@@ -274,7 +277,7 @@ export class InternationalTransferService {
         error_logs: appendError(transfer, `Pix funding event reported ${status}.`, 'pix_funding'),
       });
       await this.refreshReconciliation(updated);
-      return updated;
+      return this.syncOrchestration(updated, 'webhook:etherfuse', trace.correlation_id || trace.request_id);
     }
 
     if (!['completed', 'paid', 'confirmed', 'pix.received', 'processing', 'funded'].includes(status)) {
@@ -286,7 +289,7 @@ export class InternationalTransferService {
         },
       });
       await this.refreshReconciliation(updated);
-      return updated;
+      return this.syncOrchestration(updated, 'webhook:etherfuse', trace.correlation_id || trace.request_id);
     }
 
     if (hasReachedTransferState(transfer.status, 'PIX_RECEIVED')) {
@@ -299,7 +302,7 @@ export class InternationalTransferService {
         },
       });
       await this.refreshReconciliation(updated);
-      return updated;
+      return this.syncOrchestration(updated, 'webhook:etherfuse', trace.correlation_id || trace.request_id);
     }
 
     this.assertTransition(transfer, 'PIX_RECEIVED');
@@ -314,7 +317,7 @@ export class InternationalTransferService {
       },
     });
     await this.refreshReconciliation(updated);
-    return updated;
+    return this.syncOrchestration(updated, 'webhook:etherfuse', trace.correlation_id || trace.request_id);
   }
 
   async confirmSandboxFunding(transferId: string, input: Record<string, unknown> = {}): Promise<InternationalTransfer> {
@@ -358,7 +361,7 @@ export class InternationalTransferService {
         },
       });
       await this.refreshReconciliation(updated);
-      return updated;
+      return this.syncOrchestration(updated, 'system', input.correlation_id || input.request_id);
     }
 
     try {
@@ -398,7 +401,7 @@ export class InternationalTransferService {
         },
       });
       await this.refreshReconciliation(current, { settlement: evidence });
-      return current;
+      return this.syncOrchestration(current, 'system', input.correlation_id || input.request_id);
     } catch (error) {
       await this.repository.updateTransfer(transfer.transfer_id, {
         status: 'FAILED',
@@ -421,7 +424,7 @@ export class InternationalTransferService {
         },
       });
       await this.refreshReconciliation(updated);
-      return updated;
+      return this.syncOrchestration(updated, 'system', String(providerOptions.correlation_id || providerOptions.correlationId || providerOptions.request_id || providerOptions.requestId || '').trim());
     }
     if (transfer.status === 'USDC_SETTLED' && this.repository.getPayoutInstructionByTransfer) {
       const persisted = await this.repository.getPayoutInstructionByTransfer(transfer.transfer_id);
@@ -527,7 +530,7 @@ export class InternationalTransferService {
       });
 
       await this.refreshReconciliation(updated, { payout: instruction });
-      return updated;
+      return this.syncOrchestration(updated, 'system', String(providerOptions.correlation_id || providerOptions.correlationId || providerOptions.request_id || providerOptions.requestId || '').trim());
     } catch (error) {
       await this.repository.updateTransfer(transfer.transfer_id, {
         status: 'FAILED',
@@ -593,7 +596,7 @@ export class InternationalTransferService {
       ? await this.repository.appendPayoutEvent(eventRecord)
       : false;
     if (this.repository.appendPayoutEvent && !eventInserted) {
-      return transfer;
+      return this.syncOrchestration(transfer, 'system');
     }
 
     const observation: PayoutStatusObservation = {
@@ -681,7 +684,7 @@ export class InternationalTransferService {
       );
     }
     if (transfer.status === 'PAYOUT_COMPLETED' || transfer.status === 'FAILED' || transfer.status === 'REFUNDED') {
-      return transfer;
+      return this.syncOrchestration(transfer, 'system', trace.correlation_id || trace.request_id);
     }
 
     const metadata = transfer.reconciliation_metadata || {};
@@ -747,7 +750,7 @@ export class InternationalTransferService {
     });
     await this.persistPayoutInstruction(updated, instruction);
     await this.refreshReconciliation(updated, { payout: instruction });
-    return updated;
+    return this.syncOrchestration(updated, 'system', trace.correlation_id || trace.request_id);
   }
 
   private async restorePersistedPayoutInstruction(
@@ -805,7 +808,7 @@ export class InternationalTransferService {
       },
     });
     await this.refreshReconciliation(updated, { payout: instruction });
-    return updated;
+    return this.syncOrchestration(updated, 'system', String(trace.correlation_id || trace.correlationId || trace.request_id || trace.requestId || '').trim());
   }
 
   private async persistPayoutInstruction(transfer: InternationalTransfer, instruction: PayoutInstruction): Promise<void> {
@@ -854,6 +857,56 @@ export class InternationalTransferService {
       payout: extras.payout,
     });
     return this.repository.upsertReconciliation(reconciliation);
+  }
+
+  private async syncOrchestration(
+    transfer: InternationalTransfer,
+    actor: TransferActor,
+    correlationId?: string,
+  ): Promise<InternationalTransfer> {
+    try {
+      const normalized = await orchestrator.syncFromInternationalTransfer(
+        transfer as any,
+        actor,
+        correlationId || (transfer.reconciliation_metadata as any)?.correlation_id || (transfer.reconciliation_metadata as any)?.trace?.correlation_id,
+      );
+      if (!normalized) return transfer;
+
+      const orchestrationTransfer = {
+        id: normalized.id,
+        public_ref: normalized.public_ref,
+        state: normalized.state,
+        state_version: normalized.state_version,
+        updated_at: normalized.updated_at,
+      };
+      const metadata = {
+        ...(transfer.reconciliation_metadata || {}),
+        orchestration_transfer: orchestrationTransfer,
+      };
+      const augmented: InternationalTransfer = {
+        ...transfer,
+        reconciliation_metadata: metadata,
+        orchestration_transfer_id: normalized.id,
+        orchestration_public_ref: normalized.public_ref,
+      };
+
+      const existing = (transfer.reconciliation_metadata || {}).orchestration_transfer as any;
+      if (existing?.id === normalized.id && existing?.state === normalized.state) {
+        return augmented;
+      }
+
+      const persisted = await this.repository.updateTransfer(transfer.transfer_id, {
+        reconciliation_metadata: metadata,
+      });
+      return {
+        ...persisted,
+        orchestration_transfer_id: normalized.id,
+        orchestration_public_ref: normalized.public_ref,
+      };
+    } catch (error) {
+      logger.warn(`[orchestration-bridge] sync_failed transfer_id=${transfer.transfer_id} status=${transfer.status} error=${error instanceof Error ? error.message : String(error)}`);
+      return transfer;
+    }
   }
 }
 

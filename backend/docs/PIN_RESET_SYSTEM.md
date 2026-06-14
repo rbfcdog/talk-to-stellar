@@ -72,7 +72,7 @@ Permite ao usuário solicitar reset via chat:
 #### Router: `security.router.ts` (backend/src/api/routes/security.router.ts)
 Registra as 3 rotas de segurança no Express app.
 
-#### Migração: `add_pin_reset_tokens.sql` (backend/migrations/)
+#### Migração: `backend/migrations/20260613_00_full_schema.sql`
 Cria tabela `pin_reset_tokens` com:
 - `id` (UUID PK)
 - `user_id` (FK para auth.users)

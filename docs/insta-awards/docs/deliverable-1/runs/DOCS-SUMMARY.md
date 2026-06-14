@@ -1,0 +1,20 @@
+# Documentation Summary: insta-awards/docs/deliverable-1/runs
+
+Generated summary for `docs/insta-awards/docs/deliverable-1/runs`. Last generated: 2026-06-14.
+
+## Markdown Files
+
+| File | Title | Words | Summary | Language note |
+|------|-------|-------|---------|---------------|
+| [`2026-06-12-0315.md`](./2026-06-12-0315.md) | Run 2026-06-12-0315 | 439 | The `transfer_events` table migration failed due to duplicate migration version key. Run this SQL manually in Supabase SQL Editor: Result: Clean (0 errors) | English or mostly English. |
+| [`2026-06-13-1752.md`](./2026-06-13-1752.md) | Run 2026-06-13-1752 | 519 | Recommended: Manual SQL order: | English or mostly English. |
+| [`2026-06-13-1755.md`](./2026-06-13-1755.md) | Run 2026-06-13-1755 | 240 | Documentation-only update under `docs/insta-awards/deliverable-1/`. No migrations were run in this documentation-only session. | English or mostly English. |
+| [`2026-06-13-1819.md`](./2026-06-13-1819.md) | Run 2026-06-13-1819 | 478 | Added a frontend admin transactions screen for the D1 transfer lifecycle records and documented the surface. No new migrations were added or run in this session. | English or mostly English. |
+| [`2026-06-14-1142-dashboard-polish.md`](./2026-06-14-1142-dashboard-polish.md) | Run 2026-06-14-1142 - Ops Dashboard Polish | 371 | Production-grade visual/UX upgrade for `/ops` and `/ops/transfers/:id`, with centralized tokens, reusable primitives, read-only fee normalization, tests, and live list screenshots. Detail screenshots remain pending because `transfers` has zero rows. | English or mostly English. |
+| [`2026-06-14-1155-evidence-export.md`](./2026-06-14-1155-evidence-export.md) | Run 2026-06-14-1155 - Database Evidence Export | 640 | Refreshed orchestration logs and transfer record JSON from a DB-backed normalized transfer mirrored from a legacy international transfer row. Evidence reaches `PAYOUT_INSTRUCTED`; final same-transfer real testnet completion remains pending. | English or mostly English. |
+
+## Notes
+
+- This file is an English index summary for the folder. It does not replace the source documents.
+- Source files that still contain Portuguese are marked in the language note column for follow-up translation.
+- Generated summaries intentionally skip `DOCS-SUMMARY.md` to avoid recursive noise.

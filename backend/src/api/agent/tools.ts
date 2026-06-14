@@ -3757,8 +3757,9 @@ async function executeCreateUsdBankTransferIntent(input: any): Promise<string> {
     return JSON.stringify({
       success: true,
       transfer,
+      public_ref: transfer.orchestration_public_ref || (transfer.reconciliation_metadata as any)?.orchestration_transfer?.public_ref || null,
       message:
-        `Transferência internacional criada com status ${transfer.status}. ` +
+        `Transferência internacional ${transfer.orchestration_public_ref ? `${transfer.orchestration_public_ref} ` : ''}criada com status ${transfer.status}. ` +
         `Próximo passo: criar a intenção PIX em /api/transfers/${transfer.transfer_id}/pix-intent. ` +
         `Conta destino modelada como conta bancária USD internacional.`,
     });

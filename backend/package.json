@@ -42,8 +42,9 @@
     "defindex:env": "ts-node scripts/setup-defindex-env.ts",
     "passkey:smart-account": "ts-node scripts/setup-passkey-smart-account.ts",
     "evolution:configure-webhook": "ts-node scripts/configure-evolution-webhook.ts",
-    "migrate:financial-assistant": "ts-node scripts/run-financial-assistant-migration.ts",
-    "migrate:required": "ts-node scripts/run-required-migrations.ts"
+    "migrate:required": "ts-node scripts/run-required-migrations.ts",
+    "instawards:export-log": "ts-node scripts/export-transfer-log.ts",
+    "instawards:export-record": "ts-node scripts/export-transfer-record.ts"
   },
   "keywords": [
     "stellar",
