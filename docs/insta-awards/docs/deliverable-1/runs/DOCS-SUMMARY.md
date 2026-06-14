@@ -16,6 +16,7 @@ Generated summary for `docs/insta-awards/docs/deliverable-1/runs`. Last generate
 | [`2026-06-14-1357-ops-admin-migration-supabase-fix.md`](./2026-06-14-1357-ops-admin-migration-supabase-fix.md) | Run 2026-06-14-1357 - Ops Admin Migration Supabase Fix | 313 | Removed `psql` meta-commands from the ops admin migration so it can run in Supabase SQL Editor; admin creation now runs as a separate function call or migration-runner step. | English or mostly English. |
 | [`2026-06-14-1406-frontend-ops-rewrite.md`](./2026-06-14-1406-frontend-ops-rewrite.md) | Run 2026-06-14-1406 - Frontend Ops Rewrite | 255 | Added a Next.js rewrite so `/ops/login` on the frontend host reaches the backend-rendered ops dashboard instead of the frontend 404 page. | English or mostly English. |
 | [`2026-06-14-1622-ops-login-json-error-fix.md`](./2026-06-14-1622-ops-login-json-error-fix.md) | Run 2026-06-14-1622 - Ops Login JSON Error Fix | 234 | Lazy-loaded Supabase for ops admin verification so `/ops/login` renders the transfer operator form before database credentials are needed. | English or mostly English. |
+| [`2026-06-14-1628-ops-login-import-boundary-fix.md`](./2026-06-14-1628-ops-login-import-boundary-fix.md) | Run 2026-06-14-1628 - Ops Login Import Boundary Fix | 236 | Lazy-loaded dashboard repositories and the transfer orchestrator so `/ops/login` can render before Supabase-backed dashboard modules initialize. | English or mostly English. |
 
 ## Notes
 
