@@ -6,7 +6,8 @@ Generated summary for `docs/insta-awards/docs/deliverable-2`. Last generated: 20
 
 | File | Title | Words | Summary | Language note |
 |------|-------|-------|---------|---------------|
-| [`README.md`](./README.md) | Deliverable 2 — USD Delivery & Payout Coordination Layer | 275 | Status on 2026-06-13: foundation in progress; 0/4 reviewer evidences submitted. Build a provider-agnostic payout adapter layer that turns completed Stellar USDC settlement events into USD payout instructions compatible with bank-account payout workflows. | English or mostly English. |
+| [`README.md`](./README.md) | Deliverable 2 — USD Delivery & Payout Coordination Layer | 327 | Status on 2026-06-13: foundation in progress; 0/4 reviewer evidences submitted. Build a provider-agnostic payout adapter layer that turns completed Stellar USDC settlement events into USD payout instructions compatible with bank-account payout workflows. | English or mostly English. |
+| [`SUBMISSION-CHECKLIST.md`](./SUBMISSION-CHECKLIST.md) | Deliverable 2 Submission Checklist | 1423 | Practical evidence checklist for Adapter Interface Code, Hash Transacao Stellar, Integracao Circle/Bridge, and Payout Instructions, including exact files, API calls, SQL queries, dashboard proof, and claim boundaries. | English or mostly English. |
 
 ## Notes
 
