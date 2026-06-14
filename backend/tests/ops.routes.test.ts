@@ -129,13 +129,15 @@ describe('ops history routes', () => {
     const html = await response.text();
 
     expect(response.status).toBe(200);
-    expect(html).toContain('Operator access');
-    expect(html).toContain('ops_admin_users');
+    expect(html).toContain('Transfers console');
+    expect(html).toContain('Operator email');
+    expect(html).toContain('Open transfers');
+    expect(html).not.toContain('ops_admin_users');
     expect(html).toContain('name="csrf_token"');
     expect(getCookie(response, 'tts_ops_csrf')).toContain('tts_ops_csrf=');
   });
 
-  it('logs in through the admin table and renders complete database transaction history on /ops', async () => {
+  it('logs in through the operator form and renders the transfer console on /ops', async () => {
     jest.spyOn(opsAdminAuthService, 'verifyLogin').mockResolvedValue({ ok: true, admin });
     jest.spyOn(opsAdminAuthService, 'getActiveById').mockResolvedValue(admin);
 
