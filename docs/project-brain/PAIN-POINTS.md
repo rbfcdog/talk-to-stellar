@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-13. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-42 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+43 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -346,7 +346,7 @@
 
 ---
 
-## Cluster H — Reliability (7 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (8 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -374,6 +374,15 @@
 - **Root cause**: `/ops/login` was implemented only in the backend Express app. The Next.js frontend had API proxies but no `/ops` rewrite, so `frontend-domain/ops/login` never reached the backend dashboard.
 - **Status**: **Fixed by `f321a52`**. `frontend/next.config.mjs` now rewrites `/ops` and `/ops/:path*` to the configured backend URL, preserving the backend-rendered dashboard and HTTP-only ops cookies on the frontend host.
 - **Lesson**: **Operator browser routes must be reachable from the deployed frontend domain**. When a route is backend-rendered, the frontend must either own an equivalent page or explicitly proxy the path.
+
+### #46 — Ops Login Returns Generic JSON Error Instead of Screen
+> **Quote**: "success false message \"Não consegui concluir agora. Tente novamente em alguns segundos.\" code \"temporary_unavailable\" support_code \"TTS-20260614192005-WTC3UF\" error \"Não consegui concluir agora. Tente novamente em alguns segundos.\" status 500 gave this pn login!!!!!, why dindt show teh screen??"
+> **Gloss**: `/ops/login` returned a generic JSON 500 response instead of rendering the transfer operator login screen.
+
+- **Where**: `backend/src/api/services/ops-admin-auth.service.ts`, `backend/src/api/routes/ops.router.ts`, `backend/tests/ops.routes.test.ts`.
+- **Root cause**: The ops admin auth service imported the Supabase client at module load. If backend admin DB configuration failed during route initialization, the global JSON error handler could answer before the login page rendered. Async ops routes also lacked a shared wrapper for forwarding unexpected failures consistently.
+- **Status**: **Fixed by `4b10d31`**. Supabase is lazy-loaded only when credential verification needs it, `/ops/login` renders before database credentials are required, and ops routes now use a shared async wrapper. A regression test confirms `/ops/login` returns HTML even when `JWT_SECRET` and Supabase env vars are absent.
+- **Lesson**: **Login pages must render before protected dependencies are needed**. Do dependency checks on submit, not while preparing the public form.
 
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
@@ -415,7 +424,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 42 documented incidents:
+Ranked by frequency × severity across the 43 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -423,19 +432,19 @@ Ranked by frequency × severity across the 42 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 4 | HIGH | Balance not credited, distribution math wrong, duplicate receipts |
-| 5 | **H — Reliability** | 7 | HIGH | Admin history incomplete, dashboard access, migration setup, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 8 | HIGH | Admin history incomplete, dashboard access, login rendering, migration setup, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 5 | MEDIUM | SVG spacing, shadows, charts, dark mode |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 17 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45)
+- **Confirmed fixed**: 18 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 17 of 42 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 18 of 43 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -460,3 +469,4 @@ Fixing commits verified in codebase:
 | #43 | `949db79` | Make ops admin auth migration plain SQL for Supabase SQL Editor; move bootstrap to runner/function call |
 | #44 | `f321a52` | Rewrite frontend `/ops` paths to the backend ops dashboard |
 | #45 | `34ce523` | Replace implementation-facing ops login copy with transfer-focused operator copy |
+| #46 | `4b10d31` | Render `/ops/login` before admin DB access and lazy-load Supabase during credential verification |

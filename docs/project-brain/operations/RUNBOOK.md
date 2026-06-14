@@ -142,3 +142,18 @@
 
 **Files**: `frontend/next.config.mjs`, `backend/src/api/routes/ops.router.ts`
 **Related**: Pain point #44
+
+## 10. `/ops/login` returns generic JSON 500 instead of HTML (FIXED)
+
+**Symptom**: `/ops/login` returns JSON like `success: false`, `code: temporary_unavailable`, `support_code: TTS-...`, and status 500 instead of the transfer operator login screen.
+
+**Status**: Fixed by `4b10d31`. The login page renders before admin database credentials are needed, and Supabase is lazy-loaded only during submitted credential verification.
+
+**Diagnosis steps**:
+1. Confirm the deployed backend includes `4b10d31` or later.
+2. Open `/ops/login` with `Accept: text/html`; it should return HTML containing `Transfers console`.
+3. If the page renders but submit fails, check backend env: `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and that `backend/migrations/20260614_00_ops_admin_auth.sql` has run.
+4. If the frontend domain returns 404, follow runbook section 9 for the Next.js rewrite/env.
+
+**Files**: `backend/src/api/services/ops-admin-auth.service.ts`, `backend/src/api/routes/ops.router.ts`, `backend/tests/ops.routes.test.ts`
+**Related**: Pain point #46
