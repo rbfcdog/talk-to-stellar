@@ -64,4 +64,4 @@ npx ts-node backend/src/scripts/export-transfer-log.ts <transfer_id>
 npx ts-node backend/src/scripts/export-transfer-record.ts <transfer_id>
 ```
 
-Outputs orchestration logs + transfer events, plus the complete redacted transfer record, to `docs/insta-awards/deliverable-1/evidence/`.
+Outputs orchestration logs + transfer events, plus the complete redacted transfer record, to `docs/insta-awards/deliverables/deliverable-1/evidence/`.

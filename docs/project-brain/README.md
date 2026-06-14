@@ -25,8 +25,8 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [../DOCS-SUMMARY.md](../DOCS-SUMMARY.md) | You need the grouped summary for categorized project-wide docs. |
 | [../../evolution/docs/DOCS-SUMMARY.md](../../evolution/docs/DOCS-SUMMARY.md) | You need the Evolution/WhatsApp operations-doc summary. |
 | [../../frontend/docs/DOCS-SUMMARY.md](../../frontend/docs/DOCS-SUMMARY.md) | You need frontend onboarding, architecture, review, or TDD doc context. |
-| [../../docs/insta-awards/docs/DOCS-SUMMARY.md](../../docs/insta-awards/docs/DOCS-SUMMARY.md) | You need the active Instawards Deliverable 1 doc summary. |
-| [../../docs/insta-awards/docs/deliverable-3/README.md](../../docs/insta-awards/docs/deliverable-3/README.md) | You need the institutional settlement flow demo, technical walkthrough, setup, screenshot/video, or reviewer package foundation. |
+| [../../docs/insta-awards/deliverables/DOCS-SUMMARY.md](../../docs/insta-awards/deliverables/DOCS-SUMMARY.md) | You need the active Instawards Deliverable 1 doc summary. |
+| [../../docs/insta-awards/deliverables/deliverable-3/README.md](../../docs/insta-awards/deliverables/deliverable-3/README.md) | You need the institutional settlement flow demo, technical walkthrough, setup, screenshot/video, or reviewer package foundation. |
 | [../../insta-awards-old/docs/DOCS-SUMMARY.md](../../insta-awards-old/docs/DOCS-SUMMARY.md) | You need historical Instawards audit or evidence context. |
 | [../../manual-tests/docs/DOCS-SUMMARY.md](../../manual-tests/docs/DOCS-SUMMARY.md) | You need the manual QA and benchmark-doc summary. |
 | [../../notion/docs/DOCS-SUMMARY.md](../../notion/docs/DOCS-SUMMARY.md) | You need the Notion-export doc summary. |
