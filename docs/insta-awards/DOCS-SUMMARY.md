@@ -23,8 +23,7 @@ Generated summary for `docs/insta-awards`. Last generated: 2026-06-14.
 
 | Folder | Markdown files | Summary |
 |--------|----------------|---------|
-| [`deliverable-1/`](./deliverable-1/) | 0 | [`DOCS-SUMMARY.md`](./deliverable-1/DOCS-SUMMARY.md) |
-| [`docs/`](./docs/) | 27 | [`DOCS-SUMMARY.md`](./docs/DOCS-SUMMARY.md) |
+| [`deliverables/`](./deliverables/) | 28 | [`DOCS-SUMMARY.md`](./deliverables/DOCS-SUMMARY.md) |
 
 ## Notes
 

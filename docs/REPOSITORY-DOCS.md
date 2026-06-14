@@ -17,7 +17,7 @@ The former top-level `artifacts/`, `new/`, `sow/`, and `presentation-scripts/` d
 | [Project-wide docs](./DOCS-SUMMARY.md) | `docs/**/*.md`, excluding project-brain and repository summary/index files | 91 |
 | [Evolution](../evolution/docs/DOCS-SUMMARY.md) | `evolution/docs/README.md` | 1 |
 | [Frontend](../frontend/docs/DOCS-SUMMARY.md) | `frontend/docs/**/*.md` | 5 |
-| [Active Instawards](../docs/insta-awards/docs/DOCS-SUMMARY.md) | `docs/insta-awards/docs/**/*.md` | 27 |
+| [Active Instawards](./insta-awards/deliverables/DOCS-SUMMARY.md) | `docs/insta-awards/deliverables/**/*.md` | 36 |
 | [Historical Instawards](../insta-awards-old/docs/DOCS-SUMMARY.md) | `insta-awards-old/docs/**/*.md` | 30 |
 | [Manual tests](../manual-tests/docs/DOCS-SUMMARY.md) | `manual-tests/docs/*.md` | 3 |
 | [Notion exports](../notion/docs/DOCS-SUMMARY.md) | `notion/docs/*.md` | 2 |
@@ -52,7 +52,7 @@ The current non-project-brain scan contains **250 Markdown files**: 201 source d
 
 1. Live code and migrations.
 2. Current project-brain documents.
-3. Active module docs, especially `docs/insta-awards/docs/deliverable-1/`, `docs/insta-awards/docs/deliverable-2/`, and `docs/insta-awards/docs/deliverable-3/`.
+3. Active module docs, especially `docs/insta-awards/deliverables/deliverable-1/`, `docs/insta-awards/deliverables/deliverable-2/`, and `docs/insta-awards/deliverables/deliverable-3/`.
 4. Categorized root `docs/` source documents.
 5. Dated scans, historical grant packages, `insta-awards-old/`, and `deprecated/` material.
 
@@ -60,5 +60,5 @@ The current non-project-brain scan contains **250 Markdown files**: 201 source d
 
 - `docs/funding/sow/SOW_inital.md` is superseded by the active Instawards SOW documents.
 - `docs/operations/session-env-and-migrations.md` overlaps with `docs/operations/SESSION_ENV_AND_MIGRATIONS_20260525.md`; prefer the dated `SESSION_ENV_AND_MIGRATIONS_20260525.md` version unless code proves otherwise.
-- `insta-awards-old/docs/` is superseded by `docs/insta-awards/docs/deliverable-1/`, `docs/insta-awards/docs/deliverable-2/`, and `docs/insta-awards/docs/deliverable-3/` for current reviewer evidence and implementation status.
+- `insta-awards-old/docs/` is superseded by `docs/insta-awards/deliverables/deliverable-1/`, `docs/insta-awards/deliverables/deliverable-2/`, and `docs/insta-awards/deliverables/deliverable-3/` for current reviewer evidence and implementation status.
 - Deprecated Bridge, Twilio, and regional starter pack docs do not describe current runtime behavior.

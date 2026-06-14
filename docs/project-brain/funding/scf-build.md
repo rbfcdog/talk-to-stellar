@@ -11,6 +11,6 @@ The current Instawards grant (`docs/funding/sow/SOW_instawards_submission_brl_us
 - SCF: Basic PIX → Stellar flow
 - Instawards: Full orchestration engine, payout routing, reconciliation, ops dashboard
 
-Evidence for SCF deliverables is embedded in the main codebase. Instawards evidence is in `docs/insta-awards/docs/deliverable-1/evidence/`.
+Evidence for SCF deliverables is embedded in the main codebase. Instawards evidence is in `docs/insta-awards/deliverables/deliverable-1/evidence/`.
 
 Nothing found — the SCF deliverables were absorbed into the Instawards scope.

@@ -36,7 +36,7 @@ Their source documents now live under categorized root `docs/` folders:
 | Project-wide `docs/` directory | `docs/DOCS-SUMMARY.md` |
 | Evolution | `evolution/docs/DOCS-SUMMARY.md` |
 | Frontend | `frontend/docs/DOCS-SUMMARY.md` |
-| Active Instawards | `docs/insta-awards/docs/DOCS-SUMMARY.md` |
+| Active Instawards | `docs/insta-awards/deliverables/DOCS-SUMMARY.md` |
 | Historical Instawards | `insta-awards-old/docs/DOCS-SUMMARY.md` |
 | Manual tests | `manual-tests/docs/DOCS-SUMMARY.md` |
 | Notion exports | `notion/docs/DOCS-SUMMARY.md` |
@@ -76,9 +76,9 @@ Their source documents now live under categorized root `docs/` folders:
 
 | File | Description | Freshness |
 |------|-------------|-----------|
-| `docs/insta-awards/docs/deliverable-1/` | D1 implementation plan, migrations, status, runs, and evidence | ⚠️ Active; final same-transfer real testnet evidence still pending |
-| `docs/insta-awards/docs/deliverable-2/README.md` | D2 USD payout coordination scope, Circle foundation status, and evidence checklist | ⚠️ Active; Circle sandbox/evidence still pending |
-| `docs/insta-awards/docs/deliverable-3/` | D3 institutional settlement demo foundation, walkthrough, setup, screenshot/video plans, and reviewer package | ⚠️ Active; final video/screenshots/same-transfer evidence pending |
+| `docs/insta-awards/deliverables/deliverable-1/` | D1 implementation plan, migrations, status, runs, and evidence | ⚠️ Active; final same-transfer real testnet evidence still pending |
+| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle foundation status, and evidence checklist | ⚠️ Active; Circle sandbox/evidence still pending |
+| `docs/insta-awards/deliverables/deliverable-3/` | D3 institutional settlement demo foundation, walkthrough, setup, screenshot/video plans, and reviewer package | ⚠️ Active; final video/screenshots/same-transfer evidence pending |
 
 ## Backend Docs
 
@@ -116,7 +116,7 @@ Their source documents now live under categorized root `docs/` folders:
 
 1. **`docs/funding/sow/SOW_inital.md` vs `docs/funding/INSTAWARDS_SOW.md` vs `docs/funding/sow/SOW_instawards_submission_brl_usd_rail_20260520.md`**: The initial SOW has a different scope from the Instawards submission. The code follows the Instawards SOW: orchestration engine, payout routing, reconciliation.
 2. **`docs/operations/session-env-and-migrations.md` vs `docs/operations/SESSION_ENV_AND_MIGRATIONS_20260525.md`**: Both cover session env and migrations. Prefer the dated `SESSION_ENV_AND_MIGRATIONS_20260525.md` version unless code proves otherwise.
-3. **`insta-awards-old/` vs `docs/insta-awards/`**: The old folder was a pre-deliverable preparation. Current work is under `docs/insta-awards/docs/deliverable-1/`, `deliverable-2/`, and `deliverable-3/`.
+3. **`insta-awards-old/` vs `docs/insta-awards/`**: The old folder was a pre-deliverable preparation. Current work is under `docs/insta-awards/deliverables/deliverable-1/`, `deliverable-2/`, and `deliverable-3/`.
 4. **Historical migration references vs current schema source**: Historical audits and run reports can name retired migration files. The current bootstrap source is `backend/migrations/20260613_00_full_schema.sql`; `backend/migrations/20260614_00_ops_admin_auth.sql` is the current incremental ops-login migration and the runner applies required SQL files in sorted order.
 
 ## Stats
