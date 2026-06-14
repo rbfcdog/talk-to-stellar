@@ -137,6 +137,20 @@ describe('ops history routes', () => {
     expect(getCookie(response, 'tts_ops_csrf')).toContain('tts_ops_csrf=');
   });
 
+  it('renders the ops login page before database credentials are needed', async () => {
+    delete process.env.JWT_SECRET;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const response = await request('/ops/login');
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(html).toContain('Transfers console');
+    expect(html).toContain('Operator email');
+  });
+
   it('logs in through the operator form and renders the transfer console on /ops', async () => {
     jest.spyOn(opsAdminAuthService, 'verifyLogin').mockResolvedValue({ ok: true, admin });
     jest.spyOn(opsAdminAuthService, 'getActiveById').mockResolvedValue(admin);

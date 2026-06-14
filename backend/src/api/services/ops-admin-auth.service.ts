@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { supabase } from '../../config/supabase';
 import { hashPassword, verifyPassword } from '../../utils/password';
 
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -59,7 +58,14 @@ function lockState(admin: OpsAdminUser): { locked: boolean; lockedUntil?: string
 }
 
 export class OpsAdminAuthService {
-  constructor(private readonly db: SupabaseClient = supabase) {}
+  constructor(private db?: SupabaseClient) {}
+
+  private getDb(): SupabaseClient {
+    if (this.db) return this.db;
+    const loaded = require('../../config/supabase') as typeof import('../../config/supabase');
+    this.db = loaded.supabase;
+    return this.db;
+  }
 
   normalizeLogin(value: unknown): string {
     return normalizeLogin(value);
@@ -73,7 +79,7 @@ export class OpsAdminAuthService {
     const normalized = normalizeLogin(login);
     if (!normalized) return null;
 
-    const { data, error } = await this.db
+    const { data, error } = await this.getDb()
       .from('ops_admin_users')
       .select('id, login, display_name, password_hash, role, active, failed_attempts, locked_until, last_login_at, created_at, updated_at')
       .eq('login', normalized)
@@ -87,7 +93,7 @@ export class OpsAdminAuthService {
     const normalizedId = String(id || '').trim();
     if (!normalizedId) return null;
 
-    const { data, error } = await this.db
+    const { data, error } = await this.getDb()
       .from('ops_admin_users')
       .select('id, login, display_name, role, active, failed_attempts, locked_until, last_login_at, created_at, updated_at')
       .eq('id', normalizedId)
@@ -153,7 +159,7 @@ export class OpsAdminAuthService {
       ? new Date(Date.now() + lockMinutes() * 60 * 1000).toISOString()
       : null;
 
-    const { error } = await this.db
+    const { error } = await this.getDb()
       .from('ops_admin_users')
       .update({
         failed_attempts: attempts,
@@ -167,7 +173,7 @@ export class OpsAdminAuthService {
   }
 
   private async recordSuccess(admin: OpsAdminUser): Promise<void> {
-    const { error } = await this.db
+    const { error } = await this.getDb()
       .from('ops_admin_users')
       .update({
         failed_attempts: 0,
