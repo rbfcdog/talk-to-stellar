@@ -6,7 +6,9 @@
 
 ```
 Operator opens /ops
-  -> Provides OPS_DASHBOARD_TOKEN or TRANSFER_API_TOKEN
+  -> Redirected to /ops/login if no valid ops session cookie
+  -> Login is checked against ops_admin_users
+  -> Backend sets an HTTP-only SameSite=Lax ops session cookie
   -> Backend reads transfers, international_transfers, operations, payment_logs
   -> Operator filters/searches/sorts the normalized ledger
   -> Lifecycle rows link to /ops/transfers/:id
@@ -40,6 +42,9 @@ This matches the existing `tts-op-page` dark operations language in `frontend/ap
 
 ## Current Behavior
 
+- `/ops/login` is the browser entry point. It uses a CSRF cookie + hidden token, checks the submitted login/password against `public.ops_admin_users`, then signs a short-lived HTTP-only session cookie with `JWT_SECRET`.
+- `/ops` and `/ops/transfers/:id` no longer accept query-token browser entry; unauthenticated requests redirect to `/ops/login`.
+- `OPS_DASHBOARD_TOKEN` / `TRANSFER_API_TOKEN` remain compatibility auth for JSON API clients, not the operator browser workflow.
 - `/ops` renders a production-grade ledger console with top bar, environment badge, refresh control, metrics, controls, status legend, sortable table, pagination, copy buttons, relative timestamps, and responsive stacked mobile rows.
 - The page no longer uses meta refresh. It polls in place every 30 seconds and replaces only dashboard fragments.
 - Metrics are read-only and computed from loaded ledger records: transfers today, BRL to USDC volume today, in-flight count, needs-attention count, admin fee total.
@@ -75,7 +80,7 @@ Capture steps once a seeded/testnet lifecycle transfer exists:
 
 1. Run `OPS_DASHBOARD_TOKEN=dev-ops-token PORT=3011 npm start` from `backend/`.
 2. Confirm `curl "http://127.0.0.1:3011/api/ops/history?token=dev-ops-token"` returns `source_counts.transfers > 0`.
-3. Open `http://127.0.0.1:3011/ops?token=dev-ops-token` and click a lifecycle row.
+3. Open `http://127.0.0.1:3011/ops/login`, sign in with the bootstrapped `OPS_ADMIN_LOGIN`, then click a lifecycle row.
 4. Capture:
    - success detail: `docs/project-brain/product/surfaces/ops-dashboard/screenshots/detail-success.png`
    - failed detail: `docs/project-brain/product/surfaces/ops-dashboard/screenshots/detail-failed.png`

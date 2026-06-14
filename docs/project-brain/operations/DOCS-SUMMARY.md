@@ -6,8 +6,8 @@ Generated summary for `docs/project-brain/operations`. Last generated: 2026-06-1
 
 | File | Title | Words | Summary | Language note |
 |------|-------|-------|---------|---------------|
-| [`ADMIN.md`](./ADMIN.md) | ADMIN.md — Ops Dashboard & Admin Tools | 379 | **URL**: `http://localhost:3001/ops` **Auth**: `?token=<token>` or `Authorization: Bearer <token>` or `X-Ops-Token: <token>` | English or mostly English. |
-| [`ENVIRONMENTS.md`](./ENVIRONMENTS.md) | ENVIRONMENTS.md — Setup & Configuration | 478 | Circle setup runbook: `backend/docs/CIRCLE_INTEGRATION_SETUP.md`. `backend/migrations/20260613_00_full_schema.sql` is the only schema source and includes the D1 lifecycle tables/RPCs. It was verified against an empty PostgreSQL database. There is no generic ro... | English or mostly English. |
+| [`ADMIN.md`](./ADMIN.md) | ADMIN.md — Ops Dashboard & Admin Tools | 430 | Ops dashboard browser auth now uses `/ops/login`, `public.ops_admin_users`, and an HTTP-only session cookie. Token auth remains for JSON API compatibility. | English or mostly English. |
+| [`ENVIRONMENTS.md`](./ENVIRONMENTS.md) | ENVIRONMENTS.md — Setup & Configuration | 560 | Includes ops admin bootstrap env vars, Circle payout env vars, and current migration runner guidance for the bootstrap plus ops-admin auth migration. | English or mostly English. |
 | [`RUNBOOK.md`](./RUNBOOK.md) | RUNBOOK.md — Diagnosing Recurring Failures | 750 | **Symptom**: PIX paid, "confirmed" message shown, but balance still shows R$0.00. **Diagnosis steps**: | English or mostly English. |
 
 ## Child Folders

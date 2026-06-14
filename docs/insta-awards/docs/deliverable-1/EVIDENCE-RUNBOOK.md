@@ -17,7 +17,8 @@ export STELLAR_SECRET_KEY="..."
 export STELLAR_PUBLIC_KEY="..."
 export USD_OFFRAMP_STELLAR_DESTINATION="..."
 export USDC_ASSET_ISSUER="..."
-export OPS_DASHBOARD_TOKEN="<review-token>"
+export OPS_DASHBOARD_TOKEN="<review-token>" # JSON/API compatibility
+export OPS_ADMIN_LOGIN="admin@example.com"
 export LOG_FILE="/tmp/talktostellar-orchestration.jsonl"
 ```
 
@@ -27,7 +28,11 @@ Real Etherfuse PIX funding also requires the Etherfuse env from `docs/project-br
 
 ```bash
 cd backend
+read -rs OPS_ADMIN_PASSWORD
+export OPS_ADMIN_PASSWORD
+export OPS_ADMIN_PASSWORD_HASH="$(npm run ops:hash-password --silent)"
 DATABASE_URL=postgresql://... npm run migrate:required
+unset OPS_ADMIN_PASSWORD OPS_ADMIN_PASSWORD_HASH
 ```
 
 Then run the schema inspection SQL in `MIGRATIONS.md` and paste the output into `MIGRATIONS.md` under a new dated section.
@@ -69,8 +74,10 @@ public_ref:
 Open:
 
 ```text
-http://localhost:3001/ops?token=<review-token>&source=transfers
+http://localhost:3001/ops/login
 ```
+
+Sign in with `OPS_ADMIN_LOGIN`, then open `http://localhost:3001/ops?source=transfers`.
 
 The `source=transfers` filter keeps the D1 list screenshot focused on normalized lifecycle records. Opening `/ops` without this filter shows the complete database transaction history.
 

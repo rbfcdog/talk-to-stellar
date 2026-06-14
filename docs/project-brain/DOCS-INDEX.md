@@ -117,7 +117,7 @@ Their source documents now live under categorized root `docs/` folders:
 1. **`docs/funding/sow/SOW_inital.md` vs `docs/funding/INSTAWARDS_SOW.md` vs `docs/funding/sow/SOW_instawards_submission_brl_usd_rail_20260520.md`**: The initial SOW has a different scope from the Instawards submission. The code follows the Instawards SOW: orchestration engine, payout routing, reconciliation.
 2. **`docs/operations/session-env-and-migrations.md` vs `docs/operations/SESSION_ENV_AND_MIGRATIONS_20260525.md`**: Both cover session env and migrations. Prefer the dated `SESSION_ENV_AND_MIGRATIONS_20260525.md` version unless code proves otherwise.
 3. **`insta-awards-old/` vs `docs/insta-awards/`**: The old folder was a pre-deliverable preparation. Current work is under `docs/insta-awards/docs/deliverable-1/`, `deliverable-2/`, and `deliverable-3/`.
-4. **Historical migration references vs current schema source**: Historical audits and run reports can name retired migration files. The only current schema source is `backend/migrations/20260613_00_full_schema.sql`.
+4. **Historical migration references vs current schema source**: Historical audits and run reports can name retired migration files. The current bootstrap source is `backend/migrations/20260613_00_full_schema.sql`; `backend/migrations/20260614_00_ops_admin_auth.sql` is the current incremental ops-login migration and the runner applies required SQL files in sorted order.
 
 ## Stats
 

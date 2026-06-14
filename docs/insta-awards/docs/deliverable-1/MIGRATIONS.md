@@ -1,12 +1,13 @@
 # Migrations — Deliverable 1
 
-Updated: 2026-06-13
+Updated: 2026-06-14
 
 ## Migration File
 
 | File | Purpose |
 |------|---------|
 | `backend/migrations/20260613_00_full_schema.sql` | Creates the complete TalkToStellar database from zero, including D1 `transfers`, `transfer_events`, append-only guards, public-ref generation, and atomic lifecycle RPCs. |
+| `backend/migrations/20260614_00_ops_admin_auth.sql` | Adds DB-backed `/ops/login` admin auth through `ops_admin_users` and optional admin bootstrap from env-provided login/password hash. |
 
 ## Run Commands
 
@@ -17,10 +18,25 @@ cd backend
 DATABASE_URL=postgresql://... npm run migrate:required
 ```
 
+Create or rotate the first ops admin during migration:
+
+```bash
+read -rs OPS_ADMIN_PASSWORD
+export OPS_ADMIN_PASSWORD
+export OPS_ADMIN_PASSWORD_HASH="$(npm run ops:hash-password --silent)"
+export OPS_ADMIN_LOGIN="admin@example.com"
+DATABASE_URL=postgresql://... npm run migrate:required
+unset OPS_ADMIN_PASSWORD OPS_ADMIN_PASSWORD_HASH
+```
+
 Direct `psql`:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/20260613_00_full_schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -v ops_admin_login="admin@example.com" \
+  -v ops_admin_password_hash="$OPS_ADMIN_PASSWORD_HASH" \
+  -f backend/migrations/20260614_00_ops_admin_auth.sql
 ```
 
 The repository no longer carries a generic rollback migration. Back up an existing database before applying the consolidated bootstrap.
@@ -38,6 +54,8 @@ public.transfer_events table
 public.create_transfer_with_event(...) function
 public.transition_transfer(...) function
 public.prevent_transfer_events_mutation() function
+public.ops_admin_users table
+public.upsert_ops_admin_user(...) function
 ```
 
 Expected `transfers` columns:
@@ -80,7 +98,7 @@ created_at timestamptz not null default now()
 
 ## Schema Inspection Commands
 
-Run after applying the consolidated migration:
+Run after applying the required migrations:
 
 ```sql
 select table_name

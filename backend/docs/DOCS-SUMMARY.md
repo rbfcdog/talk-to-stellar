@@ -14,11 +14,11 @@ Source scope: `backend/docs/**/*.md`, excluding this summary (13 source files).
 | PIN reset | `backend/docs/PIN_RESET_ANALYSIS.md`, `backend/docs/PIN_RESET_SYSTEM.md`, `backend/docs/PIN_RESET_TOOL_FIX.md` | PIN reset design, diagnosis, and historical fix notes |
 | Stellar payments | `backend/docs/PATH-PAYMENT.md` | Stellar path-payment behavior |
 | Tests | `backend/docs/TEST_QUICK_REFERENCE.md`, `backend/docs/tests/README.md` | Test-suite orientation and commands |
-| Migrations | `backend/docs/README.md`, `backend/docs/migrations/README_20260512_financial_assistant.md`, `backend/migrations/20260613_00_full_schema.sql` | Single complete database bootstrap and historical financial-assistant migration notes |
+| Migrations | `backend/docs/README.md`, `backend/docs/migrations/README_20260512_financial_assistant.md`, `backend/migrations/20260613_00_full_schema.sql`, `backend/migrations/20260614_00_ops_admin_auth.sql` | Complete database bootstrap, current ops-admin auth migration, and historical financial-assistant migration notes |
 | Agent backlog | `backend/docs/src/api/agent/TODO.md` | Agent-specific implementation backlog |
 
 ## Freshness Guidance
 
-`backend/docs/README.md` reflects the current folder organization. `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md` reflects the current Circle payout foundation. `backend/docs/CIRCLE_INTEGRATION_SETUP.md` reflects the current Circle operator setup path. `backend/migrations/20260613_00_full_schema.sql` is the only SQL schema source of truth. Older dated documents, including `backend/docs/migrations/README_20260512_financial_assistant.md`, can describe retired migration files or commands; verify them against `backend/package.json` and the consolidated bootstrap.
+`backend/docs/README.md` reflects the current folder organization. `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md` reflects the current Circle payout foundation. `backend/docs/CIRCLE_INTEGRATION_SETUP.md` reflects the current Circle operator setup path. `backend/migrations/20260613_00_full_schema.sql` is the bootstrap SQL source of truth; `backend/migrations/20260614_00_ops_admin_auth.sql` is the current incremental ops-login migration. Older dated documents, including `backend/docs/migrations/README_20260512_financial_assistant.md`, can describe retired migration files or commands; verify them against `backend/package.json` and the migration runner.
 
 Move stable architecture and flow conclusions into `docs/project-brain/architecture/`; keep operational migration guidance in `docs/project-brain/operations/ENVIRONMENTS.md`.

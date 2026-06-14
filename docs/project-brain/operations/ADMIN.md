@@ -5,8 +5,9 @@
 ## Ops Dashboard
 
 - **URL**: `http://localhost:3001/ops`
-- **Auth**: `?token=<token>` or `Authorization: Bearer <token>` or `X-Ops-Token: <token>`
-- **Token config**: `OPS_DASHBOARD_TOKEN` env var (`TRANSFER_API_TOKEN` is also accepted for JSON API). Local non-production fallback is `dev-ops-token`; hosted environments must set a token.
+- **Browser auth**: `GET /ops` redirects to `GET /ops/login`. The login is checked against `public.ops_admin_users`, then stored in an HTTP-only, SameSite=Lax cookie.
+- **Admin bootstrap**: generate `OPS_ADMIN_PASSWORD_HASH` with `npm --prefix backend run ops:hash-password`, then run `OPS_ADMIN_LOGIN=... OPS_ADMIN_PASSWORD_HASH=... DATABASE_URL=... npm --prefix backend run migrate:required`.
+- **Compatibility API auth**: `OPS_DASHBOARD_TOKEN` or `TRANSFER_API_TOKEN` still works for JSON clients through bearer/header/query token. Browser dashboard entry should use the DB login, not a query token.
 
 ### Features
 - Complete database transaction history from `transfers`, `international_transfers`, `operations`, and `payment_logs`
@@ -33,10 +34,10 @@
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
-| `/api/ops/history` | GET | Token | Complete database transaction history |
-| `/api/transfers` | GET | Token | List transfers |
-| `/api/transfers/:id` | GET | Token | Transfer detail + events |
-| `/api/transfers` | POST | Token | Create transfer intent |
+| `/api/ops/history` | GET | Ops session cookie or token | Complete database transaction history |
+| `/api/transfers` | GET | Ops session cookie or token | List transfers |
+| `/api/transfers/:id` | GET | Ops session cookie or token | Transfer detail + events |
+| `/api/transfers` | POST | Token, or ops session cookie plus `X-Ops-Csrf` | Create transfer intent |
 
 ## Admin Fee Wallet
 

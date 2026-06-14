@@ -2,19 +2,24 @@ import express from 'express';
 import { AddressInfo } from 'net';
 import { opsRouter } from '../src/api/routes/ops.router';
 import { opsHistoryRepository } from '../src/api/repository/ops-history.repository';
+import { opsAdminAuthService, OpsAdminUser } from '../src/api/services/ops-admin-auth.service';
 
 function app() {
   const server = express();
   server.use(express.json());
+  server.use(express.urlencoded({ extended: true }));
   server.use('/', opsRouter);
   return server;
 }
 
-async function request(path: string) {
+async function request(path: string, init: RequestInit = {}) {
   const server = app().listen(0);
   const address = server.address() as AddressInfo;
   try {
-    return await fetch(`http://127.0.0.1:${address.port}${path}`);
+    return await fetch(`http://127.0.0.1:${address.port}${path}`, {
+      redirect: 'manual',
+      ...init,
+    });
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());
@@ -22,14 +27,30 @@ async function request(path: string) {
   }
 }
 
+function getCookie(response: Response, name: string): string {
+  const setCookie = response.headers.get('set-cookie') || '';
+  return setCookie.match(new RegExp(`${name}=[^;]+`))?.[0] || '';
+}
+
 describe('ops history routes', () => {
   const originalEnv = process.env;
+  const admin: OpsAdminUser = {
+    id: '4abf4494-9fbf-4c49-b676-39c8a3c1f28d',
+    login: 'admin@talktostellar.test',
+    display_name: 'Ops Admin',
+    role: 'admin',
+    active: true,
+    failed_attempts: 0,
+    locked_until: null,
+    last_login_at: null,
+  };
 
   beforeEach(() => {
     process.env = {
       ...originalEnv,
       OPS_DASHBOARD_TOKEN: 'ops-secret',
       TRANSFER_API_TOKEN: '',
+      JWT_SECRET: 'test-only-jwt-secret-with-enough-entropy',
     };
     jest.spyOn(opsHistoryRepository, 'list').mockResolvedValue({
       records: [
@@ -95,8 +116,54 @@ describe('ops history routes', () => {
     process.env = originalEnv;
   });
 
-  it('renders complete database transaction history on /ops', async () => {
+  it('redirects dashboard visitors to the DB-backed login screen', async () => {
     const response = await request('/ops?token=ops-secret');
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toContain('/ops/login');
+    expect(response.headers.get('location')).toContain('return_to=');
+  });
+
+  it('renders the ops login page with a CSRF cookie', async () => {
+    const response = await request('/ops/login');
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('Operator access');
+    expect(html).toContain('ops_admin_users');
+    expect(html).toContain('name="csrf_token"');
+    expect(getCookie(response, 'tts_ops_csrf')).toContain('tts_ops_csrf=');
+  });
+
+  it('logs in through the admin table and renders complete database transaction history on /ops', async () => {
+    jest.spyOn(opsAdminAuthService, 'verifyLogin').mockResolvedValue({ ok: true, admin });
+    jest.spyOn(opsAdminAuthService, 'getActiveById').mockResolvedValue(admin);
+
+    const loginPage = await request('/ops/login');
+    const csrfCookie = getCookie(loginPage, 'tts_ops_csrf');
+    const csrfToken = csrfCookie.replace('tts_ops_csrf=', '');
+    const loginResponse = await request('/ops/login', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie: csrfCookie,
+      },
+      body: new URLSearchParams({
+        csrf_token: csrfToken,
+        login: admin.login,
+        password: 'correct horse battery staple',
+        return_to: '/ops',
+      }).toString(),
+    });
+    const sessionCookie = getCookie(loginResponse, 'tts_ops_session');
+
+    expect(loginResponse.status).toBe(303);
+    expect(loginResponse.headers.get('location')).toBe('/ops');
+    expect(sessionCookie).toContain('tts_ops_session=');
+
+    const response = await request('/ops', {
+      headers: { cookie: sessionCookie },
+    });
     const html = await response.text();
 
     expect(response.status).toBe(200);
@@ -113,6 +180,8 @@ describe('ops history routes', () => {
     expect(html).toContain('color-scheme: dark');
     expect(html).toContain('--ops-bg: #06070a');
     expect(html).toContain('<strong>TalkToStellar</strong>');
+    expect(html).toContain(admin.login);
+    expect(html).toContain('/ops/logout');
     expect(html).not.toContain('#fffdf8');
     expect(html).not.toContain('No transaction records match this view.');
   });

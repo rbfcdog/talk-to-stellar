@@ -5,7 +5,9 @@
  * normalized ledger fields, but transfer state changes stay in the orchestrator.
  */
 
+import crypto from 'crypto';
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import {
   OPS_HISTORY_SOURCES,
   OpsHistoryCategory,
@@ -14,8 +16,10 @@ import {
   opsHistoryRepository,
 } from '../repository/ops-history.repository';
 import { transferRepository } from '../repository/transfer.repository';
+import { opsAdminAuthService, OpsAdminUser } from '../services/ops-admin-auth.service';
 import { orchestrator } from '../../orchestration/TransferOrchestrator';
 import { isProductionLikeEnvironment } from '../../config/runtime';
+import { getRequiredJwtSecret } from '../../config/secrets';
 import {
   OpsDashboardFilters,
   OpsDashboardMetric,
@@ -23,12 +27,16 @@ import {
   OpsSortDirection,
   renderDashboardErrorPage,
   renderDashboardPage,
+  renderOpsLoginPage,
   renderTransferDetailPage,
 } from '../views/ops-dashboard.view';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 const STUCK_ACTIVE_MS = 2 * 60 * 60 * 1000;
+const OPS_SESSION_COOKIE = 'tts_ops_session';
+const OPS_CSRF_COOKIE = 'tts_ops_csrf';
+const OPS_SESSION_TYPE = 'ops_admin_session';
 const SORT_FIELDS = new Set([
   'reference',
   'status',
@@ -38,6 +46,20 @@ const SORT_FIELDS = new Set([
   'created_at',
   'updated_at',
 ]);
+
+type OpsSessionPayload = {
+  typ: typeof OPS_SESSION_TYPE;
+  sub: string;
+  login: string;
+  role: string;
+  csrf: string;
+};
+
+type OpsAuthContext = {
+  method: 'session' | 'token';
+  admin?: OpsAdminUser;
+  csrfToken?: string;
+};
 
 function configuredOpsToken(): string {
   const configured = String(process.env.OPS_DASHBOARD_TOKEN || process.env.TRANSFER_API_TOKEN || '').trim();
@@ -50,12 +72,9 @@ function readBearerToken(req: Request): string {
   return auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
 }
 
-function checkAuth(req: Request, res: Response): boolean {
+function legacyTokenAuthorized(req: Request): boolean {
   const expected = configuredOpsToken();
-  if (!expected) {
-    res.status(503).json({ error: 'OPS_DASHBOARD_TOKEN or TRANSFER_API_TOKEN must be set before using /ops.' });
-    return false;
-  }
+  if (!expected) return false;
   const token = String(
     readBearerToken(req) ||
       req.query.token ||
@@ -64,11 +83,157 @@ function checkAuth(req: Request, res: Response): boolean {
       ''
   ).trim();
 
-  if (token !== expected) {
-    res.status(401).json({ error: 'Unauthorized. Provide Authorization: Bearer <token>, X-Ops-Token, X-Api-Key, or ?token=.' });
-    return false;
+  return token === expected;
+}
+
+function parseCookies(req: Request): Record<string, string> {
+  const raw = String(req.headers.cookie || '');
+  return raw.split(';').reduce<Record<string, string>>((cookies, part) => {
+    const index = part.indexOf('=');
+    if (index === -1) return cookies;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) return cookies;
+    cookies[key] = decodeURIComponent(value);
+    return cookies;
+  }, {});
+}
+
+function cookieSecure(): boolean {
+  return isProductionLikeEnvironment();
+}
+
+function sessionTtlMs(): number {
+  const hours = Number(String(process.env.OPS_ADMIN_SESSION_HOURS || '').trim());
+  const normalizedHours = Number.isFinite(hours) && hours > 0 ? Math.min(Math.trunc(hours), 24) : 8;
+  return normalizedHours * 60 * 60 * 1000;
+}
+
+function csrfTtlMs(): number {
+  return 15 * 60 * 1000;
+}
+
+function setOpsCookie(res: Response, name: string, value: string, maxAgeMs: number, path = '/'): void {
+  res.cookie(name, value, {
+    httpOnly: true,
+    secure: cookieSecure(),
+    sameSite: 'lax',
+    maxAge: maxAgeMs,
+    path,
+  });
+}
+
+function clearOpsCookie(res: Response, name: string, path = '/'): void {
+  res.clearCookie(name, {
+    httpOnly: true,
+    secure: cookieSecure(),
+    sameSite: 'lax',
+    path,
+  });
+}
+
+function newToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function signOpsSession(admin: OpsAdminUser, csrfToken: string): string {
+  const ttlSeconds = Math.max(60, Math.trunc(sessionTtlMs() / 1000));
+  return jwt.sign({
+    typ: OPS_SESSION_TYPE,
+    sub: admin.id,
+    login: admin.login,
+    role: admin.role,
+    csrf: csrfToken,
+  } satisfies OpsSessionPayload, getRequiredJwtSecret(), { expiresIn: ttlSeconds });
+}
+
+function safeReturnTo(value: unknown): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '/ops';
+  if (!raw.startsWith('/ops')) return '/ops';
+  if (raw.startsWith('//') || raw.includes('://')) return '/ops';
+  if (raw.startsWith('/ops/login')) return '/ops';
+  return raw;
+}
+
+function requestPathWithQuery(req: Request): string {
+  return safeReturnTo(req.originalUrl || req.url || '/ops');
+}
+
+function loginRedirectUrl(req: Request): string {
+  return `/ops/login?return_to=${encodeURIComponent(requestPathWithQuery(req))}`;
+}
+
+function csrfFromHeaderOrBody(req: Request): string {
+  return String(
+    req.headers['x-ops-csrf'] ||
+      req.headers['x-csrf-token'] ||
+      req.body?.csrf_token ||
+      req.body?.csrf ||
+      ''
+  ).trim();
+}
+
+function csrfCookie(req: Request): string {
+  return String(parseCookies(req)[OPS_CSRF_COOKIE] || '').trim();
+}
+
+function validLoginCsrf(req: Request): boolean {
+  const cookie = csrfCookie(req);
+  const body = String(req.body?.csrf_token || '').trim();
+  return Boolean(cookie && body && cookie === body);
+}
+
+async function sessionAuth(req: Request): Promise<OpsAuthContext | null> {
+  const token = String(parseCookies(req)[OPS_SESSION_COOKIE] || '').trim();
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, getRequiredJwtSecret()) as Partial<OpsSessionPayload>;
+    if (decoded.typ !== OPS_SESSION_TYPE || !decoded.sub || !decoded.login || !decoded.csrf) return null;
+    const admin = await opsAdminAuthService.getActiveById(decoded.sub);
+    if (!admin || admin.login !== decoded.login) return null;
+    return {
+      method: 'session',
+      admin,
+      csrfToken: decoded.csrf,
+    };
+  } catch {
+    return null;
   }
-  return true;
+}
+
+async function requireDashboardAuth(req: Request, res: Response): Promise<OpsAuthContext | null> {
+  const auth = await sessionAuth(req);
+  if (auth) return auth;
+
+  clearOpsCookie(res, OPS_SESSION_COOKIE);
+  res.redirect(303, loginRedirectUrl(req));
+  return null;
+}
+
+async function requireApiAuth(req: Request, res: Response): Promise<OpsAuthContext | null> {
+  const auth = await sessionAuth(req);
+  if (auth) {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      const csrf = csrfFromHeaderOrBody(req);
+      if (!auth.csrfToken || csrf !== auth.csrfToken) {
+        res.status(403).json({ success: false, error: 'Missing or invalid ops CSRF token.' });
+        return null;
+      }
+    }
+    return auth;
+  }
+
+  if (legacyTokenAuthorized(req)) return { method: 'token' };
+
+  if (!configuredOpsToken()) {
+    res.status(503).json({ success: false, error: 'OPS_DASHBOARD_TOKEN or TRANSFER_API_TOKEN must be set for token API access, or log in at /ops/login.' });
+    return null;
+  }
+
+  res.status(401).json({ success: false, error: 'Unauthorized. Log in at /ops/login or provide Authorization: Bearer <token>, X-Ops-Token, X-Api-Key, or ?token= for JSON API access.' });
+  return null;
 }
 
 function queryString(value: unknown): string {
@@ -121,8 +286,8 @@ function dashboardEnvironment(): string {
   return configured === 'mainnet' || configured === 'public' ? 'MAINNET' : 'TESTNET';
 }
 
-function tokenFromRequest(req: Request): string {
-  return queryString(req.query.token);
+function tokenFromRequest(_req: Request): string {
+  return '';
 }
 
 function dashboardFilters(req: Request): OpsDashboardFilters {
@@ -391,8 +556,93 @@ function allStatuses(records: OpsHistoryRecord[]): string[] {
 }
 
 export class OpsController {
+  async loginForm(req: Request, res: Response): Promise<void> {
+    const existing = await sessionAuth(req);
+    if (existing) {
+      res.redirect(303, safeReturnTo(req.query.return_to || '/ops'));
+      return;
+    }
+
+    const csrfToken = newToken();
+    setOpsCookie(res, OPS_CSRF_COOKIE, csrfToken, csrfTtlMs(), '/ops');
+    res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderOpsLoginPage({
+      title: 'Ops login',
+      environment: dashboardEnvironment(),
+      csrfToken,
+      returnTo: safeReturnTo(req.query.return_to),
+    }));
+  }
+
+  async login(req: Request, res: Response): Promise<void> {
+    const returnTo = safeReturnTo(req.body?.return_to || req.query.return_to);
+    const login = queryString(req.body?.login);
+
+    const renderFailure = (message: string, status = 401) => {
+      const csrfToken = newToken();
+      setOpsCookie(res, OPS_CSRF_COOKIE, csrfToken, csrfTtlMs(), '/ops');
+      res.status(status).setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(renderOpsLoginPage({
+        title: 'Ops login',
+        environment: dashboardEnvironment(),
+        csrfToken,
+        returnTo,
+        login,
+        error: message,
+      }));
+    };
+
+    if (!validLoginCsrf(req)) {
+      renderFailure('Session check failed. Refresh the login page and try again.', 403);
+      return;
+    }
+
+    try {
+      const result = await opsAdminAuthService.verifyLogin(login, req.body?.password);
+      if (!result.ok) {
+        const lockedDetail = result.reason === 'locked' && result.lockedUntil
+          ? ` Account locked until ${new Date(result.lockedUntil).toISOString()}.`
+          : '';
+        renderFailure(`Invalid operator credentials.${lockedDetail}`, result.reason === 'locked' ? 423 : 401);
+        return;
+      }
+
+      const csrfToken = newToken();
+      const sessionToken = signOpsSession(result.admin, csrfToken);
+      setOpsCookie(res, OPS_SESSION_COOKIE, sessionToken, sessionTtlMs(), '/');
+      clearOpsCookie(res, OPS_CSRF_COOKIE, '/ops');
+      res.redirect(303, returnTo);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      renderFailure(`Ops login is unavailable: ${message}`, 503);
+    }
+  }
+
+  async logout(req: Request, res: Response): Promise<void> {
+    const auth = await sessionAuth(req);
+    if (auth?.csrfToken && csrfFromHeaderOrBody(req) !== auth.csrfToken) {
+      const csrfToken = newToken();
+      clearOpsCookie(res, OPS_SESSION_COOKIE, '/');
+      setOpsCookie(res, OPS_CSRF_COOKIE, csrfToken, csrfTtlMs(), '/ops');
+      res.status(403).setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(renderOpsLoginPage({
+        title: 'Ops login',
+        environment: dashboardEnvironment(),
+        csrfToken,
+        returnTo: '/ops',
+        error: 'Logout session check failed. Sign in again before continuing.',
+      }));
+      return;
+    }
+
+    clearOpsCookie(res, OPS_SESSION_COOKIE, '/');
+    clearOpsCookie(res, OPS_CSRF_COOKIE, '/ops');
+    res.redirect(303, '/ops/login');
+  }
+
   async dashboard(req: Request, res: Response): Promise<void> {
-    if (!checkAuth(req, res)) return;
+    const auth = await requireDashboardAuth(req, res);
+    if (!auth) return;
 
     const filters = dashboardFilters(req);
     const updatedAt = new Date().toISOString();
@@ -421,21 +671,25 @@ export class OpsController {
         metrics: dashboardMetrics(history.records),
         pagination,
         sourceErrors: history.source_errors,
+        operatorLogin: auth.admin?.login || 'ops',
+        csrfToken: auth.csrfToken || '',
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).setHeader('Content-Type', 'text/html; charset=utf-8');
       res.send(renderDashboardErrorPage({
-        token: filters.token,
         environment: dashboardEnvironment(),
         updatedAt,
         error: message,
+        operatorLogin: auth.admin?.login || 'ops',
+        csrfToken: auth.csrfToken || '',
       }));
     }
   }
 
   async transferDetail(req: Request, res: Response): Promise<void> {
-    if (!checkAuth(req, res)) return;
+    const auth = await requireDashboardAuth(req, res);
+    if (!auth) return;
 
     const { transfer, events } = await orchestrator.getTransferWithEvents(req.params.id);
     const sortedEvents = [...events].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
@@ -447,11 +701,13 @@ export class OpsController {
       token: tokenFromRequest(req),
       environment: dashboardEnvironment(),
       updatedAt: new Date().toISOString(),
+      operatorLogin: auth.admin?.login || 'ops',
+      csrfToken: auth.csrfToken || '',
     }));
   }
 
   async apiListTransfers(req: Request, res: Response): Promise<void> {
-    if (!checkAuth(req, res)) return;
+    if (!await requireApiAuth(req, res)) return;
     const state = req.query.state ? String(req.query.state) : undefined;
     const limit = Math.min(parseInt(String(req.query.limit || '50'), 10) || 50, 200);
     const transfers = await transferRepository.list({ state, limit });
@@ -460,7 +716,7 @@ export class OpsController {
   }
 
   async apiListHistory(req: Request, res: Response): Promise<void> {
-    if (!checkAuth(req, res)) return;
+    if (!await requireApiAuth(req, res)) return;
     const status = queryString(req.query.status || req.query.state);
     const history = await opsHistoryRepository.list({
       source: queryString(req.query.source) || undefined,
@@ -476,13 +732,13 @@ export class OpsController {
   }
 
   async apiGetTransfer(req: Request, res: Response): Promise<void> {
-    if (!checkAuth(req, res)) return;
+    if (!await requireApiAuth(req, res)) return;
     const { transfer, events } = await orchestrator.getTransferWithEvents(req.params.id);
     res.json({ success: true, transfer, events });
   }
 
   async apiCreateTransfer(req: Request, res: Response): Promise<void> {
-    if (!checkAuth(req, res)) return;
+    if (!await requireApiAuth(req, res)) return;
     try {
       const { amount_brl_in, source_endpoint, destination_endpoint } = req.body || {};
       if (!amount_brl_in) {

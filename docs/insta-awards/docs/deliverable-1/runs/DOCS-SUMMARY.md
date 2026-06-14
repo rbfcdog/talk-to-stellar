@@ -12,6 +12,7 @@ Generated summary for `docs/insta-awards/docs/deliverable-1/runs`. Last generate
 | [`2026-06-13-1819.md`](./2026-06-13-1819.md) | Run 2026-06-13-1819 | 478 | Added a frontend admin transactions screen for the D1 transfer lifecycle records and documented the surface. No new migrations were added or run in this session. | English or mostly English. |
 | [`2026-06-14-1142-dashboard-polish.md`](./2026-06-14-1142-dashboard-polish.md) | Run 2026-06-14-1142 - Ops Dashboard Polish | 371 | Production-grade visual/UX upgrade for `/ops` and `/ops/transfers/:id`, with centralized tokens, reusable primitives, read-only fee normalization, tests, and live list screenshots. Detail screenshots remain pending because `transfers` has zero rows. | English or mostly English. |
 | [`2026-06-14-1155-evidence-export.md`](./2026-06-14-1155-evidence-export.md) | Run 2026-06-14-1155 - Database Evidence Export | 640 | Refreshed orchestration logs and transfer record JSON from a DB-backed normalized transfer mirrored from a legacy international transfer row. Evidence reaches `PAYOUT_INSTRUCTED`; final same-transfer real testnet completion remains pending. | English or mostly English. |
+| [`2026-06-14-1214-ops-admin-login.md`](./2026-06-14-1214-ops-admin-login.md) | Run 2026-06-14-1214 - Ops Admin Login | 520 | Added DB-backed `/ops/login`, HTTP-only session cookies, CSRF-protected logout, `ops_admin_users` migration/bootstrap, hash utility, tests, and updated operator docs. | English or mostly English. |
 
 ## Notes
 

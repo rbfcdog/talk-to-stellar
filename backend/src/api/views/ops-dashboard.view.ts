@@ -86,6 +86,8 @@ export type OpsDashboardRenderInput = {
   metrics: OpsDashboardMetric[];
   pagination: OpsDashboardPagination;
   sourceErrors: Partial<Record<OpsHistorySource, string>>;
+  operatorLogin: string;
+  csrfToken: string;
 };
 
 export type OpsTransferDetailRenderInput = {
@@ -94,6 +96,8 @@ export type OpsTransferDetailRenderInput = {
   token: string;
   environment: string;
   updatedAt: string;
+  operatorLogin: string;
+  csrfToken: string;
 };
 
 export function escapeHtml(value: unknown): string {
@@ -285,9 +289,17 @@ function renderPageShell(input: {
   updatedAt: string;
   body: string;
   active: 'history' | 'detail';
+  operatorLogin: string;
+  csrfToken: string;
 }): string {
   const activeHistory = input.active === 'history' ? ' aria-current="page"' : '';
   const activeDetail = input.active === 'detail' ? ' aria-current="page"' : '';
+  const logoutForm = input.csrfToken
+    ? `<form class="logout-form" method="post" action="/ops/logout">
+        <input type="hidden" name="csrf_token" value="${escapeAttr(input.csrfToken)}">
+        <button class="button button-secondary" type="submit">Log out</button>
+      </form>`
+    : '';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -311,7 +323,8 @@ function renderPageShell(input: {
     <div class="top-actions">
       <span class="environment-badge">${escapeHtml(input.environment)}</span>
       <button class="button button-secondary" type="button" data-refresh-button>Refresh</button>
-      <span class="user-chip" aria-label="Authenticated operator">Ops user</span>
+      <span class="user-chip" aria-label="Authenticated operator">${escapeHtml(input.operatorLogin || 'ops')}</span>
+      ${logoutForm}
     </div>
   </div>
 </header>
@@ -547,19 +560,21 @@ export function renderDashboardPage(input: OpsDashboardRenderInput): string {
     updatedAt: input.updatedAt,
     body,
     active: 'history',
+    operatorLogin: input.operatorLogin,
+    csrfToken: input.csrfToken,
   });
 }
 
 export function renderDashboardErrorPage(input: {
-  token: string;
   environment: string;
   updatedAt: string;
   error: string;
+  operatorLogin: string;
+  csrfToken: string;
 }): string {
-  const retryHref = input.token ? `/ops?token=${encodeURIComponent(input.token)}` : '/ops';
   const body = `<section class="error-state error-state-large" role="alert">
     <div><strong>Could not load the operations ledger.</strong><p>${escapeHtml(input.error)}</p></div>
-    <a class="button button-primary" href="${escapeAttr(retryHref)}">Retry</a>
+    <a class="button button-primary" href="/ops">Retry</a>
   </section>`;
   return renderPageShell({
     title: 'Ops dashboard unavailable',
@@ -568,6 +583,8 @@ export function renderDashboardErrorPage(input: {
     updatedAt: input.updatedAt,
     body,
     active: 'history',
+    operatorLogin: input.operatorLogin,
+    csrfToken: input.csrfToken,
   });
 }
 
@@ -768,7 +785,57 @@ export function renderTransferDetailPage(input: OpsTransferDetailRenderInput): s
     updatedAt: input.updatedAt,
     body,
     active: 'detail',
+    operatorLogin: input.operatorLogin,
+    csrfToken: input.csrfToken,
   });
+}
+
+export function renderOpsLoginPage(input: {
+  title: string;
+  environment: string;
+  csrfToken: string;
+  returnTo: string;
+  login?: string;
+  error?: string;
+}): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(input.title)}</title>
+<style>${OPS_DASHBOARD_CSS}</style>
+</head>
+<body class="login-body">
+<main class="login-frame" aria-label="Ops login">
+  <section class="login-panel">
+    <div class="login-brand">
+      ${renderBrandMark()}
+      <div>
+        <span class="environment-badge">${escapeHtml(input.environment)}</span>
+        <h1>Operator access</h1>
+        <p>Use the database-backed admin login created by migration. Dashboard tokens are not accepted on this screen.</p>
+      </div>
+    </div>
+    ${input.error ? `<div class="login-error" role="alert">${escapeHtml(input.error)}</div>` : ''}
+    <form class="login-form" method="post" action="/ops/login" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="${escapeAttr(input.csrfToken)}">
+      <input type="hidden" name="return_to" value="${escapeAttr(input.returnTo || '/ops')}">
+      <label>
+        <span>Admin login</span>
+        <input name="login" value="${escapeAttr(input.login || '')}" autocomplete="username" inputmode="email" required autofocus>
+      </label>
+      <label>
+        <span>Password</span>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="button button-primary" type="submit">Enter dashboard</button>
+    </form>
+    <p class="login-footnote">Session is stored in an HTTP-only cookie and verified against <code>ops_admin_users</code> on every dashboard request.</p>
+  </section>
+</main>
+</body>
+</html>`;
 }
 
 const OPS_DASHBOARD_CSS = `
@@ -879,6 +946,7 @@ button { cursor: pointer; }
 .top-nav a { min-height: 32px; display: inline-flex; align-items: center; border-radius: var(--ops-radius-sm); padding: 0 var(--ops-space-3); color: var(--ops-muted); font-weight: 700; }
 .top-nav a[aria-current="page"] { background: var(--ops-surface-3); color: var(--ops-text); }
 .top-actions { justify-self: end; display: flex; align-items: center; justify-content: flex-end; gap: var(--ops-space-2); flex-wrap: wrap; }
+.logout-form { margin: 0; display: inline-flex; }
 .environment-badge, .user-chip, .ops-badge, .page-chip {
   display: inline-flex;
   min-height: 28px;
@@ -959,6 +1027,47 @@ button { cursor: pointer; }
 .metric-active strong { color: var(--ops-amber); }
 .metric-success strong { color: var(--ops-green); }
 .metric-attention strong { color: var(--ops-red); }
+.login-body {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--ops-space-6);
+  background:
+    radial-gradient(circle at 16% 12%, color-mix(in oklab, var(--ops-gold) 18%, transparent), transparent 26rem),
+    linear-gradient(180deg, var(--ops-bg-raised), var(--ops-bg));
+}
+.login-frame { width: min(100%, 460px); }
+.login-panel {
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--ops-surface) 94%, white 6%), var(--ops-surface));
+  box-shadow: var(--ops-shadow);
+  padding: var(--ops-space-6);
+  display: grid;
+  gap: var(--ops-space-5);
+}
+.login-brand { display: flex; gap: var(--ops-space-4); align-items: flex-start; }
+.login-brand .brand-mark { width: 42px; height: 42px; }
+.login-brand h1 { margin: var(--ops-space-4) 0 var(--ops-space-2); font-size: 30px; line-height: 1.1; }
+.login-brand p, .login-footnote { margin: 0; color: var(--ops-muted); line-height: 1.55; }
+.login-error {
+  border: 1px solid color-mix(in oklab, var(--ops-red) 42%, var(--ops-border));
+  border-radius: var(--ops-radius);
+  background: color-mix(in oklab, var(--ops-red) 12%, var(--ops-bg));
+  color: var(--ops-text);
+  padding: var(--ops-space-3);
+}
+.login-form { display: grid; gap: var(--ops-space-4); }
+.login-form label { display: grid; gap: var(--ops-space-2); color: var(--ops-muted); font-size: 12px; font-weight: 900; }
+.login-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: color-mix(in oklab, var(--ops-bg) 88%, white 12%);
+  color: var(--ops-text);
+  padding: 0 var(--ops-space-3);
+}
 .controls-shell { padding: var(--ops-space-4); display: grid; gap: var(--ops-space-4); }
 .ops-controls { display: grid; gap: var(--ops-space-4); }
 .control-grid { display: grid; grid-template-columns: 1.1fr 1fr minmax(240px, 2fr) repeat(3, minmax(120px, 0.8fr)); gap: var(--ops-space-3); align-items: end; }

@@ -108,7 +108,7 @@ graph TD
 - Telegram: `telegram/` directory, `backend/src/api/services/notifications/`
 - Web frontend: `frontend/` (React/Next.js)
 - Landing email list: `frontend/components/landing-reluca/EarlyAccessSignup.tsx` posts through `frontend/app/api/early-access/route.ts`
-- Ops dashboard: `backend/src/api/controllers/ops.controller.ts` reads complete database transaction history through `backend/src/api/repository/ops-history.repository.ts`
+- Ops dashboard: `backend/src/api/controllers/ops.controller.ts` authenticates browser operators through `backend/src/api/services/ops-admin-auth.service.ts`, then reads complete database transaction history through `backend/src/api/repository/ops-history.repository.ts`
 - Admin transactions dashboard: `frontend/app/admin/transactions/` uses Next proxy routes under `frontend/app/api/transfers/`
 
 ### API Layer
@@ -141,6 +141,7 @@ graph TD
 - Quotes: `backend/src/api/services/brl-reference-rate.service.ts`, `brl-usd-quote.service.ts`
 - Fees: `backend/src/api/services/economy-engine.service.ts`, `platform-fee.service.ts`
 - Payout: `backend/src/api/services/usd-payout-adapters.ts`, `usd-payout-coordination.service.ts` — provider interface plus Circle Mint bank payout foundation, Bridge compatibility, Etherfuse proof, and ops mock
+- Ops admin auth: `backend/src/api/services/ops-admin-auth.service.ts` — DB-backed `/ops/login`, scrypt password hash verification, account lockout, and active-admin checks
 - Settlement: `backend/src/api/services/stellar-settlement.service.ts`
 - DeFindex: `backend/src/api/services/defindex-yield.service.ts`
 - Evolution: `backend/src/api/services/notifications/evolution.service.ts`
@@ -151,11 +152,12 @@ graph TD
 
 ### Repository
 - `backend/src/api/repository/` — all repositories (Supabase raw queries)
-- Key: `international-transfer.repository.ts`, `transfer.repository.ts` (D1 normalized lifecycle), `ops-history.repository.ts` (complete operational read model), `operation.repository.ts`, `wallet.repository.ts`, `agent.repository.ts`
+- Key: `international-transfer.repository.ts`, `transfer.repository.ts` (D1 normalized lifecycle), `ops-history.repository.ts` (complete operational read model), `ops_admin_users` table via `ops-admin-auth.service.ts`, `operation.repository.ts`, `wallet.repository.ts`, `agent.repository.ts`
 
 ### Database Migrations
-- Single SQL source of truth: `backend/migrations/20260613_00_full_schema.sql`
-- The consolidated bootstrap creates the complete current database from zero.
+- Bootstrap SQL source of truth: `backend/migrations/20260613_00_full_schema.sql`
+- Current incremental migration: `backend/migrations/20260614_00_ops_admin_auth.sql` for DB-backed ops admin login/bootstrap.
+- The migration runner applies required SQL files in sorted order.
 - Do not create parallel migrations under Supabase CLI temp paths, source-tree schema bootstrap files, or runtime startup code.
 
 ### D1 Evidence Scripts

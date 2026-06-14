@@ -42,14 +42,26 @@ The SQL migration source of truth is:
 
 ```text
 backend/migrations/20260613_00_full_schema.sql
+backend/migrations/20260614_00_ops_admin_auth.sql
 ```
 
-This is the only database bootstrap. It creates the complete current schema, functions, indexes, RLS configuration, and required seed rows for a new database.
+The first file is the database bootstrap. The second file is the current incremental migration for DB-backed ops dashboard login and optional admin bootstrap.
 
 Apply it from a trusted admin context with:
 
 ```bash
 DATABASE_URL=postgresql://... npm run migrate:required
+```
+
+To create or rotate the first ops admin during migration:
+
+```bash
+read -rs OPS_ADMIN_PASSWORD
+export OPS_ADMIN_PASSWORD
+export OPS_ADMIN_PASSWORD_HASH="$(npm run ops:hash-password --silent)"
+export OPS_ADMIN_LOGIN="admin@example.com"
+DATABASE_URL=postgresql://... npm run migrate:required
+unset OPS_ADMIN_PASSWORD OPS_ADMIN_PASSWORD_HASH
 ```
 
 Do not add parallel SQL migrations under other folders or restore runtime schema bootstraps.
