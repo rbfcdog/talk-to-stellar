@@ -276,6 +276,10 @@ export class IdempotencyService {
 }
 
 export async function idempotencyMiddleware(req: Request, res: Response, next: NextFunction) {
+  if (idempotencyRoute(req).startsWith('/ops')) {
+    return next();
+  }
+
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase())) {
     return next();
   }

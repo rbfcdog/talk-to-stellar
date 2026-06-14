@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import actionsRouter from './api/routes/actions.router';
 import { supabase } from './config/supabase';
 import { AgentRepository } from './api/repository/core/agent.repository';
@@ -30,6 +31,8 @@ import {
   sensitiveRateLimit,
 } from './api/middlewares/security.middleware';
 import { publicErrorPayload } from './utils/public-error';
+import { renderOpsLoginPage } from './api/views/ops-dashboard.view';
+import { isProductionLikeEnvironment } from './config/runtime';
 
 const app = express();
 
@@ -116,6 +119,28 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   const payload = publicErrorPayload(err, { includeSupportCode: true });
 
   logger.error(`Unhandled error ${payload.support_code}: ${errorMessage}`);
+
+  const route = String(req.originalUrl || req.url || '').split('?')[0];
+  if (route === '/ops/login' && !res.headersSent) {
+    const csrfToken = crypto.randomBytes(32).toString('base64url');
+    const environment = String(process.env.STELLAR_NETWORK || process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet').toLowerCase();
+    res.cookie('tts_ops_csrf', csrfToken, {
+      httpOnly: true,
+      secure: isProductionLikeEnvironment(),
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/ops',
+    });
+    res.status(statusCode).setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(renderOpsLoginPage({
+      title: 'Ops login',
+      environment: environment === 'mainnet' || environment === 'public' ? 'MAINNET' : 'TESTNET',
+      csrfToken,
+      returnTo: '/ops',
+      error: 'Could not open the transfers console. Try again in a few seconds.',
+    }));
+    return;
+  }
 
   res.status(statusCode).json({
     ...payload,
