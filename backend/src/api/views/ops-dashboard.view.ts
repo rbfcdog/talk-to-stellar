@@ -1,5 +1,12 @@
-import { OPS_HISTORY_SOURCES, OpsHistoryCategory, OpsHistoryRecord, OpsHistorySource } from '../repository/ops-history.repository';
+import type { OpsHistoryCategory, OpsHistoryRecord, OpsHistorySource } from '../repository/ops-history.repository';
 import { TRANSFER_STATES, Transfer, TransferEvent, TransferState } from '../../orchestration/types';
+
+export const OPS_HISTORY_SOURCES: readonly OpsHistorySource[] = [
+  'transfers',
+  'international_transfers',
+  'operations',
+  'payment_logs',
+];
 
 export const HISTORY_SOURCE_LABELS: Record<OpsHistorySource, string> = {
   transfers: 'D1 lifecycle',
