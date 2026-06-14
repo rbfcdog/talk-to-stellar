@@ -152,8 +152,25 @@
 **Diagnosis steps**:
 1. Confirm the deployed backend includes `6529ec7` or later.
 2. Open `/ops/login` with `Accept: text/html`; it should return HTML containing `Transfers console`.
-3. If the page renders but submit fails, check backend env: `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and that `backend/migrations/20260614_00_ops_admin_auth.sql` has run.
-4. If the frontend domain returns 404, follow runbook section 9 for the Next.js rewrite/env.
+3. If the page renders but submit returns "Could not open the transfers console", follow runbook section 11.
+4. If the page renders but submit shows "Ops login is unavailable", check backend env: `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and that `backend/migrations/20260614_00_ops_admin_auth.sql` has run.
+5. If the frontend domain returns 404, follow runbook section 9 for the Next.js rewrite/env.
 
 **Files**: `backend/src/api/services/ops-admin-auth.service.ts`, `backend/src/api/routes/ops.router.ts`, `backend/tests/ops.routes.test.ts`
 **Related**: Pain point #46
+
+## 11. `/ops/login` form submit returns "Could not open the transfers console" (FIXED)
+
+**Symptom**: `/ops/login` renders the `Transfers console` page, but after entering the operator email/password it returns the same page with `Could not open the transfers console. Try again in a few seconds.`
+
+**Status**: Fixed by `002ccd9`. The server-rendered `/ops` browser routes bypass backend CORS middleware so frontend-hosted form posts can reach the ops controller. JSON API routes keep normal CORS enforcement.
+
+**Diagnosis steps**:
+1. Confirm the deployed backend includes `002ccd9` or later.
+2. Confirm the frontend still rewrites `/ops` and `/ops/:path*` to the backend.
+3. Submit `/ops/login` from the frontend host. If the backend logs previously showed `CORS origin denied`, this fix is the required deployment.
+4. If the page now shows `Invalid operator credentials`, the route is working and the remaining issue is the admin row/password.
+5. If the page shows `Ops login is unavailable: JWT_SECRET is required` or a Supabase error, fix backend env or the `ops_admin_users` migration/admin row.
+
+**Files**: `backend/src/app.ts`, `backend/src/api/middlewares/security.middleware.ts`, `backend/tests/security.middleware.test.ts`
+**Related**: Pain point #47

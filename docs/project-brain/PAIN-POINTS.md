@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-13. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-43 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+44 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -346,7 +346,7 @@
 
 ---
 
-## Cluster H — Reliability (8 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (9 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -383,6 +383,15 @@
 - **Root cause**: The ops controller, ops admin auth service, and ops dashboard view imported Supabase-backed dashboard modules at module load. If backend admin DB configuration failed during route initialization, the global JSON error handler could answer before the login page rendered. Async ops routes also lacked a shared wrapper for forwarding unexpected failures consistently.
 - **Status**: **Fixed by `4b10d31`, `c4d38bd`, and `6529ec7`**. Supabase and dashboard data modules are lazy-loaded only when credential verification or an authenticated dashboard request needs them; `/ops/login` renders before database credentials are required. Ops routes now use a shared async wrapper, idempotency storage bypasses `/ops`, and the global error handler renders the transfer login HTML for `/ops/login` instead of JSON. A regression test confirms `/ops/login` returns HTML even when `JWT_SECRET` and Supabase env vars are absent, and a direct module-load check confirms `ops.router` loads with Supabase env removed.
 - **Lesson**: **Login pages must render before protected dependencies are needed**. Do dependency checks on submit, not while preparing the public form.
+
+### #47 — Ops Login Form Submit Shows HTML Error
+> **Quote**: "TESTNET Transfers console Sign in to review transfer status, payout progress, and reconciliation evidence. Could not open the transfers console. Try again in a few seconds. Operator email Password gave this still"
+> **Gloss**: `/ops/login` rendered the operator login screen, but submitting the form returned the same screen with a generic "Could not open the transfers console" error.
+
+- **Where**: `backend/src/app.ts`, `backend/src/api/middlewares/security.middleware.ts`, `backend/tests/security.middleware.test.ts`.
+- **Root cause**: The backend global CORS middleware could reject the frontend-hosted `/ops/login` form POST before the ops controller ran. The GET navigation rendered because it did not need CORS, but the POST carried an `Origin` header from the frontend rewrite host. When that origin was not configured in backend CORS env, the global error handler rendered the fallback login page error.
+- **Status**: **Fixed by `002ccd9`**. Server-rendered `/ops` browser routes now bypass CORS middleware while JSON APIs keep strict CORS behavior. `/ops` remains protected by CSRF, DB-backed admin credentials, and HTTP-only session cookies. A regression test verifies only `/ops` browser paths are marked for the bypass and `/api/ops/*` remains outside it.
+- **Lesson**: **Do not put CORS in front of same-site server-rendered form posts**. CORS is for browser API access; `/ops` HTML uses CSRF and cookie auth.
 
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
@@ -424,7 +433,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 43 documented incidents:
+Ranked by frequency × severity across the 44 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -432,19 +441,19 @@ Ranked by frequency × severity across the 43 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 4 | HIGH | Balance not credited, distribution math wrong, duplicate receipts |
-| 5 | **H — Reliability** | 8 | HIGH | Admin history incomplete, dashboard access, login rendering, migration setup, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 9 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 5 | MEDIUM | SVG spacing, shadows, charts, dark mode |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 18 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46)
+- **Confirmed fixed**: 19 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 18 of 43 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 19 of 44 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -470,3 +479,4 @@ Fixing commits verified in codebase:
 | #44 | `f321a52` | Rewrite frontend `/ops` paths to the backend ops dashboard |
 | #45 | `34ce523` | Replace implementation-facing ops login copy with transfer-focused operator copy |
 | #46 | `4b10d31`, `c4d38bd`, `6529ec7` | Render `/ops/login` before admin DB/dashboard access and keep login errors on the HTML screen |
+| #47 | `002ccd9` | Let server-rendered `/ops` browser routes bypass CORS so frontend-hosted login form POST reaches the controller |
