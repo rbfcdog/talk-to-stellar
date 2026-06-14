@@ -325,7 +325,7 @@ function renderPageShell(input: {
     </a>
     <nav class="top-nav" aria-label="Operations sections">
       <a href="/ops"${activeHistory}>Ledger</a>
-      <a href="#transfer-detail"${activeDetail}>Forensics</a>
+      ${input.active === 'detail' ? `<a href="#transfer-detail"${activeDetail}>Forensics</a>` : ''}
     </nav>
     <div class="top-actions">
       <span class="environment-badge">${escapeHtml(input.environment)}</span>
@@ -1250,6 +1250,30 @@ pre { margin: 0; max-height: 520px; overflow: auto; padding: var(--ops-space-4);
 .ops-modal, .ops-drawer { border: 1px solid var(--ops-border); border-radius: var(--ops-radius); background: var(--ops-surface); color: var(--ops-text); box-shadow: var(--ops-shadow-hover); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+@media print {
+  *, *::before, *::after { background: #fff !important; color: #000 !important; box-shadow: none !important; border-color: #ccc !important; }
+  body { font-size: 11px; line-height: 1.4; }
+  .ops-topbar, .top-actions, .button, .controls-shell, .toast-region, .skip-link, .pagination, .copy-button, .logout-form, .raw-panel, details summary, .json-toolbar { display: none !important; }
+  .ops-frame { max-width: 100%; width: 100%; padding: 0; gap: 12px; }
+  .page-heading h1 { font-size: 18px; }
+  .metric-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .metric-card { min-height: 0; padding: 6px 8px; border: 1px solid #ccc; }
+  .metric-card strong { font-size: 16px; }
+  .detail-layout { grid-template-columns: 1fr; gap: 12px; }
+  .panel { padding: 8px; border: 1px solid #ccc; break-inside: avoid; }
+  .stage-rail { break-inside: avoid; }
+  .timeline-event { break-inside: avoid; }
+  .timeline-event article { border: 1px solid #ccc; }
+  table { font-size: 10px; min-width: 0; }
+  th, td { padding: 4px 6px; }
+  thead { display: table-header-group; }
+  .back-link { display: none; }
+  .side-panels { break-inside: avoid; }
+  .reconciliation-banner { border: 1px solid #ccc; }
+  .fee-table { border: 1px solid #ccc; }
+  .evidence-list div { border-bottom: 1px solid #ccc; }
+  @page { margin: 12mm; size: A4; }
 }
 @media (max-width: 1120px) {
   .topbar-inner { grid-template-columns: 1fr; }
