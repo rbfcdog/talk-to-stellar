@@ -21,28 +21,36 @@ Status: screenshot capture pending after the real testnet evidence transfer.
    npm run dev
    ```
 
-3. Optional frontend admin console:
+3. Start the frontend with the backend proxy target configured:
 
    ```bash
    cd frontend
-   npm run dev
+   BACKEND_URL=http://localhost:3001 npm run dev
    ```
 
-4. Open the backend ops dashboard:
+4. Open the ops dashboard on the frontend host:
+
+   ```text
+   http://localhost:3000/ops/login
+   ```
+
+   Sign in with the bootstrapped `OPS_ADMIN_LOGIN`, then open `/ops?source=transfers`. The Next.js rewrite forwards `/ops` and `/ops/*` to the backend while keeping the frontend URL.
+
+5. Backend-direct fallback:
 
    ```text
    http://localhost:3001/ops/login
    ```
 
-   Sign in with the bootstrapped `OPS_ADMIN_LOGIN`, then open `/ops?source=transfers`.
-
-5. Open the frontend admin transactions dashboard:
+6. Open the frontend admin transactions dashboard:
 
    ```text
    http://localhost:3000/admin/transactions
    ```
 
    Paste the same `<review-token>` into the token prompt. The frontend calls the database-backed transfer API through `/api/transfers`; the Next.js proxy forwards it as `X-Ops-Token`.
+
+For local development without the inline env, set `BACKEND_URL=http://localhost:3001` or `NEXT_PUBLIC_BACKEND_URL=http://localhost:3001` in the frontend environment and restart/redeploy the frontend.
 
 Browser auth is DB-backed through `public.ops_admin_users` and an HTTP-only session cookie. Token auth remains available only for JSON API clients:
 - `Authorization: Bearer <review-token>`
@@ -80,7 +88,7 @@ Use the same completed transfer for dashboard screenshots, orchestration logs, a
 
 1. Apply migrations from `docs/insta-awards/docs/deliverable-1/MIGRATIONS.md`.
 2. Execute the real testnet transfer flow with `LOG_FILE` set.
-3. Open `/ops/login`, sign in, then open `/ops?source=transfers` and capture `dashboard-list.png`.
+3. Open `http://localhost:3000/ops/login`, sign in, then open `/ops?source=transfers` and capture `dashboard-list.png`.
 4. Open the row for the completed `public_ref` and capture `dashboard-detail.png`.
 5. Open `/admin/transactions`, select the same completed transfer, and capture an optional frontend admin screenshot if reviewers ask for a richer dashboard view.
 6. Save all screenshots in `docs/insta-awards/deliverable-1/evidence/`.
