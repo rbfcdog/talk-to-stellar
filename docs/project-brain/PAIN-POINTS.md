@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-13. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-39 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+40 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -337,7 +337,7 @@
 
 ---
 
-## Cluster H — Reliability (5 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (6 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -347,6 +347,15 @@
 - **Root cause**: `/ops` reads only the new `transfers` and `transfer_events` tables. Historical and non-D1 transactions are persisted in `operations`, `payment_logs`, and `international_transfers`, so the dashboard can show zero while transaction history exists elsewhere in the database.
 - **Status**: **Fixed in current working tree; commit pending**. `ops-history.repository.ts` aggregates every row from `transfers`, `international_transfers`, `operations`, and `payment_logs`; `/ops` now renders the unified history. Verified against configured Supabase on 2026-06-13: 1,540 records loaded (1,482 operations, 56 payment logs, 2 international transfers, 0 normalized transfers).
 - **Lesson**: **Operations history screens must aggregate every authoritative transaction table**. A lifecycle-specific table cannot be presented as the complete database ledger.
+
+### #43 — Supabase SQL Editor Rejects Ops Admin Migration
+> **Quote**: "Failed to run sql query: ERROR:  42601: syntax error at or near \"\\\" LINE 160: \\if :{?ops_admin_login}" and "gaver this when running migration"
+> **Gloss**: Applying the ops admin auth migration in Supabase SQL Editor failed because the migration contained `psql` backslash meta-commands.
+
+- **Where**: `backend/migrations/20260614_00_ops_admin_auth.sql:160`, `backend/scripts/run-required-migrations.ts`.
+- **Root cause**: The migration mixed plain PostgreSQL with `psql` client directives (`\if`, `\echo`, variable interpolation). Those commands work only inside the `psql` CLI and are rejected by Supabase SQL Editor.
+- **Status**: **Fixed by `949db79`**. `backend/migrations/20260614_00_ops_admin_auth.sql` is now plain SQL only. `backend/scripts/run-required-migrations.ts` performs optional admin bootstrap as a separate `select public.upsert_ops_admin_user(...)` step after migrations.
+- **Lesson**: **Migrations must be plain SQL unless clearly marked runner-only**. Supabase SQL Editor compatibility is required for founder/reviewer setup.
 
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
@@ -388,7 +397,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 39 documented incidents:
+Ranked by frequency × severity across the 40 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -396,19 +405,19 @@ Ranked by frequency × severity across the 39 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 4 | HIGH | Balance not credited, distribution math wrong, duplicate receipts |
-| 5 | **H — Reliability** | 5 | HIGH | Admin history incomplete, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 6 | HIGH | Admin history incomplete, migration setup, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 5 | MEDIUM | SVG spacing, shadows, charts, dark mode |
 | 7 | **F — Copy & Verbosity** | 4 | MEDIUM | "Summary" banned, stray words, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 14 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42)
+- **Confirmed fixed**: 15 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 14 of 39 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 15 of 40 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -430,3 +439,4 @@ Fixing commits verified in codebase:
 | #33 | `0da597da` | Deduplicate PIX auto-pay receipts (DB + in-memory) |
 | #40 | Via config | Admin fee wallet configured via `TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY` |
 | #42 | Commit pending | Aggregate all authoritative transaction tables in `/ops`; verified 1,540 live database records |
+| #43 | `949db79` | Make ops admin auth migration plain SQL for Supabase SQL Editor; move bootstrap to runner/function call |

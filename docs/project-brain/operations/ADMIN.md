@@ -6,7 +6,7 @@
 
 - **URL**: `http://localhost:3001/ops`
 - **Browser auth**: `GET /ops` redirects to `GET /ops/login`. The login is checked against `public.ops_admin_users`, then stored in an HTTP-only, SameSite=Lax cookie.
-- **Admin bootstrap**: generate `OPS_ADMIN_PASSWORD_HASH` with `npm --prefix backend run ops:hash-password`, then run `OPS_ADMIN_LOGIN=... OPS_ADMIN_PASSWORD_HASH=... DATABASE_URL=... npm --prefix backend run migrate:required`.
+- **Admin bootstrap**: generate `OPS_ADMIN_PASSWORD_HASH` with `npm --prefix backend run ops:hash-password`, then run `OPS_ADMIN_LOGIN=... OPS_ADMIN_PASSWORD_HASH=... DATABASE_URL=... npm --prefix backend run migrate:required`. If applying migrations in Supabase SQL Editor, run `backend/migrations/20260614_00_ops_admin_auth.sql` first, then call `select public.upsert_ops_admin_user(lower('admin@example.com'), 'generated-salt-hash', null);`.
 - **Compatibility API auth**: `OPS_DASHBOARD_TOKEN` or `TRANSFER_API_TOKEN` still works for JSON clients through bearer/header/query token. Browser dashboard entry should use the DB login, not a query token.
 
 ### Features

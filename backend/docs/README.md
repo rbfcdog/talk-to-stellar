@@ -45,7 +45,7 @@ backend/migrations/20260613_00_full_schema.sql
 backend/migrations/20260614_00_ops_admin_auth.sql
 ```
 
-The first file is the database bootstrap. The second file is the current incremental migration for DB-backed ops dashboard login and optional admin bootstrap.
+The first file is the database bootstrap. The second file is the current incremental migration for DB-backed ops dashboard login. Admin creation runs as a separate `public.upsert_ops_admin_user(...)` call or through the migration runner after the SQL files apply.
 
 Apply it from a trusted admin context with:
 

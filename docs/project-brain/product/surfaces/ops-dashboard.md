@@ -43,6 +43,7 @@ This matches the existing `tts-op-page` dark operations language in `frontend/ap
 ## Current Behavior
 
 - `/ops/login` is the browser entry point. It uses a CSRF cookie + hidden token, checks the submitted login/password against `public.ops_admin_users`, then signs a short-lived HTTP-only session cookie with `JWT_SECRET`.
+- `backend/migrations/20260614_00_ops_admin_auth.sql` is plain SQL so it can run in Supabase SQL Editor. The first admin is created by `public.upsert_ops_admin_user(...)` after the migration, or automatically by `backend/scripts/run-required-migrations.ts` when `OPS_ADMIN_LOGIN` and `OPS_ADMIN_PASSWORD_HASH` are set.
 - `/ops` and `/ops/transfers/:id` no longer accept query-token browser entry; unauthenticated requests redirect to `/ops/login`.
 - `OPS_DASHBOARD_TOKEN` / `TRANSFER_API_TOKEN` remain compatibility auth for JSON API clients, not the operator browser workflow.
 - `/ops` renders a production-grade ledger console with top bar, environment badge, refresh control, metrics, controls, status legend, sortable table, pagination, copy buttons, relative timestamps, and responsive stacked mobile rows.

@@ -15,7 +15,7 @@ Replaced browser dashboard entry through query token with a DB-backed admin logi
 | `backend/migrations/20260614_00_ops_admin_auth.sql` | Added `ops_admin_users`, RLS, service-role-only policy, and `upsert_ops_admin_user(...)`. |
 | `backend/migrations/20260613_00_full_schema.sql` | Added the ops admin auth schema to fresh bootstrap. |
 | `backend/scripts/hash-ops-admin-password.ts` | Added password hash utility for admin bootstrap. |
-| `backend/scripts/run-required-migrations.ts` | Applies required SQL files in order and passes optional admin bootstrap variables into psql. |
+| `backend/scripts/run-required-migrations.ts` | Applies required SQL files in order and can create or rotate the first ops admin after migrations. |
 | `backend/tests/ops.routes.test.ts` | Added DB-backed login, CSRF, session-cookie, and redirect coverage. |
 | `backend/.env.example` | Added ops admin login/session env vars. |
 | `docs/project-brain/**` and D1/D3 docs | Updated auth, migration, and dashboard instructions. |
@@ -32,6 +32,8 @@ Replaced browser dashboard entry through query token with a DB-backed admin logi
 - Unsafe JSON requests authenticated by cookie require `X-Ops-Csrf`; bearer/header/query token clients remain compatible.
 
 ## Admin Bootstrap
+
+Note: `2026-06-14-1357-ops-admin-migration-supabase-fix.md` later moved the optional admin creation out of the SQL migration file so Supabase SQL Editor can run the migration directly. The migration runner command below still works.
 
 ```bash
 cd backend

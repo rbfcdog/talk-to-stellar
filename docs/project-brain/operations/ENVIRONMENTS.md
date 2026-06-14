@@ -139,7 +139,7 @@ cd backend
 DATABASE_URL=postgresql://... npm run migrate:required
 ```
 
-`backend/migrations/20260613_00_full_schema.sql` is the bootstrap schema source and includes the D1 lifecycle tables/RPCs. `backend/migrations/20260614_00_ops_admin_auth.sql` adds the DB-backed ops admin login and optional admin bootstrap. The migration runner applies required SQL files in sorted order. There is no generic rollback SQL; take a backup before applying to an existing database.
+`backend/migrations/20260613_00_full_schema.sql` is the bootstrap schema source and includes the D1 lifecycle tables/RPCs. `backend/migrations/20260614_00_ops_admin_auth.sql` adds the DB-backed ops admin login as plain SQL for Supabase SQL Editor compatibility. The migration runner applies required SQL files in sorted order and can create or rotate the first admin after the migrations when `OPS_ADMIN_LOGIN` and `OPS_ADMIN_PASSWORD_HASH` are set. There is no generic rollback SQL; take a backup before applying to an existing database.
 
 ## Ports
 
