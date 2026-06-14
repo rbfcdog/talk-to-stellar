@@ -17,10 +17,10 @@ Current provider focus:
 
 | Evidence | Status | Current artifact |
 |----------|--------|------------------|
-| Adapter Interface Code | Ready for code review | `backend/src/api/services/usd-payout-adapters.ts`, `backend/tests/payout-adapter-contract.test.ts` |
-| Hash Transação Stellar | Pending | Needs an end-to-end transfer with confirmed Stellar settlement hash |
-| Integração Circle/Bridge | Circle foundation ready; sandbox evidence pending | `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`, `GET /api/transfers/payout-providers` |
-| Payout Instructions | Pending live transfer evidence | `POST /api/transfers/:id/payout-instruction`, `GET /api/transfers/:id/payout-evidence` |
+| Adapter Interface Code | Ready for code review | `backend/src/api/services/usd-payout-adapters.ts`, `backend/tests/payout-adapter-contract.test.ts`, `SUBMISSION-CHECKLIST.md` |
+| Hash Transação Stellar | Pending | Needs an end-to-end transfer with confirmed Stellar settlement hash; capture using `SUBMISSION-CHECKLIST.md` |
+| Integração Circle/Bridge | Circle foundation ready; sandbox evidence pending | `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`, `GET /api/transfers/payout-providers`, `SUBMISSION-CHECKLIST.md` |
+| Payout Instructions | Pending live transfer evidence | `POST /api/transfers/:id/payout-instruction`, `GET /api/transfers/:id/payout-evidence`, `SUBMISSION-CHECKLIST.md` |
 
 ## Implementation Map
 
@@ -53,6 +53,10 @@ Keep `ENABLE_REAL_PAYOUT_EXECUTION=false` for compatibility evidence. Set it to 
 npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts
 npm --prefix backend run build
 ```
+
+## Evidence Assembly
+
+Use `SUBMISSION-CHECKLIST.md` to build the final reviewer package. It lists the exact files, commands, SQL queries, API responses, dashboard screenshot, and claim boundaries needed for each requested artifact.
 
 ## Remaining Evidence Work
 
