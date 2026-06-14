@@ -1,6 +1,8 @@
 -- Ops dashboard DB-backed admin login.
--- Pass OPS_ADMIN_LOGIN and OPS_ADMIN_PASSWORD_HASH to backend/scripts/run-required-migrations.ts
--- to create or rotate the first admin without committing secrets.
+-- This migration intentionally contains only plain SQL so it can run in the
+-- Supabase SQL Editor as well as through psql. Create or rotate the first
+-- admin separately with public.upsert_ops_admin_user(...), or by passing
+-- OPS_ADMIN_LOGIN and OPS_ADMIN_PASSWORD_HASH to backend/scripts/run-required-migrations.ts.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -156,13 +158,3 @@ BEGIN
     GRANT EXECUTE ON FUNCTION public.upsert_ops_admin_user(TEXT, TEXT, TEXT) TO service_role;
   END IF;
 END $$;
-
-\if :{?ops_admin_login}
-\if :{?ops_admin_password_hash}
-SELECT public.upsert_ops_admin_user(:'ops_admin_login', :'ops_admin_password_hash', NULL);
-\else
-\echo 'OPS_ADMIN_LOGIN provided without OPS_ADMIN_PASSWORD_HASH; skipping ops admin bootstrap.'
-\endif
-\else
-\echo 'OPS_ADMIN_LOGIN not provided; ops_admin_users table created without bootstrapping an admin.'
-\endif

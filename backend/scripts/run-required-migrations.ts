@@ -35,12 +35,17 @@ if (!migrationPaths.length) {
   process.exit(1);
 }
 
-const psqlVars = ['ON_ERROR_STOP=1'];
 const opsAdminLogin = String(process.env.OPS_ADMIN_LOGIN || '').trim();
 const opsAdminPasswordHash = String(process.env.OPS_ADMIN_PASSWORD_HASH || '').trim();
 
-if (opsAdminLogin) psqlVars.push(`ops_admin_login=${opsAdminLogin.toLowerCase()}`);
-if (opsAdminPasswordHash) psqlVars.push(`ops_admin_password_hash=${opsAdminPasswordHash}`);
+function sqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+if ((opsAdminLogin && !opsAdminPasswordHash) || (!opsAdminLogin && opsAdminPasswordHash)) {
+  console.error('OPS_ADMIN_LOGIN and OPS_ADMIN_PASSWORD_HASH must be provided together to bootstrap the ops admin.');
+  process.exit(1);
+}
 
 console.log('Required migrations:');
 for (const migrationPath of migrationPaths) {
@@ -69,11 +74,37 @@ for (const migrationPath of migrationPaths) {
     'psql',
     [
       databaseUrl,
-      ...psqlVars.flatMap((entry) => ['-v', entry]),
+      '-v',
+      'ON_ERROR_STOP=1',
       '-f',
       migrationPath,
     ],
     { stdio: 'inherit' }
+  );
+
+  if (result.error) {
+    console.error(`Could not execute psql: ${result.error.message}`);
+    process.exit(1);
+  }
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+if (opsAdminLogin && opsAdminPasswordHash) {
+  console.log(`Creating or rotating ops admin login ${opsAdminLogin.toLowerCase()}...`);
+  const result = spawnSync(
+    'psql',
+    [
+      databaseUrl,
+      '-v',
+      'ON_ERROR_STOP=1',
+    ],
+    {
+      input: `SELECT public.upsert_ops_admin_user(${sqlLiteral(opsAdminLogin.toLowerCase())}, ${sqlLiteral(opsAdminPasswordHash)}, NULL);\n`,
+      stdio: ['pipe', 'inherit', 'inherit'],
+    }
   );
 
   if (result.error) {
