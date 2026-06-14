@@ -27,6 +27,7 @@ import { initBridgeService } from './integrations/bridge';
 import {
   buildCorsOptions,
   globalRateLimit,
+  isOpsBrowserRoutePath,
   securityHeaders,
   sensitiveRateLimit,
 } from './api/middlewares/security.middleware';
@@ -43,8 +44,16 @@ logger.info('Database schema is managed by backend/migrations/20260613_00_full_s
 const corsOptions = buildCorsOptions();
 
 app.use(securityHeaders);
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+function corsUnlessOpsBrowserRoute(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (isOpsBrowserRoutePath(req.path || req.originalUrl || req.url)) {
+    next();
+    return;
+  }
+  cors(corsOptions)(req, res, next);
+}
+
+app.use(corsUnlessOpsBrowserRoute);
+app.options('*', corsUnlessOpsBrowserRoute);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(globalRateLimit);
