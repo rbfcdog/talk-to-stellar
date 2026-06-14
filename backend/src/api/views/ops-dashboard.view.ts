@@ -813,8 +813,8 @@ export function renderOpsLoginPage(input: {
       ${renderBrandMark()}
       <div>
         <span class="environment-badge">${escapeHtml(input.environment)}</span>
-        <h1>Operator access</h1>
-        <p>Use the database-backed admin login created by migration. Dashboard tokens are not accepted on this screen.</p>
+        <h1>Transfers console</h1>
+        <p>Sign in to review transfer status, payout progress, and reconciliation evidence.</p>
       </div>
     </div>
     ${input.error ? `<div class="login-error" role="alert">${escapeHtml(input.error)}</div>` : ''}
@@ -822,16 +822,16 @@ export function renderOpsLoginPage(input: {
       <input type="hidden" name="csrf_token" value="${escapeAttr(input.csrfToken)}">
       <input type="hidden" name="return_to" value="${escapeAttr(input.returnTo || '/ops')}">
       <label>
-        <span>Admin login</span>
+        <span>Operator email</span>
         <input name="login" value="${escapeAttr(input.login || '')}" autocomplete="username" inputmode="email" required autofocus>
       </label>
       <label>
         <span>Password</span>
         <input name="password" type="password" autocomplete="current-password" required>
       </label>
-      <button class="button button-primary" type="submit">Enter dashboard</button>
+      <button class="button button-primary" type="submit">Open transfers</button>
     </form>
-    <p class="login-footnote">Session is stored in an HTTP-only cookie and verified against <code>ops_admin_users</code> on every dashboard request.</p>
+    <p class="login-footnote">For authorized transfer operators. Use this console to follow live transfers from intake to payout.</p>
   </section>
 </main>
 </body>
