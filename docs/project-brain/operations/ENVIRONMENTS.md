@@ -46,6 +46,12 @@ OPENAI_API_KEY                     # GPT-4o
 OPENAI_MODEL=gpt-4o
 ```
 
+### Frontend Proxy
+```
+BACKEND_URL                        # Server-side Next.js rewrites/proxies to backend, including /ops
+NEXT_PUBLIC_BACKEND_URL            # Browser-visible fallback for client/API proxy routes
+```
+
 ### Stellar
 ```
 STELLAR_NETWORK=TESTNET            # TESTNET or MAINNET

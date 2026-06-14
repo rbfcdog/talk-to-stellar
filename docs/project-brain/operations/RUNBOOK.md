@@ -125,3 +125,20 @@
 
 **Files**: `backend/migrations/20260614_00_ops_admin_auth.sql`, `backend/scripts/run-required-migrations.ts`
 **Related**: Pain point #43
+
+## 9. Frontend `/ops/login` returns Next.js 404 (FIXED)
+
+**Symptom**: Opening `/ops/login` on the frontend host shows "This page could not be found."
+
+**Status**: Fixed by `f321a52`. The frontend now rewrites `/ops` and `/ops/:path*` to the backend ops dashboard.
+
+**Diagnosis steps**:
+1. Confirm backend route exists: `backend/src/api/routes/ops.router.ts` has `opsRouter.get('/ops/login', ...)`.
+2. Confirm frontend rewrite exists: `frontend/next.config.mjs` has rewrites for `/ops` and `/ops/:path*`.
+3. Confirm the frontend environment has `BACKEND_URL` or `NEXT_PUBLIC_BACKEND_URL` pointing to the backend origin.
+4. Rebuild/redeploy the frontend; Next.js config rewrites are not picked up by an already-running production server.
+
+**Fix**: `frontend/next.config.mjs` proxies the browser ops paths to the backend while keeping the same frontend URL and cookie scope.
+
+**Files**: `frontend/next.config.mjs`, `backend/src/api/routes/ops.router.ts`
+**Related**: Pain point #44

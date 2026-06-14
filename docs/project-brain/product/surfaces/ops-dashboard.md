@@ -6,6 +6,7 @@
 
 ```
 Operator opens /ops
+  -> Frontend rewrites /ops and /ops/* to the backend when served from the Next.js host
   -> Redirected to /ops/login if no valid ops session cookie
   -> Login is checked against ops_admin_users
   -> Backend sets an HTTP-only SameSite=Lax ops session cookie
@@ -43,6 +44,7 @@ This matches the existing `tts-op-page` dark operations language in `frontend/ap
 ## Current Behavior
 
 - `/ops/login` is the browser entry point. It uses a CSRF cookie + hidden token, checks the submitted login/password against `public.ops_admin_users`, then signs a short-lived HTTP-only session cookie with `JWT_SECRET`.
+- The deployed frontend serves `/ops/login` through the `frontend/next.config.mjs` rewrite to the backend. The frontend environment must set `BACKEND_URL` or `NEXT_PUBLIC_BACKEND_URL` to the backend origin.
 - `backend/migrations/20260614_00_ops_admin_auth.sql` is plain SQL so it can run in Supabase SQL Editor. The first admin is created by `public.upsert_ops_admin_user(...)` after the migration, or automatically by `backend/scripts/run-required-migrations.ts` when `OPS_ADMIN_LOGIN` and `OPS_ADMIN_PASSWORD_HASH` are set.
 - `/ops` and `/ops/transfers/:id` no longer accept query-token browser entry; unauthenticated requests redirect to `/ops/login`.
 - `OPS_DASHBOARD_TOKEN` / `TRANSFER_API_TOKEN` remain compatibility auth for JSON API clients, not the operator browser workflow.
