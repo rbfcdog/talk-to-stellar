@@ -85,6 +85,11 @@ export function buildCorsOptions(env: NodeJS.ProcessEnv = process.env): CorsOpti
   };
 }
 
+export function isOpsBrowserRoutePath(path: unknown): boolean {
+  const route = String(path || '').split('?')[0];
+  return route === '/ops' || route.startsWith('/ops/');
+}
+
 export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
