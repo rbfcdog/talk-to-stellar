@@ -56,8 +56,18 @@ export async function proxyBackendApi(
     ...sessionHeaders,
   };
   if (options.forwardTransferOpsAuthorization) {
-    const opsSecret = req.headers.get("x-international-transfer-ops-secret");
-    if (opsSecret) headers["x-international-transfer-ops-secret"] = opsSecret;
+    const forwardedAuthHeaders = [
+      "authorization",
+      "x-international-transfer-ops-secret",
+      "x-ops-token",
+      "x-api-key",
+    ];
+    for (const headerName of forwardedAuthHeaders) {
+      const value = req.headers.get(headerName);
+      if (value) headers[headerName] = value;
+    }
+    const queryToken = req.nextUrl.searchParams.get("token");
+    if (queryToken && !headers["x-ops-token"]) headers["x-ops-token"] = queryToken;
   }
   for (const headerName of options.forwardHeaders || []) {
     const value = req.headers.get(headerName);

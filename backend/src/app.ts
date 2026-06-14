@@ -5,7 +5,6 @@ import { supabase } from './config/supabase';
 import { AgentRepository } from './api/repository/core/agent.repository';
 import { createAgentRoutes } from './api/agent/routes';
 import { logger } from './utils/logger';
-import { runMigrations } from './utils/migrate';
 import externalRouter from './api/routes/external.router';
 import authRouter from './api/routes/auth.router';
 import passkeyRouter from './api/routes/passkey.router';
@@ -15,8 +14,10 @@ import rampRouter from './api/routes/ramp.router';
 import evolutionRouter from './api/routes/evolution.router';
 import bridgeWebhookRouter from './api/routes/bridge-webhook.router';
 import quotesRouter from './api/routes/quotes.router';
+import earlyAccessRouter from './api/routes/early-access.router';
 import internationalTransfersRouter from './api/routes/international-transfers.router';
 import webhooksRouter from './api/routes/webhooks.router';
+import { opsRouter } from './api/routes/ops.router';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import { FxRateAlertService } from './api/services/fx-rate-alert.service';
@@ -28,22 +29,13 @@ import {
   securityHeaders,
   sensitiveRateLimit,
 } from './api/middlewares/security.middleware';
-import { readBooleanEnv } from './config/runtime';
 import { publicErrorPayload } from './utils/public-error';
 
 const app = express();
 
 app.set('trust proxy', 1);
 
-// Legacy startup migrations used exec_sql and disabled RLS. Keep them opt-in only.
-if (readBooleanEnv(process.env.RUN_LEGACY_STARTUP_MIGRATIONS)) {
-  runMigrations(supabase).catch((error) => {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Failed to run migrations: ${errorMessage}`);
-  });
-} else {
-  logger.info('Legacy startup migrations disabled. Run database migrations explicitly from a trusted admin context.');
-}
+logger.info('Database schema is managed by backend/migrations/20260613_00_full_schema.sql.');
 
 const corsOptions = buildCorsOptions();
 
@@ -53,7 +45,7 @@ app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(globalRateLimit);
-app.use(['/api/passkeys', '/api/security', '/api/external/recovery', '/api/external/link-existing', '/api/auth'], sensitiveRateLimit);
+app.use(['/api/passkeys', '/api/security', '/api/external/recovery', '/api/external/link-existing', '/api/auth', '/api/early-access'], sensitiveRateLimit);
 app.use(idempotencyMiddleware);
 
 app.get('/health', (req, res) => {
@@ -85,12 +77,14 @@ app.use('/api/security', securityRouter);
 app.use('/api/financial', financialRouter);
 app.use('/api/ramp', rampRouter);
 app.use('/api/quotes', quotesRouter);
+app.use('/api/early-access', earlyAccessRouter);
 app.use('/api/transfers', internationalTransfersRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/evolution', evolutionRouter);
 app.use('/webhook/evolution', evolutionRouter);
 app.use('/webhook/bridge', bridgeWebhookRouter);
 app.use('/webhooks', webhooksRouter);
+app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
@@ -103,6 +97,14 @@ EvolutionService.startOutboundDeliveryWorker();
 initBridgeService();
 logger.info('[evolution-startup] Evolution services registered (auto-config, inbound worker, outbound worker)');
 
+// Start Stellar settlement watcher (lazy — won't crash if transfers table doesn't exist yet)
+import('./orchestration/stellarWatcher').then(({ stellarWatcher }) => {
+  stellarWatcher.start();
+  logger.info('[stellar-watcher] Stellar settlement watcher started');
+}).catch((err: any) => {
+  logger.warn(`[stellar-watcher] Could not start: ${err.message}`);
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
@@ -112,9 +114,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   const errorMessage = err instanceof Error ? err.message : String(err);
   const statusCode = err.statusCode || err.status || 500;
   const payload = publicErrorPayload(err, { includeSupportCode: true });
-  
+
   logger.error(`Unhandled error ${payload.support_code}: ${errorMessage}`);
-  
+
   res.status(statusCode).json({
     ...payload,
     error: payload.message,

@@ -170,6 +170,31 @@ const c = {
     stat3Value: { "pt-BR": "4%", en: "4%" },
     stat3Label: { "pt-BR": "Economia média em taxas", en: "Average fee savings" },
   },
+  earlyAccess: {
+    eyebrow: { "pt-BR": "Acesso antecipado", en: "Early access" },
+    title: { "pt-BR": "Entre na lista privada", en: "Join the private list" },
+    subtitle: {
+      "pt-BR": "Receba o convite quando abrirmos novos testes de conversão PIX, dólar e multiativos.",
+      en: "Get the invite when we open new Pix, dollar, and multi-asset conversion tests.",
+    },
+    label: { "pt-BR": "E-mail", en: "Email" },
+    placeholder: { "pt-BR": "seu@email.com", en: "you@example.com" },
+    submit: { "pt-BR": "Entrar na lista", en: "Join list" },
+    submitting: { "pt-BR": "Salvando", en: "Saving" },
+    success: {
+      "pt-BR": "Lista recebida. Vamos te avisar quando abrirmos mais vagas.",
+      en: "You are on the list. We will tell you when more spots open.",
+    },
+    invalid: { "pt-BR": "Informe um e-mail válido para entrar na lista.", en: "Enter a valid email to join the list." },
+    error: {
+      "pt-BR": "Não consegui salvar seu e-mail agora. Tente novamente em alguns segundos.",
+      en: "Could not save your email right now. Try again in a few seconds.",
+    },
+    privacy: {
+      "pt-BR": "Sem spam. Só convite e atualizações importantes.",
+      en: "No spam. Only invites and important updates.",
+    },
+  },
   footer: {
     description: {
       "pt-BR": "Sua conta local com o poder de uma carteira global. Dolarize seu capital em segundos.",

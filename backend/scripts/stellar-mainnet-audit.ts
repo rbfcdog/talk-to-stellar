@@ -57,7 +57,7 @@ const findings: Finding[] = [];
 
 const wrongPassphraseFiles = filesMatching((_file, text) =>
   /Public Global Stellar Network ; May 2015|Test StellarNetwork ; September 2015/.test(text)
-).filter((file) => file !== 'backend/scripts/stellar-mainnet-audit.ts' && file !== 'docs/STELLAR_MAINNET_HARDENING_SCAN.md');
+).filter((file) => file !== 'backend/scripts/stellar-mainnet-audit.ts' && file !== 'docs/stellar/STELLAR_MAINNET_HARDENING_SCAN.md');
 addFinding(findings, {
   id: 'stellar-passphrase-drift',
   severity: 'critical',

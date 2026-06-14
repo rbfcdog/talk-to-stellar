@@ -1,0 +1,16 @@
+{
+  "name": "dentpeg-pix",
+  "version": "1.0.0",
+  "description": "DentPeg PIX Deposit — create PIX charges, get QR codes, and receive DePix/USDT/USDC on mainnet",
+  "license": "ISC",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "dev": "node --watch --env-file=.env server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "qrcode": "^1.5.4"
+  }
+}

@@ -1,0 +1,28 @@
+# Documentation Summary: security
+
+Generated summary for `docs/security`. Last generated: 2026-06-14.
+
+## Markdown Files
+
+| File | Title | Words | Summary | Language note |
+|------|-------|-------|---------|---------------|
+| [`CUSTODIAL.md`](./CUSTODIAL.md) | Arquitetura não-custodial com PIN + Passkey | 1139 | Converter o TalkToStellar para um modelo não-custodial, onde: o usuário é o único dono da chave Stellar; | Portuguese text remains in source; review for translation. |
+| [`EMAIL_CONFIRMATION_PRODUCTION.md`](./EMAIL_CONFIRMATION_PRODUCTION.md) | Email Verification For Production | 271 | TalkToStellar can require a one-time e-mail code before account creation or login links are finalized. The code is stored only as an HMAC hash in `public.email_confirmations`, expires by default after 10 minutes, and is marked as used after confirmation. Use o... | English or mostly English. |
+| [`PASSKEY_ENROLLMENT_SECURITY_FIX.md`](./PASSKEY_ENROLLMENT_SECURITY_FIX.md) | Correção de Segurança: Passkey/WebAuthn Enrollment | 135 | O cadastro de uma nova passkey podia ser iniciado e concluído informando apenas `email` ou `user_id`. A validação criptográfica do WebAuthn estava correta, mas faltava provar que quem estava registrando a credencial controlava a conta. Um atacante que soubesse... | English or mostly English. |
+| [`SECURITY_AUDIT_CHALLENGE_1.md`](./SECURITY_AUDIT_CHALLENGE_1.md) | Desafio 1 - Auditoria de Seguranca | 1229 | Foi identificada uma vulnerabilidade critica de takeover de conta no fluxo de redefinicao de PIN. Antes da correcao, o endpoint publico `POST /api/security/reset-pin-init` aceitava apenas `user_id` e `session_id`, gerava um token de redefinicao e devolvia esse... | English or mostly English. |
+| [`SECURITY_AUDIT_CHALLENGE_2.md`](./SECURITY_AUDIT_CHALLENGE_2.md) | Security Audit Challenge 2 | 153 | Vulnerabilidade critica encontrada e corrigida: o endpoint POST /api/agent/query era publico e, quando a requisicao chegava com source telegram ou whatsapp, o backend confiava no metadata.from_id enviado pelo proprio cliente para adotar a sessao da vitima. Com... | English or mostly English. |
+| [`SECURITY_AUDIT_DEEP_DIVE.md`](./SECURITY_AUDIT_DEEP_DIVE.md) | Auditoria de Segurança Profunda - TalkToStellar | 5420 | Data da auditoria: 2026-05-18 Escopo: backend Express, agente/LLM tools, frontend Next.js, Telegram bot, Evolution/WhatsApp webhook, migrations Supabase/Postgres, configuracao de deploy, dependencias npm e arquivos de ambiente versionados. | English or mostly English. |
+| [`SECURITY_FIX_BATCH_20260519.md`](./SECURITY_FIX_BATCH_20260519.md) | Security fix batch - 2026-05-19 | 346 | This batch implements the first set of fixes from `docs/security/SECURITY_FULL_CODEBASE_SCAN_20260519.md`. `GET /api/financial/wallet-profile/:public_key` now validates `session_id` plus `session_token` through the same `requireSessionAuth` path used by the re... | English or mostly English. |
+| [`SECURITY_FULL_CODEBASE_SCAN_20260519.md`](./SECURITY_FULL_CODEBASE_SCAN_20260519.md) | Security full codebase scan - 2026-05-19 | 1926 | Status: review/update report only. No runtime behavior was changed in this document. Scope reviewed: | English or mostly English. |
+| [`SECURITY_HARDENING_IMPLEMENTATION_20260519.md`](./SECURITY_HARDENING_IMPLEMENTATION_20260519.md) | Security hardening implementation - 2026-05-19 | 219 | Browser session secrets now live in HttpOnly cookies (`tts_session_id`, `tts_session_token`) set by the Next.js API proxy. Frontend clients no longer store or read `talk-to-stellar.sessionToken` from `localStorage`; legacy keys are only removed. | English or mostly English. |
+| [`SECURITY_HARDENING_ROUND_20260518.md`](./SECURITY_HARDENING_ROUND_20260518.md) | Security Hardening Round - 2026-05-18 | 319 | Removido o uso runtime de `exec_sql` e criada a migração `backend/migrations/20260518_01_security_hardening_public_surface.sql` para derrubar a RPC perigosa em produção. RPCs de Vault (`store_private_key` e `get_private_key`) agora ficam restritas ao `service_... | Portuguese text remains in source; review for translation. |
+| [`openzeppelin-env-script-quick-guide.md`](./openzeppelin-env-script-quick-guide.md) | Script rapido: envs Passkey/OpenZeppelin | 201 | Use este script para gerar as envs de passkey a partir da URL exata do frontend: Salvar em arquivo: | English or mostly English. |
+| [`openzeppelin-smart-account-deploy.md`](./openzeppelin-smart-account-deploy.md) | OpenZeppelin smart account: deploy e registro | 466 | Este guia mostra o caminho mais curto para ligar a passkey ja cadastrada a uma smart account OpenZeppelin Stellar. O comando novo: | English or mostly English. |
+| [`passkey-envs-como-gerar.md`](./passkey-envs-como-gerar.md) | Passkey/OpenZeppelin: como gerar as envs | 566 | Guia curto para preencher as variaveis novas de passkey. Para testar passkey simples, voce nao precisa de contrato OpenZeppelin. Use o script do repo para gerar o bloco correto a partir da URL exata do frontend: | English or mostly English. |
+| [`passkey-openzeppelin-env-guide.md`](./passkey-openzeppelin-env-guide.md) | Passkey e OpenZeppelin: guia de envs | 1326 | Este guia explica o que preencher em cada variavel para a tela `/passkey-test` funcionar e para deixar claro o que ainda falta para execucao on-chain com OpenZeppelin Stellar Smart Account. Existem dois niveis diferentes: | English or mostly English. |
+
+## Notes
+
+- This file is an English index summary for the folder. It does not replace the source documents.
+- Source files that still contain Portuguese are marked in the language note column for follow-up translation.
+- Generated summaries intentionally skip `DOCS-SUMMARY.md` to avoid recursive noise.
