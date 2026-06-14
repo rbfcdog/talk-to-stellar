@@ -26,7 +26,7 @@ TalkToStellar is a conversational money platform. Users send money through Whats
 | Balance view | Web frontend → balance computation from Stellar | ✅ Testnet |
 | Transaction history | Web frontend → operations DB | ✅ Testnet |
 | Receipts | Generated server-side → Resvg SVG rendering | ✅ Testnet |
-| Ops dashboard | `/ops` → complete DB transaction history; normalized rows link to TransferOrchestrator detail | ✅ Polished ledger; lifecycle detail screenshots pending seeded transfer |
+| Ops dashboard | `/ops/login` → DB-backed admin session → `/ops` complete DB transaction history; normalized rows link to TransferOrchestrator detail | ✅ Polished ledger with secure login; lifecycle detail screenshots pending seeded transfer |
 | Admin transactions dashboard | `/admin/transactions` → `/api/transfers` → TransferOrchestrator records/events | ✅ Frontend route; final evidence screenshots pending |
 | Admin fee wallet | Configurable treasury public key | ✅ Configured |
 | FAQ page | Standalone web page | ⚠️ Pending (pain point #38) |
@@ -56,6 +56,7 @@ TalkToStellar is a conversational money platform. Users send money through Whats
 │  /api/external   — account linking, onboarding        │
 │  /api/auth       — authentication (JWT, passkeys)    │
 │  /api/security   — PIN management                    │
+│  /ops/login      — DB-backed ops admin login          │
 │  /ops            — operational dashboard             │
 │  /api/ops/history — complete DB transaction history   │
 └──────────────────┬──────────────────────────────────┘

@@ -23,6 +23,7 @@ Decide the execution mode before recording:
 ```bash
 LOG_FILE=/tmp/talktostellar-institution-settlement.jsonl \
 OPS_DASHBOARD_TOKEN=<review-token> \
+OPS_ADMIN_LOGIN=admin@example.com \
 TRANSFER_API_TOKEN=<review-token> \
 INTERNATIONAL_TRANSFER_OPS_SECRET=<ops-secret> \
 npm --prefix backend run dev
@@ -190,10 +191,9 @@ npx --prefix frontend playwright screenshot \
   "http://localhost:3000/institution-settlement?transfer_id=${TRANSFER_ID}" \
   docs/insta-awards/docs/deliverable-3/evidence/screenshots/01-institution-settlement-overview.png
 
-npx --prefix frontend playwright screenshot \
-  --viewport-size=1440,1000 \
-  "http://localhost:3001/ops?token=${OPS_DASHBOARD_TOKEN}&source=transfers" \
-  docs/insta-awards/docs/deliverable-3/evidence/screenshots/07-ops-dashboard-list.png
+# For the ops dashboard, first open http://localhost:3001/ops/login in the
+# same browser context, sign in with OPS_ADMIN_LOGIN, then capture:
+# http://localhost:3001/ops?source=transfers
 ```
 
 ## 7. Record Video

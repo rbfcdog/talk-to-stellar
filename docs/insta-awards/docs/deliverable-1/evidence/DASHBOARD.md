@@ -4,12 +4,15 @@ Status: screenshot capture pending after the real testnet evidence transfer.
 
 ## Access
 
-1. Set auth and logging:
+1. Set auth, admin bootstrap, and logging:
 
    ```bash
-   export OPS_DASHBOARD_TOKEN="<review-token>"
+   export OPS_DASHBOARD_TOKEN="<review-token>" # JSON/API compatibility only
+   export OPS_ADMIN_LOGIN="admin@example.com"
    export LOG_FILE="/tmp/talktostellar-orchestration.jsonl"
    ```
+
+   Generate `OPS_ADMIN_PASSWORD_HASH` with `npm --prefix backend run ops:hash-password --silent` and apply the migration as described in `MIGRATIONS.md`.
 
 2. Start the backend:
 
@@ -28,8 +31,10 @@ Status: screenshot capture pending after the real testnet evidence transfer.
 4. Open the backend ops dashboard:
 
    ```text
-   http://localhost:3001/ops?token=<review-token>&source=transfers
+   http://localhost:3001/ops/login
    ```
+
+   Sign in with the bootstrapped `OPS_ADMIN_LOGIN`, then open `/ops?source=transfers`.
 
 5. Open the frontend admin transactions dashboard:
 
@@ -39,12 +44,10 @@ Status: screenshot capture pending after the real testnet evidence transfer.
 
    Paste the same `<review-token>` into the token prompt. The frontend calls the database-backed transfer API through `/api/transfers`; the Next.js proxy forwards it as `X-Ops-Token`.
 
-Auth options:
+Browser auth is DB-backed through `public.ops_admin_users` and an HTTP-only session cookie. Token auth remains available only for JSON API clients:
 - `Authorization: Bearer <review-token>`
 - `X-Ops-Token: <review-token>`
-- `?token=<review-token>`
-
-Local non-production fallback is `dev-ops-token` only when `OPS_DASHBOARD_TOKEN` and `TRANSFER_API_TOKEN` are unset. Hosted environments must set a token.
+- `?token=<review-token>` for JSON API calls
 
 ## What the Reviewer Will See
 
@@ -77,7 +80,7 @@ Use the same completed transfer for dashboard screenshots, orchestration logs, a
 
 1. Apply migrations from `docs/insta-awards/docs/deliverable-1/MIGRATIONS.md`.
 2. Execute the real testnet transfer flow with `LOG_FILE` set.
-3. Open `/ops?token=<review-token>&source=transfers` and capture `dashboard-list.png`.
+3. Open `/ops/login`, sign in, then open `/ops?source=transfers` and capture `dashboard-list.png`.
 4. Open the row for the completed `public_ref` and capture `dashboard-detail.png`.
 5. Open `/admin/transactions`, select the same completed transfer, and capture an optional frontend admin screenshot if reviewers ask for a richer dashboard view.
 6. Save all screenshots in `docs/insta-awards/deliverable-1/evidence/`.
@@ -91,5 +94,5 @@ Use the same completed transfer for dashboard screenshots, orchestration logs, a
 | `/api/transfers/:id` | GET | Read normalized transfer + events when the ID/public ref is not a legacy transfer. |
 | `/api/transfers` | POST | Create normalized transfer intent when body contains `amount_brl_in` and no `quote_id`. |
 
-All require token authentication through `INTERNATIONAL_TRANSFER_OPS_SECRET`, `INTERNAL_API_SECRET`, `OPS_DASHBOARD_TOKEN`, or `TRANSFER_API_TOKEN`.
+All require either the ops session cookie from `/ops/login`, or token authentication through `INTERNATIONAL_TRANSFER_OPS_SECRET`, `INTERNAL_API_SECRET`, `OPS_DASHBOARD_TOKEN`, or `TRANSFER_API_TOKEN`.
 The frontend proxy accepts `?token=` for convenience and forwards it as `X-Ops-Token` because the mounted transfer router authenticates headers.

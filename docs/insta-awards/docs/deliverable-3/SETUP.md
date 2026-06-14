@@ -23,6 +23,7 @@ Current schema source of truth:
 
 ```text
 backend/migrations/20260613_00_full_schema.sql
+backend/migrations/20260614_00_ops_admin_auth.sql
 ```
 
 Do not create a separate D3 migration for the demo. The walkthrough should prove the current transfer, payout, and reconciliation tables.
@@ -38,7 +39,9 @@ SUPABASE_SERVICE_ROLE_KEY=...
 SUPABASE_ANON_KEY=...
 
 INTERNATIONAL_TRANSFER_OPS_SECRET=replace-with-long-random-secret
-OPS_DASHBOARD_TOKEN=replace-with-review-token
+OPS_DASHBOARD_TOKEN=replace-with-review-token # JSON/API compatibility
+OPS_ADMIN_LOGIN=admin@example.com
+OPS_ADMIN_PASSWORD_HASH=generate-with-ops-hash-password
 TRANSFER_API_TOKEN=replace-with-review-token
 LOG_FILE=/tmp/talktostellar-institution-settlement.jsonl
 
@@ -126,7 +129,7 @@ Expected local URLs:
 ```text
 Backend: http://localhost:3001
 Institution settlement demo: http://localhost:3000/institution-settlement
-Ops dashboard: http://localhost:3001/ops?token=<OPS_DASHBOARD_TOKEN>&source=transfers
+Ops dashboard: http://localhost:3001/ops/login, then /ops?source=transfers
 Admin dashboard: http://localhost:3000/admin/transactions
 ```
 

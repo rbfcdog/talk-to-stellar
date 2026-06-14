@@ -178,6 +178,24 @@ The repository pages through every source, normalizes rows into one operational-
 
 **Used by**: `/ops`, `GET /api/ops/history`
 
+### ops_admin_users
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | |
+| login | text unique | normalized lower-case operator login |
+| display_name | text | optional operator label |
+| password_hash | text | server-generated scrypt hash from `backend/scripts/hash-ops-admin-password.ts` |
+| role | text | currently `admin` |
+| active | boolean | false disables login |
+| failed_attempts | integer | lockout counter |
+| locked_until | timestamptz | temporary lock after repeated failures |
+| last_failed_at | timestamptz | latest failed attempt |
+| last_login_at | timestamptz | latest successful login |
+
+**Used by**: `/ops/login`, ops dashboard session verification.
+**Migration**: `backend/migrations/20260614_00_ops_admin_auth.sql` plus consolidated bootstrap `backend/migrations/20260613_00_full_schema.sql`.
+**Notes**: Browser dashboard access is DB-backed. JSON clients can still use `OPS_DASHBOARD_TOKEN`/`TRANSFER_API_TOKEN` for compatibility.
+
 ### D1 transfer lifecycle RPCs
 | Function | Purpose |
 |----------|---------|

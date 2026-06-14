@@ -4,7 +4,7 @@ Updated: 2026-06-14
 
 ## Acceptance Criteria
 
-- [x] `transfers` + `transfer_events` migration exists; rollback SQL is intentionally excluded and DB backup is required before applying
+- [x] `transfers` + `transfer_events` migration exists; DB-backed ops admin login migration exists; rollback SQL is intentionally excluded and DB backup is required before applying
 - [ ] Migrations run cleanly against Supabase and schema inspection pasted in `MIGRATIONS.md`
 - [x] State machine module with explicit transition map; illegal transitions throw; covered by tests
 - [x] Orchestrator coordinates normalized PIX intake, conversion, Stellar settlement, payout routing hook, reconciliation, and full lifecycle management
@@ -13,7 +13,7 @@ Updated: 2026-06-14
 - [x] Programmatic API: create/read/list normalized transfers with token auth
 - [x] Idempotent webhook/settlement handling with replay events logged
 - [x] Structured per-transfer orchestration logs + export script
-- [x] `/ops` dashboard list + detail with timeline, reconciliation, raw record, and token auth
+- [x] `/ops` dashboard list + detail with timeline, reconciliation, raw record, DB-backed browser login, and token-compatible JSON API auth
 - [x] Frontend `/admin/transactions` screen for database-backed transfer operations visibility
 - [x] Unit + integration tests for state machine/orchestrator pass in this run
 - [ ] Manual WhatsApp/Telegram check completed and noted
@@ -54,11 +54,14 @@ npx ts-node scripts/export-transfer-log.ts 972fda9f-fdec-47bd-a21c-a9326999e948
 cd backend
 npx ts-node scripts/export-transfer-record.ts 972fda9f-fdec-47bd-a21c-a9326999e948
 # PASS: wrote docs/insta-awards/deliverable-1/evidence/transfer-record-TTS-2026-000001.json
+
+npm --prefix backend test -- --runInBand tests/ops.routes.test.ts tests/ops-history.repository.test.ts tests/orchestration/stateMachine.test.ts tests/orchestration/orchestrator.test.ts tests/international-transfer.routes.test.ts
+# PASS: 5 suites, 33 tests
 ```
 
 ## Current Blockers Before Declaring Done
 
-1. Apply `backend/migrations/20260613_00_full_schema.sql` to the target Supabase database.
+1. Apply `backend/migrations/20260613_00_full_schema.sql` and `backend/migrations/20260614_00_ops_admin_auth.sql` to the target Supabase database.
 2. Run schema inspection and paste output into `MIGRATIONS.md`.
 3. Execute a real Stellar testnet D1 transfer with `LOG_FILE` enabled.
 4. Start backend and capture `/ops` list/detail screenshots for that same transfer.
