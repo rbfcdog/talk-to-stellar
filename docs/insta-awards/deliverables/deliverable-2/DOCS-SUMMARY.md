@@ -1,13 +1,20 @@
 # Documentation Summary: insta-awards/deliverables/deliverable-2
 
-Generated summary for `docs/insta-awards/deliverables/deliverable-2`. Last generated: 2026-06-14.
+Generated summary for `docs/insta-awards/deliverables/deliverable-2`. Last generated: 2026-06-15.
 
 ## Markdown Files
 
 | File | Title | Words | Summary | Language note |
 |------|-------|-------|---------|---------------|
-| [`README.md`](./README.md) | Deliverable 2 — USD Delivery & Payout Coordination Layer | 327 | Status on 2026-06-13: foundation in progress; 0/4 reviewer evidences submitted. Build a provider-agnostic payout adapter layer that turns completed Stellar USDC settlement events into USD payout instructions compatible with bank-account payout workflows. | English or mostly English. |
-| [`SUBMISSION-CHECKLIST.md`](./SUBMISSION-CHECKLIST.md) | Deliverable 2 Submission Checklist | 1423 | Practical evidence checklist for Adapter Interface Code, Hash Transacao Stellar, Integracao Circle/Bridge, and Payout Instructions, including exact files, API calls, SQL queries, dashboard proof, and claim boundaries. | English or mostly English. |
+| [`README.md`](./README.md) | Deliverable 2 — USD Delivery & Payout Coordination Layer | 501 | Status on 2026-06-15: Circle sandbox linked-bank setup exists, active evidence docs are initialized, D1 real evidence is cross-referenced, and final same-transfer payout evidence is still pending. | English or mostly English. |
+| [`SUBMISSION-CHECKLIST.md`](./SUBMISSION-CHECKLIST.md) | Deliverable 2 Submission Checklist | 1511 | Practical evidence checklist for Adapter Interface Code, Hash Transacao Stellar, Integracao Circle/Bridge, and Payout Instructions, including exact files, API calls, SQL queries, dashboard proof, Circle linked-bank readiness, and claim boundaries. | English or mostly English. |
+
+## Child Folders
+
+| Folder | Markdown files | Summary |
+|--------|----------------|---------|
+| [`evidence/`](./evidence/) | 4 | [`DOCS-SUMMARY.md`](./evidence/DOCS-SUMMARY.md) |
+| [`runs/`](./runs/) | 1 | [`DOCS-SUMMARY.md`](./runs/DOCS-SUMMARY.md) |
 
 ## Notes
 

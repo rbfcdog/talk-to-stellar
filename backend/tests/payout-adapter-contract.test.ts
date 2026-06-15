@@ -154,7 +154,6 @@ describe('PayoutProviderAdapter contract', () => {
   it('sends executable destination details while persisting only redacted evidence', async () => {
     process.env.ENABLE_REAL_PAYOUT_EXECUTION = 'true';
     process.env.CIRCLE_API_KEY = 'circle-test-key';
-    process.env.CIRCLE_PAYOUT_DESTINATION_ID = 'circle-bank-account-1';
     const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({
       ok: true,
       status: 201,
@@ -171,7 +170,13 @@ describe('PayoutProviderAdapter contract', () => {
       }),
     } as any);
 
-    const instruction = await new CircleCompatibilityAdapter().createPayoutInstruction(baseInput);
+    const instruction = await new CircleCompatibilityAdapter().createPayoutInstruction({
+      ...baseInput,
+      providerOptions: {
+        circleDestinationId: 'circle-bank-account-1',
+        circleDestinationType: 'wire',
+      },
+    });
 
     expect(fetchSpy.mock.calls[0][0]).toBe('https://api-sandbox.circle.com/v1/businessAccount/payouts');
     const request = fetchSpy.mock.calls[0][1] as RequestInit;

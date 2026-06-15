@@ -77,7 +77,8 @@ Their source documents now live under categorized root `docs/` folders:
 | File | Description | Freshness |
 |------|-------------|-----------|
 | `docs/insta-awards/deliverables/deliverable-1/` | D1 implementation plan, migrations, status, runs, and evidence | ⚠️ Active; final same-transfer real testnet evidence still pending |
-| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle foundation status, and evidence checklist | ⚠️ Active; Circle sandbox/evidence still pending |
+| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle linked-bank foundation status, active evidence docs, and final evidence checklist | ⚠️ Active; final same-transfer Circle payout evidence still pending |
+| `docs/insta-awards/deliverables/deliverable-2/evidence/` | Active D2 foundation evidence for adapter code, Stellar hash requirements, Circle/Bridge setup, and payout instructions | ⚠️ Foundation evidence; final same-transfer evidence pending |
 | `docs/insta-awards/deliverables/deliverable-3/` | D3 institutional settlement demo foundation, walkthrough, setup, screenshot/video plans, and reviewer package | ⚠️ Active; final video/screenshots/same-transfer evidence pending |
 
 ## Backend Docs

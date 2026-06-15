@@ -10,7 +10,7 @@ Source scope: `backend/docs/**/*.md`, excluding this summary (13 source files).
 |------|-------------|--------------------------|
 | Backend entry point | `backend/docs/README.md` | External onboarding endpoints, required env vars, migration source of truth, folder map, build/test commands |
 | Agent onboarding | `backend/docs/AGENT_ONBOARDING_INSTRUCTIONS.md`, `backend/docs/ONBOARDING_AND_PIN_FLOW.md` | Conversation onboarding and PIN flow |
-| Circle payout foundation | `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md` | Circle Mint payout payload shape, setup steps, env vars, sandbox/live gating, status polling, webhook intake, troubleshooting, and evidence rules |
+| Circle payout foundation | `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md` | Circle Mint payout payload shape, setup steps, env vars, readiness command, protected request destination options, sandbox/live gating, status polling, webhook intake, troubleshooting, and evidence rules |
 | PIN reset | `backend/docs/PIN_RESET_ANALYSIS.md`, `backend/docs/PIN_RESET_SYSTEM.md`, `backend/docs/PIN_RESET_TOOL_FIX.md` | PIN reset design, diagnosis, and historical fix notes |
 | Stellar payments | `backend/docs/PATH-PAYMENT.md` | Stellar path-payment behavior |
 | Tests | `backend/docs/TEST_QUICK_REFERENCE.md`, `backend/docs/tests/README.md` | Test-suite orientation and commands |

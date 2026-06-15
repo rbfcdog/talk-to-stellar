@@ -22,6 +22,8 @@ The adapter uses Circle Mint's bank payout model:
 
 Circle payouts require a linked Circle bank account destination ID. Raw routing/account details are not sent to Circle payout execution; they remain redacted destination metadata for reviewer evidence and same-name controls.
 
+The protected payout-instruction route can use either backend env `CIRCLE_PAYOUT_DESTINATION_ID` or per-request provider options: `circleDestinationId`, `circleDestinationType`, `circleSourceWalletId`, and `circleIdempotencyKey`.
+
 ## Execution Modes
 
 | Mode | When | Result |
@@ -57,6 +59,12 @@ Notes:
 - `CIRCLE_PAYOUT_CREATE_URL` and `CIRCLE_PAYOUT_STATUS_URL` are optional overrides. If blank, the adapter derives Circle sandbox/production URLs from `CIRCLE_ENVIRONMENT` or `CIRCLE_API_BASE_URL`.
 - `CIRCLE_SOURCE_WALLET_ID` is optional. If omitted, Circle uses the account's main wallet.
 
+Readiness check:
+
+```bash
+npm --prefix backend run circle:payout-readiness
+```
+
 ## Operator Flow
 
 After a transfer reaches `USDC_SETTLED` with a Stellar transaction hash:
@@ -66,7 +74,9 @@ POST /api/transfers/:id/payout-instruction
 Authorization: Bearer <ops-token>
 
 {
-  "provider": "circle"
+  "provider": "circle",
+  "circleDestinationId": "optional-linked-bank-id",
+  "circleDestinationType": "wire"
 }
 ```
 

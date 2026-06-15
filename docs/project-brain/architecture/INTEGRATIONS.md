@@ -57,13 +57,13 @@
 - **Endpoint**: `https://api-sandbox.circle.com` by default for sandbox; `https://api.circle.com` for production
 - **Auth**: Bearer API key via `CIRCLE_API_KEY`
 - **Client**: `backend/src/api/services/usd-payout-adapters.ts` — `CircleCompatibilityAdapter`
-- **Features**: Circle Mint `/v1/businessAccount/payouts` payload creation, linked bank destination ID support, sandbox/live execution gating, payout status polling, payout webhook normalization, redacted evidence storage
+- **Features**: Circle Mint `/v1/businessAccount/payouts` payload creation, linked bank destination ID support through env or protected request options, sandbox/live execution gating, payout status polling, payout webhook normalization, redacted evidence storage
 - **Routes**: `POST /api/transfers/:id/payout-instruction`, `POST /api/transfers/:id/payout-status-refresh`, `POST /api/transfers/payout-events/circle`, `GET /api/transfers/:id/payout-evidence`
 - **Persistence**: `international_payout_instructions`, `international_payout_events`, `international_transfer_reconciliations`
-- **Execution control**: Real Circle calls require `ENABLE_REAL_PAYOUT_EXECUTION=true`, `CIRCLE_API_KEY`, and a linked bank account ID in `CIRCLE_PAYOUT_DESTINATION_ID` or `payout_destination.providerDestinationId`
+- **Execution control**: Real Circle calls require `ENABLE_REAL_PAYOUT_EXECUTION=true`, `CIRCLE_API_KEY`, and a linked bank account ID in `CIRCLE_PAYOUT_DESTINATION_ID`, `payout_destination.providerDestinationId`, or protected request `circleDestinationId`
 - **Failure modes**: Missing linked bank account ID, insufficient Circle balance, payout `failed`, returned wires after `complete`, name mismatch at receiving bank, webhook secret mismatch
 - **Config**: `PAYOUT_PROVIDER=circle`, `CIRCLE_API_KEY`, `CIRCLE_ENVIRONMENT`, `CIRCLE_API_BASE_URL`, `CIRCLE_PAYOUT_DESTINATION_ID`, `CIRCLE_PAYOUT_DESTINATION_TYPE=wire`, `CIRCLE_SOURCE_WALLET_ID`, `CIRCLE_PAYOUT_CREATE_URL`, `CIRCLE_PAYOUT_STATUS_URL`, `CIRCLE_PAYOUT_WEBHOOK_SECRET`, `PAYOUT_WEBHOOK_SECRET`, `PAYOUT_PROVIDER_TIMEOUT_MS`
-- **Docs**: `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`
+- **Docs**: `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`; readiness command `npm --prefix backend run circle:payout-readiness`
 
 ## Bridge.xyz (PIX/ACH — Alternate Rail)
 

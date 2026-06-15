@@ -17,7 +17,7 @@
 
 #### Deliverable 2 — Payout Adapter (PENDING)
 - **Scope**: Real payout adapter execution (Circle/Bridge), identity alignment, settlement evidence
-- **Status**: Foundation started on 2026-06-13. Circle Mint payout adapter now builds official `/v1/businessAccount/payouts` payloads, supports linked bank destination IDs, gated sandbox/live execution, status polling, webhook normalization, and redacted evidence. Bridge remains compatibility-oriented while provider access is pending. Completion still requires Circle sandbox credentials, a linked bank account ID, an end-to-end transfer run after Stellar settlement, and evidence capture.
+- **Status**: Foundation advanced on 2026-06-15. Circle Mint payout adapter builds official `/v1/businessAccount/payouts` payloads, supports linked bank destination IDs through env or protected request options, has a redacted readiness command, and keeps gated sandbox/live execution, status polling, webhook normalization, and redacted evidence. A Circle sandbox wire bank destination was created outside Git; raw API key and bank details are not committed. Bridge remains compatibility-oriented while provider access is pending. Completion still requires one same-transfer run after Stellar settlement, a persisted Circle provider payout ID, and evidence capture.
 - **Files**: `backend/src/api/services/usd-payout-adapters.ts`, `backend/src/api/services/usd-payout-coordination.service.ts`, `backend/src/api/services/international-transfer.service.ts`, `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`
 
 #### Deliverable 3 — Institutional Settlement Flow Demonstration (PENDING)
