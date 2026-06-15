@@ -1,5 +1,25 @@
-# Deliverable 2 — Documentation Summary
+# Documentation Summary: insta-awards/deliverables/deliverable-2
 
-**Date:** 2026-06-14
+Generated summary for `docs/insta-awards/deliverables/deliverable-2`. Last generated: 2026-06-15.
 
-The D2 payout coordination layer is **code-complete** across all four checklist items: the `PayoutProviderAdapter` TypeScript interface (with four concrete implementations — mock, Circle, Bridge, Etherfuse) is fully defined and tested (8 contract tests passing), the Circle and Bridge adapters build real provider-compatible payloads with comprehensive redaction rules that strip account numbers, routing numbers, IBANs, and bank-account IDs from persisted evidence while preserving last-4 digits for audit, the payout instruction lifecycle spans create → poll → webhook with normalized status observation and dual state machine sync between `PayoutStatus` and `InternationalTransferState`, and the `UsdPayoutCoordinationService.buildEvidence()` method assembles the complete `PayoutCoordinationEvidence` object with a 4-item checklist, settlement attachment, same-name identity gate, and redacted status history. The sole remaining gap is a real Stellar testnet transfer execution — without it, `stellar_transaction_hash` in the checklist remains `ready: false` (readyCount is 3/4, submission status is `PENDING`). Once a real testnet transfer runs and the tx hash is captured into `evidence/stellar-transaction-hash.md`, all four items will be ready and the evidence package is complete.
+## Markdown Files
+
+| File | Title | Words | Summary | Language note |
+|------|-------|-------|---------|---------------|
+| [`DELIVERABLE-LOCATIONS.md`](./DELIVERABLE-LOCATIONS.md) | Deliverable Locations — D2 and D1 Evidence | 249 | Exact locations for all four D2 evidence labels, backend code references, and the current real D1 JSON evidence files with why they are real. | English or mostly English. |
+| [`README.md`](./README.md) | Deliverable 2 — USD Delivery & Payout Coordination Layer | 705 | Active D2 package entry point covering all four requested reviewer labels, current Circle readiness, current database boundary, D1 cross-reference, and remaining final execution work. | English or mostly English. |
+| [`STATUS.md`](./STATUS.md) | Deliverable 2 Status — USD Delivery & Payout Coordination Layer | 435 | One-page current status: all four D2 evidence labels have files, final real same-transfer evidence remains pending, and exact completion requirements are listed. | English or mostly English. |
+| [`SUBMISSION-CHECKLIST.md`](./SUBMISSION-CHECKLIST.md) | Deliverable 2 Submission Checklist | 1511 | Practical evidence checklist for Adapter Interface Code, Hash Transacao Stellar, Integracao Circle/Bridge, and Payout Instructions, including exact files, API calls, SQL queries, dashboard proof, Circle linked-bank readiness, and claim boundaries. | English or mostly English. |
+
+## Child Folders
+
+| Folder | Markdown files | Summary |
+|--------|----------------|---------|
+| [`evidence/`](./evidence/) | 5 | [`DOCS-SUMMARY.md`](./evidence/DOCS-SUMMARY.md) |
+| [`runs/`](./runs/) | 2 | [`DOCS-SUMMARY.md`](./runs/DOCS-SUMMARY.md) |
+
+## Notes
+
+- This file is an English index summary for the folder. It does not replace the source documents.
+- Source files that still contain Portuguese are marked in the language note column for follow-up translation.
+- Generated summaries intentionally skip `DOCS-SUMMARY.md` to avoid recursive noise.

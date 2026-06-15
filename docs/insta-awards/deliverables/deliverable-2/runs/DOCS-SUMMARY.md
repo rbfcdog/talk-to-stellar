@@ -7,6 +7,7 @@ Generated summary for `docs/insta-awards/deliverables/deliverable-2/runs`. Last 
 | File | Title | Words | Summary | Language note |
 |------|-------|-------|---------|---------------|
 | [`2026-06-15-circle-linked-bank-foundation.md`](./2026-06-15-circle-linked-bank-foundation.md) | Run 2026-06-15 - Circle Linked Bank Foundation | 456 | Documents the Circle sandbox linked-bank foundation, redacted readiness output, changed files, env boundary, commands, migration note, D1 evidence reference, and remaining same-transfer D2 evidence steps. | English or mostly English. |
+| [`2026-06-15-d2-all-deliverables.md`](./2026-06-15-d2-all-deliverables.md) | Run 2026-06-15 - D2 All Deliverables Package | 454 | Documents the all-label D2 package assembly, redacted Circle readiness, sanitized DB counts, verification results, evidence boundary, and next real same-transfer execution steps. | English or mostly English. |
 
 ## Notes
 

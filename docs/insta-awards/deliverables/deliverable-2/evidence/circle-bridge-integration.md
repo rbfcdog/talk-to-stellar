@@ -6,6 +6,16 @@ Circle sandbox foundation is ready for a settled transfer. The Circle sandbox AP
 
 Bridge remains compatibility-only until provider access and payout endpoints are available.
 
+Current execution status from `circle-readiness-redacted.json`:
+
+- linked Circle wire destination: present
+- destination type: `wire`
+- destination ID evidence: hash/tail only
+- Circle API key available to backend process: no
+- `ENABLE_REAL_PAYOUT_EXECUTION`: false
+- Circle sandbox API execution ready: no
+- compatibility evidence ready: yes
+
 ## Circle Linked Bank Evidence
 
 The operator created a Circle sandbox wire bank account with:
@@ -77,3 +87,20 @@ TalkToStellar has a Circle Mint sandbox payout foundation with linked-bank desti
 ```
 
 Do not claim Circle sandbox payout execution until a settled transfer creates a Circle payout and Circle returns a provider payout ID stored in `international_payout_instructions`.
+
+## Bridge Boundary
+
+Current Bridge claim:
+
+```text
+TalkToStellar has a Bridge-compatible payout adapter shape, but no live Bridge payout execution is claimed because provider credentials and payout endpoints are not configured.
+```
+
+Required before live Bridge evidence:
+
+- `BRIDGE_API_KEY`
+- `BRIDGE_PAYOUT_CREATE_URL`
+- `BRIDGE_PAYOUT_STATUS_URL`
+- `ENABLE_REAL_PAYOUT_EXECUTION=true`
+- a settled transfer with real Stellar evidence
+- a persisted provider payout ID or provider status reference

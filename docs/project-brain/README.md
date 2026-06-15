@@ -27,6 +27,8 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [../../frontend/docs/DOCS-SUMMARY.md](../../frontend/docs/DOCS-SUMMARY.md) | You need frontend onboarding, architecture, review, or TDD doc context. |
 | [../../docs/insta-awards/deliverables/DOCS-SUMMARY.md](../../docs/insta-awards/deliverables/DOCS-SUMMARY.md) | You need the active Instawards deliverables summary. |
 | [../../docs/insta-awards/deliverables/deliverable-2/README.md](../../docs/insta-awards/deliverables/deliverable-2/README.md) | You need the D2 Circle/Bridge payout coordination foundation and evidence checklist. |
+| [../../docs/insta-awards/deliverables/deliverable-2/STATUS.md](../../docs/insta-awards/deliverables/deliverable-2/STATUS.md) | You need the current D2 all-deliverables status and final-evidence blocker. |
+| [../../docs/insta-awards/deliverables/deliverable-2/DELIVERABLE-LOCATIONS.md](../../docs/insta-awards/deliverables/deliverable-2/DELIVERABLE-LOCATIONS.md) | You need exact D2 evidence file paths and the D1 real-evidence cross-reference. |
 | [../../docs/insta-awards/deliverables/deliverable-3/README.md](../../docs/insta-awards/deliverables/deliverable-3/README.md) | You need the institutional settlement flow demo, technical walkthrough, setup, screenshot/video, or reviewer package foundation. |
 | [../../insta-awards-old/docs/DOCS-SUMMARY.md](../../insta-awards-old/docs/DOCS-SUMMARY.md) | You need historical Instawards audit or evidence context. |
 | [../../manual-tests/docs/DOCS-SUMMARY.md](../../manual-tests/docs/DOCS-SUMMARY.md) | You need the manual QA and benchmark-doc summary. |

@@ -1,107 +1,58 @@
-# Evidence 1: Adapter Interface Code
+# Evidence 1 — Adapter Interface Code
 
-## Location
+## Status
 
-`backend/src/api/services/usd-payout-adapters.ts:28-35`
+Ready for code review and test proof. The provider-agnostic payout adapter contract exists, supports Circle/Bridge/Etherfuse/mock providers, and is covered by backend tests.
 
-## Interface Definition
+## Code References
 
-```typescript
-export interface PayoutProviderAdapter {
-  providerName: PayoutProviderName;
-  getCapabilities(): PayoutProviderCapabilities;
-  createPayoutInstruction(input: CreatePayoutInput): Promise<PayoutInstruction>;
-  getPayoutStatus(providerPayoutId: string): Promise<PayoutStatus | PayoutStatusObservation>;
-  normalizeWebhookEvent?(payload: Record<string, unknown>): PayoutProviderEvent | null;
-  cancelPayout?(providerPayoutId: string): Promise<void>;
-}
-```
-
-## Method Signatures
-
-| Method | Signature | Description |
-|---|---|---|
-| `providerName` | `PayoutProviderName` | Constant string identifying the provider (`'mock'`, `'circle'`, `'bridge'`, `'etherfuse'`) |
-| `getCapabilities` | `() => PayoutProviderCapabilities` | Returns read-only capability snapshot (execution mode, requirements, blockers, notes) |
-| `createPayoutInstruction` | `(input: CreatePayoutInput) => Promise<PayoutInstruction>` | Creates a payout instruction record. May execute a real API call or produce a compatibility payload depending on env config. |
-| `getPayoutStatus` | `(providerPayoutId: string) => Promise<PayoutStatus \| PayoutStatusObservation>` | Polls the provider for current status. Returns a normalized `PayoutStatus` or a full `PayoutStatusObservation` with evidence. |
-| `normalizeWebhookEvent` | `(payload: Record<string, unknown>) => PayoutProviderEvent \| null` | (Optional) Normalizes an incoming webhook payload into a `PayoutProviderEvent`. Returns `null` if the payload is unrecognized. |
-| `cancelPayout` | `(providerPayoutId: string) => Promise<void>` | (Optional) Cancels a pending payout. Not yet implemented in most adapters. |
-
-## CreatePayoutInput
-
-```typescript
-export type CreatePayoutInput = {
-  transferId: string;
-  amountUsd: string;
-  destination: UsdBankDestination;
-  senderLegalName?: string;
-  recipientLegalName?: string;
-  stellarTxHash?: string;
-  stellarMemo?: string;
-  metadata?: Record<string, unknown>;
-  providerOptions?: Record<string, unknown>;
-};
-```
-
-## Supported Providers Table
-
-| Provider | Class | Execution Mode | Supports Webhooks | USD Bank Destination | Source |
-|---|---|---|---|---|---|
-| `mock` | `MockUsdPayoutAdapter` | `mock` | No | No | `usd-payout-adapters.ts:296` |
-| `circle` | `CircleCompatibilityAdapter` | `compatibility` / `sandbox_api` / `live_api` | Yes | Yes | `usd-payout-adapters.ts:525` |
-| `bridge` | `BridgeCompatibilityAdapter` | `compatibility` / `live_api` | Yes | Yes | `usd-payout-adapters.ts:807` |
-| `etherfuse` | `EtherfusePixOffRampAdapter` | `proof` | No | No | `usd-payout-adapters.ts:815` |
-
-## Factory Function
-
-```typescript
-// Location: usd-payout-adapters.ts:927-934
-export function getPayoutProviderAdapter(
-  provider = process.env.PAYOUT_PROVIDER
-): PayoutProviderAdapter {
-  const normalized = String(provider || 'etherfuse').trim().toLowerCase();
-  if (normalized === 'circle') return new CircleCompatibilityAdapter();
-  if (normalized === 'bridge') return new BridgeCompatibilityAdapter();
-  if (normalized === 'etherfuse') return new EtherfusePixOffRampAdapter();
-  if (normalized === 'mock') return new MockUsdPayoutAdapter();
-  throw new Error(
-    `Unsupported payout provider "${normalized}". ` +
-    `Expected one of: ${SUPPORTED_PAYOUT_PROVIDERS.join(', ')}.`
-  );
-}
-```
-
-Unknown providers throw — the system never falls back silently to mock.
-
-## Redaction Rules
-
-Location: `usd-payout-adapters.ts:120-145`
-
-All persisted evidence goes through `redactPayoutFields()`:
-
-| Field Pattern | Redaction Rule |
+| Area | File |
 |---|---|
-| `accountHolderName` | `[REDACTED]` |
-| `accountNumber`, `routingNumber` | `[REDACTED_LAST4:xxxx]` (preserves last 4 digits) |
-| `iban` | `[REDACTED]` |
-| `providerDestinationId`, `circleBankAccountId` | `[REDACTED_HASH:xxxxxxxxxxxx]` (SHA-256 prefix) |
-| Sensitive `id` fields inside objects with `type` keys | `[REDACTED_HASH:xxxxxxxxxxxx]` |
+| Adapter contract and providers | `backend/src/api/services/usd-payout-adapters.ts` |
+| Payout evidence builder | `backend/src/api/services/usd-payout-coordination.service.ts` |
+| Transfer payout orchestration | `backend/src/api/services/international-transfer.service.ts` |
+| HTTP payout routes | `backend/src/api/routes/international-transfers.router.ts` |
+| Contract tests | `backend/tests/payout-adapter-contract.test.ts` |
 
-The `payoutProviderEvidenceSnapshot()` function (`usd-payout-adapters.ts:147-149`) wraps this and also applies the global `redactSensitive()` utility.
+## Contract
 
-## Test Coverage
+The `PayoutProviderAdapter` interface requires every provider to expose capabilities, create payout instructions, poll status, and optionally normalize webhook events.
 
-Location: `backend/tests/payout-adapter-contract.test.ts` (264 lines, 8 tests)
+Supported providers:
 
-Tests cover:
-- Mock adapter with ops policy gating
-- Etherfuse proof payload (no USD bank claim)
-- Circle compatibility payload with redacted account fields
-- Bridge compatibility payload with redacted IBAN/routing
-- Real execution mode: Circle sends executable destination details to API, persists only redacted evidence
-- Circle status polling with sandbox endpoint
-- Rejection of unknown provider names
-- Webhook event normalization with signed secrets
+| Provider | Purpose |
+|---|---|
+| `circle` | Circle Mint USD payout payloads and sandbox/live API execution when enabled. |
+| `bridge` | Bridge-compatible payout payloads while provider access is pending. |
+| `etherfuse` | PIX off-ramp proof path, not a USD bank payout claim. |
+| `mock` | Ops-only mock evidence when mock policy explicitly allows it. |
 
-Run: `npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts`
+Unknown provider names throw and do not fall back silently to mock.
+
+## Current Foundation Addition
+
+`POST /api/transfers/:id/payout-instruction` now forwards Circle-specific provider options to the payout service:
+
+- `circleDestinationId` / `circle_destination_id`
+- `circleDestinationType` / `circle_destination_type`
+- `circleSourceWalletId` / `circle_source_wallet_id`
+- `circleIdempotencyKey` / `circle_idempotency_key`
+
+This lets the backend use either a global `CIRCLE_PAYOUT_DESTINATION_ID` or a per-request/per-transfer linked Circle bank account ID.
+
+## Reviewer Claim
+
+Use this claim:
+
+```text
+TalkToStellar implements a provider-agnostic payout adapter contract that can build USD payout instructions for Circle and Bridge-compatible workflows, preserve Etherfuse PIX proof metadata, and reject unsupported providers without silently falling back to mock behavior.
+```
+
+Do not claim final Circle payout execution from this artifact alone. Execution proof belongs in `circle-bridge-integration.md` and `payout-instructions.md` after a real same-transfer run.
+
+## Verification
+
+```bash
+npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts tests/international-transfer.routes.test.ts
+npm --prefix backend run build
+```

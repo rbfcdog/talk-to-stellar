@@ -1,6 +1,6 @@
 # Documentation Summary: insta-awards/deliverables
 
-Generated summary for `docs/insta-awards/deliverables`. Last generated: 2026-06-14.
+Generated summary for `docs/insta-awards/deliverables`. Last generated: 2026-06-15.
 
 ## Markdown Files
 
@@ -11,7 +11,7 @@ No direct Markdown files in this folder besides generated summaries.
 | Folder | Markdown files | Summary |
 |--------|----------------|---------|
 | [`deliverable-1/`](./deliverable-1/) | 22 | [`DOCS-SUMMARY.md`](./deliverable-1/DOCS-SUMMARY.md) |
-| [`deliverable-2/`](./deliverable-2/) | 7 | [`DOCS-SUMMARY.md`](./deliverable-2/DOCS-SUMMARY.md) |
+| [`deliverable-2/`](./deliverable-2/) | 11 | [`DOCS-SUMMARY.md`](./deliverable-2/DOCS-SUMMARY.md) |
 | [`deliverable-3/`](./deliverable-3/) | 15 | [`DOCS-SUMMARY.md`](./deliverable-3/DOCS-SUMMARY.md) |
 
 ## Notes
