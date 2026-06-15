@@ -386,6 +386,8 @@ function renderPageShell(input: {
   const activeHistory =
     input.active === "history" ? ' aria-current="page"' : "";
   const activeDetail = input.active === "detail" ? ' aria-current="page"' : "";
+  const forensicsHref =
+    input.active === "detail" ? "#transfer-detail" : "/ops?source=transfers";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -404,10 +406,18 @@ function renderPageShell(input: {
     </a>
     <nav class="top-nav" aria-label="Operations sections">
       <a href="/ops"${activeHistory}>Ledger</a>
-      ${input.active === "detail" ? `<a href="#transfer-detail"${activeDetail}>Forensics</a>` : ""}
+      <a href="${escapeAttr(forensicsHref)}"${activeDetail}>Forensics</a>
     </nav>
     <div class="top-actions">
-      <span class="updated-text">${escapeHtml(formatRelativeTime(input.updatedAt))}</span>
+      <span class="environment-badge">${escapeHtml(input.environment)}</span>
+      <span class="updated-text">Updated <span data-updated-ago data-updated-at="${escapeAttr(input.updatedAt)}">${escapeHtml(formatRelativeTime(input.updatedAt))}</span></span>
+      <button class="button button-secondary button-quiet" type="button" data-refresh-button>Refresh</button>
+      <button class="button button-secondary button-quiet" type="button" data-print-button>Print</button>
+      <span class="operator-chip mono" title="${escapeAttr(input.operatorLogin)}">${escapeHtml(shortValue(input.operatorLogin, 20, 8))}</span>
+      <form class="logout-form" method="post" action="/ops/logout">
+        <input type="hidden" name="csrf_token" value="${escapeAttr(input.csrfToken)}">
+        <button class="button button-secondary button-quiet" type="submit">Sign out</button>
+      </form>
     </div>
   </div>
 </header>
@@ -431,7 +441,7 @@ function renderMetricCards(metrics: OpsDashboardMetric[]): string {
 ${metrics
   .map(
     (metric) =>
-      `<span class="metric-item metric-${metric.tone || "default"}"><strong>${escapeHtml(metric.value)}</strong>${escapeHtml(metric.label)}</span>`,
+      `<article class="metric-item metric-${metric.tone || "default"}"><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong><small>${escapeHtml(metric.detail)}</small></article>`,
   )
   .join("")}
 </section>`;
@@ -467,23 +477,53 @@ function renderControls(input: OpsDashboardRenderInput): string {
   });
 
   return `<section class="controls-shell" aria-label="Ledger controls">
-  <details class="filter-toggle">
-    <summary>Filters &mdash; ${escapeHtml(String(filters.source ? HISTORY_SOURCE_LABELS[filters.source as OpsHistorySource] || filters.source : "All sources"))}</summary>
-    <form class="ops-controls" method="get" action="/ops">
-      ${tokenHiddenInput(filters.token)}
-      <div class="control-row">
-        <label><select name="source">
+  <form class="ops-controls" method="get" action="/ops">
+    ${tokenHiddenInput(filters.token)}
+    <div class="control-grid">
+      <label>
+        <span>Source</span>
+        <select name="source">
           <option value="">All sources</option>
           ${OPS_HISTORY_SOURCES.map((source) => `<option value="${escapeAttr(source)}"${filters.source === source ? " selected" : ""}>${escapeHtml(HISTORY_SOURCE_LABELS[source])}</option>`).join("")}
-        </select></label>
-        <label><input type="search" name="q" value="${escapeAttr(filters.search)}" placeholder="public_ref, tx hash, key, user"></label>
-        <label><span class="sr-only">From</span><input type="date" name="from" value="${escapeAttr(filters.from)}" placeholder="From"></label>
-        <label><span class="sr-only">To</span><input type="date" name="to" value="${escapeAttr(filters.to)}" placeholder="To"></label>
-        <button class="button button-secondary" type="submit">Apply</button>
-        ${filters.source || filters.search || filters.from || filters.to || filters.needsAttention || filters.states.length ? `<a class="button button-secondary" href="${escapeAttr(clearHref)}">Clear</a>` : ""}
+        </select>
+      </label>
+      <label>
+        <span>Group</span>
+        <select name="category">
+          <option value="">All groups</option>
+          <option value="active"${filters.category === "active" ? " selected" : ""}>Active</option>
+          <option value="completed"${filters.category === "completed" ? " selected" : ""}>Completed</option>
+          <option value="failed"${filters.category === "failed" ? " selected" : ""}>Failed</option>
+        </select>
+      </label>
+      <label class="control-search">
+        <span>Search</span>
+        <input type="search" name="q" value="${escapeAttr(filters.search)}" placeholder="Reference, tx hash, key, user">
+      </label>
+      <label>
+        <span>From</span>
+        <input type="date" name="from" value="${escapeAttr(filters.from)}">
+      </label>
+      <label>
+        <span>To</span>
+        <input type="date" name="to" value="${escapeAttr(filters.to)}">
+      </label>
+      <label>
+        <span>Rows</span>
+        <select name="page_size">
+          ${[25, 50, 100].map((size) => `<option value="${size}"${filters.pageSize === size ? " selected" : ""}>${size}</option>`).join("")}
+        </select>
+      </label>
+      <label class="check-control">
+        <input type="checkbox" name="needs_attention" value="1"${filters.needsAttention ? " checked" : ""}>
+        <span>Needs attention</span>
+      </label>
+      <div class="control-actions">
+        <button class="button button-primary" type="submit">Apply filters</button>
+        ${filters.source || filters.category || filters.search || filters.from || filters.to || filters.needsAttention || filters.states.length || filters.pageSize !== 50 ? `<a class="button button-secondary" href="${escapeAttr(clearHref)}">Clear</a>` : ""}
       </div>
-    </form>
-  </details>
+    </div>
+  </form>
 </section>`;
 }
 
@@ -1039,12 +1079,12 @@ button { cursor: pointer; }
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--ops-border);
-  background: var(--ops-bg);
+  background: color-mix(in oklab, var(--ops-bg) 94%, black 6%);
 }
 .topbar-inner {
-  max-width: 1440px;
+  max-width: 1360px;
   margin: 0 auto;
-  padding: var(--ops-space-2) var(--ops-space-4);
+  padding: var(--ops-space-3) var(--ops-space-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1055,25 +1095,59 @@ button { cursor: pointer; }
 .brand-copy { display: flex; gap: 6px; align-items: baseline; }
 .brand-copy strong { font-size: 14px; }
 .brand-copy span { color: var(--ops-muted); font-size: 11px; }
-.top-nav { display: flex; gap: 2px; }
-.top-nav a { min-height: 30px; display: inline-flex; align-items: center; padding: 0 var(--ops-space-2); color: var(--ops-muted); font-weight: 700; font-size: 13px; }
-.top-nav a[aria-current="page"] { border-bottom: 2px solid var(--ops-gold-light); color: var(--ops-text); }
-.top-actions { display: flex; align-items: center; gap: var(--ops-space-2); }
+.top-nav {
+  display: flex;
+  gap: var(--ops-space-1);
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+  padding: 2px;
+  background: var(--ops-bg-raised);
+}
+.top-nav a {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0 var(--ops-space-3);
+  color: var(--ops-muted);
+  font-weight: 800;
+  font-size: 12px;
+}
+.top-nav a[aria-current="page"] { background: var(--ops-surface-2); color: var(--ops-text); }
+.top-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--ops-space-2); flex-wrap: wrap; }
 .updated-text { color: var(--ops-muted); font-size: 12px; font-family: var(--ops-font-mono); }
+.operator-chip {
+  max-width: 240px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+  padding: 0 var(--ops-space-2);
+  color: var(--ops-text-soft);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.logout-form { margin: 0; display: inline-flex; }
 .ops-frame {
-  width: min(1440px, 100%);
+  width: min(1360px, 100%);
   margin: 0 auto;
-  padding: var(--ops-space-4) var(--ops-space-4);
+  padding: var(--ops-space-5);
   display: grid;
-  gap: var(--ops-space-4);
+  gap: var(--ops-space-5);
 }
 .page-heading {
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: var(--ops-space-4);
+  border-bottom: 1px solid var(--ops-border);
+  padding-bottom: var(--ops-space-4);
 }
-.page-heading h1 { margin: 0; font-size: 18px; font-weight: 700; }
-.page-heading p { max-width: 70ch; margin: var(--ops-space-1) 0 0; color: var(--ops-muted); line-height: 1.4; font-size: 12px; }
+.page-heading h1 { margin: 0; font-size: 22px; line-height: 1.1; font-weight: 800; }
+.page-heading p { max-width: 72ch; margin: var(--ops-space-2) 0 0; color: var(--ops-muted); line-height: 1.45; font-size: 13px; }
 .button, .copy-button {
   display: inline-flex;
   align-items: center;
@@ -1082,13 +1156,16 @@ button { cursor: pointer; }
   border: 1px solid var(--ops-border);
   border-radius: var(--ops-radius-sm);
   padding: 0 var(--ops-space-2);
-  background: var(--ops-bg);
+  background: var(--ops-surface);
   color: var(--ops-muted);
-  font-weight: 700;
+  font-weight: 800;
   font-size: 12px;
+  transition: border-color 160ms var(--ops-ease), color 160ms var(--ops-ease), background-color 160ms var(--ops-ease);
 }
-.button:hover { color: var(--ops-text); }
+.button:hover { border-color: var(--ops-border-strong); color: var(--ops-text); background: var(--ops-surface-2); }
 .button-primary { border-color: var(--ops-gold); background: var(--ops-gold); color: var(--ops-bg); }
+.button-primary:hover { border-color: var(--ops-gold-light); background: var(--ops-gold-light); color: var(--ops-bg); }
+.button-quiet { min-height: 28px; background: transparent; }
 .button-disabled { opacity: 0.4; cursor: not-allowed; }
 .copy-button { min-height: 24px; font-size: 10px; padding: 0 var(--ops-space-1); }
 .ops-badge, .page-chip {
@@ -1116,21 +1193,37 @@ button { cursor: pointer; }
   font-weight: 700;
   color: var(--ops-gold-light);
 }
-.metric-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ops-space-4);
-  align-items: center;
+.metric-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--ops-space-3);
 }
 .metric-item {
-  font-size: 13px;
+  min-height: 104px;
+  display: grid;
+  align-content: space-between;
+  gap: var(--ops-space-2);
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+  background: var(--ops-surface);
+  padding: var(--ops-space-4);
   color: var(--ops-muted);
+}
+.metric-item span {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 .metric-item strong {
   font-family: var(--ops-font-mono);
-  font-size: 16px;
+  font-size: 24px;
+  line-height: 1;
   color: var(--ops-text);
-  margin-right: 4px;
+}
+.metric-item small {
+  color: var(--ops-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .metric-active strong { color: var(--ops-amber); }
 .metric-success strong { color: var(--ops-green); }
@@ -1138,6 +1231,7 @@ button { cursor: pointer; }
 .table-shell, .panel, .detail-hero, .error-state, .raw-panel {
   border: 1px solid var(--ops-border);
   border-radius: var(--ops-radius-sm);
+  background: var(--ops-surface);
 }
 .login-body {
   min-height: 100vh;
@@ -1181,38 +1275,60 @@ button { cursor: pointer; }
   padding: 0 var(--ops-space-3);
 }
 .controls-shell {
-  border-top: 1px solid var(--ops-border);
-  border-bottom: 1px solid var(--ops-border);
-  padding: var(--ops-space-2) 0;
-}
-.filter-toggle summary {
-  font-size: 12px;
-  font-weight: 800;
-  padding: var(--ops-space-1) 0;
-}
-.filter-toggle[open] {
-  border-bottom: 1px solid var(--ops-border);
-  padding-bottom: var(--ops-space-3);
-}
-.control-row {
-  display: flex;
-  gap: var(--ops-space-2);
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: var(--ops-space-2);
-}
-.control-row label { flex: none; }
-.control-row input, .control-row select {
-  min-height: 32px;
   border: 1px solid var(--ops-border);
   border-radius: var(--ops-radius-sm);
-  background: var(--ops-bg);
+  background: var(--ops-surface);
+  padding: var(--ops-space-3);
+}
+.ops-controls { margin: 0; }
+.control-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(128px, 0.8fr) minmax(240px, 1.5fr) repeat(3, minmax(112px, 0.7fr)) minmax(140px, 0.8fr) auto;
+  gap: var(--ops-space-2);
+  align-items: end;
+}
+.control-grid label {
+  display: grid;
+  gap: var(--ops-space-1);
+}
+.control-grid label > span {
+  color: var(--ops-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.control-grid input, .control-grid select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+  background: var(--ops-bg-raised);
   color: var(--ops-text);
   padding: 0 var(--ops-space-2);
   font-size: 13px;
 }
-.control-row input[type="search"] { width: 200px; }
-.control-row input[type="date"] { width: 130px; }
+.control-grid input::placeholder { color: color-mix(in oklab, var(--ops-muted) 80%, transparent); }
+.check-control {
+  min-height: 34px;
+  display: flex !important;
+  align-items: center;
+  gap: var(--ops-space-2) !important;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+  background: var(--ops-bg-raised);
+  padding: 0 var(--ops-space-2);
+}
+.check-control input {
+  width: 16px;
+  min-height: 16px;
+  accent-color: var(--ops-gold);
+}
+.check-control span { text-transform: none !important; font-size: 12px !important; color: var(--ops-text-soft) !important; }
+.control-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ops-space-2);
+}
 .status-pill {
   display: inline-flex;
   min-height: 30px;
@@ -1246,13 +1362,21 @@ button { cursor: pointer; }
   padding: var(--ops-space-2) var(--ops-space-3);
   font-size: 12px;
 }
-.table-meta { display: flex; gap: var(--ops-space-2); align-items: center; border-bottom: 1px solid var(--ops-border); padding: var(--ops-space-3) var(--ops-space-4); color: var(--ops-muted); }
+.table-meta {
+  display: flex;
+  gap: var(--ops-space-2);
+  align-items: center;
+  border-bottom: 1px solid var(--ops-border);
+  padding: var(--ops-space-3) var(--ops-space-4);
+  color: var(--ops-muted);
+  background: var(--ops-bg-raised);
+}
 table { width: 100%; border-collapse: collapse; }
 th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--ops-surface-2);
+  background: color-mix(in oklab, var(--ops-surface-2) 88%, black 12%);
   color: var(--ops-muted);
   text-align: left;
   padding: var(--ops-space-3);
@@ -1378,9 +1502,10 @@ pre { margin: 0; max-height: 520px; overflow: auto; padding: var(--ops-space-4);
   .page-heading { align-items: flex-start; }
   .page-heading h1 { font-size: 14px; margin: 0; }
   .page-heading p { margin: 2px 0 0; font-size: 9px; }
-  .metric-grid { gap: 8px; }
-  .metric-item { font-size: 10px; }
+  .metric-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .metric-item { min-height: auto; padding: 6px; font-size: 9px; border: 1px solid #bbb; }
   .metric-item strong { font-size: 12px; }
+  .metric-item small { font-size: 8px; }
   .table-shell { overflow: visible; border: 1px solid #bbb; }
   .table-meta { padding: 6px 8px; font-size: 9px; }
   table { font-size: 9px; min-width: 0; width: 100%; }
@@ -1417,15 +1542,29 @@ pre { margin: 0; max-height: 520px; overflow: auto; padding: var(--ops-space-4);
   pre { max-height: none; padding: 6px; font-size: 8px; }
   .status-pill { border: 1px solid #bbb; padding: 2px 5px; }
   .ops-badge { border: 1px solid #bbb; }
-  @page { margin: 10mm; size: A4; }
+  @page { margin: 10mm; size: A4 landscape; }
 }
 @media (max-width: 1120px) {
   .detail-layout { grid-template-columns: 1fr; }
+  .topbar-inner { align-items: flex-start; flex-wrap: wrap; }
+  .top-actions { width: 100%; justify-content: flex-start; }
+  .metric-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .control-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .control-search { grid-column: span 2; }
 }
 @media (max-width: 760px) {
   .ops-frame { padding: var(--ops-space-3); }
   .page-heading { display: grid; }
-  .metric-grid { flex-direction: column; gap: var(--ops-space-1); }
+  .metric-bar { grid-template-columns: 1fr; gap: var(--ops-space-2); }
+  .metric-item { min-height: 84px; }
+  .control-grid { grid-template-columns: 1fr; }
+  .control-search { grid-column: auto; }
+  .control-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .control-actions .button { width: 100%; }
+  .top-nav { order: 3; width: 100%; }
+  .top-nav a { flex: 1; justify-content: center; }
+  .brand-copy span { display: none; }
+  .operator-chip { max-width: 100%; }
   .amount-summary div { border-right: 0; border-bottom: 1px solid var(--ops-border); }
   .amount-summary div:last-child { border-bottom: 0; }
   .table-shell { overflow: visible; background: transparent; border: 0; box-shadow: none; }
@@ -1488,6 +1627,12 @@ const OPS_DASHBOARD_SCRIPT = `
       event.preventDefault();
       var value = copyButton.getAttribute('data-copy-value') || '';
       navigator.clipboard.writeText(value).then(function () { toast('Copied to clipboard'); }).catch(function () { toast('Copy failed'); });
+      return;
+    }
+    var printButton = target.closest('[data-print-button]');
+    if (printButton) {
+      event.preventDefault();
+      window.print();
       return;
     }
     var row = target.closest('[data-row-href]');
