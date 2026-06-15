@@ -20,7 +20,7 @@ Updated: 2026-06-14
 - [ ] One real Stellar testnet end-to-end transfer executed
 - [ ] Dashboard screenshots captured as `dashboard-list.png` / `dashboard-detail.png`
 - [ ] All 4 final evidence artifacts refreshed for the same real testnet transfer
-- [x] Interim database-backed orchestration logs and transfer record refreshed from normalized `transfers` + `transfer_events`
+- [ ] Final orchestration logs and transfer record exported from a reconciled real Stellar testnet transfer
 - [x] Runs documented under `docs/insta-awards/deliverables/deliverable-1/runs/`
 
 ## Evidence Status
@@ -29,8 +29,8 @@ Updated: 2026-06-14
 |---|----------|------|--------|
 | 1 | Repository link + capability map | `evidence/REPO.md` | Needs refresh after final run |
 | 2 | Dashboard instructions/screenshots | `evidence/DASHBOARD.md`, `dashboard-list.png`, `dashboard-detail.png` | Instructions exist; screenshots pending |
-| 3 | Orchestration logs | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-000001.json` | Refreshed 2026-06-14 from DB-backed normalized transfer mirrored from legacy `international_transfers`; final real completed testnet transfer still pending |
-| 4 | Transfer record | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-000001.json` | Refreshed 2026-06-14 from the same DB-backed normalized transfer; final real completed testnet transfer still pending |
+| 3 | Orchestration logs | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-<public_ref>.json` | Pending; no JSON is committed until a reconciled real Stellar testnet transfer exists |
+| 4 | Transfer record | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-<public_ref>.json` | Pending; no JSON is committed until it passes the real-evidence export guard |
 
 ## Verification This Run
 
@@ -47,14 +47,6 @@ npm --prefix backend test -- --runInBand tests/international-transfer.routes.tes
 npm --prefix frontend run build
 # PASS: Next.js build; /admin/transactions route generated
 
-cd backend
-npx ts-node scripts/export-transfer-log.ts 972fda9f-fdec-47bd-a21c-a9326999e948
-# PASS: wrote docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-000001.json
-
-cd backend
-npx ts-node scripts/export-transfer-record.ts 972fda9f-fdec-47bd-a21c-a9326999e948
-# PASS: wrote docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-000001.json
-
 npm --prefix backend test -- --runInBand tests/ops.routes.test.ts tests/ops-history.repository.test.ts tests/orchestration/stateMachine.test.ts tests/orchestration/orchestrator.test.ts tests/international-transfer.routes.test.ts
 # PASS: 5 suites, 33 tests
 ```
@@ -67,15 +59,15 @@ npm --prefix backend test -- --runInBand tests/ops.routes.test.ts tests/ops-hist
 4. Start backend and capture `/ops` list/detail screenshots for that same transfer.
 5. Export refreshed log and transfer record evidence for that same `public_ref`.
 
-## Interim Evidence Export
+## Evidence Export Policy
 
-On 2026-06-14, `international_transfers.id = tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec` was mirrored through `TransferOrchestrator.syncFromInternationalTransfer()` into normalized transfer `972fda9f-fdec-47bd-a21c-a9326999e948` / `TTS-2026-000001`.
+The active evidence folder intentionally contains no log or transfer-record JSON until the final same-transfer run is complete.
 
-That database-backed transfer currently has 8 lifecycle events and ends at `PAYOUT_INSTRUCTED`. The exported JSON files are reviewer-useful for validating architecture, lifecycle transitions, quote flow, payout object handling, and reconciliation metadata shape, but they are not a substitute for the final same-transfer real testnet evidence run.
+The export scripts now reject non-final evidence before writing files. A transfer must be `RECONCILED`, include a real PIX evidence value, include a 64-character Stellar transaction hash, include a positive Stellar ledger number, and include reconciliation metadata.
 
 ## Documentation Pointers
 
 - Start here: `README.md`
 - Final evidence production steps: `EVIDENCE-RUNBOOK.md`
 - Migration details and schema inspection SQL: `MIGRATIONS.md`
-- Latest evidence export run: `runs/2026-06-14-1155-evidence-export.md`
+- Latest dashboard cleanup run: `runs/2026-06-14-2224-ops-dashboard-cleanup.md`
