@@ -458,17 +458,6 @@ function metricCurrency(value: bigint, asset: string): string {
   return `${normalized} ${formatScaled(value, 6, 2)}`;
 }
 
-function isSameLocalDate(value: string, offsetDays = 0): boolean {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const target = new Date();
-  target.setHours(0, 0, 0, 0);
-  target.setDate(target.getDate() + offsetDays);
-  const next = new Date(target);
-  next.setDate(target.getDate() + 1);
-  return date.getTime() >= target.getTime() && date.getTime() < next.getTime();
-}
-
 function amountSum(records: OpsHistoryRecord[], pick: (record: OpsHistoryRecord) => string | null | undefined): bigint {
   return records.reduce((total, record) => total + decimalToScale(pick(record)), 0n);
 }
@@ -492,25 +481,24 @@ function feeMetric(records: OpsHistoryRecord[]): { value: string; detail: string
 }
 
 function dashboardMetrics(records: OpsHistoryRecord[]): OpsDashboardMetric[] {
-  const today = records.filter((record) => isSameLocalDate(record.created_at));
-  const todayBrlToUsdc = today.filter((record) =>
+  const brlToUsdc = records.filter((record) =>
     String(record.source_asset || '').toUpperCase() === 'BRL' &&
     String(record.destination_asset || '').toUpperCase() === 'USDC'
   );
-  const volumeToday = amountSum(todayBrlToUsdc, (record) => record.source_amount);
+  const totalBrlToUsdc = amountSum(brlToUsdc, (record) => record.source_amount);
   const completed = records.filter((record) => record.category === 'completed').length;
   const fees = feeMetric(records);
 
   return [
     {
-      label: 'Transfers today',
-      value: String(today.length),
-      detail: 'Ledger records created today',
+      label: 'All transfers',
+      value: String(records.length),
+      detail: 'Total ledger records loaded',
     },
     {
-      label: 'BRL to USDC today',
-      value: metricCurrency(volumeToday, 'BRL'),
-      detail: 'Volume funded into the USDC rail',
+      label: 'BRL to USDC total',
+      value: metricCurrency(totalBrlToUsdc, 'BRL'),
+      detail: 'Total volume funded into the USDC rail',
       tone: 'success',
     },
     {

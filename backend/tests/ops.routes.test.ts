@@ -184,10 +184,14 @@ describe('ops history routes', () => {
 
     expect(response.status).toBe(200);
     expect(html).toContain('Ops dashboard');
-    expect(html).toContain('Transfers today');
-    expect(html).toContain('BRL to USDC today');
+    expect(html).toContain('All transfers');
+    expect(html).toContain('Total ledger records loaded');
+    expect(html).toContain('BRL to USDC total');
+    expect(html).toContain('Total volume funded into the USDC rail');
     expect(html).toContain('Completed');
     expect(html).toContain('Admin fees');
+    expect(html).not.toContain('Transfers today');
+    expect(html).not.toContain('BRL to USDC today');
     expect(html).not.toContain('Needs attention');
     expect(html).not.toContain('In flight');
     expect(html).toContain('Apply filters');
