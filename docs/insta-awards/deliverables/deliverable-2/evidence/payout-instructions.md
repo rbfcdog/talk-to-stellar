@@ -2,7 +2,16 @@
 
 ## Status
 
-Foundation ready. Final evidence still requires one settled transfer with a real Stellar transaction hash.
+Foundation ready. Final evidence still requires one settled transfer with a real Stellar transaction hash and a provider payout instruction row.
+
+Current database inspection on 2026-06-15:
+
+- `public.international_payout_instructions`: 0 rows
+- `public.international_payout_events`: 0 rows
+- current `public.international_transfers` rows contain mock-prefixed Stellar and PIX identifiers
+- usable final D2 transfer count: 0
+
+This means payout-instruction evidence is ready as a route/service/schema package, but final real payout evidence cannot be claimed yet.
 
 ## Create A Circle Payout Instruction
 
@@ -75,3 +84,11 @@ where transfer_id = '<transfer_id>';
 ## Redaction Rule
 
 Reviewer evidence must not expose raw API keys, account numbers, routing numbers, or raw linked destination IDs. Provider references are hashed; account and routing numbers show last four digits only.
+
+## Final Reviewer Claim After Execution
+
+Use this only after a real settled transfer creates a payout instruction:
+
+```text
+For the settled transfer, TalkToStellar created a USD payout instruction, linked it to Stellar settlement evidence, persisted provider request/response evidence, tracked provider status, and exposed a redacted reviewer evidence package.
+```

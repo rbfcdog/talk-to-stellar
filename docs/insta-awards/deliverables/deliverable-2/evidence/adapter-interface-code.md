@@ -2,7 +2,7 @@
 
 ## Status
 
-Foundation ready. The provider-agnostic payout adapter contract exists and is covered by backend tests.
+Ready for code review and test proof. The provider-agnostic payout adapter contract exists, supports Circle/Bridge/Etherfuse/mock providers, and is covered by backend tests.
 
 ## Code References
 
@@ -39,6 +39,16 @@ Unknown provider names throw and do not fall back silently to mock.
 - `circleIdempotencyKey` / `circle_idempotency_key`
 
 This lets the backend use either a global `CIRCLE_PAYOUT_DESTINATION_ID` or a per-request/per-transfer linked Circle bank account ID.
+
+## Reviewer Claim
+
+Use this claim:
+
+```text
+TalkToStellar implements a provider-agnostic payout adapter contract that can build USD payout instructions for Circle and Bridge-compatible workflows, preserve Etherfuse PIX proof metadata, and reject unsupported providers without silently falling back to mock behavior.
+```
+
+Do not claim final Circle payout execution from this artifact alone. Execution proof belongs in `circle-bridge-integration.md` and `payout-instructions.md` after a real same-transfer run.
 
 ## Verification
 

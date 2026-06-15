@@ -77,8 +77,10 @@ Their source documents now live under categorized root `docs/` folders:
 | File | Description | Freshness |
 |------|-------------|-----------|
 | `docs/insta-awards/deliverables/deliverable-1/` | D1 implementation plan, migrations, status, runs, and evidence | ⚠️ Active; final same-transfer real testnet evidence still pending |
-| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle linked-bank foundation status, active evidence docs, and final evidence checklist | ⚠️ Active; final same-transfer Circle payout evidence still pending |
-| `docs/insta-awards/deliverables/deliverable-2/evidence/` | Active D2 foundation evidence for adapter code, Stellar hash requirements, Circle/Bridge setup, and payout instructions | ⚠️ Foundation evidence; final same-transfer evidence pending |
+| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle linked-bank foundation status, active evidence docs, current DB boundary, and final evidence checklist | ⚠️ Active; final same-transfer Circle payout evidence still pending |
+| `docs/insta-awards/deliverables/deliverable-2/STATUS.md` | Current D2 all-deliverables status and completion blockers | ⚠️ Foundation package ready; final execution pending |
+| `docs/insta-awards/deliverables/deliverable-2/DELIVERABLE-LOCATIONS.md` | Exact D2 evidence locations and D1 real-evidence cross-reference | ✅ Current |
+| `docs/insta-awards/deliverables/deliverable-2/evidence/` | Active D2 foundation evidence for adapter code, Stellar hash requirements, Circle/Bridge setup, payout instructions, redacted Circle readiness, and current DB state | ⚠️ Foundation evidence; final same-transfer evidence pending |
 | `docs/insta-awards/deliverables/deliverable-3/` | D3 institutional settlement demo foundation, walkthrough, setup, screenshot/video plans, and reviewer package | ⚠️ Active; final video/screenshots/same-transfer evidence pending |
 
 ## Backend Docs

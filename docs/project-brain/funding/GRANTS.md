@@ -15,10 +15,11 @@
 - **Files**: `backend/src/orchestration/`, `backend/src/api/repository/transfer.repository.ts`, `backend/src/api/repository/ops-history.repository.ts`, `backend/src/api/routes/ops.router.ts`, `backend/src/api/controllers/ops.controller.ts`
 - **Run docs**: `docs/insta-awards/deliverables/deliverable-1/runs/`
 
-#### Deliverable 2 — Payout Adapter (PENDING)
+#### Deliverable 2 — Payout Adapter (FOUNDATION PACKAGE READY; FINAL EXECUTION PENDING)
 - **Scope**: Real payout adapter execution (Circle/Bridge), identity alignment, settlement evidence
-- **Status**: Foundation advanced on 2026-06-15. Circle Mint payout adapter builds official `/v1/businessAccount/payouts` payloads, supports linked bank destination IDs through env or protected request options, has a redacted readiness command, and keeps gated sandbox/live execution, status polling, webhook normalization, and redacted evidence. A Circle sandbox wire bank destination was created outside Git; raw API key and bank details are not committed. Bridge remains compatibility-oriented while provider access is pending. Completion still requires one same-transfer run after Stellar settlement, a persisted Circle provider payout ID, and evidence capture.
+- **Status**: All four requested D2 evidence labels were assembled on 2026-06-15: Adapter Interface Code, Hash Transacao Stellar, Integracao Circle/Bridge, and Payout Instructions. Circle Mint payout adapter builds official `/v1/businessAccount/payouts` payloads, supports linked bank destination IDs through env or protected request options, has a redacted readiness command, and keeps gated sandbox/live execution, status polling, webhook normalization, and redacted evidence. A Circle sandbox wire bank destination was created outside Git; raw API key and bank details are not committed. Current DB inspection shows no usable final D2 transfer: 2 `international_transfers` rows with mock-prefixed Stellar/PIX identifiers, 0 `international_payout_instructions`, and 0 `international_payout_events`. Completion still requires one same-transfer run after real Stellar settlement, a persisted Circle provider payout ID, status/webhook evidence, reconciliation output, and dashboard screenshots.
 - **Files**: `backend/src/api/services/usd-payout-adapters.ts`, `backend/src/api/services/usd-payout-coordination.service.ts`, `backend/src/api/services/international-transfer.service.ts`, `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`
+- **Evidence package**: `docs/insta-awards/deliverables/deliverable-2/STATUS.md`, `docs/insta-awards/deliverables/deliverable-2/DELIVERABLE-LOCATIONS.md`, `docs/insta-awards/deliverables/deliverable-2/evidence/`, `docs/insta-awards/deliverables/deliverable-2/runs/`
 
 #### Deliverable 3 — Institutional Settlement Flow Demonstration (PENDING)
 - **Scope**: Demo video, screenshots, architecture diagrams, technical walkthrough, setup documentation, and reviewer package showing PIX funding to Stellar settlement to international USD payout orchestration.
@@ -50,5 +51,5 @@
 | Deliverable | Due | Status |
 |-------------|-----|--------|
 | Instaward D1 | Active sprint | In progress |
-| Instaward D2 | TBD | Foundation in progress |
+| Instaward D2 | TBD | Foundation package ready; final execution pending |
 | Instaward D3 | TBD | Foundation in progress |

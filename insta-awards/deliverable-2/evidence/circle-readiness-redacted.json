@@ -1,0 +1,33 @@
+{
+  "captured_at": "2026-06-15",
+  "provider": "circle",
+  "purpose": "D2 sandbox payout readiness",
+  "environment": "sandbox",
+  "api_key_present": false,
+  "api_key_kind": "missing",
+  "linked_destination": {
+    "present": true,
+    "type": "wire",
+    "id_hash": "9c20e383eab6",
+    "id_tail": "cd88"
+  },
+  "source_wallet_id_present": false,
+  "execution_gate_enabled": false,
+  "derived_urls": {
+    "create_payout": "https://api-sandbox.circle.com/v1/businessAccount/payouts",
+    "get_payout": "https://api-sandbox.circle.com/v1/businessAccount/payouts/{id}"
+  },
+  "ready_for": {
+    "compatibility_evidence": true,
+    "circle_sandbox_api_execution": false
+  },
+  "blockers": [
+    "CIRCLE_API_KEY is missing.",
+    "ENABLE_REAL_PAYOUT_EXECUTION is false."
+  ],
+  "next_action": "Set missing backend env values, restart backend, then re-run this script.",
+  "safety": [
+    "This script does not print API keys or raw bank account IDs.",
+    "The linked destination must come from Circle bank-account linking; do not use random strings for execution."
+  ]
+}

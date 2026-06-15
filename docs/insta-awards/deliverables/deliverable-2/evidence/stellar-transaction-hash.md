@@ -2,9 +2,24 @@
 
 ## Status
 
-Pending final same-transfer run.
+Evidence requirements are ready. Final same-transfer D2 Stellar hash is pending.
 
 D2 requires a real Stellar testnet transaction hash from the same transfer used for Circle payout evidence. The existing historical Stellar JSON evidence from D1 can prove real Stellar activity, but it is not a replacement for the D2 same-transfer payout package.
+
+## Current Database Result
+
+The database was inspected on 2026-06-15. See `current-db-state.md`.
+
+Current result:
+
+- `international_transfers`: 2 rows
+- usable final D2 transfer count: 0
+- both current transfer rows have mock-prefixed Stellar hashes
+- both current transfer rows have mock-prefixed PIX identifiers
+- `international_payout_instructions`: 0 rows
+- `international_payout_events`: 0 rows
+
+Therefore there is no valid D2 same-transfer Stellar hash to submit yet.
 
 ## Required Fields
 
@@ -43,3 +58,13 @@ The final D2 package should show the same `stellar_tx_hash` in:
 - reconciliation output
 - `/api/transfers/:id/payout-evidence`
 - ops dashboard detail page
+
+## D1 Cross-Reference
+
+Current D1 real historical Stellar evidence is in:
+
+```text
+docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json
+```
+
+It includes testnet transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, verified on Horizon testnet ledger `2488252`. This is real historical Stellar evidence, but it is not a same-transfer D2 payout hash.
