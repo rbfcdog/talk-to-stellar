@@ -45,7 +45,8 @@
     "migrate:required": "ts-node scripts/run-required-migrations.ts",
     "ops:hash-password": "ts-node scripts/hash-ops-admin-password.ts",
     "instawards:export-log": "ts-node scripts/export-transfer-log.ts",
-    "instawards:export-record": "ts-node scripts/export-transfer-record.ts"
+    "instawards:export-record": "ts-node scripts/export-transfer-record.ts",
+    "instawards:export-real-stellar-payment": "ts-node src/scripts/export-real-stellar-payment-evidence.ts"
   },
   "keywords": [
     "stellar",

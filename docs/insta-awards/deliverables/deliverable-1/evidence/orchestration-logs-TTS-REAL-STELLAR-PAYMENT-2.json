@@ -1,0 +1,88 @@
+{
+  "exported_at": "2026-06-15T02:03:06.040Z",
+  "public_ref": "TTS-REAL-STELLAR-PAYMENT-2",
+  "evidence_scope": "historical_real_stellar_payment",
+  "final_d1_cross_border_evidence": false,
+  "final_d1_note": "This is real Stellar testnet payment evidence from existing database history. It is not the final D1 PIX-to-Stellar-to-payout evidence package.",
+  "source_tables": {
+    "payment_logs_id": 2,
+    "operation_ids": [
+      "259de57a-ca16-409b-bf73-79c5641cbf16"
+    ]
+  },
+  "records": [
+    {
+      "event_type": "payment_log_success",
+      "source": "payment_logs",
+      "actor": "api",
+      "created_at": "2026-05-10T21:46:35.971+00:00",
+      "payload": {
+        "id": 2,
+        "user_id_masked": "te***@***.com",
+        "session_id_masked": "***15ec7c96",
+        "source_public_key": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
+        "destination_public_key": "GBBBRRQ2JIQX4RDQFPQHA4FBT5I5T37DPGYSC76TM3PEC65QIZXE3WCY",
+        "source_amount": "11.9281550",
+        "source_asset_code": "XLM",
+        "source_asset_issuer": null,
+        "destination_amount": "10.0000000",
+        "destination_asset_code": "USDC",
+        "destination_asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+        "fee_xlm": "0.0000100",
+        "payment_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+        "operation_type": "PATH_PAYMENT",
+        "status": "success",
+        "route_path": [],
+        "created_at": "2026-05-10T21:46:35.971+00:00",
+        "completed_at": "2026-05-10T21:46:35.971+00:00"
+      }
+    },
+    {
+      "event_type": "operation_completed",
+      "source": "operations",
+      "actor": "system",
+      "created_at": "2026-05-12T18:49:47.173976",
+      "payload": {
+        "id": "259de57a-ca16-409b-bf73-79c5641cbf16",
+        "type": "PATH_PAYMENT_STRICT_RECEIVE",
+        "status": "COMPLETED",
+        "amount": 10,
+        "asset_code": "USDC",
+        "context_redacted": true,
+        "stellar_transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+        "transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+        "created_at": "2026-05-10T21:46:32.971018",
+        "updated_at": "2026-05-12T18:49:47.173976"
+      }
+    },
+    {
+      "event_type": "horizon_transaction_confirmed",
+      "source": "stellar_horizon_testnet",
+      "actor": "horizon",
+      "created_at": "2026-05-10T21:46:35Z",
+      "payload": {
+        "hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+        "ledger": 2488252,
+        "successful": true,
+        "created_at": "2026-05-10T21:46:35Z",
+        "source_account": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
+        "operation_count": 1,
+        "fee_charged": "100",
+        "memo_type": "none",
+        "paging_token": "10686960964214784",
+        "links": {
+          "self": "https://horizon-testnet.stellar.org/transactions/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+          "operations": "https://horizon-testnet.stellar.org/transactions/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094/operations{?cursor,limit,order}",
+          "effects": "https://horizon-testnet.stellar.org/transactions/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094/effects{?cursor,limit,order}",
+          "explorer": "https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094"
+        }
+      }
+    }
+  ],
+  "summary": {
+    "total_records": 3,
+    "stellar_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+    "stellar_ledger": 2488252,
+    "successful": true
+  }
+}
