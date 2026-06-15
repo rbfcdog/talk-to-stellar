@@ -2,6 +2,14 @@
 
 These diagrams describe the current reviewer flow. They are documentation diagrams; the source of truth remains the code paths named under each diagram.
 
+For the award upload label `Diagramas de Arquitetura`, submit:
+
+```text
+docs/insta-awards/deliverables/deliverable-3/evidence/diagramas-de-arquitetura.md
+```
+
+That evidence file contains the reviewer-ready Mermaid diagram set for the end-to-end transfer routing demonstration.
+
 ## End-To-End Flow
 
 ```mermaid

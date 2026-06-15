@@ -16,9 +16,10 @@ The final package must identify one transfer and walk reviewers through every st
 
 | Artifact | Path or URL | Status |
 |----------|-------------|--------|
-| Demo video | `evidence/video/` | Pending |
-| Screenshot set | `evidence/screenshots/` | Pending |
-| Architecture diagrams | `ARCHITECTURE-DIAGRAMS.md` | Ready |
+| Video Demo Completo | `evidence/video-demo-completo.md`; final media in `evidence/video/` | Storyboard ready; final video pending |
+| Diagramas de Arquitetura | `evidence/diagramas-de-arquitetura.md`; source copy in `ARCHITECTURE-DIAGRAMS.md` | Ready |
+| Screenshot Fluxo Completo | `evidence/screenshot-fluxo-completo.md`; final images in `evidence/screenshots/` | Shot list ready; final screenshots pending |
+| Transfer Record Final | `evidence/transfer-record-final.md`; final JSON in `evidence/json/final-transfer-record.json` | Schema ready; final same-transfer record pending |
 | Technical walkthrough | `TECHNICAL-WALKTHROUGH.md` | Ready |
 | Setup documentation | `SETUP.md` | Ready |
 | Demo runbook | `DEMO-RUNBOOK.md` | Ready |

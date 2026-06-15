@@ -12,7 +12,7 @@ No direct Markdown files in this folder besides generated summaries.
 |--------|----------------|---------|
 | [`deliverable-1/`](./deliverable-1/) | 24 | [`DOCS-SUMMARY.md`](./deliverable-1/DOCS-SUMMARY.md) |
 | [`deliverable-2/`](./deliverable-2/) | 11 | [`DOCS-SUMMARY.md`](./deliverable-2/DOCS-SUMMARY.md) |
-| [`deliverable-3/`](./deliverable-3/) | 15 | [`DOCS-SUMMARY.md`](./deliverable-3/DOCS-SUMMARY.md) |
+| [`deliverable-3/`](./deliverable-3/) | 20 | [`DOCS-SUMMARY.md`](./deliverable-3/DOCS-SUMMARY.md) |
 
 ## Notes
 
