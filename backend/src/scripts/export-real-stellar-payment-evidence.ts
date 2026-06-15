@@ -98,7 +98,6 @@ async function main(): Promise<void> {
     exported_at: exportedAt,
     reference,
     evidence_scope: 'stellar_testnet_payment',
-    source_note: `Database export from payment_logs.id=${paymentLog.id} with matching operations row and Horizon testnet confirmation.`,
     source_tables: {
       payment_logs_id: paymentLog.id,
       operation_ids: (operationRows || []).map((row: any) => row.id),
@@ -196,14 +195,6 @@ async function main(): Promise<void> {
     payment_log: redactedPayment,
     operations: redactedOperations,
     stellar: horizonEvidence,
-    redaction: {
-      applied: true,
-      notes: [
-        'User and session identifiers are masked.',
-        'No raw secrets or private keys are included.',
-        'Public Stellar account IDs and transaction hashes remain visible because they are public-chain evidence.',
-      ],
-    },
   };
 
   const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverables/deliverable-1/evidence');

@@ -2,7 +2,6 @@
   "exported_at": "2026-06-15T02:03:06.040Z",
   "reference": "TTS-2026-STELLAR-000002",
   "evidence_scope": "stellar_testnet_payment",
-  "source_note": "Database export from payment_logs.id=2 with matching operations row and Horizon testnet confirmation.",
   "source_tables": {
     "payment_logs_id": 2,
     "operation_ids": [
@@ -60,13 +59,5 @@
       "effects": "https://horizon-testnet.stellar.org/transactions/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094/effects{?cursor,limit,order}",
       "explorer": "https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094"
     }
-  },
-  "redaction": {
-    "applied": true,
-    "notes": [
-      "User and session identifiers are masked.",
-      "No raw secrets or private keys are included.",
-      "Public Stellar account IDs and transaction hashes remain visible because they are public-chain evidence."
-    ]
   }
 }

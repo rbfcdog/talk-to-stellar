@@ -2,7 +2,6 @@
   "exported_at": "2026-06-15T02:03:06.040Z",
   "reference": "TTS-2026-STELLAR-000002",
   "evidence_scope": "stellar_testnet_payment",
-  "source_note": "Database export from payment_logs.id=2 with matching operations row and Horizon testnet confirmation.",
   "source_tables": {
     "payment_logs_id": 2,
     "operation_ids": [
