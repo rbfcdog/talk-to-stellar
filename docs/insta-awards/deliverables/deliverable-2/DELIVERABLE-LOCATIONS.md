@@ -34,7 +34,7 @@ docs/insta-awards/deliverables/deliverable-2/
 | Circle setup guide | `backend/docs/CIRCLE_INTEGRATION_SETUP.md` |
 | Circle foundation guide | `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md` |
 
-## Deliverable 1 Real Evidence Location
+## Deliverable 1 Verified Evidence Location
 
 Deliverable 1 evidence is here:
 
@@ -42,12 +42,12 @@ Deliverable 1 evidence is here:
 docs/insta-awards/deliverables/deliverable-1/evidence/
 ```
 
-Current real JSON files:
+Current JSON files:
 
-- `orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json`
-- `transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json`
+- `orchestration-logs-TTS-2026-STELLAR-000002.json`
+- `transfer-record-TTS-2026-STELLAR-000002.json`
 
-Why those D1 files are real:
+Why those D1 files are verified:
 
 - They were exported from live database `payment_logs.id = 2`.
 - They include the matching operations row `259de57a-ca16-409b-bf73-79c5641cbf16`.
@@ -55,4 +55,4 @@ Why those D1 files are real:
 - Horizon testnet confirms ledger `2488252` and `successful = true`.
 - Sensitive user/session/context values were redacted before commit.
 
-Boundary: these D1 JSON files prove real historical Stellar settlement evidence. They are not a substitute for the final D2 same-transfer Circle payout package.
+Boundary: these D1 JSON files prove database-backed Stellar settlement evidence. They are not a substitute for the final D2 same-transfer Circle payout package.

@@ -68,12 +68,12 @@ No new D2 migration was added. This foundation uses the existing `backend/migrat
 
 Deliverable 1 evidence lives at `docs/insta-awards/deliverables/deliverable-1/evidence/`.
 
-The current real JSON files are:
+The current JSON files are:
 
-- `orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json`
-- `transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json`
+- `orchestration-logs-TTS-2026-STELLAR-000002.json`
+- `transfer-record-TTS-2026-STELLAR-000002.json`
 
-They are real historical Stellar testnet evidence from live database `payment_logs.id = 2`, matching database operation row `259de57a-ca16-409b-bf73-79c5641cbf16`, and Horizon-confirmed transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`, `successful = true`.
+They were exported from live database `payment_logs.id = 2`, match database operation row `259de57a-ca16-409b-bf73-79c5641cbf16`, and include Horizon-confirmed transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`, `successful = true`.
 
 ## Left Open
 

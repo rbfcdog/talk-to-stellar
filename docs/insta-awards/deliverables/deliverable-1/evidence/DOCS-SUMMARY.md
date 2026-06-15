@@ -13,8 +13,8 @@ Generated summary for `docs/insta-awards/deliverables/deliverable-1/evidence`. L
 
 | File | Source | Summary |
 |------|--------|---------|
-| `orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json` | `payment_logs.id = 2` + Horizon testnet | Real historical Stellar payment log evidence. Transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`, successful on Horizon. |
-| `transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json` | `payment_logs.id = 2` + Horizon testnet | Real historical Stellar payment record evidence for the same transaction. Not the final D1 PIX-to-payout transfer record. |
+| `orchestration-logs-TTS-2026-STELLAR-000002.json` | `payment_logs.id = 2` + Horizon testnet | Stellar payment log export. Transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`, successful on Horizon. |
+| `transfer-record-TTS-2026-STELLAR-000002.json` | `payment_logs.id = 2` + Horizon testnet | Stellar payment record export for the same transaction. Not the final D1 PIX-to-payout transfer record. |
 
 ## Notes
 

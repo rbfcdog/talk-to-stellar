@@ -110,12 +110,12 @@ The two current `international_transfers` rows contain mock-prefixed Stellar and
 
 Deliverable 1 evidence is in `docs/insta-awards/deliverables/deliverable-1/evidence/`.
 
-Current real JSON evidence files:
+Current JSON evidence files:
 
-- `orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json`
-- `transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json`
+- `orchestration-logs-TTS-2026-STELLAR-000002.json`
+- `transfer-record-TTS-2026-STELLAR-000002.json`
 
-They are real historical Stellar testnet evidence because they were exported from live database `payment_logs.id = 2`, include matching `operations` rows, and verify transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094` on Horizon testnet ledger `2488252` with `successful = true`. They are not the final same-transfer D1 PIX-to-payout package.
+They were exported from live database `payment_logs.id = 2`, include matching `operations` rows, and verify transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094` on Horizon testnet ledger `2488252` with `successful = true`. They are not the final same-transfer D1 PIX-to-payout package.
 
 ## Remaining Evidence Work
 

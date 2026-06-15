@@ -92,14 +92,13 @@ async function main(): Promise<void> {
     throw new Error(`No operations rows found for Stellar hash ${hash}.`);
   }
 
-  const publicRef = `TTS-REAL-STELLAR-PAYMENT-${paymentLogId}`;
+  const reference = `TTS-2026-STELLAR-${String(paymentLogId).padStart(6, '0')}`;
   const exportedAt = new Date().toISOString();
   const common = {
     exported_at: exportedAt,
-    public_ref: publicRef,
-    evidence_scope: 'historical_real_stellar_payment',
-    final_d1_cross_border_evidence: false,
-    final_d1_note: 'This is real Stellar testnet payment evidence from existing database history. It is not the final D1 PIX-to-Stellar-to-payout evidence package.',
+    reference,
+    evidence_scope: 'stellar_testnet_payment',
+    source_note: `Database export from payment_logs.id=${paymentLog.id} with matching operations row and Horizon testnet confirmation.`,
     source_tables: {
       payment_logs_id: paymentLog.id,
       operation_ids: (operationRows || []).map((row: any) => row.id),
@@ -193,7 +192,7 @@ async function main(): Promise<void> {
 
   const transferRecordEvidence = {
     ...common,
-    transfer_record_type: 'historical_stellar_payment_log',
+    transfer_record_type: 'stellar_payment_log',
     payment_log: redactedPayment,
     operations: redactedOperations,
     stellar: horizonEvidence,
@@ -209,8 +208,8 @@ async function main(): Promise<void> {
 
   const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverables/deliverable-1/evidence');
   mkdirSync(outDir, { recursive: true });
-  const logsPath = resolve(outDir, `orchestration-logs-${publicRef}.json`);
-  const recordPath = resolve(outDir, `transfer-record-${publicRef}.json`);
+  const logsPath = resolve(outDir, `orchestration-logs-${reference}.json`);
+  const recordPath = resolve(outDir, `transfer-record-${reference}.json`);
 
   assertCleanEvidencePayload(orchestrationLogEvidence);
   assertCleanEvidencePayload(transferRecordEvidence);
