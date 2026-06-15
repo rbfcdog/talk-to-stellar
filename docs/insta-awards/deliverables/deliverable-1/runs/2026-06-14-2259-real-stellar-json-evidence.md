@@ -4,10 +4,10 @@
 
 Added two real JSON evidence files for the D1 evidence folder using an existing successful Stellar testnet payment from the live database, verified against Horizon testnet before writing:
 
-- `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json`
-- `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json`
+- `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-STELLAR-000002.json`
+- `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-STELLAR-000002.json`
 
-These files are real historical Stellar payment evidence from `payment_logs.id = 2`, transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`. They are not the final D1 PIX-to-Stellar-to-payout evidence package.
+These files are Stellar payment evidence from `payment_logs.id = 2`, transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`. They are not the final D1 PIX-to-Stellar-to-payout evidence package.
 
 ## Files Changed
 
@@ -15,8 +15,8 @@ These files are real historical Stellar payment evidence from `payment_logs.id =
 |---|---|
 | `backend/package.json` | Added `instawards:export-real-stellar-payment` script. |
 | `backend/src/scripts/export-real-stellar-payment-evidence.ts` | Exports real payment-log evidence only after DB, Horizon, positive-amount, operation-row, and marker validation. |
-| `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json` | Real orchestration-log-style JSON for the verified Stellar payment. |
-| `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json` | Real transfer-record-style JSON for the same verified Stellar payment. |
+| `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-STELLAR-000002.json` | Real orchestration-log-style JSON for the verified Stellar payment. |
+| `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-STELLAR-000002.json` | Real transfer-record-style JSON for the same verified Stellar payment. |
 | `docs/insta-awards/deliverables/deliverable-1/STATUS.md` | Points D1 evidence readers to the real JSON files and keeps the final D1 blocker explicit. |
 | `docs/insta-awards/deliverables/deliverable-1/DELIVERABLE-LOCATIONS.md` | Adds exact paths for the real JSON files. |
 | `docs/insta-awards/deliverables/deliverable-1/evidence/DOCS-SUMMARY.md` | Adds the JSON evidence index. |

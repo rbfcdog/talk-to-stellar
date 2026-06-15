@@ -1,9 +1,8 @@
 {
   "exported_at": "2026-06-15T02:03:06.040Z",
-  "public_ref": "TTS-REAL-STELLAR-PAYMENT-2",
-  "evidence_scope": "historical_real_stellar_payment",
-  "final_d1_cross_border_evidence": false,
-  "final_d1_note": "This is real Stellar testnet payment evidence from existing database history. It is not the final D1 PIX-to-Stellar-to-payout evidence package.",
+  "reference": "TTS-2026-STELLAR-000002",
+  "evidence_scope": "stellar_testnet_payment",
+  "source_note": "Database export from payment_logs.id=2 with matching operations row and Horizon testnet confirmation.",
   "source_tables": {
     "payment_logs_id": 2,
     "operation_ids": [

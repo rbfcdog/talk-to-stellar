@@ -24,7 +24,7 @@ What is real now:
 - Provider-agnostic adapter code exists in `backend/src/api/services/usd-payout-adapters.ts`.
 - Backend payout coordination and evidence code exists in `backend/src/api/services/usd-payout-coordination.service.ts`.
 - Circle sandbox linked-bank setup exists outside Git, with only redacted hash/tail evidence committed.
-- D1 has real historical Stellar testnet JSON evidence from live database export.
+- D1 has verified Stellar testnet JSON evidence from live database export.
 
 What is not complete yet:
 

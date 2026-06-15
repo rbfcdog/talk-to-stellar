@@ -1,6 +1,6 @@
 # Instaward #1 — Transfer Lifecycle Engine
 
-**Status**: In progress; real historical Stellar JSON exists; final D1 same-transfer export pending
+**Status**: In progress; verified Stellar JSON exists; final D1 same-transfer export pending
 **Evidence**: `docs/insta-awards/deliverables/deliverable-1/evidence/`
 
 ## Scope (from SOW)
@@ -12,10 +12,10 @@
 |---|------|--------|----------|
 | 1 | Repository + code | ✅ | `backend/src/orchestration/` |
 | 2 | Dashboard screenshot | Pending final capture | `docs/insta-awards/deliverables/deliverable-1/evidence/DASHBOARD.md` (instructions) |
-| 3 | Orchestration logs | Real historical Stellar JSON exists; final D1 export pending | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json` |
-| 4 | Transfer record | Real historical Stellar JSON exists; final D1 export pending | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json` |
+| 3 | Orchestration logs | Verified Stellar JSON exists; final D1 export pending | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-STELLAR-000002.json` |
+| 4 | Transfer record | Verified Stellar JSON exists; final D1 export pending | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-STELLAR-000002.json` |
 
-The active evidence folder contains two real historical Stellar-payment JSON files from `payment_logs.id = 2`, verified against Horizon testnet transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`. These files are not the final same-transfer D1 PIX-to-payout package. The final D1 exporters still reject non-final transfer evidence before writing files.
+The active evidence folder contains two Stellar-payment JSON files from `payment_logs.id = 2`, verified against Horizon testnet transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger `2488252`. These files are not the final same-transfer D1 PIX-to-payout package. The final D1 exporters still reject non-final transfer evidence before writing files.
 
 ## Key Artifacts
 - `backend/src/orchestration/stateMachine.ts` — 13-state transition map

@@ -25,8 +25,8 @@ When the two differ, update the active `docs/insta-awards/...` package first, th
 | GitHub repository and capability map | `docs/insta-awards/deliverables/deliverable-1/evidence/REPO.md` |
 | Dashboard access and screenshot steps | `docs/insta-awards/deliverables/deliverable-1/evidence/DASHBOARD.md` |
 | Dashboard screenshots | `docs/insta-awards/deliverables/deliverable-1/evidence/dashboard-list.png` and `docs/insta-awards/deliverables/deliverable-1/evidence/dashboard-detail.png` after final capture |
-| Real Stellar payment logs JSON | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json` |
-| Real Stellar payment record JSON | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json` |
+| Verified Stellar payment logs JSON | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-STELLAR-000002.json` |
+| Verified Stellar payment record JSON | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-STELLAR-000002.json` |
 | Final D1 Logs de Orquestracao | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-<public_ref>.json` after the final PIX-to-payout export |
 | Final D1 Exemplo de Transfer Record | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-<public_ref>.json` after the final PIX-to-payout export |
 | Copy-paste orchestration log explanation | `docs/project-brain/operations/forensics/orchestration-logs.md` |
