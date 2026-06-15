@@ -33,7 +33,7 @@ export function publicErrorCode(error: unknown) {
   if (/wallet not found for payment confirmation|wallet not found for conversion confirmation|wallet.*vault|vault[_\s-]?secret|source wallet secret|wallet private key|private key|failed to read secret from vault|get_private_key|not ready to sign|assinar esta operacao/.test(normalized)) return 'account_signing_unavailable';
   if (/pin.*(required|obrigator|obrigatorio)|pin da wallet|pin da conta/.test(normalized)) return 'missing_pin';
   if (/(invalid|incorrect|wrong|invalido).*(pin)|pin.*(invalid|incorrect|wrong|invalido)|senha/.test(normalized)) return 'invalid_pin';
-  if (/insufficient|saldo insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';
+  if (/insufficient|saldo(?:\s+de\s+[a-z0-9_-]+)?\s+insuficiente|not enough balance/.test(normalized)) return 'insufficient_balance';
   if (/defindex.*desativad|execucao defindex|defindex_enable_execution|defindex_compliance_approved|compliance approval|yield.*execution.*(disabled|requires)|execution.*yield.*disabled/.test(normalized)) return 'yield_execution_disabled';
   if (/review.*not ready|prepare.*again|revisao.*nao.*pronta|prepare.*revisao/.test(normalized)) return 'review_not_prepared';
   if (/(wallet private key|source wallet secret|private key|secret|failed to read secret from vault|get_private_key|assinar esta operacao|not ready to sign).*(defindex|yield|rendimento|operacao)|(defindex|yield|rendimento|operacao).*(wallet private key|source wallet secret|private key|secret|failed to read secret from vault|get_private_key|assinar esta operacao|not ready to sign)/.test(normalized)) return 'account_signing_unavailable';

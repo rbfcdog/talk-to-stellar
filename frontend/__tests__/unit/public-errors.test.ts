@@ -25,4 +25,12 @@ describe("public error mapping", () => {
     expect(mapped.message).toContain("assinar")
     expect(mapped.message).toContain("Entre novamente")
   })
+
+  it("shows insufficient balance for asset-specific conversion debit errors", () => {
+    const mapped = mapPublicError("Failed to build conversion transaction: Saldo de TESOURO insuficiente para a conversão. Necessário: 123, disponível: 89.6400000.", "pt-BR")
+
+    expect(mapped.code).toBe("insufficient_balance")
+    expect(mapped.message).toContain("Saldo insuficiente")
+    expect(mapped.message).not.toContain("Tente novamente em alguns segundos")
+  })
 })

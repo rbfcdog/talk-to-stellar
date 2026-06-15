@@ -80,6 +80,14 @@ describe('public-error utility', () => {
     expect(publicErrorMessage('Falha de envio da transacao externa.')).toContain('Nenhum valor saiu');
   });
 
+  it('maps asset-specific insufficient conversion balance without generic retry copy', () => {
+    const message = publicErrorMessage('Failed to build conversion transaction: Saldo de TESOURO insuficiente para a conversão. Necessário: 123, disponível: 89.6400000.');
+
+    expect(message).toContain('Saldo insuficiente');
+    expect(message).not.toBe('Não consegui concluir agora. Tente novamente em alguns segundos.');
+    expect(message).not.toContain('TESOURO insuficiente');
+  });
+
   it('maps recipient asset readiness failures without hiding the required action', () => {
     const message = publicErrorMessage('Ana Silva ainda nao pode receber CETES. Peca para ativar recebimento.');
 

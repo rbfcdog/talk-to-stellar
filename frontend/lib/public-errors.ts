@@ -144,7 +144,7 @@ export function mapPublicError(error: unknown, language?: string) {
     };
   }
 
-  if (/insufficient|saldo insuficiente|not enough balance|balance/.test(normalized)) {
+  if (/insufficient|saldo(?:\s+de\s+[a-z0-9_-]+)?\s+insuficiente|not enough balance|balance/.test(normalized)) {
     return {
       code: "insufficient_balance",
       message: copy(language, "Saldo insuficiente para concluir. Complete o saldo via PIX e tente novamente.", "Insufficient balance. Add funds with PIX and try again."),
