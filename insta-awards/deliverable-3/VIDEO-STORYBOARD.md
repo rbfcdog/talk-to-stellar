@@ -8,12 +8,12 @@
 
 ## Scene 1: Dashboard Overview (0:00–0:22)
 
-**Visual**: `/ops` dashboard page with metrics cards and transfer ledger table.
-**Audio/Narration**: "This is the TalkToStellar operational dashboard. Here you can see every transfer that flows through the system. The metric cards show transfers today, BRL-to-USDC volume, in-flight transfers, items needing attention, and admin fees. The table below is a unified ledger pulling from four database sources: D1 lifecycle transfers, international transfers, operations, and payment logs."
+**Visual**: `/ops` dashboard page with positive metrics cards and transfer ledger table.
+**Audio/Narration**: "This is the TalkToStellar operational dashboard. Here you can see every transfer that flows through the system. The metric cards focus on the clean operating picture: transfers today, BRL-to-USDC volume, completed records, and admin fees. The table below is a unified ledger pulling from four database sources: D1 lifecycle transfers, international transfers, operations, and payment logs."
 
 **What to show on screen**:
 1. Browser loads `http://localhost:3333/ops` (or deployed URL)
-2. 5 metric cards animate in (Transfers today, BRL to USDC today, In flight, Needs attention, Admin fees)
+2. 4 metric cards appear (Transfers today, BRL to USDC today, Completed, Admin fees)
 3. Scroll down to the table showing rows with: Reference, Status (color-coded pills), Route (e.g., "D1 lifecycle transfer"), Amount chain (R$ → USDC/USD), Evidence (tx hash), Fee, Created, Updated
 4. Hover cursor over a status pill to show meaning
 5. Point out the `source=transfers` filter dropdown and status legend
