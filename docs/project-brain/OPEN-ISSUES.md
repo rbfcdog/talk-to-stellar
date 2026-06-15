@@ -4,7 +4,7 @@
 
 Every pain point from [PAIN-POINTS.md](./PAIN-POINTS.md) whose fix could NOT be verified in the current code. Only genuinely open issues listed here.
 
-PAIN-POINTS.md currently records 21 fixed, 22 still open, and 3 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
+PAIN-POINTS.md currently records 22 fixed, 22 still open, and 3 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
 
 ## Priority: P0 (Blocking Production)
 
