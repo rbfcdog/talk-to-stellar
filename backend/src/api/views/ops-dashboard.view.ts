@@ -1,54 +1,80 @@
-import type { OpsHistoryCategory, OpsHistoryRecord, OpsHistorySource } from '../repository/ops-history.repository';
-import { TRANSFER_STATES, Transfer, TransferEvent, TransferState } from '../../orchestration/types';
+import type {
+  OpsHistoryCategory,
+  OpsHistoryRecord,
+  OpsHistorySource,
+} from "../repository/ops-history.repository";
+import {
+  TRANSFER_STATES,
+  Transfer,
+  TransferEvent,
+  TransferState,
+} from "../../orchestration/types";
 
 export const OPS_HISTORY_SOURCES: readonly OpsHistorySource[] = [
-  'transfers',
-  'international_transfers',
-  'operations',
-  'payment_logs',
+  "transfers",
+  "international_transfers",
+  "operations",
+  "payment_logs",
 ];
 
 export const HISTORY_SOURCE_LABELS: Record<OpsHistorySource, string> = {
-  transfers: 'D1 lifecycle',
-  international_transfers: 'International',
-  operations: 'Operations',
-  payment_logs: 'Payment logs',
+  transfers: "D1 lifecycle",
+  international_transfers: "International",
+  operations: "Operations",
+  payment_logs: "Payment logs",
 };
 
 export const STATE_LABELS: Record<TransferState, string> = {
-  CREATED: 'Created',
-  QUOTED: 'Quoted',
-  PIX_CHARGE_ISSUED: 'PIX issued',
-  PIX_FUNDED: 'PIX funded',
-  CONVERTING: 'Converting',
-  STELLAR_SETTLED: 'Stellar settled',
-  PAYOUT_ROUTING: 'Routing',
-  PAYOUT_INSTRUCTED: 'Payout instructed',
-  RECONCILED: 'Reconciled',
-  QUOTE_EXPIRED: 'Quote expired',
-  PIX_EXPIRED: 'PIX expired',
-  FAILED: 'Failed',
-  REFUND_REQUIRED: 'Refund required',
+  CREATED: "Created",
+  QUOTED: "Quoted",
+  PIX_CHARGE_ISSUED: "PIX issued",
+  PIX_FUNDED: "PIX funded",
+  CONVERTING: "Converting",
+  STELLAR_SETTLED: "Stellar settled",
+  PAYOUT_ROUTING: "Routing",
+  PAYOUT_INSTRUCTED: "Payout instructed",
+  RECONCILED: "Reconciled",
+  QUOTE_EXPIRED: "Quote expired",
+  PIX_EXPIRED: "PIX expired",
+  FAILED: "Failed",
+  REFUND_REQUIRED: "Refund required",
 };
 
 export const PRIMARY_STAGES: TransferState[] = [
-  'CREATED',
-  'QUOTED',
-  'PIX_CHARGE_ISSUED',
-  'PIX_FUNDED',
-  'CONVERTING',
-  'STELLAR_SETTLED',
-  'PAYOUT_ROUTING',
-  'PAYOUT_INSTRUCTED',
-  'RECONCILED',
+  "CREATED",
+  "QUOTED",
+  "PIX_CHARGE_ISSUED",
+  "PIX_FUNDED",
+  "CONVERTING",
+  "STELLAR_SETTLED",
+  "PAYOUT_ROUTING",
+  "PAYOUT_INSTRUCTED",
+  "RECONCILED",
 ];
 
-const FAILURE_STATES = new Set<TransferState>(['QUOTE_EXPIRED', 'PIX_EXPIRED', 'FAILED', 'REFUND_REQUIRED']);
-const ACTIVE_STATES = new Set<TransferState>(['PIX_FUNDED', 'CONVERTING', 'PAYOUT_ROUTING']);
-const SUCCESS_STATES = new Set<TransferState>(['STELLAR_SETTLED', 'PAYOUT_INSTRUCTED', 'RECONCILED']);
-const NEUTRAL_STATES = new Set<TransferState>(['CREATED', 'QUOTED', 'PIX_CHARGE_ISSUED']);
+const FAILURE_STATES = new Set<TransferState>([
+  "QUOTE_EXPIRED",
+  "PIX_EXPIRED",
+  "FAILED",
+  "REFUND_REQUIRED",
+]);
+const ACTIVE_STATES = new Set<TransferState>([
+  "PIX_FUNDED",
+  "CONVERTING",
+  "PAYOUT_ROUTING",
+]);
+const SUCCESS_STATES = new Set<TransferState>([
+  "STELLAR_SETTLED",
+  "PAYOUT_INSTRUCTED",
+  "RECONCILED",
+]);
+const NEUTRAL_STATES = new Set<TransferState>([
+  "CREATED",
+  "QUOTED",
+  "PIX_CHARGE_ISSUED",
+]);
 
-export type OpsSortDirection = 'asc' | 'desc';
+export type OpsSortDirection = "asc" | "desc";
 
 export type OpsDashboardFilters = {
   token: string;
@@ -69,7 +95,7 @@ export type OpsDashboardMetric = {
   label: string;
   value: string;
   detail: string;
-  tone?: 'default' | 'active' | 'success' | 'attention';
+  tone?: "default" | "active" | "success" | "attention";
 };
 
 export type OpsDashboardPagination = {
@@ -108,12 +134,12 @@ export type OpsTransferDetailRenderInput = {
 };
 
 export function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function escapeAttr(value: unknown): string {
@@ -121,72 +147,92 @@ function escapeAttr(value: unknown): string {
 }
 
 function titleizeStatus(value: string): string {
-  const cleaned = String(value || '').trim();
-  if (!cleaned) return 'Unknown';
+  const cleaned = String(value || "").trim();
+  if (!cleaned) return "Unknown";
   return cleaned
     .toLowerCase()
     .split(/[_\s-]+/)
     .filter(Boolean)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(' ');
+    .join(" ");
 }
 
 function normalizeAsset(asset: string | null | undefined): string {
-  return String(asset || '').trim().toUpperCase();
+  return String(asset || "")
+    .trim()
+    .toUpperCase();
 }
 
 function groupInteger(value: string): string {
-  const sign = value.startsWith('-') ? '-' : '';
+  const sign = value.startsWith("-") ? "-" : "";
   const digits = sign ? value.slice(1) : value;
-  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
 
-function formatDecimal(value: string | null | undefined, maxDecimals: number, minDecimals = 0): string {
-  const text = String(value ?? '').trim().replace(',', '.');
-  if (!text) return '';
+function formatDecimal(
+  value: string | null | undefined,
+  maxDecimals: number,
+  minDecimals = 0,
+): string {
+  const text = String(value ?? "")
+    .trim()
+    .replace(",", ".");
+  if (!text) return "";
   const match = text.match(/^(-?)(\d+)(?:\.(\d+))?$/);
   if (!match) return text;
 
-  const sign = match[1] || '';
-  const integer = match[2] || '0';
-  const fraction = (match[3] || '').slice(0, maxDecimals);
-  let trimmed = fraction.replace(/0+$/g, '');
+  const sign = match[1] || "";
+  const integer = match[2] || "0";
+  const fraction = (match[3] || "").slice(0, maxDecimals);
+  let trimmed = fraction.replace(/0+$/g, "");
   if (trimmed.length < minDecimals) {
-    trimmed = trimmed.padEnd(minDecimals, '0');
+    trimmed = trimmed.padEnd(minDecimals, "0");
   }
-  return trimmed ? `${groupInteger(`${sign}${integer}`)}.${trimmed}` : groupInteger(`${sign}${integer}`);
+  return trimmed
+    ? `${groupInteger(`${sign}${integer}`)}.${trimmed}`
+    : groupInteger(`${sign}${integer}`);
 }
 
-export function formatCurrency(value: string | null | undefined, asset: string | null | undefined): string {
-  const text = String(value ?? '').trim();
-  if (!text) return '-';
+export function formatCurrency(
+  value: string | null | undefined,
+  asset: string | null | undefined,
+): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "-";
   const normalizedAsset = normalizeAsset(asset);
-  if (normalizedAsset === 'BRL') return `R$ ${escapeHtml(formatDecimal(text, 2, 2))}`;
-  if (normalizedAsset === 'USDC') return `USDC ${escapeHtml(formatDecimal(text, 6, 2))}`;
-  if (normalizedAsset === 'USD') return `US$ ${escapeHtml(formatDecimal(text, 2, 2))}`;
-  if (normalizedAsset === 'XLM') return `XLM ${escapeHtml(formatDecimal(text, 7, 2))}`;
-  return `${escapeHtml(normalizedAsset || 'Amount')} ${escapeHtml(formatDecimal(text, 6, 0))}`;
+  if (normalizedAsset === "BRL")
+    return `R$ ${escapeHtml(formatDecimal(text, 2, 2))}`;
+  if (normalizedAsset === "USDC")
+    return `USDC ${escapeHtml(formatDecimal(text, 6, 2))}`;
+  if (normalizedAsset === "USD")
+    return `US$ ${escapeHtml(formatDecimal(text, 2, 2))}`;
+  if (normalizedAsset === "XLM")
+    return `XLM ${escapeHtml(formatDecimal(text, 7, 2))}`;
+  return `${escapeHtml(normalizedAsset || "Amount")} ${escapeHtml(formatDecimal(text, 6, 0))}`;
 }
 
 function formatAbsoluteDate(value: string | null | undefined): string {
-  if (!value) return '-';
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, 'Z');
+  return date
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, "Z");
 }
 
 function formatRelativeTime(value: string | null | undefined): string {
-  if (!value) return '-';
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   const diffMs = Date.now() - date.getTime();
   const future = diffMs < 0;
   const seconds = Math.max(0, Math.round(Math.abs(diffMs) / 1000));
   const units: Array<[number, string]> = [
-    [60 * 60 * 24 * 30, 'mo'],
-    [60 * 60 * 24, 'd'],
-    [60 * 60, 'h'],
-    [60, 'm'],
+    [60 * 60 * 24 * 30, "mo"],
+    [60 * 60 * 24, "d"],
+    [60 * 60, "h"],
+    [60, "m"],
   ];
   for (const [unitSeconds, label] of units) {
     if (seconds >= unitSeconds) {
@@ -194,95 +240,133 @@ function formatRelativeTime(value: string | null | undefined): string {
       return future ? `in ${amount}${label}` : `${amount}${label} ago`;
     }
   }
-  return future ? 'in seconds' : 'just now';
+  return future ? "in seconds" : "just now";
 }
 
-function renderTime(value: string | null | undefined, mode: 'compact' | 'stack' = 'compact'): string {
+function renderTime(
+  value: string | null | undefined,
+  mode: "compact" | "stack" = "compact",
+): string {
   const absolute = formatAbsoluteDate(value);
-  if (!value || absolute === '-') return '<span class="muted">-</span>';
-  const iso = Number.isNaN(new Date(value).getTime()) ? String(value) : new Date(value).toISOString();
+  if (!value || absolute === "-") return '<span class="muted">-</span>';
+  const iso = Number.isNaN(new Date(value).getTime())
+    ? String(value)
+    : new Date(value).toISOString();
   const relative = formatRelativeTime(value);
-  if (mode === 'stack') {
+  if (mode === "stack") {
     return `<span class="time-stack"><time datetime="${escapeAttr(iso)}" title="${escapeAttr(absolute)}" data-relative-time="${escapeAttr(iso)}">${escapeHtml(relative)}</time><span>${escapeHtml(absolute)}</span></span>`;
   }
   return `<time datetime="${escapeAttr(iso)}" title="${escapeAttr(absolute)}" data-relative-time="${escapeAttr(iso)}">${escapeHtml(relative)}</time>`;
 }
 
-function shortValue(value: string | null | undefined, left = 10, right = 6): string {
-  const text = String(value || '').trim();
-  if (!text) return '-';
+function shortValue(
+  value: string | null | undefined,
+  left = 10,
+  right = 6,
+): string {
+  const text = String(value || "").trim();
+  if (!text) return "-";
   if (text.length <= left + right + 3) return text;
   return `${text.slice(0, left)}...${text.slice(-right)}`;
 }
 
 function tokenHiddenInput(token: string): string {
-  return token ? `<input type="hidden" name="token" value="${escapeAttr(token)}">` : '';
+  return token
+    ? `<input type="hidden" name="token" value="${escapeAttr(token)}">`
+    : "";
 }
 
 function isKnownTransferState(status: string): status is TransferState {
   return (TRANSFER_STATES as readonly string[]).includes(status);
 }
 
-function statusTone(status: string, category?: OpsHistoryCategory): 'neutral' | 'info' | 'active' | 'success' | 'attention' {
-  const normalized = String(status || '').trim().toUpperCase();
-  if (isKnownTransferState(normalized) && FAILURE_STATES.has(normalized)) return 'attention';
-  if (category === 'failed') return 'attention';
-  if (/FAIL|ERROR|EXPIRED|REFUND|CANCEL|DISCREP/.test(normalized)) return 'attention';
-  if (isKnownTransferState(normalized) && SUCCESS_STATES.has(normalized)) return 'success';
-  if (category === 'completed') return 'success';
-  if (isKnownTransferState(normalized) && ACTIVE_STATES.has(normalized)) return 'active';
-  if (/FUNDED|CONVERT|ROUT|PAYOUT|PENDING|PROCESS/.test(normalized)) return 'active';
-  if (isKnownTransferState(normalized) && NEUTRAL_STATES.has(normalized)) return normalized === 'PIX_CHARGE_ISSUED' ? 'info' : 'neutral';
-  return 'neutral';
+function statusTone(
+  status: string,
+  category?: OpsHistoryCategory,
+): "neutral" | "info" | "active" | "success" | "attention" {
+  const normalized = String(status || "")
+    .trim()
+    .toUpperCase();
+  if (isKnownTransferState(normalized) && FAILURE_STATES.has(normalized))
+    return "attention";
+  if (category === "failed") return "attention";
+  if (/FAIL|ERROR|EXPIRED|REFUND|CANCEL|DISCREP/.test(normalized))
+    return "attention";
+  if (isKnownTransferState(normalized) && SUCCESS_STATES.has(normalized))
+    return "success";
+  if (category === "completed") return "success";
+  if (isKnownTransferState(normalized) && ACTIVE_STATES.has(normalized))
+    return "active";
+  if (/FUNDED|CONVERT|ROUT|PAYOUT|PENDING|PROCESS/.test(normalized))
+    return "active";
+  if (isKnownTransferState(normalized) && NEUTRAL_STATES.has(normalized))
+    return normalized === "PIX_CHARGE_ISSUED" ? "info" : "neutral";
+  return "neutral";
 }
 
-export function renderStatusPill(status: string, category?: OpsHistoryCategory): string {
-  const normalized = String(status || '').trim().toUpperCase();
-  const label = isKnownTransferState(normalized) ? STATE_LABELS[normalized] : titleizeStatus(status);
+export function renderStatusPill(
+  status: string,
+  category?: OpsHistoryCategory,
+): string {
+  const normalized = String(status || "")
+    .trim()
+    .toUpperCase();
+  const label = isKnownTransferState(normalized)
+    ? STATE_LABELS[normalized]
+    : titleizeStatus(status);
   const tone = statusTone(status, category);
   return `<span class="status-pill status-${tone}" role="status" aria-label="Status: ${escapeAttr(label)}"><span class="status-dot" aria-hidden="true"></span><span class="status-text">${escapeHtml(label)}</span></span>`;
 }
 
-function renderBadge(label: string, tone: 'default' | 'active' | 'success' | 'attention' = 'default'): string {
+function renderBadge(
+  label: string,
+  tone: "default" | "active" | "success" | "attention" = "default",
+): string {
   return `<span class="ops-badge ops-badge-${tone}">${escapeHtml(label)}</span>`;
 }
 
-function renderCopyButton(value: string | null | undefined, label: string): string {
-  const text = String(value || '').trim();
-  if (!text) return '';
+function renderCopyButton(
+  value: string | null | undefined,
+  label: string,
+): string {
+  const text = String(value || "").trim();
+  if (!text) return "";
   return `<button class="copy-button" type="button" data-copy-value="${escapeAttr(text)}" aria-label="Copy ${escapeAttr(label)}" title="Copy ${escapeAttr(label)}">Copy</button>`;
 }
 
 function renderExternalLink(href: string, label: string): string {
-  if (!href) return '';
+  if (!href) return "";
   return `<a class="external-link" href="${escapeAttr(href)}" target="_blank" rel="noreferrer">${escapeHtml(label)} <span aria-hidden="true">&nearr;</span></a>`;
 }
 
-function buildOpsUrl(filters: OpsDashboardFilters, overrides: Partial<OpsDashboardFilters> = {}): string {
+function buildOpsUrl(
+  filters: OpsDashboardFilters,
+  overrides: Partial<OpsDashboardFilters> = {},
+): string {
   const next: OpsDashboardFilters = {
     ...filters,
     ...overrides,
     states: overrides.states ?? filters.states,
   };
   const params = new URLSearchParams();
-  if (next.token) params.set('token', next.token);
-  if (next.source) params.set('source', next.source);
-  if (next.category) params.set('category', next.category);
-  for (const state of next.states) params.append('state', state);
-  if (next.search) params.set('q', next.search);
-  if (next.from) params.set('from', next.from);
-  if (next.to) params.set('to', next.to);
-  if (next.needsAttention) params.set('needs_attention', '1');
-  if (next.sort) params.set('sort', next.sort);
-  if (next.direction) params.set('dir', next.direction);
-  if (next.page > 1) params.set('page', String(next.page));
-  if (next.pageSize !== 50) params.set('page_size', String(next.pageSize));
+  if (next.token) params.set("token", next.token);
+  if (next.source) params.set("source", next.source);
+  if (next.category) params.set("category", next.category);
+  for (const state of next.states) params.append("state", state);
+  if (next.search) params.set("q", next.search);
+  if (next.from) params.set("from", next.from);
+  if (next.to) params.set("to", next.to);
+  if (next.needsAttention) params.set("needs_attention", "1");
+  if (next.sort) params.set("sort", next.sort);
+  if (next.direction) params.set("dir", next.direction);
+  if (next.page > 1) params.set("page", String(next.page));
+  if (next.pageSize !== 50) params.set("page_size", String(next.pageSize));
   const query = params.toString();
-  return query ? `/ops?${query}` : '/ops';
+  return query ? `/ops?${query}` : "/ops";
 }
 
 export function tokenQuery(token: string): string {
-  return token ? `?token=${encodeURIComponent(token)}` : '';
+  return token ? `?token=${encodeURIComponent(token)}` : "";
 }
 
 function renderBrandMark(): string {
@@ -295,18 +379,13 @@ function renderPageShell(input: {
   environment: string;
   updatedAt: string;
   body: string;
-  active: 'history' | 'detail';
+  active: "history" | "detail";
   operatorLogin: string;
   csrfToken: string;
 }): string {
-  const activeHistory = input.active === 'history' ? ' aria-current="page"' : '';
-  const activeDetail = input.active === 'detail' ? ' aria-current="page"' : '';
-  const logoutForm = input.csrfToken
-    ? `<form class="logout-form" method="post" action="/ops/logout">
-        <input type="hidden" name="csrf_token" value="${escapeAttr(input.csrfToken)}">
-        <button class="button button-secondary" type="submit">Log out</button>
-      </form>`
-    : '';
+  const activeHistory =
+    input.active === "history" ? ' aria-current="page"' : "";
+  const activeDetail = input.active === "detail" ? ' aria-current="page"' : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -325,26 +404,18 @@ function renderPageShell(input: {
     </a>
     <nav class="top-nav" aria-label="Operations sections">
       <a href="/ops"${activeHistory}>Ledger</a>
-      ${input.active === 'detail' ? `<a href="#transfer-detail"${activeDetail}>Forensics</a>` : ''}
+      ${input.active === "detail" ? `<a href="#transfer-detail"${activeDetail}>Forensics</a>` : ""}
     </nav>
     <div class="top-actions">
-      <span class="environment-badge">${escapeHtml(input.environment)}</span>
-      <button class="button button-secondary" type="button" data-refresh-button>Refresh</button>
-      <span class="user-chip" aria-label="Authenticated operator">${escapeHtml(input.operatorLogin || 'ops')}</span>
-      ${logoutForm}
+      <span class="updated-text">${escapeHtml(formatRelativeTime(input.updatedAt))}</span>
     </div>
   </div>
 </header>
 <main id="main" class="ops-frame">
   <section class="page-heading" aria-label="Page summary">
     <div>
-      <p class="eyebrow">Payments operations</p>
       <h1>${escapeHtml(input.title)}</h1>
       <p>${escapeHtml(input.subtitle)}</p>
-    </div>
-    <div class="updated-indicator" aria-live="polite">
-      <span>Updated</span>
-      <strong data-updated-ago data-updated-at="${escapeAttr(input.updatedAt)}">${escapeHtml(formatRelativeTime(input.updatedAt))}</strong>
     </div>
   </section>
   ${input.body}
@@ -356,156 +427,149 @@ function renderPageShell(input: {
 }
 
 function renderMetricCards(metrics: OpsDashboardMetric[]): string {
-  return `<section class="metric-grid" data-refresh-fragment="metrics" aria-label="Operational metrics">
-${metrics.map((metric) => `<article class="metric-card metric-${metric.tone || 'default'}">
-  <span>${escapeHtml(metric.label)}</span>
-  <strong>${escapeHtml(metric.value)}</strong>
-  <p>${escapeHtml(metric.detail)}</p>
-</article>`).join('')}
+  return `<section class="metric-bar" data-refresh-fragment="metrics" aria-label="Operational metrics">
+${metrics
+  .map(
+    (metric) =>
+      `<span class="metric-item metric-${metric.tone || "default"}"><strong>${escapeHtml(metric.value)}</strong>${escapeHtml(metric.label)}</span>`,
+  )
+  .join("")}
 </section>`;
 }
 
-function renderSourceErrors(sourceErrors: Partial<Record<OpsHistorySource, string>>): string {
+function renderSourceErrors(
+  sourceErrors: Partial<Record<OpsHistorySource, string>>,
+): string {
   const entries = Object.entries(sourceErrors);
-  if (!entries.length) return '<div data-refresh-fragment="source-errors"></div>';
+  if (!entries.length)
+    return '<div data-refresh-fragment="source-errors"></div>';
   return `<section class="error-state" data-refresh-fragment="source-errors" role="alert">
   <div><strong>Some database sources could not be loaded.</strong><p>Available sources still rendered. Retry after checking Supabase connectivity.</p></div>
   <button class="button button-secondary" type="button" data-refresh-button>Retry</button>
-  <ul>${entries.map(([source, error]) => `<li><span class="mono">${escapeHtml(source)}</span>: ${escapeHtml(error)}</li>`).join('')}</ul>
+  <ul>${entries.map(([source, error]) => `<li><span class="mono">${escapeHtml(source)}</span>: ${escapeHtml(error)}</li>`).join("")}</ul>
 </section>`;
 }
 
-function renderStatusLegend(): string {
-  const items = [
-    ['neutral', 'Created or quoted'],
-    ['info', 'PIX issued'],
-    ['active', 'Money moving'],
-    ['success', 'Settled or reconciled'],
-    ['attention', 'Failed or needs attention'],
-  ] as const;
-  return `<aside class="status-legend" aria-label="Status legend">
-${items.map(([tone, label]) => `<span class="legend-item status-${tone}"><span class="status-dot" aria-hidden="true"></span>${escapeHtml(label)}</span>`).join('')}
-</aside>`;
-}
-
 function renderControls(input: OpsDashboardRenderInput): string {
-  const { filters, allStatuses } = input;
-  const selectedStates = new Set(filters.states.map((state) => state.toUpperCase()));
-  const statusChips = [
-    ...TRANSFER_STATES,
-    ...allStatuses.filter((status) => !(TRANSFER_STATES as readonly string[]).includes(status)),
-  ].slice(0, 32);
+  const { filters } = input;
   const clearHref = buildOpsUrl(filters, {
-    source: '',
-    category: '',
+    source: "",
+    category: "",
     states: [],
-    search: '',
-    from: '',
-    to: '',
+    search: "",
+    from: "",
+    to: "",
     needsAttention: false,
-    sort: 'created_at',
-    direction: 'desc',
+    sort: "created_at",
+    direction: "desc",
     page: 1,
     pageSize: 50,
   });
 
   return `<section class="controls-shell" aria-label="Ledger controls">
-  <form class="ops-controls" method="get" action="/ops">
-    ${tokenHiddenInput(filters.token)}
-    <div class="control-grid">
-      <label><span>Source</span><select name="source">
-        <option value="">All sources</option>
-        ${OPS_HISTORY_SOURCES.map((source) => `<option value="${escapeAttr(source)}"${filters.source === source ? ' selected' : ''}>${escapeHtml(HISTORY_SOURCE_LABELS[source])}</option>`).join('')}
-      </select></label>
-      <label><span>Group</span><select name="category">
-        <option value="">All groups</option>
-        ${(['active', 'completed', 'failed'] as OpsHistoryCategory[]).map((category) => `<option value="${category}"${filters.category === category ? ' selected' : ''}>${escapeHtml(titleizeStatus(category))}</option>`).join('')}
-      </select></label>
-      <label class="wide-control"><span>Search</span><input type="search" name="q" value="${escapeAttr(filters.search)}" placeholder="public_ref, tx hash, key, user"></label>
-      <label><span>From</span><input type="date" name="from" value="${escapeAttr(filters.from)}"></label>
-      <label><span>To</span><input type="date" name="to" value="${escapeAttr(filters.to)}"></label>
-      <label><span>Rows</span><select name="page_size">
-        ${[25, 50, 100].map((size) => `<option value="${size}"${filters.pageSize === size ? ' selected' : ''}>${size}</option>`).join('')}
-      </select></label>
-    </div>
-    <div class="chip-row" role="group" aria-label="State filters">
-      <label class="filter-chip attention-chip"><input type="checkbox" name="needs_attention" value="1"${filters.needsAttention ? ' checked' : ''}>Needs attention</label>
-      ${statusChips.map((status) => {
-        const normalized = status.toUpperCase();
-        return `<label class="filter-chip"><input type="checkbox" name="state" value="${escapeAttr(status)}"${selectedStates.has(normalized) ? ' checked' : ''}>${escapeHtml(isKnownTransferState(normalized) ? STATE_LABELS[normalized] : titleizeStatus(status))}</label>`;
-      }).join('')}
-    </div>
-    <div class="control-actions">
-      <button class="button button-primary" type="submit">Apply filters</button>
-      <a class="button button-secondary" href="${escapeAttr(clearHref)}">Clear</a>
-    </div>
-  </form>
-  ${renderStatusLegend()}
+  <details class="filter-toggle">
+    <summary>Filters &mdash; ${escapeHtml(String(filters.source ? HISTORY_SOURCE_LABELS[filters.source as OpsHistorySource] || filters.source : "All sources"))}</summary>
+    <form class="ops-controls" method="get" action="/ops">
+      ${tokenHiddenInput(filters.token)}
+      <div class="control-row">
+        <label><select name="source">
+          <option value="">All sources</option>
+          ${OPS_HISTORY_SOURCES.map((source) => `<option value="${escapeAttr(source)}"${filters.source === source ? " selected" : ""}>${escapeHtml(HISTORY_SOURCE_LABELS[source])}</option>`).join("")}
+        </select></label>
+        <label><input type="search" name="q" value="${escapeAttr(filters.search)}" placeholder="public_ref, tx hash, key, user"></label>
+        <label><span class="sr-only">From</span><input type="date" name="from" value="${escapeAttr(filters.from)}" placeholder="From"></label>
+        <label><span class="sr-only">To</span><input type="date" name="to" value="${escapeAttr(filters.to)}" placeholder="To"></label>
+        <button class="button button-secondary" type="submit">Apply</button>
+        ${filters.source || filters.search || filters.from || filters.to || filters.needsAttention || filters.states.length ? `<a class="button button-secondary" href="${escapeAttr(clearHref)}">Clear</a>` : ""}
+      </div>
+    </form>
+  </details>
 </section>`;
 }
 
-function sortHeader(label: string, field: string, filters: OpsDashboardFilters, align: 'left' | 'right' = 'left'): string {
+function sortHeader(
+  label: string,
+  field: string,
+  filters: OpsDashboardFilters,
+  align: "left" | "right" = "left",
+): string {
   const active = filters.sort === field;
-  const nextDir: OpsSortDirection = active && filters.direction === 'desc' ? 'asc' : 'desc';
-  const href = buildOpsUrl(filters, { sort: field, direction: nextDir, page: 1 });
-  const marker = active ? (filters.direction === 'desc' ? '&darr;' : '&uarr;') : '';
-  return `<th class="${align === 'right' ? 'align-right' : ''}" scope="col"><a class="sort-link${active ? ' active' : ''}" href="${escapeAttr(href)}">${escapeHtml(label)} <span aria-hidden="true">${marker}</span></a></th>`;
+  const nextDir: OpsSortDirection =
+    active && filters.direction === "desc" ? "asc" : "desc";
+  const href = buildOpsUrl(filters, {
+    sort: field,
+    direction: nextDir,
+    page: 1,
+  });
+  const marker = active
+    ? filters.direction === "desc"
+      ? "&darr;"
+      : "&uarr;"
+    : "";
+  return `<th class="${align === "right" ? "align-right" : ""}" scope="col"><a class="sort-link${active ? " active" : ""}" href="${escapeAttr(href)}">${escapeHtml(label)} <span aria-hidden="true">${marker}</span></a></th>`;
 }
 
 function renderAmountChain(record: OpsHistoryRecord): string {
   const source = formatCurrency(record.source_amount, record.source_asset);
-  const destination = formatCurrency(record.destination_amount, record.destination_asset);
+  const destination = formatCurrency(
+    record.destination_amount,
+    record.destination_asset,
+  );
   return `<div class="amount-chain">
     <span>${source}</span>
     <span class="route-arrow" aria-hidden="true">&rarr;</span>
     <span>${destination}</span>
   </div>
-  <div class="muted mono">${escapeHtml(normalizeAsset(record.source_asset) || 'source')} to ${escapeHtml(normalizeAsset(record.destination_asset) || 'destination')}</div>`;
+  <div class="muted mono">${escapeHtml(normalizeAsset(record.source_asset) || "source")} to ${escapeHtml(normalizeAsset(record.destination_asset) || "destination")}</div>`;
 }
 
 function renderEvidenceCell(record: OpsHistoryRecord): string {
-  const primary = record.transaction_hash || record.external_reference || '';
-  const secondary = record.transaction_hash && record.external_reference ? record.external_reference : '';
+  const primary = record.transaction_hash || record.external_reference || "";
+  const secondary =
+    record.transaction_hash && record.external_reference
+      ? record.external_reference
+      : "";
   if (!primary && !secondary) return '<span class="muted">-</span>';
   return `<div class="evidence-cell">
     <span class="mono" title="${escapeAttr(primary)}">${escapeHtml(shortValue(primary, 10, 7))}</span>
-    ${renderCopyButton(primary, 'evidence value')}
-    ${secondary ? `<span class="muted mono" title="${escapeAttr(secondary)}">${escapeHtml(shortValue(secondary, 10, 7))}</span>` : ''}
+    ${renderCopyButton(primary, "evidence value")}
+    ${secondary ? `<span class="muted mono" title="${escapeAttr(secondary)}">${escapeHtml(shortValue(secondary, 10, 7))}</span>` : ""}
   </div>`;
 }
 
 function renderFeeCell(record: OpsHistoryRecord): string {
   if (!record.fee_amount) return '<span class="muted">-</span>';
-  return `<div class="fee-cell"><span class="mono">${formatCurrency(record.fee_amount, record.fee_asset)}</span><span class="muted">${escapeHtml(record.fee_label || 'app fee')}</span></div>`;
+  return `<div class="fee-cell"><span class="mono">${formatCurrency(record.fee_amount, record.fee_asset)}</span><span class="muted">${escapeHtml(record.fee_label || "app fee")}</span></div>`;
 }
 
-function renderRows(records: OpsHistoryRecord[], filters: OpsDashboardFilters): string {
+function renderRows(
+  records: OpsHistoryRecord[],
+  filters: OpsDashboardFilters,
+): string {
   if (!records.length) {
-    return `<tr><td colspan="8">${renderEmptyState('No transaction records match this view.', 'Adjust filters, widen the date range, or clear the needs-attention quick filter.')}</td></tr>`;
+    return `<tr><td colspan="5">${renderEmptyState("No transaction records match this view.", "Adjust filters, widen the date range, or clear the needs-attention quick filter.")}</td></tr>`;
   }
   const q = tokenQuery(filters.token);
-  return records.map((record) => {
-    const detailHref = record.lifecycle_transfer_id ? `/ops/transfers/${encodeURIComponent(record.lifecycle_transfer_id)}${q}` : '';
-    const rowAttrs = detailHref
-      ? ` tabindex="0" data-row-href="${escapeAttr(detailHref)}" aria-label="Open transfer ${escapeAttr(record.reference)}"`
-      : '';
-    const refContent = detailHref
-      ? `<a class="mono ref-link" href="${escapeAttr(detailHref)}">${escapeHtml(record.reference)}</a>`
-      : `<span class="mono ref-link">${escapeHtml(record.reference)}</span>`;
-    return `<tr class="ops-row" data-row-id="${escapeAttr(record.id)}"${rowAttrs}>
-      <td data-label="Reference">
-        <div class="ref-cell">${refContent}${renderCopyButton(record.reference, 'public reference')}</div>
-        <div class="muted mono">${escapeHtml(record.source_record_id)}</div>
-      </td>
-      <td data-label="Status">${renderStatusPill(record.status, record.category)}<div class="status-source">${renderBadge(HISTORY_SOURCE_LABELS[record.source])}</div></td>
+  return records
+    .map((record) => {
+      const detailHref = record.lifecycle_transfer_id
+        ? `/ops/transfers/${encodeURIComponent(record.lifecycle_transfer_id)}${q}`
+        : "";
+      const rowAttrs = detailHref
+        ? ` tabindex="0" data-row-href="${escapeAttr(detailHref)}" aria-label="Open transfer ${escapeAttr(record.reference)}"`
+        : "";
+      const refContent = detailHref
+        ? `<a class="mono ref-link" href="${escapeAttr(detailHref)}">${escapeHtml(record.reference)}</a>`
+        : `<span class="mono ref-link">${escapeHtml(record.reference)}</span>`;
+      return `<tr class="ops-row" data-row-id="${escapeAttr(record.id)}"${rowAttrs}>
+      <td data-label="Reference">${refContent}</td>
+      <td data-label="Status">${renderStatusPill(record.status, record.category)}</td>
       <td data-label="Route"><strong>${escapeHtml(record.kind)}</strong><div class="muted">${escapeHtml(record.route)}</div></td>
       <td data-label="Amount" class="align-right">${renderAmountChain(record)}</td>
-      <td data-label="Evidence">${renderEvidenceCell(record)}</td>
-      <td data-label="App fee" class="align-right">${renderFeeCell(record)}</td>
       <td data-label="Created">${renderTime(record.created_at)}</td>
-      <td data-label="Updated">${renderTime(record.updated_at)}</td>
     </tr>`;
-  }).join('');
+    })
+    .join("");
 }
 
 function renderTable(input: OpsDashboardRenderInput): string {
@@ -518,14 +582,11 @@ function renderTable(input: OpsDashboardRenderInput): string {
   <table>
     <thead>
       <tr>
-        ${sortHeader('Reference', 'reference', filters)}
-        ${sortHeader('Status', 'status', filters)}
-        ${sortHeader('Route', 'kind', filters)}
-        ${sortHeader('Amount', 'source_amount', filters, 'right')}
-        <th scope="col">Evidence</th>
-        ${sortHeader('App fee', 'fee_amount', filters, 'right')}
-        ${sortHeader('Created', 'created_at', filters)}
-        ${sortHeader('Updated', 'updated_at', filters)}
+        ${sortHeader("Reference", "reference", filters)}
+        ${sortHeader("Status", "status", filters)}
+        ${sortHeader("Route", "kind", filters)}
+        ${sortHeader("Amount", "source_amount", filters, "right")}
+        ${sortHeader("Created", "created_at", filters)}
       </tr>
     </thead>
     <tbody>${renderRows(records, filters)}</tbody>
@@ -533,9 +594,16 @@ function renderTable(input: OpsDashboardRenderInput): string {
 </section>`;
 }
 
-function renderPagination(filters: OpsDashboardFilters, pagination: OpsDashboardPagination): string {
-  const previousHref = buildOpsUrl(filters, { page: Math.max(1, pagination.page - 1) });
-  const nextHref = buildOpsUrl(filters, { page: Math.min(pagination.totalPages, pagination.page + 1) });
+function renderPagination(
+  filters: OpsDashboardFilters,
+  pagination: OpsDashboardPagination,
+): string {
+  const previousHref = buildOpsUrl(filters, {
+    page: Math.max(1, pagination.page - 1),
+  });
+  const nextHref = buildOpsUrl(filters, {
+    page: Math.min(pagination.totalPages, pagination.page + 1),
+  });
   const previousDisabled = pagination.page <= 1;
   const nextDisabled = pagination.page >= pagination.totalPages;
   return `<nav class="pagination" aria-label="Ledger pagination" data-refresh-fragment="pagination">
@@ -566,7 +634,7 @@ export function renderDashboardPage(input: OpsDashboardRenderInput): string {
     environment: input.environment,
     updatedAt: input.updatedAt,
     body,
-    active: 'history',
+    active: "history",
     operatorLogin: input.operatorLogin,
     csrfToken: input.csrfToken,
   });
@@ -584,12 +652,12 @@ export function renderDashboardErrorPage(input: {
     <a class="button button-primary" href="/ops">Retry</a>
   </section>`;
   return renderPageShell({
-    title: 'Ops dashboard unavailable',
-    subtitle: 'The dashboard could not read the protected ledger.',
+    title: "Ops dashboard unavailable",
+    subtitle: "The dashboard could not read the protected ledger.",
     environment: input.environment,
     updatedAt: input.updatedAt,
     body,
-    active: 'history',
+    active: "history",
     operatorLogin: input.operatorLogin,
     csrfToken: input.csrfToken,
   });
@@ -597,29 +665,34 @@ export function renderDashboardErrorPage(input: {
 
 function transferAmountSummary(transfer: Transfer): string {
   const items = [
-    ['BRL in', formatCurrency(transfer.amount_brl_in, 'BRL')],
-    ['USDC settled', formatCurrency(transfer.amount_usdc_settled, 'USDC')],
-    ['USD out', formatCurrency(transfer.amount_usd_out_expected, 'USD')],
+    ["BRL in", formatCurrency(transfer.amount_brl_in, "BRL")],
+    ["USDC settled", formatCurrency(transfer.amount_usdc_settled, "USDC")],
+    ["USD out", formatCurrency(transfer.amount_usd_out_expected, "USD")],
   ];
   return `<div class="amount-summary" aria-label="Transfer amount summary">
-${items.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong class="mono">${value}</strong></div>`).join('')}
+${items.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong class="mono">${value}</strong></div>`).join("")}
 </div>`;
 }
 
 function transferNetwork(transfer: Transfer, fallback: string): string {
-  return String(transfer.stellar?.network || fallback || 'testnet').toLowerCase() === 'mainnet' ? 'MAINNET' : 'TESTNET';
+  return String(
+    transfer.stellar?.network || fallback || "testnet",
+  ).toLowerCase() === "mainnet"
+    ? "MAINNET"
+    : "TESTNET";
 }
 
 function stellarExpertUrl(transfer: Transfer): string {
   const txHash = transfer.stellar?.tx_hash;
-  if (!txHash) return '';
-  const network = transfer.stellar?.network === 'mainnet' ? 'public' : 'testnet';
+  if (!txHash) return "";
+  const network =
+    transfer.stellar?.network === "mainnet" ? "public" : "testnet";
   return `https://stellar.expert/explorer/${network}/tx/${encodeURIComponent(txHash)}`;
 }
 
 function receiptUrl(transfer: Transfer): string {
   const txHash = transfer.stellar?.tx_hash;
-  return txHash ? `/api/external/receipts/${encodeURIComponent(txHash)}` : '';
+  return txHash ? `/api/external/receipts/${encodeURIComponent(txHash)}` : "";
 }
 
 function renderDetailHero(input: OpsTransferDetailRenderInput): string {
@@ -630,17 +703,17 @@ function renderDetailHero(input: OpsTransferDetailRenderInput): string {
     <a class="back-link" href="/ops${tokenQuery(input.token)}">Back to ledger</a>
     <div class="detail-ref">
       <h2 class="mono">${escapeHtml(transfer.public_ref)}</h2>
-      ${renderCopyButton(transfer.public_ref, 'public reference')}
+      ${renderCopyButton(transfer.public_ref, "public reference")}
       ${renderStatusPill(transfer.state)}
       <span class="environment-badge">${escapeHtml(network)}</span>
     </div>
-    ${transfer.failure_reason ? `<p class="failure-reason">${escapeHtml(transfer.failure_reason)}</p>` : ''}
+    ${transfer.failure_reason ? `<p class="failure-reason">${escapeHtml(transfer.failure_reason)}</p>` : ""}
   </div>
   ${transferAmountSummary(transfer)}
   <dl class="detail-meta">
     <div><dt>Transfer ID</dt><dd class="mono">${escapeHtml(transfer.id)}</dd></div>
-    <div><dt>Created</dt><dd>${renderTime(transfer.created_at, 'stack')}</dd></div>
-    <div><dt>Updated</dt><dd>${renderTime(transfer.updated_at, 'stack')}</dd></div>
+    <div><dt>Created</dt><dd>${renderTime(transfer.created_at, "stack")}</dd></div>
+    <div><dt>Updated</dt><dd>${renderTime(transfer.updated_at, "stack")}</dd></div>
     <div><dt>State version</dt><dd class="mono">${escapeHtml(String(transfer.state_version))}</dd></div>
   </dl>
 </section>`;
@@ -653,54 +726,81 @@ function renderStageRail(transfer: Transfer): string {
 ${PRIMARY_STAGES.map((stage, index) => {
   const done = !failed && activeIndex >= 0 && index < activeIndex;
   const active = !failed && index === activeIndex;
-  const className = failed && index === Math.max(0, activeIndex) ? 'failed' : done ? 'done' : active ? 'active' : '';
+  const className =
+    failed && index === Math.max(0, activeIndex)
+      ? "failed"
+      : done
+        ? "done"
+        : active
+          ? "active"
+          : "";
   return `<span class="${className}" title="${escapeAttr(STATE_LABELS[stage])}"><span class="sr-only">${escapeHtml(STATE_LABELS[stage])}</span></span>`;
-}).join('')}
+}).join("")}
 </div>`;
 }
 
 function syntaxHighlightJson(value: unknown): string {
   const escaped = escapeHtml(JSON.stringify(value, null, 2));
-  return escaped.replace(/(&quot;(?:\\.|[^\\])*?&quot;)(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, (match, stringToken: string, colon: string) => {
-    if (stringToken) {
-      return colon ? `<span class="json-key">${stringToken}</span>${colon}` : `<span class="json-string">${stringToken}</span>`;
-    }
-    if (/true|false/.test(match)) return `<span class="json-boolean">${match}</span>`;
-    if (/null/.test(match)) return `<span class="json-null">${match}</span>`;
-    return `<span class="json-number">${match}</span>`;
-  });
+  return escaped.replace(
+    /(&quot;(?:\\.|[^\\])*?&quot;)(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
+    (match, stringToken: string, colon: string) => {
+      if (stringToken) {
+        return colon
+          ? `<span class="json-key">${stringToken}</span>${colon}`
+          : `<span class="json-string">${stringToken}</span>`;
+      }
+      if (/true|false/.test(match))
+        return `<span class="json-boolean">${match}</span>`;
+      if (/null/.test(match)) return `<span class="json-null">${match}</span>`;
+      return `<span class="json-number">${match}</span>`;
+    },
+  );
 }
 
 function renderJsonBlock(value: unknown, id: string): string {
   const raw = JSON.stringify(value, null, 2);
   return `<div class="json-block">
-    <div class="json-toolbar"><span>JSON</span>${renderCopyButton(raw, 'JSON')}</div>
+    <div class="json-toolbar"><span>JSON</span>${renderCopyButton(raw, "JSON")}</div>
     <pre id="${escapeAttr(id)}"><code>${syntaxHighlightJson(value)}</code></pre>
   </div>`;
 }
 
-function eventTone(event: TransferEvent, transfer: Transfer, index: number, events: TransferEvent[]): string {
-  if (FAILURE_STATES.has(event.to_state) || event.event_type === 'failed') return 'attention';
+function eventTone(
+  event: TransferEvent,
+  transfer: Transfer,
+  index: number,
+  events: TransferEvent[],
+): string {
+  if (FAILURE_STATES.has(event.to_state) || event.event_type === "failed")
+    return "attention";
   const latestEvent = events[events.length - 1];
-  if (latestEvent?.id === event.id && event.to_state === transfer.state && !FAILURE_STATES.has(transfer.state)) return 'active';
-  return 'success';
+  if (
+    latestEvent?.id === event.id &&
+    event.to_state === transfer.state &&
+    !FAILURE_STATES.has(transfer.state)
+  )
+    return "active";
+  return "success";
 }
 
 function renderTimeline(input: OpsTransferDetailRenderInput): string {
   const { transfer, events } = input;
   if (!events.length) {
-    return `<section class="panel timeline-panel"><h2>Lifecycle timeline</h2>${renderStageRail(transfer)}${renderEmptyState('No lifecycle events recorded.', 'The transfer record exists, but transfer_events has no entries yet.')}</section>`;
+    return `<section class="panel timeline-panel"><h2>Lifecycle timeline</h2>${renderStageRail(transfer)}${renderEmptyState("No lifecycle events recorded.", "The transfer record exists, but transfer_events has no entries yet.")}</section>`;
   }
 
   return `<section class="panel timeline-panel">
   <h2>Lifecycle timeline</h2>
   ${renderStageRail(transfer)}
   <ol class="timeline" aria-label="Transfer lifecycle events">
-    ${events.map((event, index) => {
-      const tone = eventTone(event, transfer, index, events);
-      const from = event.from_state ? STATE_LABELS[event.from_state] || event.from_state : 'Start';
-      const to = STATE_LABELS[event.to_state] || event.to_state;
-      return `<li class="timeline-event timeline-${tone}">
+    ${events
+      .map((event, index) => {
+        const tone = eventTone(event, transfer, index, events);
+        const from = event.from_state
+          ? STATE_LABELS[event.from_state] || event.from_state
+          : "Start";
+        const to = STATE_LABELS[event.to_state] || event.to_state;
+        return `<li class="timeline-event timeline-${tone}">
         <div class="timeline-node" aria-hidden="true"></div>
         <article>
           <header>
@@ -708,16 +808,17 @@ function renderTimeline(input: OpsTransferDetailRenderInput): string {
               <strong>${escapeHtml(from)} <span aria-hidden="true">&rarr;</span> ${escapeHtml(to)}</strong>
               <span class="muted mono">${escapeHtml(event.event_type)}</span>
             </div>
-            <div class="timeline-meta">${renderTime(event.created_at, 'stack')}</div>
+            <div class="timeline-meta">${renderTime(event.created_at, "stack")}</div>
           </header>
-          <div class="event-chips">${renderBadge(event.actor)}${event.correlation_id ? renderBadge(shortValue(event.correlation_id, 8, 5)) : ''}</div>
+          <div class="event-chips">${renderBadge(event.actor)}${event.correlation_id ? renderBadge(shortValue(event.correlation_id, 8, 5)) : ""}</div>
           <details>
             <summary>Payload</summary>
             ${renderJsonBlock(event.payload || {}, `event-${escapeAttr(event.id)}-payload`)}
           </details>
         </article>
       </li>`;
-    }).join('')}
+      })
+      .join("")}
   </ol>
 </section>`;
 }
@@ -729,22 +830,22 @@ function renderReconciliation(transfer: Transfer): string {
   const passed = Boolean(rec?.amounts_match && discrepancies.length === 0);
   return `<section class="panel">
   <h2>Reconciliation</h2>
-  <div class="reconciliation-banner ${passed ? 'reconciliation-pass' : 'reconciliation-fail'}">
-    <strong>${passed ? 'Amounts matched' : 'Review required'}</strong>
-    <span>${passed ? 'No discrepancies recorded.' : 'Mismatch, missing reconciliation, or discrepancy detected.'}</span>
+  <div class="reconciliation-banner ${passed ? "reconciliation-pass" : "reconciliation-fail"}">
+    <strong>${passed ? "Amounts matched" : "Review required"}</strong>
+    <span>${passed ? "No discrepancies recorded." : "Mismatch, missing reconciliation, or discrepancy detected."}</span>
   </div>
   <dl class="kv-list">
-    <div><dt>Amounts match</dt><dd>${rec?.amounts_match ? 'Yes' : 'No'}</dd></div>
-    <div><dt>Reconciled by</dt><dd>${escapeHtml(rec?.reconciled_by || '-')}</dd></div>
-    <div><dt>Reconciled at</dt><dd>${renderTime(rec?.reconciled_at, 'stack')}</dd></div>
+    <div><dt>Amounts match</dt><dd>${rec?.amounts_match ? "Yes" : "No"}</dd></div>
+    <div><dt>Reconciled by</dt><dd>${escapeHtml(rec?.reconciled_by || "-")}</dd></div>
+    <div><dt>Reconciled at</dt><dd>${renderTime(rec?.reconciled_at, "stack")}</dd></div>
   </dl>
   <div class="fee-table" role="table" aria-label="Fee breakdown">
     <div role="row" class="fee-heading"><span role="columnheader">Fee</span><span role="columnheader">Amount</span></div>
-    ${fees.length ? fees.map((fee) => `<div role="row"><span role="cell">${escapeHtml(fee.label || 'fee')}</span><span role="cell" class="mono">${formatCurrency(fee.amount, fee.currency)}</span></div>`).join('') : '<div role="row"><span role="cell" class="muted">No fees recorded</span><span role="cell">-</span></div>'}
+    ${fees.length ? fees.map((fee) => `<div role="row"><span role="cell">${escapeHtml(fee.label || "fee")}</span><span role="cell" class="mono">${formatCurrency(fee.amount, fee.currency)}</span></div>`).join("") : '<div role="row"><span role="cell" class="muted">No fees recorded</span><span role="cell">-</span></div>'}
   </div>
   <div class="discrepancies">
     <strong>Discrepancies</strong>
-    ${discrepancies.length ? `<ul>${discrepancies.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="muted">None</p>'}
+    ${discrepancies.length ? `<ul>${discrepancies.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : '<p class="muted">None</p>'}
   </div>
 </section>`;
 }
@@ -756,25 +857,30 @@ function renderEvidencePanel(transfer: Transfer, environment: string): string {
   return `<section class="panel">
   <h2>Evidence and links</h2>
   <dl class="evidence-list">
-    <div><dt>Stellar tx</dt><dd><span class="mono">${escapeHtml(shortValue(transfer.stellar?.tx_hash, 12, 8))}</span>${renderCopyButton(transfer.stellar?.tx_hash, 'Stellar transaction hash')}${renderExternalLink(txUrl, `stellar.expert ${network.toLowerCase()}`)}</dd></div>
-    <div><dt>PIX e2e id</dt><dd><span class="mono">${escapeHtml(transfer.pix?.e2e_id || transfer.pix?.txid || '-')}</span>${renderCopyButton(transfer.pix?.e2e_id || transfer.pix?.txid, 'PIX evidence id')}</dd></div>
-    <div><dt>PIX charge</dt><dd><span class="mono">${escapeHtml(transfer.pix?.charge_id || '-')}</span>${renderCopyButton(transfer.pix?.charge_id, 'PIX charge id')}</dd></div>
-    <div><dt>Payout reference</dt><dd><span class="mono">${escapeHtml(transfer.payout?.reference_id || transfer.payout?.routing_status || '-')}</span>${renderCopyButton(transfer.payout?.reference_id || transfer.payout?.routing_status, 'payout reference')}</dd></div>
-    <div><dt>Receipt</dt><dd>${receipt ? renderExternalLink(receipt, 'receipt') : '<span class="muted">No receipt link available</span>'}</dd></div>
+    <div><dt>Stellar tx</dt><dd><span class="mono">${escapeHtml(shortValue(transfer.stellar?.tx_hash, 12, 8))}</span>${renderCopyButton(transfer.stellar?.tx_hash, "Stellar transaction hash")}${renderExternalLink(txUrl, `stellar.expert ${network.toLowerCase()}`)}</dd></div>
+    <div><dt>PIX e2e id</dt><dd><span class="mono">${escapeHtml(transfer.pix?.e2e_id || transfer.pix?.txid || "-")}</span>${renderCopyButton(transfer.pix?.e2e_id || transfer.pix?.txid, "PIX evidence id")}</dd></div>
+    <div><dt>PIX charge</dt><dd><span class="mono">${escapeHtml(transfer.pix?.charge_id || "-")}</span>${renderCopyButton(transfer.pix?.charge_id, "PIX charge id")}</dd></div>
+    <div><dt>Payout reference</dt><dd><span class="mono">${escapeHtml(transfer.payout?.reference_id || transfer.payout?.routing_status || "-")}</span>${renderCopyButton(transfer.payout?.reference_id || transfer.payout?.routing_status, "payout reference")}</dd></div>
+    <div><dt>Receipt</dt><dd>${receipt ? renderExternalLink(receipt, "receipt") : '<span class="muted">No receipt link available</span>'}</dd></div>
   </dl>
 </section>`;
 }
 
-function renderRawTransfer(transfer: Transfer, events: TransferEvent[]): string {
+function renderRawTransfer(
+  transfer: Transfer,
+  events: TransferEvent[],
+): string {
   return `<section class="panel raw-panel">
   <details>
     <summary><span>Raw Transfer Record</span><span class="muted">Collapsed by default</span></summary>
-    ${renderJsonBlock({ ...transfer, events }, 'raw-transfer-record')}
+    ${renderJsonBlock({ ...transfer, events }, "raw-transfer-record")}
   </details>
 </section>`;
 }
 
-export function renderTransferDetailPage(input: OpsTransferDetailRenderInput): string {
+export function renderTransferDetailPage(
+  input: OpsTransferDetailRenderInput,
+): string {
   const { transfer, events } = input;
   const body = `${renderDetailHero(input)}
   <div class="detail-layout">
@@ -787,11 +893,12 @@ export function renderTransferDetailPage(input: OpsTransferDetailRenderInput): s
   ${renderRawTransfer(transfer, events)}`;
   return renderPageShell({
     title: `${transfer.public_ref} forensics`,
-    subtitle: 'Lifecycle events, reconciliation, and immutable evidence for one transfer.',
+    subtitle:
+      "Lifecycle events, reconciliation, and immutable evidence for one transfer.",
     environment: transferNetwork(transfer, input.environment),
     updatedAt: input.updatedAt,
     body,
-    active: 'detail',
+    active: "detail",
     operatorLogin: input.operatorLogin,
     csrfToken: input.csrfToken,
   });
@@ -824,13 +931,13 @@ export function renderOpsLoginPage(input: {
         <p>Sign in to review transfer status, payout progress, and reconciliation evidence.</p>
       </div>
     </div>
-    ${input.error ? `<div class="login-error" role="alert">${escapeHtml(input.error)}</div>` : ''}
+    ${input.error ? `<div class="login-error" role="alert">${escapeHtml(input.error)}</div>` : ""}
     <form class="login-form" method="post" action="/ops/login" autocomplete="off">
       <input type="hidden" name="csrf_token" value="${escapeAttr(input.csrfToken)}">
-      <input type="hidden" name="return_to" value="${escapeAttr(input.returnTo || '/ops')}">
+      <input type="hidden" name="return_to" value="${escapeAttr(input.returnTo || "/ops")}">
       <label>
         <span>Operator email</span>
-        <input name="login" value="${escapeAttr(input.login || '')}" autocomplete="username" inputmode="email" required autofocus>
+        <input name="login" value="${escapeAttr(input.login || "")}" autocomplete="username" inputmode="email" required autofocus>
       </label>
       <label>
         <span>Password</span>
@@ -884,7 +991,7 @@ html { min-height: 100%; background: var(--ops-bg); }
 body {
   min-height: 100vh;
   margin: 0;
-  background: linear-gradient(180deg, var(--ops-bg-raised) 0%, var(--ops-bg) 14rem), var(--ops-bg);
+  background: var(--ops-bg);
   color: var(--ops-text);
   font-family: var(--ops-font-sans);
   font-size: 14px;
@@ -932,108 +1039,106 @@ button { cursor: pointer; }
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--ops-border);
-  background: color-mix(in oklab, var(--ops-surface) 92%, transparent);
-  backdrop-filter: blur(14px);
+  background: var(--ops-bg);
 }
 .topbar-inner {
   max-width: 1440px;
   margin: 0 auto;
-  padding: var(--ops-space-3) var(--ops-space-6);
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  padding: var(--ops-space-2) var(--ops-space-4);
+  display: flex;
   align-items: center;
-  gap: var(--ops-space-4);
+  justify-content: space-between;
+  gap: var(--ops-space-3);
 }
-.brand { display: inline-flex; align-items: center; gap: var(--ops-space-3); width: fit-content; }
-.brand-mark { width: 34px; height: 34px; color: var(--ops-gold-light); flex: none; }
-.brand-copy { display: grid; gap: 2px; }
-.brand-copy strong { font-size: 14px; line-height: 1.1; }
-.brand-copy span { color: var(--ops-muted); font-size: 12px; }
-.top-nav { display: inline-flex; border: 1px solid var(--ops-border); border-radius: var(--ops-radius); background: var(--ops-bg); padding: 3px; }
-.top-nav a { min-height: 32px; display: inline-flex; align-items: center; border-radius: var(--ops-radius-sm); padding: 0 var(--ops-space-3); color: var(--ops-muted); font-weight: 700; }
-.top-nav a[aria-current="page"] { background: var(--ops-surface-3); color: var(--ops-text); }
-.top-actions { justify-self: end; display: flex; align-items: center; justify-content: flex-end; gap: var(--ops-space-2); flex-wrap: wrap; }
-.logout-form { margin: 0; display: inline-flex; }
-.environment-badge, .user-chip, .ops-badge, .page-chip {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius-sm);
-  background: color-mix(in oklab, var(--ops-bg) 78%, var(--ops-surface) 22%);
-  color: var(--ops-muted);
-  padding: 0 var(--ops-space-2);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.environment-badge { border-color: color-mix(in oklab, var(--ops-gold) 35%, var(--ops-border)); color: var(--ops-gold-light); }
-.ops-badge-active { border-color: color-mix(in oklab, var(--ops-amber) 38%, var(--ops-border)); color: var(--ops-amber); }
-.ops-badge-success { border-color: color-mix(in oklab, var(--ops-green) 34%, var(--ops-border)); color: var(--ops-green); }
-.ops-badge-attention { border-color: color-mix(in oklab, var(--ops-red) 38%, var(--ops-border)); color: var(--ops-red); }
-.button, .copy-button {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius);
-  padding: 0 var(--ops-space-3);
-  background: var(--ops-surface-2);
-  color: var(--ops-text);
-  font-weight: 800;
-  transition: transform 180ms var(--ops-ease), border-color 180ms var(--ops-ease), background-color 180ms var(--ops-ease), box-shadow 180ms var(--ops-ease);
-}
-.button:hover, .copy-button:hover { transform: translateY(-1px); border-color: color-mix(in oklab, var(--ops-gold) 42%, var(--ops-border)); box-shadow: var(--ops-shadow-hover); }
-.button-primary { border-color: var(--ops-gold); background: var(--ops-gold); color: var(--ops-bg); }
-.button-secondary { color: var(--ops-muted); }
-.button-disabled { opacity: 0.48; cursor: not-allowed; }
-.copy-button { min-height: 26px; padding: 0 var(--ops-space-2); font-size: 11px; color: var(--ops-muted); }
+.brand { display: inline-flex; align-items: center; gap: var(--ops-space-2); }
+.brand-mark { width: 24px; height: 24px; color: var(--ops-gold-light); flex: none; }
+.brand-copy { display: flex; gap: 6px; align-items: baseline; }
+.brand-copy strong { font-size: 14px; }
+.brand-copy span { color: var(--ops-muted); font-size: 11px; }
+.top-nav { display: flex; gap: 2px; }
+.top-nav a { min-height: 30px; display: inline-flex; align-items: center; padding: 0 var(--ops-space-2); color: var(--ops-muted); font-weight: 700; font-size: 13px; }
+.top-nav a[aria-current="page"] { border-bottom: 2px solid var(--ops-gold-light); color: var(--ops-text); }
+.top-actions { display: flex; align-items: center; gap: var(--ops-space-2); }
+.updated-text { color: var(--ops-muted); font-size: 12px; font-family: var(--ops-font-mono); }
 .ops-frame {
   width: min(1440px, 100%);
   margin: 0 auto;
-  padding: var(--ops-space-6);
+  padding: var(--ops-space-4) var(--ops-space-4);
   display: grid;
-  gap: var(--ops-space-5);
+  gap: var(--ops-space-4);
 }
 .page-heading {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
+  align-items: baseline;
   gap: var(--ops-space-4);
 }
-.page-heading h1 { margin: 0; font-size: 28px; line-height: 1.15; }
-.page-heading p { max-width: 70ch; margin: var(--ops-space-2) 0 0; color: var(--ops-muted); line-height: 1.55; }
-.eyebrow { margin: 0 0 var(--ops-space-2) !important; color: var(--ops-gold-light) !important; font-size: 12px; font-weight: 800; }
-.updated-indicator {
-  min-width: 150px;
+.page-heading h1 { margin: 0; font-size: 18px; font-weight: 700; }
+.page-heading p { max-width: 70ch; margin: var(--ops-space-1) 0 0; color: var(--ops-muted); line-height: 1.4; font-size: 12px; }
+.button, .copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
   border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius);
-  background: var(--ops-surface);
-  padding: var(--ops-space-3);
-  box-shadow: var(--ops-shadow);
+  border-radius: var(--ops-radius-sm);
+  padding: 0 var(--ops-space-2);
+  background: var(--ops-bg);
+  color: var(--ops-muted);
+  font-weight: 700;
+  font-size: 12px;
 }
-.updated-indicator span { display: block; color: var(--ops-muted); font-size: 12px; }
-.updated-indicator strong { display: block; margin-top: 2px; font-family: var(--ops-font-mono); font-size: 13px; }
+.button:hover { color: var(--ops-text); }
+.button-primary { border-color: var(--ops-gold); background: var(--ops-gold); color: var(--ops-bg); }
+.button-disabled { opacity: 0.4; cursor: not-allowed; }
+.copy-button { min-height: 24px; font-size: 10px; padding: 0 var(--ops-space-1); }
+.ops-badge, .page-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+  padding: 0 var(--ops-space-1);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ops-muted);
+}
+.ops-badge-active { border-color: color-mix(in oklab, var(--ops-amber) 38%, var(--ops-border)); color: var(--ops-amber); }
+.ops-badge-success { border-color: color-mix(in oklab, var(--ops-green) 34%, var(--ops-border)); color: var(--ops-green); }
+.ops-badge-attention { border-color: color-mix(in oklab, var(--ops-red) 38%, var(--ops-border)); color: var(--ops-red); }
+.environment-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid color-mix(in oklab, var(--ops-gold) 35%, var(--ops-border));
+  border-radius: var(--ops-radius-sm);
+  padding: 0 var(--ops-space-1);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ops-gold-light);
+}
 .metric-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--ops-space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ops-space-4);
+  align-items: center;
 }
-.metric-card, .controls-shell, .table-shell, .panel, .detail-hero, .error-state, .raw-panel {
-  border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius);
-  background: linear-gradient(180deg, color-mix(in oklab, var(--ops-surface) 92%, white 8%), var(--ops-surface));
-  box-shadow: var(--ops-shadow);
+.metric-item {
+  font-size: 13px;
+  color: var(--ops-muted);
 }
-.metric-card { min-height: 118px; padding: var(--ops-space-4); display: grid; align-content: space-between; gap: var(--ops-space-3); }
-.metric-card span { color: var(--ops-muted); font-size: 12px; font-weight: 800; }
-.metric-card strong { font-family: var(--ops-font-mono); font-size: 25px; line-height: 1.1; }
-.metric-card p { margin: 0; color: var(--ops-muted); font-size: 12px; line-height: 1.4; }
+.metric-item strong {
+  font-family: var(--ops-font-mono);
+  font-size: 16px;
+  color: var(--ops-text);
+  margin-right: 4px;
+}
 .metric-active strong { color: var(--ops-amber); }
 .metric-success strong { color: var(--ops-green); }
 .metric-attention strong { color: var(--ops-red); }
+.table-shell, .panel, .detail-hero, .error-state, .raw-panel {
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-sm);
+}
 .login-body {
   min-height: 100vh;
   display: grid;
@@ -1075,40 +1180,39 @@ button { cursor: pointer; }
   color: var(--ops-text);
   padding: 0 var(--ops-space-3);
 }
-.controls-shell { padding: var(--ops-space-4); display: grid; gap: var(--ops-space-4); }
-.ops-controls { display: grid; gap: var(--ops-space-4); }
-.control-grid { display: grid; grid-template-columns: 1.1fr 1fr minmax(240px, 2fr) repeat(3, minmax(120px, 0.8fr)); gap: var(--ops-space-3); align-items: end; }
-.control-grid label { display: grid; gap: var(--ops-space-2); color: var(--ops-muted); font-size: 12px; font-weight: 800; }
-.control-grid input, .control-grid select {
-  width: 100%;
-  min-height: 40px;
-  border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius);
-  background: color-mix(in oklab, var(--ops-bg) 88%, white 12%);
-  color: var(--ops-text);
-  padding: 0 var(--ops-space-3);
+.controls-shell {
+  border-top: 1px solid var(--ops-border);
+  border-bottom: 1px solid var(--ops-border);
+  padding: var(--ops-space-2) 0;
 }
-.control-grid option { background: var(--ops-surface); color: var(--ops-text); }
-.chip-row { display: flex; flex-wrap: wrap; gap: var(--ops-space-2); }
-.filter-chip {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
+.filter-toggle summary {
+  font-size: 12px;
+  font-weight: 800;
+  padding: var(--ops-space-1) 0;
+}
+.filter-toggle[open] {
+  border-bottom: 1px solid var(--ops-border);
+  padding-bottom: var(--ops-space-3);
+}
+.control-row {
+  display: flex;
   gap: var(--ops-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--ops-space-2);
+}
+.control-row label { flex: none; }
+.control-row input, .control-row select {
+  min-height: 32px;
   border: 1px solid var(--ops-border);
   border-radius: var(--ops-radius-sm);
   background: var(--ops-bg);
-  color: var(--ops-muted);
+  color: var(--ops-text);
   padding: 0 var(--ops-space-2);
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
+  font-size: 13px;
 }
-.filter-chip:has(input:checked) { border-color: color-mix(in oklab, var(--ops-gold) 52%, var(--ops-border)); background: color-mix(in oklab, var(--ops-gold) 12%, var(--ops-bg)); color: var(--ops-gold-light); }
-.attention-chip:has(input:checked) { border-color: color-mix(in oklab, var(--ops-red) 58%, var(--ops-border)); background: color-mix(in oklab, var(--ops-red) 14%, var(--ops-bg)); color: var(--ops-red); }
-.control-actions { display: flex; gap: var(--ops-space-2); align-items: center; flex-wrap: wrap; }
-.status-legend { display: flex; flex-wrap: wrap; gap: var(--ops-space-2); border-top: 1px solid var(--ops-border); padding-top: var(--ops-space-3); }
-.legend-item { min-height: 28px; display: inline-flex; align-items: center; gap: var(--ops-space-2); color: var(--ops-muted); font-size: 12px; }
+.control-row input[type="search"] { width: 200px; }
+.control-row input[type="date"] { width: 130px; }
 .status-pill {
   display: inline-flex;
   min-height: 30px;
@@ -1143,7 +1247,7 @@ button { cursor: pointer; }
   font-size: 12px;
 }
 .table-meta { display: flex; gap: var(--ops-space-2); align-items: center; border-bottom: 1px solid var(--ops-border); padding: var(--ops-space-3) var(--ops-space-4); color: var(--ops-muted); }
-table { width: 100%; min-width: 1180px; border-collapse: collapse; }
+table { width: 100%; border-collapse: collapse; }
 th {
   position: sticky;
   top: 0;
@@ -1252,43 +1356,76 @@ pre { margin: 0; max-height: 520px; overflow: auto; padding: var(--ops-space-4);
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 @media print {
-  *, *::before, *::after { background: #fff !important; color: #000 !important; box-shadow: none !important; border-color: #ccc !important; }
-  body { font-size: 11px; line-height: 1.4; }
-  .ops-topbar, .top-actions, .button, .controls-shell, .toast-region, .skip-link, .pagination, .copy-button, .logout-form, .raw-panel, details summary, .json-toolbar { display: none !important; }
-  .ops-frame { max-width: 100%; width: 100%; padding: 0; gap: 12px; }
-  .page-heading h1 { font-size: 18px; }
-  .metric-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
-  .metric-card { min-height: 0; padding: 6px 8px; border: 1px solid #ccc; }
-  .metric-card strong { font-size: 16px; }
-  .detail-layout { grid-template-columns: 1fr; gap: 12px; }
-  .panel { padding: 8px; border: 1px solid #ccc; break-inside: avoid; }
-  .stage-rail { break-inside: avoid; }
-  .timeline-event { break-inside: avoid; }
-  .timeline-event article { border: 1px solid #ccc; }
-  table { font-size: 10px; min-width: 0; }
-  th, td { padding: 4px 6px; }
+  :root { color-scheme: light; }
+  *, *::before, *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    border-color: #bbb !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  body {
+    font-size: 10.5px;
+    line-height: 1.35;
+    background: #fff !important;
+    min-height: auto;
+  }
+  a { color: #000 !important; text-decoration: none !important; }
+  .ops-topbar, .top-actions, .button, .controls-shell, .toast-region, .skip-link, .pagination, .copy-button, .logout-form, details summary, .json-toolbar, .filter-toggle, .empty-state { display: none !important; }
+  .ops-frame { max-width: 100%; width: 100%; padding: 0; gap: 8px; }
+  .page-heading { align-items: flex-start; }
+  .page-heading h1 { font-size: 14px; margin: 0; }
+  .page-heading p { margin: 2px 0 0; font-size: 9px; }
+  .metric-grid { gap: 8px; }
+  .metric-item { font-size: 10px; }
+  .metric-item strong { font-size: 12px; }
+  .table-shell { overflow: visible; border: 1px solid #bbb; }
+  .table-meta { padding: 6px 8px; font-size: 9px; }
+  table { font-size: 9px; min-width: 0; width: 100%; }
+  th, td { padding: 4px 6px; border-bottom: 1px solid #ddd; }
   thead { display: table-header-group; }
+  tbody tr { page-break-inside: avoid; }
+  .detail-layout { grid-template-columns: 1fr; gap: 10px; }
+  .detail-hero { padding: 10px; gap: 10px; border: 1px solid #bbb; }
+  .detail-ref { gap: 6px; }
+  .detail-ref h2 { font-size: 14px; }
+  .amount-summary { grid-template-columns: repeat(3, 1fr); border: 1px solid #bbb; }
+  .amount-summary div { padding: 6px 8px; border-right: 1px solid #ddd; background: #fff !important; }
+  .amount-summary strong { font-size: 13px; }
+  .detail-meta { grid-template-columns: repeat(4, 1fr); border-top: 1px solid #ddd; }
+  .panel { padding: 8px; border: 1px solid #bbb; break-inside: avoid; background: #fff !important; }
+  .panel h2 { font-size: 12px; margin: 0 0 8px; }
+  .stage-rail { break-inside: avoid; margin-bottom: 10px; }
+  .stage-rail span { height: 6px; border: 1px solid #bbb; }
+  .timeline { gap: 8px; }
+  .timeline-event { gap: 8px; page-break-inside: avoid; }
+  .timeline-event article { border: 1px solid #bbb; padding: 6px; background: #fff !important; }
+  .timeline-node { width: 12px; height: 12px; margin-top: 4px; border-width: 2px; }
+  .timeline-event::before { left: 6px; top: 16px; bottom: -12px; }
+  .event-chips { margin: 6px 0; }
+  .reconciliation-banner { border: 1px solid #bbb; padding: 6px; margin-bottom: 8px; }
+  .fee-table { border: 1px solid #bbb; margin-top: 8px; }
+  .fee-table div { padding: 4px 6px; }
+  .discrepancies { margin-top: 8px; }
+  .evidence-list div { border-bottom: 1px solid #ddd; padding: 4px 0; }
   .back-link { display: none; }
   .side-panels { break-inside: avoid; }
-  .reconciliation-banner { border: 1px solid #ccc; }
-  .fee-table { border: 1px solid #ccc; }
-  .evidence-list div { border-bottom: 1px solid #ccc; }
-  @page { margin: 12mm; size: A4; }
+  .raw-panel { display: none !important; }
+  .json-block { border: 1px solid #bbb; }
+  pre { max-height: none; padding: 6px; font-size: 8px; }
+  .status-pill { border: 1px solid #bbb; padding: 2px 5px; }
+  .ops-badge { border: 1px solid #bbb; }
+  @page { margin: 10mm; size: A4; }
 }
 @media (max-width: 1120px) {
-  .topbar-inner { grid-template-columns: 1fr; }
-  .top-nav { width: fit-content; }
-  .top-actions { justify-self: start; justify-content: flex-start; }
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .wide-control { grid-column: 1 / -1; }
   .detail-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
-  .ops-frame { padding: var(--ops-space-4); }
+  .ops-frame { padding: var(--ops-space-3); }
   .page-heading { display: grid; }
-  .updated-indicator { width: 100%; }
-  .metric-grid, .control-grid, .amount-summary, .detail-meta { grid-template-columns: 1fr; }
+  .metric-grid { flex-direction: column; gap: var(--ops-space-1); }
   .amount-summary div { border-right: 0; border-bottom: 1px solid var(--ops-border); }
   .amount-summary div:last-child { border-bottom: 0; }
   .table-shell { overflow: visible; background: transparent; border: 0; box-shadow: none; }
