@@ -11,9 +11,14 @@
     "instawards:evidence": "node backend/scripts/instawards-evidence.mjs",
     "passkey:env": "node backend/scripts/generate-passkey-env.mjs",
     "passkey:smart-account": "npm --prefix backend run passkey:smart-account --",
-    "telegram:start": "npm --prefix telegram start"
+    "telegram:start": "npm --prefix telegram start",
+    "circle:e2e": "npx tsx scripts/circle-e2e-test.ts",
+    "circle:readiness": "npm --prefix backend exec -- npx tsx scripts/circle-payout-readiness.ts"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2"
   }
 }
