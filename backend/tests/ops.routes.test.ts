@@ -186,8 +186,10 @@ describe('ops history routes', () => {
     expect(html).toContain('Ops dashboard');
     expect(html).toContain('Transfers today');
     expect(html).toContain('BRL to USDC today');
-    expect(html).toContain('Needs attention');
+    expect(html).toContain('Completed');
     expect(html).toContain('Admin fees');
+    expect(html).not.toContain('Needs attention');
+    expect(html).not.toContain('In flight');
     expect(html).toContain('Apply filters');
     expect(html).toContain('data-ops-dashboard-page="list"');
     expect(html).toContain('data-refresh-fragment="table"');

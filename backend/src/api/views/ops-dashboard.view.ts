@@ -356,7 +356,6 @@ function buildOpsUrl(
   if (next.search) params.set("q", next.search);
   if (next.from) params.set("from", next.from);
   if (next.to) params.set("to", next.to);
-  if (next.needsAttention) params.set("needs_attention", "1");
   if (next.sort) params.set("sort", next.sort);
   if (next.direction) params.set("dir", next.direction);
   if (next.page > 1) params.set("page", String(next.page));
@@ -514,13 +513,9 @@ function renderControls(input: OpsDashboardRenderInput): string {
           ${[25, 50, 100].map((size) => `<option value="${size}"${filters.pageSize === size ? " selected" : ""}>${size}</option>`).join("")}
         </select>
       </label>
-      <label class="check-control">
-        <input type="checkbox" name="needs_attention" value="1"${filters.needsAttention ? " checked" : ""}>
-        <span>Needs attention</span>
-      </label>
       <div class="control-actions">
         <button class="button button-primary" type="submit">Apply filters</button>
-        ${filters.source || filters.category || filters.search || filters.from || filters.to || filters.needsAttention || filters.states.length || filters.pageSize !== 50 ? `<a class="button button-secondary" href="${escapeAttr(clearHref)}">Clear</a>` : ""}
+        ${filters.source || filters.category || filters.search || filters.from || filters.to || filters.states.length || filters.pageSize !== 50 ? `<a class="button button-secondary" href="${escapeAttr(clearHref)}">Clear</a>` : ""}
       </div>
     </div>
   </form>
@@ -587,7 +582,7 @@ function renderRows(
   filters: OpsDashboardFilters,
 ): string {
   if (!records.length) {
-    return `<tr><td colspan="5">${renderEmptyState("No transaction records match this view.", "Adjust filters, widen the date range, or clear the needs-attention quick filter.")}</td></tr>`;
+    return `<tr><td colspan="5">${renderEmptyState("No transaction records match this view.", "Adjust filters, widen the date range, or clear filters.")}</td></tr>`;
   }
   const q = tokenQuery(filters.token);
   return records
@@ -1195,7 +1190,7 @@ button { cursor: pointer; }
 }
 .metric-bar {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--ops-space-3);
 }
 .metric-item {
@@ -1283,7 +1278,7 @@ button { cursor: pointer; }
 .ops-controls { margin: 0; }
 .control-grid {
   display: grid;
-  grid-template-columns: minmax(140px, 0.9fr) minmax(128px, 0.8fr) minmax(240px, 1.5fr) repeat(3, minmax(112px, 0.7fr)) minmax(140px, 0.8fr) auto;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(128px, 0.8fr) minmax(240px, 1.5fr) repeat(3, minmax(112px, 0.7fr)) auto;
   gap: var(--ops-space-2);
   align-items: end;
 }
@@ -1308,22 +1303,6 @@ button { cursor: pointer; }
   font-size: 13px;
 }
 .control-grid input::placeholder { color: color-mix(in oklab, var(--ops-muted) 80%, transparent); }
-.check-control {
-  min-height: 34px;
-  display: flex !important;
-  align-items: center;
-  gap: var(--ops-space-2) !important;
-  border: 1px solid var(--ops-border);
-  border-radius: var(--ops-radius-sm);
-  background: var(--ops-bg-raised);
-  padding: 0 var(--ops-space-2);
-}
-.check-control input {
-  width: 16px;
-  min-height: 16px;
-  accent-color: var(--ops-gold);
-}
-.check-control span { text-transform: none !important; font-size: 12px !important; color: var(--ops-text-soft) !important; }
 .control-actions {
   display: flex;
   align-items: center;
@@ -1502,7 +1481,7 @@ pre { margin: 0; max-height: 520px; overflow: auto; padding: var(--ops-space-4);
   .page-heading { align-items: flex-start; }
   .page-heading h1 { font-size: 14px; margin: 0; }
   .page-heading p { margin: 2px 0 0; font-size: 9px; }
-  .metric-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .metric-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .metric-item { min-height: auto; padding: 6px; font-size: 9px; border: 1px solid #bbb; }
   .metric-item strong { font-size: 12px; }
   .metric-item small { font-size: 8px; }

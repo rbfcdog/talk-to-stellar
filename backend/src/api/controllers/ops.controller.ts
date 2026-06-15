@@ -35,7 +35,6 @@ const OPS_HISTORY_SOURCES = [
 ] as const;
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
-const STUCK_ACTIVE_MS = 2 * 60 * 60 * 1000;
 const OPS_SESSION_COOKIE = 'tts_ops_session';
 const OPS_CSRF_COOKIE = 'tts_ops_csrf';
 const OPS_SESSION_TYPE = 'ops_admin_session';
@@ -284,11 +283,6 @@ function normalizeSort(value: string): string {
   return SORT_FIELDS.has(value) ? value : 'created_at';
 }
 
-function readBoolean(value: unknown): boolean {
-  const normalized = queryString(value).toLowerCase();
-  return ['1', 'true', 'yes', 'on'].includes(normalized);
-}
-
 function readPositiveInt(value: unknown, fallback: number): number {
   const parsed = parseInt(queryString(value), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -323,7 +317,7 @@ function dashboardFilters(req: Request): OpsDashboardFilters {
     search: queryString(req.query.q || req.query.search),
     from: queryString(req.query.from),
     to: queryString(req.query.to),
-    needsAttention: readBoolean(req.query.needs_attention || req.query.needsAttention),
+    needsAttention: false,
     sort: normalizeSort(queryString(req.query.sort)),
     direction: normalizeDirection(queryString(req.query.dir || req.query.direction)),
     page: readPositiveInt(req.query.page, 1),
@@ -352,14 +346,6 @@ function dateInRange(value: string, from: string, to: string): boolean {
   return true;
 }
 
-function recordNeedsAttention(record: OpsHistoryRecord): boolean {
-  const status = record.status.toUpperCase();
-  if (record.category === 'failed') return true;
-  if (/FAIL|ERROR|EXPIRED|REFUND|CANCEL|DISCREP/.test(status)) return true;
-  const updatedAt = Date.parse(record.updated_at || record.created_at);
-  return record.category === 'active' && Number.isFinite(updatedAt) && Date.now() - updatedAt > STUCK_ACTIVE_MS;
-}
-
 function recordMatchesSearch(record: OpsHistoryRecord, search: string): boolean {
   if (!search) return true;
   const needle = search.toLowerCase();
@@ -384,7 +370,6 @@ function applyDashboardFilters(records: OpsHistoryRecord[], filters: OpsDashboar
     if (filters.category && record.category !== filters.category) return false;
     if (stateSet.size && !stateSet.has(record.status.toUpperCase())) return false;
     if (!dateInRange(record.created_at, filters.from, filters.to)) return false;
-    if (filters.needsAttention && !recordNeedsAttention(record)) return false;
     if (!recordMatchesSearch(record, filters.search)) return false;
     return true;
   });
@@ -488,12 +473,6 @@ function amountSum(records: OpsHistoryRecord[], pick: (record: OpsHistoryRecord)
   return records.reduce((total, record) => total + decimalToScale(pick(record)), 0n);
 }
 
-function signedCountDelta(current: number, previous: number): string {
-  if (previous === 0 && current === 0) return 'flat vs yesterday';
-  const diff = current - previous;
-  return `${diff >= 0 ? '+' : ''}${diff} vs yesterday`;
-}
-
 function feeMetric(records: OpsHistoryRecord[]): { value: string; detail: string } {
   const feesByAsset = new Map<string, bigint>();
   let feeRows = 0;
@@ -514,45 +493,31 @@ function feeMetric(records: OpsHistoryRecord[]): { value: string; detail: string
 
 function dashboardMetrics(records: OpsHistoryRecord[]): OpsDashboardMetric[] {
   const today = records.filter((record) => isSameLocalDate(record.created_at));
-  const yesterday = records.filter((record) => isSameLocalDate(record.created_at, -1));
   const todayBrlToUsdc = today.filter((record) =>
     String(record.source_asset || '').toUpperCase() === 'BRL' &&
     String(record.destination_asset || '').toUpperCase() === 'USDC'
   );
-  const yesterdayBrlToUsdc = yesterday.filter((record) =>
-    String(record.source_asset || '').toUpperCase() === 'BRL' &&
-    String(record.destination_asset || '').toUpperCase() === 'USDC'
-  );
   const volumeToday = amountSum(todayBrlToUsdc, (record) => record.source_amount);
-  const volumeYesterday = amountSum(yesterdayBrlToUsdc, (record) => record.source_amount);
-  const volumeDiff = volumeToday - volumeYesterday;
-  const inFlight = records.filter((record) => record.category === 'active').length;
-  const attention = records.filter(recordNeedsAttention).length;
+  const completed = records.filter((record) => record.category === 'completed').length;
   const fees = feeMetric(records);
 
   return [
     {
       label: 'Transfers today',
       value: String(today.length),
-      detail: signedCountDelta(today.length, yesterday.length),
+      detail: 'Ledger records created today',
     },
     {
       label: 'BRL to USDC today',
       value: metricCurrency(volumeToday, 'BRL'),
-      detail: `${volumeDiff >= 0n ? '+' : ''}${metricCurrency(volumeDiff, 'BRL')} vs yesterday`,
+      detail: 'Volume funded into the USDC rail',
       tone: 'success',
     },
     {
-      label: 'In flight',
-      value: String(inFlight),
-      detail: 'Active or pending ledger records',
-      tone: 'active',
-    },
-    {
-      label: 'Needs attention',
-      value: String(attention),
-      detail: 'Failed, discrepant, expired, refund, or stuck',
-      tone: attention ? 'attention' : 'default',
+      label: 'Completed',
+      value: String(completed),
+      detail: 'Settled, reconciled, or successful records',
+      tone: 'success',
     },
     {
       label: 'Admin fees',

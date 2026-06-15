@@ -52,7 +52,7 @@ WhatsApp/Telegram/Web → Agent (LangChain/GPT-4o) → TransferOrchestrator (13-
 
 | # | Evidence | Where | What It Proves |
 |---|---|---|---|
-| E1 | Ops Dashboard | `GET /ops` | 5 metrics, unified ledger, filterable table, 4 data sources |
+| E1 | Ops Dashboard | `GET /ops` | 4 positive metrics, unified ledger, filterable table, 4 data sources |
 | E2 | Transfer Detail | `GET /ops/transfers/:id` | Full lifecycle timeline, stage rail, actor attribution |
 | E3 | Reconciliation Panel | `/ops/transfers/:id` (right sidebar) | Amount matching, fee breakdown, discrepancy flags |
 | E4 | Evidence & Links Panel | `/ops/transfers/:id` (right sidebar) | Stellar tx hash → stellar.expert, PIX ids, payout reference |
@@ -79,7 +79,7 @@ WhatsApp/Telegram/Web → Agent (LangChain/GPT-4o) → TransferOrchestrator (13-
 ### E1: Ops Dashboard
 
 1. Navigate to `/ops?source=transfers`
-2. Check that 5 metric cards show non-zero values (or "0" if no test data)
+2. Check that the 4 positive metric cards render: Transfers today, BRL to USDC today, Completed, Admin fees
 3. Verify the table shows rows with `source=transfers`
 4. Apply filters (state, date range, search) and verify table updates
 5. Confirm the "Updated X ago" indicator refreshes

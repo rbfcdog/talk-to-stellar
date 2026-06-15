@@ -9,11 +9,11 @@ Each screenshot maps to a specific URL and shows specific evidence of the transf
 **URL**: `http://localhost:3333/ops` (or deployed `/ops`)
 
 **What it must show**:
-- [x] 5 metric cards with actual values (not zeros): Transfers today, BRL to USDC today, In flight, Needs attention, Admin fees
+- [x] 4 positive metric cards: Transfers today, BRL to USDC today, Completed, Admin fees
 - [x] Source filter set to "D1 lifecycle" (`source=transfers`)
 - [x] Table with at least 3 rows, sorted by Created descending
 - [x] At least one row with a status pill showing "Reconciled" (green) or "Stellar settled" (green)
-- [x] At least one row with an active status (amber) — e.g., "Converting" or "Routing"
+- [x] At least one row with a useful status pill — preferably "Reconciled" or "Stellar settled"
 - [x] Amount chain visible (R$ XXX.XX → USDC XXX.XX)
 - [x] Status legend visible at the bottom of the filter section
 - [x] Environment badge showing "TESTNET" in the topbar
@@ -22,7 +22,7 @@ Each screenshot maps to a specific URL and shows specific evidence of the transf
 1. Navigate to `/ops?source=transfers` in your browser
 2. Ensure the browser viewport is 1440×900 or wider
 3. Wait for the "Updated" indicator to show a relative time (confirms data loaded)
-4. Take a full-page screenshot showing metrics + table (at least 3 rows)
+4. Take a full-page screenshot showing the four positive metrics + table (at least 3 rows)
 
 **Alternative via Playwright** (from `instawards-evidence.mjs`):
 ```bash
