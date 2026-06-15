@@ -20,6 +20,7 @@ The code implementation has been advanced and targeted tests pass, but the deliv
 |---|---|
 | `PLAN.md` | Mandatory exploration findings, architecture map, implementation plan, and assumptions. |
 | `STATUS.md` | Acceptance checklist and current blockers. |
+| `DELIVERABLE-LOCATIONS.md` | Quick map for repository, dashboard, orchestration log, and transfer record evidence paths. |
 | `MIGRATIONS.md` | Consolidated migration, application command, backup requirement, and schema inspection SQL. |
 | `EVIDENCE-RUNBOOK.md` | Exact steps to produce the final four reviewer evidence artifacts. |
 | `runs/` | Per-session run reports. Every working session must add a timestamped report. |

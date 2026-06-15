@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-13. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-14. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-44 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+45 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -297,7 +297,7 @@
 
 ---
 
-## Cluster G — Visual Polish (5 incidents, SEVERITY: MEDIUM)
+## Cluster G — Visual Polish (6 incidents, SEVERITY: MEDIUM)
 
 ### #1 — PIX Confirmation Pop-Up Aesthetics
 > **Quote**: "fazer tela de confirmação pix ser um pop-up mais bonitinho, melhorar a estetica final"
@@ -343,6 +343,15 @@
 - **Root cause**: Dark mode CSS variable not applied to self-sent messages. Sent messages inherit the background color instead of using a distinct sent-message color.
 - **Status**: **Still open**.
 - **Lesson**: **Dark mode sent messages = light bubble (e.g., #2563eb or WhatsApp green)**. Received messages = dark bubble. Test both modes on every component.
+
+### #48 — Ops Dashboard Visual Pollution and Forensics Entry
+> **Quote**: "the foresincs ain working and make the UI more clean on dashboard, make so its very printable"
+> **Gloss**: The ops dashboard needed a cleaner, less visually noisy ledger layout, a working Forensics entry point, and a print-friendly view.
+
+- **Where**: `backend/src/api/views/ops-dashboard.view.ts`.
+- **Root cause**: The server-rendered dashboard had drifted between markup and CSS: metrics were emitted as `metric-bar` while older CSS targeted `metric-grid`, the filter area lost key structure, the top bar no longer exposed quiet session/print actions, and the Forensics nav only had a useful anchor on detail pages.
+- **Status**: **Fixed by `6555da6`**. `renderPageShell()` now always exposes a Forensics link (`/ops?source=transfers` on the ledger, `#transfer-detail` on detail); `renderMetricCards()` renders compact styled metric cards; `renderControls()` renders a single clean filter strip with source, group, search, dates, rows, and needs-attention; the top bar has quiet refresh/print/session controls; the print button calls `window.print()` and print CSS targets the new metric classes.
+- **Lesson**: **Operations dashboards need stable information hierarchy**. Metrics, filters, table, and forensic navigation must be visually distinct, printable, and backed by the same CSS classes the renderer actually emits.
 
 ---
 
@@ -433,7 +442,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 44 documented incidents:
+Ranked by frequency × severity across the 45 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -442,18 +451,18 @@ Ranked by frequency × severity across the 44 documented incidents:
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 4 | HIGH | Balance not credited, distribution math wrong, duplicate receipts |
 | 5 | **H — Reliability** | 9 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, investments fail, payment links unreliable, login redirects wrong |
-| 6 | **G — Visual Polish** | 5 | MEDIUM | SVG spacing, shadows, charts, dark mode |
+| 6 | **G — Visual Polish** | 6 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 19 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47)
+- **Confirmed fixed**: 20 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 19 of 44 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 20 of 45 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -480,3 +489,4 @@ Fixing commits verified in codebase:
 | #45 | `34ce523` | Replace implementation-facing ops login copy with transfer-focused operator copy |
 | #46 | `4b10d31`, `c4d38bd`, `6529ec7` | Render `/ops/login` before admin DB/dashboard access and keep login errors on the HTML screen |
 | #47 | `002ccd9` | Let server-rendered `/ops` browser routes bypass CORS so frontend-hosted login form POST reaches the controller |
+| #48 | `6555da6` | Clean the ops dashboard visual hierarchy, restore Forensics entry, and add printable controls |
