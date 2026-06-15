@@ -54,6 +54,11 @@ function assertCleanEvidencePayload(payload: unknown): void {
   }
 }
 
+function timestampMs(value: unknown): number {
+  const time = new Date(String(value || '')).getTime();
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+}
+
 async function main(): Promise<void> {
   const paymentLogId = Number(process.argv[2] || 2);
   if (!Number.isInteger(paymentLogId) || paymentLogId <= 0) {
@@ -156,45 +161,136 @@ async function main(): Promise<void> {
     },
   };
 
+  const rawOrchestrationEvents = [
+    {
+      event_id: `payment_logs:${paymentLog.id}:success`,
+      occurred_at: paymentLog.completed_at || paymentLog.created_at,
+      actor: 'api',
+      source_table: 'payment_logs',
+      source_record_id: String(paymentLog.id),
+      action: 'payment_log_success',
+      status: paymentLog.status,
+      transaction_hash: hash,
+      movement: {
+        source: {
+          account: paymentLog.source_public_key,
+          amount: paymentLog.source_amount,
+          asset_code: paymentLog.source_asset_code,
+          asset_issuer: paymentLog.source_asset_issuer,
+        },
+        destination: {
+          account: paymentLog.destination_public_key,
+          amount: paymentLog.destination_amount,
+          asset_code: paymentLog.destination_asset_code,
+          asset_issuer: paymentLog.destination_asset_issuer,
+        },
+        fee: {
+          amount: paymentLog.fee_xlm,
+          asset_code: 'XLM',
+        },
+      },
+    },
+    ...redactedOperations.map((operation: any) => ({
+      event_id: `operations:${operation.id}:completed`,
+      occurred_at: operation.updated_at || operation.created_at,
+      actor: 'system',
+      source_table: 'operations',
+      source_record_id: String(operation.id),
+      action: 'operation_completed',
+      status: operation.status,
+      operation: {
+        type: operation.type,
+        amount: operation.amount,
+        asset_code: operation.asset_code,
+        stellar_transaction_hash: operation.stellar_transaction_hash,
+        transaction_hash: operation.transaction_hash,
+      },
+    })),
+    {
+      event_id: `stellar_horizon_testnet:${hash}:confirmed`,
+      occurred_at: horizon.created_at,
+      actor: 'horizon',
+      source_table: 'stellar_horizon_testnet',
+      source_record_id: String(horizon.paging_token || hash),
+      action: 'transaction_confirmed',
+      status: horizon.successful === true ? 'successful' : 'failed',
+      confirmation: {
+        hash: horizon.hash,
+        ledger: horizon.ledger,
+        successful: horizon.successful,
+        operation_count: horizon.operation_count,
+        fee_charged: horizon.fee_charged,
+        memo_type: horizon.memo_type,
+        source_account: horizon.source_account,
+        paging_token: horizon.paging_token,
+        explorer: `https://stellar.expert/explorer/testnet/tx/${hash}`,
+      },
+    },
+  ];
+  const orchestrationEvents = rawOrchestrationEvents
+    .sort((left, right) => timestampMs(left.occurred_at) - timestampMs(right.occurred_at))
+    .map((event, index) => ({
+      sequence: index + 1,
+      ...event,
+    }));
+
   const orchestrationLogEvidence = {
     ...common,
-    records: [
-      {
-        event_type: 'payment_log_success',
-        source: 'payment_logs',
-        actor: 'api',
-        created_at: paymentLog.completed_at || paymentLog.created_at,
-        payload: redactedPayment,
-      },
-      ...redactedOperations.map((operation: any) => ({
-        event_type: 'operation_completed',
-        source: 'operations',
-        actor: 'system',
-        created_at: operation.updated_at || operation.created_at,
-        payload: operation,
-      })),
-      {
-        event_type: 'horizon_transaction_confirmed',
-        source: 'stellar_horizon_testnet',
-        actor: 'horizon',
-        created_at: horizon.created_at,
-        payload: horizonEvidence,
-      },
-    ],
+    log_type: 'orchestration_timeline',
+    events: orchestrationEvents,
     summary: {
-      total_records: 2 + redactedOperations.length,
+      event_count: orchestrationEvents.length,
+      first_event_at: orchestrationEvents[0]?.occurred_at || null,
+      last_event_at: orchestrationEvents[orchestrationEvents.length - 1]?.occurred_at || null,
+      final_status: horizon.successful === true ? 'successful' : 'failed',
       stellar_hash: hash,
       stellar_ledger: horizon.ledger,
-      successful: horizon.successful,
     },
   };
 
   const transferRecordEvidence = {
     ...common,
     transfer_record_type: 'stellar_payment_log',
-    payment_log: redactedPayment,
-    operations: redactedOperations,
-    stellar: horizonEvidence,
+    transfer: {
+      reference,
+      status: paymentLog.status,
+      operation_type: paymentLog.operation_type,
+      created_at: paymentLog.created_at,
+      completed_at: paymentLog.completed_at,
+      identifiers: {
+        payment_logs_id: paymentLog.id,
+        operation_ids: redactedOperations.map((operation: any) => operation.id),
+        user_id_masked: redactedPayment.user_id_masked,
+        session_id_masked: redactedPayment.session_id_masked,
+        payment_hash: hash,
+      },
+      accounts: {
+        source_public_key: paymentLog.source_public_key,
+        destination_public_key: paymentLog.destination_public_key,
+      },
+      amounts: {
+        source: {
+          amount: paymentLog.source_amount,
+          asset_code: paymentLog.source_asset_code,
+          asset_issuer: paymentLog.source_asset_issuer,
+        },
+        destination: {
+          amount: paymentLog.destination_amount,
+          asset_code: paymentLog.destination_asset_code,
+          asset_issuer: paymentLog.destination_asset_issuer,
+        },
+        fee: {
+          amount: paymentLog.fee_xlm,
+          asset_code: 'XLM',
+        },
+      },
+      route_path: paymentLog.route_path,
+    },
+    database_records: {
+      payment_log: redactedPayment,
+      operations: redactedOperations,
+    },
+    stellar_settlement: horizonEvidence,
   };
 
   const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverables/deliverable-1/evidence');
