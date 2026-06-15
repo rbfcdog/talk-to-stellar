@@ -19,6 +19,7 @@ Generated summary for `docs/insta-awards/deliverables/deliverable-1/runs`. Last 
 | [`2026-06-14-1628-ops-login-import-boundary-fix.md`](./2026-06-14-1628-ops-login-import-boundary-fix.md) | Run 2026-06-14-1628 - Ops Login Import Boundary Fix | 236 | Lazy-loaded dashboard repositories and the transfer orchestrator so `/ops/login` can render before Supabase-backed dashboard modules initialize. | English or mostly English. |
 | [`2026-06-14-1652-ops-login-cors-bypass.md`](./2026-06-14-1652-ops-login-cors-bypass.md) | Run 2026-06-14-1652 - Ops Login CORS Bypass | 268 | Let server-rendered `/ops` browser routes bypass backend CORS middleware so frontend-hosted login form posts reach the ops controller while JSON APIs keep strict CORS behavior. | English or mostly English. |
 | [`2026-06-14-1932-ops-login-html-error-guard.md`](./2026-06-14-1932-ops-login-html-error-guard.md) | Run 2026-06-14-1932 - Ops Login HTML Error Guard | 258 | Removed the final runtime repository import from the ops view, bypassed idempotency for `/ops`, and added an HTML fallback for `/ops/login` errors. | English or mostly English. |
+| [`2026-06-14-2224-ops-dashboard-cleanup.md`](./2026-06-14-2224-ops-dashboard-cleanup.md) | Run 2026-06-14-2224 - Ops Dashboard Cleanup | 271 | Cleaned the backend-rendered `/ops` dashboard, restored a useful Forensics entry point, added print/session controls, and documented Deliverable 1 evidence file locations. | English or mostly English. |
 
 ## Notes
 

@@ -50,10 +50,12 @@ This matches the existing `tts-op-page` dark operations language in `frontend/ap
 - `backend/migrations/20260614_00_ops_admin_auth.sql` is plain SQL so it can run in Supabase SQL Editor. The first admin is created by `public.upsert_ops_admin_user(...)` after the migration, or automatically by `backend/scripts/run-required-migrations.ts` when `OPS_ADMIN_LOGIN` and `OPS_ADMIN_PASSWORD_HASH` are set.
 - `/ops` and `/ops/transfers/:id` no longer accept query-token browser entry; unauthenticated requests redirect to `/ops/login`.
 - `OPS_DASHBOARD_TOKEN` / `TRANSFER_API_TOKEN` remain compatibility auth for JSON API clients, not the operator browser workflow.
-- `/ops` renders a production-grade ledger console with top bar, environment badge, refresh control, metrics, controls, status legend, sortable table, pagination, copy buttons, relative timestamps, and responsive stacked mobile rows.
+- `/ops` renders a production-grade ledger console with top bar, environment badge, refresh control, print action, quiet operator/session controls, compact metric cards, a single filter strip, sortable table, pagination, copy buttons, relative timestamps, and responsive stacked mobile rows.
+- The Ledger/Forensics top nav is always meaningful: Ledger opens the unified history, while Forensics opens `source=transfers` on the list page and the `#transfer-detail` section on a transfer detail page.
 - The page no longer uses meta refresh. It polls in place every 30 seconds and replaces only dashboard fragments.
 - Metrics are read-only and computed from loaded ledger records: transfers today, BRL to USDC volume today, in-flight count, needs-attention count, admin fee total.
 - Needs-attention includes failed, expired, refund, discrepant, and active records not updated for more than two hours.
+- The print view removes interactive chrome, uses A4 landscape, keeps the ledger table and metrics legible on paper/PDF, and hides raw JSON by default.
 - `/ops/transfers/:id` renders the forensic view: public reference header, status pill, amount summary, lifecycle rail/timeline, reconciliation banner, fee table, evidence links, and collapsed syntax-highlighted raw JSON.
 - `GET /api/ops/history` remains protected and additive. It now includes normalized read-only fee fields when available.
 
