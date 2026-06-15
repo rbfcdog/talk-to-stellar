@@ -13,11 +13,12 @@ User opens conversion screen (web)
   → Confirm → Stellar transaction executes
 ```
 
-## Known Issues (Updated June 13, 2026)
+## Known Issues (Updated June 15, 2026)
 
 ### Fixed
 - **Screen doesn't close** (#4): ✅ Fixed by `6569ae0` — `PixCompletionPopup` now has `autoClose` prop
 - **Visual inconsistency** (#5): ✅ Fixed by `1c5550c`, `82ba3a4` — PIX and conversion UI normalized
+- **Asset-specific insufficient balance copy** (#49): ✅ Fixed by `227832a` — backend and frontend public-error mappers now classify `Saldo de <ASSET> insuficiente` as `insufficient_balance` instead of a temporary retry.
 
 ### Still Open
 - **Quote drift** (#30): Quote still re-fetches on render — needs snapshot-on-first-load
@@ -37,5 +38,9 @@ User opens conversion screen (web)
 
 ## Key Files
 - `frontend/app/convert/convert-client.tsx` (~1050 lines) — conversion screen (monolithic)
+- `frontend/app/confirm-conversion/confirm-conversion-client.tsx` — PIN confirmation and progress/error display
+- `frontend/lib/public-errors.ts` — frontend public-error classification
 - `backend/src/api/controllers/financial.controller.ts` — conversion endpoints
+- `backend/src/api/controllers/external-finalize.controller.ts` — conversion finalization and Stellar submission
 - `backend/src/api/services/stellar.service.ts` — pathfinding + execution
+- `backend/src/utils/public-error.ts` — backend public-error classification

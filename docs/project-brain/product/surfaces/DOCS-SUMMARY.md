@@ -1,6 +1,6 @@
 # Documentation Summary: project-brain/product/surfaces
 
-Generated summary for `docs/project-brain/product/surfaces`. Last generated: 2026-06-14.
+Generated summary for `docs/project-brain/product/surfaces`. Last generated: 2026-06-15.
 
 ## Markdown Files
 
@@ -11,7 +11,7 @@ Generated summary for `docs/project-brain/product/surfaces`. Last generated: 202
 | [`landing-page.md`](./landing-page.md) | Landing Page — Surface Audit | 204 | The active homepage is `frontend/app/page.tsx`, which uses `frontend/components/landing-reluca/`. The email form is embedded in the CTA via `frontend/components/landing-reluca/EarlyAccessSignup.tsx`. | English or mostly English. |
 | [`ops-dashboard.md`](./ops-dashboard.md) | Ops Dashboard - Surface Audit | 1007 | Backend `/ops` now uses centralized dashboard tokens, quiet top actions, compact positive metric cards, a clean filter strip, printable ledger styling, in-place refresh, responsive rows, and transfer forensic detail rendering. Live list screenshots were captured; final same-transfer detail screenshots remain pending. | English or mostly English. |
 | [`ops-dashboard-components.md`](./ops-dashboard-components.md) | Ops Dashboard Components | 344 | Component inventory for the backend ops dashboard: cards, badges, StatusPill, table, buttons, top-nav tabs, tooltips, empty state, refresh loading state, toast, CopyButton, modal/drawer foundation, and JSON block rules. | English or mostly English. |
-| [`web-conversion-screen.md`](./web-conversion-screen.md) | Web Conversion Screen — Surface Audit | 209 | **Screen doesn't close** (#4): ✅ Fixed by `6569ae0` — `PixCompletionPopup` now has `autoClose` prop **Visual inconsistency** (#5): ✅ Fixed by `1c5550c`, `82ba3a4` — PIX and conversion UI normalized | English or mostly English. |
+| [`web-conversion-screen.md`](./web-conversion-screen.md) | Web Conversion Screen — Surface Audit | 305 | Conversion surface audit covering fixed screen close, visual consistency, and asset-specific insufficient-balance copy, plus open quote drift, mobile length, Continue-button, language-toggle, empty-balance, and back-navigation issues. | English or mostly English. |
 | [`whatsapp-bot.md`](./whatsapp-bot.md) | WhatsApp Bot — Surface Audit | 168 | **"Summary:" banned** (#2): ✅ Fixed by `f24d6f1` — `stripUserFacingSummaryLabels()` strips "Summary:"/"Resumo:" from all messages **Send blocked by contacts** (#6): ✅ Fixed by `9106c6a` — resolves recipients from wallets table before contacts | English or mostly English. |
 
 ## Notes
