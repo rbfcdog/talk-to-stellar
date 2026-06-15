@@ -1,10 +1,10 @@
-# Deliverable 3 - Institutional Settlement Flow Demonstration
+# Deliverable 3 / Week 4 - End-to-End Transfer Routing Demonstration
 
-Status on 2026-06-13: foundation started; final demo video, screenshots, and evidence exports are still pending.
+Status on 2026-06-15: foundation package ready; final demo video, screenshots, and evidence exports are still pending.
 
 ## Reviewer Goal
 
-Reviewers should be able to understand the full institutional settlement route:
+Reviewers should be able to understand the full transfer-routing route:
 
 ```text
 PIX funding -> BRL/USD quote -> Stellar USDC settlement -> USD payout coordination -> reconciliation evidence
@@ -12,13 +12,23 @@ PIX funding -> BRL/USD quote -> Stellar USDC settlement -> USD payout coordinati
 
 This folder is the reviewer-facing documentation package for the flow demonstration and technical walkthrough. It intentionally uses the current code surfaces instead of a separate one-off demo process.
 
+## Award Upload Map
+
+| Award evidence label | Submit this file now |
+|----------|----------------------|
+| Video Demo Completo | `evidence/video-demo-completo.md` |
+| Diagramas de Arquitetura | `evidence/diagramas-de-arquitetura.md` |
+| Screenshot Fluxo Completo | `evidence/screenshot-fluxo-completo.md` |
+| Transfer Record Final | `evidence/transfer-record-final.md` |
+
 ## Artifact Map
 
 | Artifact | Foundation file | Final evidence target |
 |----------|-----------------|-----------------------|
-| Demo video | `VIDEO-STORYBOARD.md` | `evidence/video/` |
-| Screenshots | `SCREENSHOT-SHOTLIST.md` | `evidence/screenshots/` |
-| Architecture diagrams | `ARCHITECTURE-DIAGRAMS.md` | Included in docs and final reviewer package |
+| Demo video | `VIDEO-STORYBOARD.md`, `evidence/video-demo-completo.md` | `evidence/video/` |
+| Screenshots | `SCREENSHOT-SHOTLIST.md`, `evidence/screenshot-fluxo-completo.md` | `evidence/screenshots/` |
+| Architecture diagrams | `ARCHITECTURE-DIAGRAMS.md`, `evidence/diagramas-de-arquitetura.md` | Included in docs and final reviewer package |
+| Final transfer record | `evidence/transfer-record-final.md` | `evidence/json/final-transfer-record.json` |
 | Technical walkthrough | `TECHNICAL-WALKTHROUGH.md` | Included in final reviewer package |
 | Setup documentation | `SETUP.md` | Included in final reviewer package |
 | Demo runbook | `DEMO-RUNBOOK.md` | Run log under `runs/` after execution |
@@ -56,6 +66,7 @@ Do not mark this deliverable complete until `STATUS.md` is updated with concrete
 
 ## Related Docs
 
+- Upload map: `DELIVERABLE-LOCATIONS.md`
 - D1 lifecycle package: `docs/insta-awards/deliverables/deliverable-1/README.md`
 - D2 payout package: `docs/insta-awards/deliverables/deliverable-2/README.md`
 - Circle setup: `backend/docs/CIRCLE_INTEGRATION_SETUP.md`

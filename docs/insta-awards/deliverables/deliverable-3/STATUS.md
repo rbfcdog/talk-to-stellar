@@ -1,14 +1,24 @@
-# Deliverable 3 Status
+# Deliverable 3 / Week 4 Status
 
-Status on 2026-06-13: documentation foundation in progress.
+Status on 2026-06-15: documentation foundation ready for reviewer inspection. Final video, screenshots, and same-transfer JSON evidence are still pending.
+
+## Award Evidence Labels
+
+| Award evidence label | Status | Submit this file now |
+|---|---|---|
+| Video Demo Completo | Storyboard ready; final video pending | `evidence/video-demo-completo.md` |
+| Diagramas de Arquitetura | Ready; Mermaid diagrams included | `evidence/diagramas-de-arquitetura.md` |
+| Screenshot Fluxo Completo | Shot list ready; final screenshots pending | `evidence/screenshot-fluxo-completo.md` |
+| Transfer Record Final | Record schema ready; final same-transfer record pending | `evidence/transfer-record-final.md` |
 
 ## Acceptance Checklist
 
 | Requirement | Status | Evidence path |
 |-------------|--------|---------------|
-| Demo video explains PIX -> Stellar -> payout orchestration | Pending | `evidence/video/` |
-| Screenshots show quote, PIX, settlement, payout, evidence, and ops dashboard | Pending | `evidence/screenshots/` |
-| Architecture diagrams explain services, states, and evidence model | Foundation ready | `ARCHITECTURE-DIAGRAMS.md` |
+| Demo video explains PIX -> Stellar -> payout orchestration | Storyboard ready; recording pending | `evidence/video-demo-completo.md`, `evidence/video/` |
+| Screenshots show quote, PIX, settlement, payout, evidence, and ops dashboard | Shot list ready; capture pending | `evidence/screenshot-fluxo-completo.md`, `evidence/screenshots/` |
+| Architecture diagrams explain services, states, and evidence model | Ready | `evidence/diagramas-de-arquitetura.md`, `ARCHITECTURE-DIAGRAMS.md` |
+| Final transfer record explains required shape and current boundary | Ready as requirement doc; final JSON pending | `evidence/transfer-record-final.md` |
 | Technical walkthrough maps each step to API routes and services | Foundation ready | `TECHNICAL-WALKTHROUGH.md` |
 | Setup documentation lists env, migration, backend, frontend, and provider steps | Foundation ready | `SETUP.md` |
 | Final reviewer package links all artifacts | Foundation ready | `REVIEWER-PACKAGE.md` |

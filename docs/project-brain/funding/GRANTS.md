@@ -21,10 +21,10 @@
 - **Files**: `backend/src/api/services/usd-payout-adapters.ts`, `backend/src/api/services/usd-payout-coordination.service.ts`, `backend/src/api/services/international-transfer.service.ts`, `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md`, `backend/docs/CIRCLE_INTEGRATION_SETUP.md`
 - **Evidence package**: `docs/insta-awards/deliverables/deliverable-2/STATUS.md`, `docs/insta-awards/deliverables/deliverable-2/DELIVERABLE-LOCATIONS.md`, `docs/insta-awards/deliverables/deliverable-2/evidence/`, `docs/insta-awards/deliverables/deliverable-2/runs/`
 
-#### Deliverable 3 — Institutional Settlement Flow Demonstration (PENDING)
+#### Deliverable 3 — End-to-End Transfer Routing Demonstration (FOUNDATION PACKAGE READY; FINAL MEDIA PENDING)
 - **Scope**: Demo video, screenshots, architecture diagrams, technical walkthrough, setup documentation, and reviewer package showing PIX funding to Stellar settlement to international USD payout orchestration.
-- **Status**: Foundation started on 2026-06-13. Documentation package now exists under `docs/insta-awards/deliverables/deliverable-3/` with setup, diagrams, technical walkthrough, demo runbook, screenshot shot list, video storyboard, evidence checklist, reviewer package, and claims boundary. Final completion still requires one same-transfer run, JSON evidence exports, screenshots, and recorded demo video.
-- **Files**: `docs/insta-awards/deliverables/deliverable-3/README.md`, `docs/insta-awards/deliverables/deliverable-3/DEMO-RUNBOOK.md`, `docs/insta-awards/deliverables/deliverable-3/TECHNICAL-WALKTHROUGH.md`, `docs/insta-awards/deliverables/deliverable-3/ARCHITECTURE-DIAGRAMS.md`, `docs/insta-awards/deliverables/deliverable-3/REVIEWER-PACKAGE.md`
+- **Status**: Week 4 evidence-label files were assembled on 2026-06-15 for Video Demo Completo, Diagramas de Arquitetura, Screenshot Fluxo Completo, and Transfer Record Final. The architecture evidence is Mermaid-based and ready for reviewer submission. Final completion still requires one same-transfer run, JSON evidence exports, screenshots, and recorded demo video.
+- **Files**: `docs/insta-awards/deliverables/deliverable-3/DELIVERABLE-LOCATIONS.md`, `docs/insta-awards/deliverables/deliverable-3/evidence/video-demo-completo.md`, `docs/insta-awards/deliverables/deliverable-3/evidence/diagramas-de-arquitetura.md`, `docs/insta-awards/deliverables/deliverable-3/evidence/screenshot-fluxo-completo.md`, `docs/insta-awards/deliverables/deliverable-3/evidence/transfer-record-final.md`
 
 ## Stellar Community Fund (SCF)
 
@@ -52,4 +52,4 @@
 |-------------|-----|--------|
 | Instaward D1 | Active sprint | In progress |
 | Instaward D2 | TBD | Foundation package ready; final execution pending |
-| Instaward D3 | TBD | Foundation in progress |
+| Instaward D3 | TBD | Foundation package ready; final media/evidence pending |

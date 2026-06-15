@@ -6,9 +6,11 @@ Use this checklist to decide when the D3 package is ready for reviewers.
 
 | Evidence | Required status | Artifact |
 |----------|-----------------|----------|
-| Demo video | Captured | `evidence/video/<run-id>.mp4` or hosted link documented in `evidence/video/README.md` |
-| Screenshot set | Captured | `evidence/screenshots/*.png` |
-| Architecture diagrams | Current | `ARCHITECTURE-DIAGRAMS.md` |
+| Video Demo Completo | Storyboard now; captured video for final | `evidence/video-demo-completo.md`, then `evidence/video/<run-id>.mp4` or hosted link |
+| Diagramas de Arquitetura | Current and ready | `evidence/diagramas-de-arquitetura.md` |
+| Screenshot Fluxo Completo | Shot list now; captured screenshots for final | `evidence/screenshot-fluxo-completo.md`, then `evidence/screenshots/*.png` |
+| Transfer Record Final | Required shape now; same-transfer JSON for final | `evidence/transfer-record-final.md`, then `evidence/json/final-transfer-record.json` |
+| Architecture diagrams source | Current | `ARCHITECTURE-DIAGRAMS.md` |
 | Technical walkthrough | Current | `TECHNICAL-WALKTHROUGH.md` |
 | Setup documentation | Current | `SETUP.md` |
 | Demo command runbook | Current | `DEMO-RUNBOOK.md` |

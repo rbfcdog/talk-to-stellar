@@ -1,6 +1,15 @@
 # Deliverable 3 Evidence Folder
 
-Status: placeholders only until the final demo run is captured.
+Status: four upload-label Markdown files are ready; final video, screenshots, and same-transfer JSON evidence are pending.
+
+## Upload Files
+
+| Award evidence label | File |
+|---|---|
+| Video Demo Completo | `video-demo-completo.md` |
+| Diagramas de Arquitetura | `diagramas-de-arquitetura.md` |
+| Screenshot Fluxo Completo | `screenshot-fluxo-completo.md` |
+| Transfer Record Final | `transfer-record-final.md` |
 
 Expected final structure:
 
