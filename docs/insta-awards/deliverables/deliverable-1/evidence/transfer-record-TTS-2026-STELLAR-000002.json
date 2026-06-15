@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-06-15T02:03:06.040Z",
+  "exported_at": "2026-06-15T22:47:33.481Z",
   "reference": "TTS-2026-STELLAR-000002",
   "evidence_scope": "stellar_testnet_payment",
   "source_tables": {
@@ -9,41 +9,80 @@
     ]
   },
   "transfer_record_type": "stellar_payment_log",
-  "payment_log": {
-    "id": 2,
-    "user_id_masked": "te***@***.com",
-    "session_id_masked": "***15ec7c96",
-    "source_public_key": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
-    "destination_public_key": "GBBBRRQ2JIQX4RDQFPQHA4FBT5I5T37DPGYSC76TM3PEC65QIZXE3WCY",
-    "source_amount": "11.9281550",
-    "source_asset_code": "XLM",
-    "source_asset_issuer": null,
-    "destination_amount": "10.0000000",
-    "destination_asset_code": "USDC",
-    "destination_asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
-    "fee_xlm": "0.0000100",
-    "payment_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
-    "operation_type": "PATH_PAYMENT",
+  "transfer": {
+    "reference": "TTS-2026-STELLAR-000002",
     "status": "success",
-    "route_path": [],
+    "operation_type": "PATH_PAYMENT",
     "created_at": "2026-05-10T21:46:35.971+00:00",
-    "completed_at": "2026-05-10T21:46:35.971+00:00"
+    "completed_at": "2026-05-10T21:46:35.971+00:00",
+    "identifiers": {
+      "payment_logs_id": 2,
+      "operation_ids": [
+        "259de57a-ca16-409b-bf73-79c5641cbf16"
+      ],
+      "user_id_masked": "te***@***.com",
+      "session_id_masked": "***15ec7c96",
+      "payment_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094"
+    },
+    "accounts": {
+      "source_public_key": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
+      "destination_public_key": "GBBBRRQ2JIQX4RDQFPQHA4FBT5I5T37DPGYSC76TM3PEC65QIZXE3WCY"
+    },
+    "amounts": {
+      "source": {
+        "amount": "11.9281550",
+        "asset_code": "XLM",
+        "asset_issuer": null
+      },
+      "destination": {
+        "amount": "10.0000000",
+        "asset_code": "USDC",
+        "asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+      },
+      "fee": {
+        "amount": "0.0000100",
+        "asset_code": "XLM"
+      }
+    },
+    "route_path": []
   },
-  "operations": [
-    {
-      "id": "259de57a-ca16-409b-bf73-79c5641cbf16",
-      "type": "PATH_PAYMENT_STRICT_RECEIVE",
-      "status": "COMPLETED",
-      "amount": 10,
-      "asset_code": "USDC",
-      "context_redacted": true,
-      "stellar_transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
-      "transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
-      "created_at": "2026-05-10T21:46:32.971018",
-      "updated_at": "2026-05-12T18:49:47.173976"
-    }
-  ],
-  "stellar": {
+  "database_records": {
+    "payment_log": {
+      "id": 2,
+      "user_id_masked": "te***@***.com",
+      "session_id_masked": "***15ec7c96",
+      "source_public_key": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
+      "destination_public_key": "GBBBRRQ2JIQX4RDQFPQHA4FBT5I5T37DPGYSC76TM3PEC65QIZXE3WCY",
+      "source_amount": "11.9281550",
+      "source_asset_code": "XLM",
+      "source_asset_issuer": null,
+      "destination_amount": "10.0000000",
+      "destination_asset_code": "USDC",
+      "destination_asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      "fee_xlm": "0.0000100",
+      "payment_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+      "operation_type": "PATH_PAYMENT",
+      "status": "success",
+      "route_path": [],
+      "created_at": "2026-05-10T21:46:35.971+00:00",
+      "completed_at": "2026-05-10T21:46:35.971+00:00"
+    },
+    "operations": [
+      {
+        "id": "259de57a-ca16-409b-bf73-79c5641cbf16",
+        "type": "PATH_PAYMENT_STRICT_RECEIVE",
+        "status": "COMPLETED",
+        "amount": 10,
+        "asset_code": "USDC",
+        "context_redacted": true,
+        "stellar_transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+        "transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+        "created_at": "2026-05-10T21:46:32.971018",
+        "updated_at": "2026-05-12T18:49:47.173976"
+      }
+    ]
+  },
+  "stellar_settlement": {
     "hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
     "ledger": 2488252,
     "successful": true,
