@@ -7,6 +7,7 @@
 import { writeFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { readLogFileEntriesForTransfer } from '../orchestration/orchestrationLogger';
+import { assertFinalRealTransferEvidence } from './realEvidenceGuard';
 
 async function main() {
   const transferId = process.argv[2];
@@ -64,7 +65,9 @@ async function main() {
     },
   };
 
-  const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverable-1/evidence');
+  assertFinalRealTransferEvidence(log);
+
+  const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverables/deliverable-1/evidence');
   mkdirSync(outDir, { recursive: true });
 
   const filename = `orchestration-logs-${transfer.public_ref}.json`;

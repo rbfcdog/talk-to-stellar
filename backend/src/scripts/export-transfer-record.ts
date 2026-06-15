@@ -5,6 +5,7 @@
 
 import { writeFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
+import { assertFinalRealTransferEvidence } from './realEvidenceGuard';
 
 async function main() {
   const transferId = process.argv[2];
@@ -30,7 +31,9 @@ async function main() {
     },
   };
 
-  const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverable-1/evidence');
+  assertFinalRealTransferEvidence(record);
+
+  const outDir = resolve(__dirname, '../../../docs/insta-awards/deliverables/deliverable-1/evidence');
   mkdirSync(outDir, { recursive: true });
   const outPath = resolve(outDir, `transfer-record-${transfer.public_ref}.json`);
   writeFileSync(outPath, JSON.stringify(record, null, 2));

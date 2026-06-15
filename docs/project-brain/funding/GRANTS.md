@@ -10,7 +10,7 @@
 - **Deliverables**: 3 (see `docs/insta-awards/deliverables/deliverable-1/`, `docs/insta-awards/deliverables/deliverable-2/`, `docs/insta-awards/deliverables/deliverable-3/`)
 
 #### Deliverable 1 — Transfer Lifecycle Engine (IN PROGRESS)
-- **Status**: Implementation improved on 2026-06-13. Code compiles and targeted lifecycle/API tests pass. On 2026-06-14, interim database-backed evidence was refreshed by mirroring legacy `international_transfers.id = tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec` into normalized `TTS-2026-000001`; exported artifacts prove lifecycle handling through `PAYOUT_INSTRUCTED`. Final completion still requires applying `backend/migrations/20260613_00_full_schema.sql` to Supabase if not already applied in the target env, executing one real Stellar testnet run through completion/reconciliation, and capturing dashboard screenshots.
+- **Status**: Implementation improved on 2026-06-13. Code compiles and targeted lifecycle/API tests pass. The active evidence folder no longer carries non-final log or transfer-record JSON. Final completion still requires applying `backend/migrations/20260613_00_full_schema.sql` to Supabase if not already applied in the target env, executing one real Stellar testnet run through completion/reconciliation, exporting guarded logs/record JSON, and capturing dashboard screenshots.
 - **Evidence target**: `docs/insta-awards/deliverables/deliverable-1/evidence/`
 - **Files**: `backend/src/orchestration/`, `backend/src/api/repository/transfer.repository.ts`, `backend/src/api/repository/ops-history.repository.ts`, `backend/src/api/routes/ops.router.ts`, `backend/src/api/controllers/ops.controller.ts`
 - **Run docs**: `docs/insta-awards/deliverables/deliverable-1/runs/`

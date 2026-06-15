@@ -22,7 +22,7 @@ export OPS_ADMIN_LOGIN="admin@example.com"
 export LOG_FILE="/tmp/talktostellar-orchestration.jsonl"
 ```
 
-Real Etherfuse PIX funding also requires the Etherfuse env from `docs/project-brain/operations/ENVIRONMENTS.md`. If provider sandbox funding is not available, document the simulated PIX webhook clearly in the run report.
+Real Etherfuse PIX funding also requires the Etherfuse env from `docs/project-brain/operations/ENVIRONMENTS.md`. The final evidence package must use provider-returned PIX and Stellar evidence values. Do not use locally generated confirmation IDs.
 
 ## Step 1 — Apply Migrations
 
@@ -55,7 +55,7 @@ High-level sequence:
 1. Create BRL/USD quote with `POST /api/quotes/brl-usd`.
 2. Create transfer with `POST /api/transfers` using the returned `quote_id`.
 3. Create PIX intent with `POST /api/transfers/:legacy_transfer_id/pix-intent`.
-4. Confirm PIX funding through Etherfuse webhook, or document the authorized sandbox confirmation path.
+4. Confirm PIX funding through an Etherfuse webhook or provider-returned sandbox event with real provider IDs.
 5. Settle Stellar with `POST /api/transfers/:legacy_transfer_id/settle-stellar`.
 6. Create payout instruction with `POST /api/transfers/:legacy_transfer_id/payout-instruction`.
 7. Refresh payout status or use provider webhook until payout status is complete.
@@ -123,6 +123,8 @@ The JSON must include:
 - Every transition from creation to reconciliation.
 - Any idempotent replay events if retries occurred.
 
+The export command fails before writing if the transfer is not `RECONCILED`, if Stellar evidence is missing, if the Stellar ledger is not positive, or if generated local evidence values are present.
+
 ## Step 6 — Export Transfer Record
 
 ```bash
@@ -142,6 +144,8 @@ The JSON must include:
 - `amount_brl_in`, `amount_usdc_settled`, `amount_usd_out_expected`.
 - `quote`, `pix`, `stellar`, `payout`, and `reconciliation`.
 - PII masked in endpoint, PIX, and Stellar fields.
+
+The export command uses the same real-evidence guard as the log export. If it fails, do not edit the JSON manually; complete the real transfer lifecycle and rerun the export.
 
 ## Step 7 — Refresh Evidence Docs
 

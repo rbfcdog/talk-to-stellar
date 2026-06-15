@@ -1,6 +1,6 @@
 # Instaward #1 — Transfer Lifecycle Engine
 
-**Status**: In progress; interim DB-backed evidence refreshed 2026-06-14
+**Status**: In progress; final real evidence export pending
 **Evidence**: `docs/insta-awards/deliverables/deliverable-1/evidence/`
 
 ## Scope (from SOW)
@@ -12,10 +12,10 @@
 |---|------|--------|----------|
 | 1 | Repository + code | ✅ | `backend/src/orchestration/` |
 | 2 | Dashboard screenshot | Pending final capture | `docs/insta-awards/deliverables/deliverable-1/evidence/DASHBOARD.md` (instructions) |
-| 3 | Orchestration logs | Interim refreshed | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-2026-000001.json` |
-| 4 | Transfer record | Interim refreshed | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-000001.json` |
+| 3 | Orchestration logs | Pending final real export | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-<public_ref>.json` |
+| 4 | Transfer record | Pending final real export | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-<public_ref>.json` |
 
-Interim evidence is database-backed from normalized `TTS-2026-000001`, mirrored from legacy `international_transfers.id = tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec`. It proves lifecycle handling through `PAYOUT_INSTRUCTED`. Final completion still requires a same-transfer real Stellar testnet run through completion/reconciliation plus dashboard screenshots.
+The active evidence folder intentionally has no log or transfer-record JSON until the same-transfer real Stellar testnet run reaches reconciliation. The export scripts reject non-final evidence before writing files.
 
 ## Key Artifacts
 - `backend/src/orchestration/stateMachine.ts` — 13-state transition map
