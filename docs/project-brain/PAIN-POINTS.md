@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-14. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-15. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-45 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+46 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -36,7 +36,7 @@
 
 ---
 
-## Cluster B — Ledger & Balance Correctness (4 incidents, SEVERITY: HIGH)
+## Cluster B — Ledger & Balance Correctness (5 incidents, SEVERITY: HIGH)
 
 ### #32 — Balance Not Credited
 > **Quote**: "era pra ter mudado o saldo, teste o on ramp e o off ramp, nao esta alterando o saldo nesse caso. o on ramp nao esta funcionando... teste extensivamente se funciona"
@@ -73,6 +73,15 @@
 - **Root cause**: Two events fire for one on-ramp completion (e.g., "PIX received" + "Settlement confirmed"). Both trigger receipt generation. No deduplication by operation ID.
 - **Status**: **Fixed** by `0da597da` (Deduplicate Pix auto-pay receipts). The receipt system now has two-layer deduplication: (1) DB-level `dedupe_key` unique constraint in `agent_messages` table (`payment-receipt.service.ts:329-337`), (2) in-memory `Set<string>` for external delivery dedupe (`payment-receipt.service.ts:346-356`). The dedupe key is threaded from the PIX auto-pay flow through `anchor.service.ts:8713-8738`.
 - **Lesson**: **Receipt generation must be idempotent per operation ID**. Deduplicate by `operation_id` or `pix_payment_id`.
+
+### #49 — Conversion Insufficient Balance Shown as Temporary Error
+> **Quote**: "7 (93,3%)\n\nConversion not completed\n\nI could not finish that right now. Try again in a few seconds.\n\nError ID: TTS-20260615164337-6RF248\nPIN\n\nConversion progress\n\nThe conversion stopped before completion. Check the highlighted error above before trying again."
+> **Gloss**: A conversion with insufficient TESOURO balance reached the confirmation screen but showed a generic temporary error instead of saying the balance was insufficient.
+
+- **Where**: `backend/src/utils/public-error.ts`, `frontend/lib/public-errors.ts`, `backend/src/api/controllers/external-finalize.controller.ts`, `frontend/app/confirm-conversion/confirm-conversion-client.tsx`.
+- **Root cause**: The exact backend error was `Saldo de TESOURO insuficiente para a conversão. Necessário: 123, disponível: 89.6400000.` The public error mappers only recognized contiguous `saldo insuficiente`, so `Saldo de <ASSET> insuficiente` fell through to `temporary_unavailable`.
+- **Status**: **Fixed** by `227832a` (Fix conversion insufficient balance error copy). `publicErrorCode()` in `backend/src/utils/public-error.ts` and `mapPublicError()` in `frontend/lib/public-errors.ts` now classify asset-specific insufficient balance messages as `insufficient_balance`; regression tests cover the exact TESOURO conversion error shape.
+- **Lesson**: **Balance errors must stay actionable through every layer**. Asset-specific messages such as `Saldo de TESOURO insuficiente` must map to insufficient-balance copy, not a generic retry.
 
 ---
 
@@ -442,14 +451,14 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 45 documented incidents:
+Ranked by frequency × severity across the 46 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
 | 1 | **C — Flow State Machine** | 8 | HIGH | Windows don't close, flows auto-advance, links expire, PIN cut off |
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
-| 4 | **B — Ledger & Balance** | 4 | HIGH | Balance not credited, distribution math wrong, duplicate receipts |
+| 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
 | 5 | **H — Reliability** | 9 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 6 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
@@ -457,12 +466,12 @@ Ranked by frequency × severity across the 45 documented incidents:
 
 ## Status Summary
 
-- **Confirmed fixed**: 20 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48)
+- **Confirmed fixed**: 21 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 20 of 45 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 21 of 46 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -482,6 +491,7 @@ Fixing commits verified in codebase:
 | #16 | `5a55e6c`, `92cc83d` | Fix completed short-link state, extend expiry windows |
 | #22 | `e8cf1ea` | Remove receipt link from PIX completion popup |
 | #33 | `0da597da` | Deduplicate PIX auto-pay receipts (DB + in-memory) |
+| #49 | `227832a` | Map asset-specific insufficient conversion balance errors to insufficient-balance copy |
 | #40 | Via config | Admin fee wallet configured via `TALKTOSTELLAR_FEE_TREASURY_PUBLIC_KEY` |
 | #42 | Commit pending | Aggregate all authoritative transaction tables in `/ops`; verified 1,540 live database records |
 | #43 | `949db79` | Make ops admin auth migration plain SQL for Supabase SQL Editor; move bootstrap to runner/function call |

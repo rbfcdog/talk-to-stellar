@@ -174,3 +174,21 @@
 
 **Files**: `backend/src/app.ts`, `backend/src/api/middlewares/security.middleware.ts`, `backend/tests/security.middleware.test.ts`
 **Related**: Pain point #47
+
+## 12. Conversion Confirmation Shows Generic Temporary Error for Insufficient Balance (FIXED)
+
+**Symptom**: `/confirm-conversion` reaches the progress screen, then shows `Conversion not completed`, `I could not finish that right now. Try again in a few seconds.`, and an error ID like `TTS-20260615164337-6RF248`.
+
+**Observed case**: On 2026-06-15, `payment_confirmations.id = 154` was a `123 TESOURO -> 28.1956173 USDC` confirmation. The wallet had `89.6400000 TESOURO`, so the real backend error was insufficient source balance.
+
+**Diagnosis steps**:
+1. Query `payment_confirmations` near the support-code timestamp. Look for a pending `external_conversion_confirm` row.
+2. Query `payment_logs` for the same time window. If no row exists, the failure happened before token reservation or transaction submission.
+3. Check the wallet Horizon balances for the source asset.
+4. Reproduce only quote/XDR build, not submission, with the same public key and source/destination assets.
+5. If the raw error looks like `Saldo de <ASSET> insuficiente`, it should map to `insufficient_balance`.
+
+**Status**: Fixed by `227832a`. Backend `publicErrorCode()` and frontend `mapPublicError()` now classify asset-specific Portuguese insufficient-balance messages.
+
+**Files**: `backend/src/utils/public-error.ts`, `frontend/lib/public-errors.ts`, `backend/tests/public-error.test.ts`, `frontend/__tests__/unit/public-errors.test.ts`
+**Related**: Pain point #49
