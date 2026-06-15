@@ -256,6 +256,16 @@ export class InternationalTransfersController {
           wallet_pin: req.body?.wallet_pin || req.body?.walletPin || req.body?.pin,
           run_etherfuse_offramp_test: req.body?.run_etherfuse_offramp_test ?? req.body?.runEtherfuseOffRampTest,
           target_brl: req.body?.target_brl || req.body?.targetBrl,
+          circle_destination_id: req.body?.circle_destination_id ||
+            req.body?.circleDestinationId ||
+            req.body?.provider_destination_id ||
+            req.body?.providerDestinationId,
+          circle_destination_type: req.body?.circle_destination_type ||
+            req.body?.circleDestinationType ||
+            req.body?.provider_destination_type ||
+            req.body?.providerDestinationType,
+          circle_source_wallet_id: req.body?.circle_source_wallet_id || req.body?.circleSourceWalletId,
+          circle_idempotency_key: req.body?.circle_idempotency_key || req.body?.circleIdempotencyKey || req.body?.idempotency_key || req.body?.idempotencyKey,
           request_id: context.request_id,
           correlation_id: context.correlation_id,
         },

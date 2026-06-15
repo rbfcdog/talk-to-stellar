@@ -401,6 +401,14 @@ describe('international transfer HTTP routes', () => {
       headers,
       body: { provider: 'etherfuse' },
     })).resolves.toMatchObject({ status: 201, body: { transfer: { status: 'PAYOUT_PENDING' } } });
+    expect(internationalTransferService.createPayoutInstruction).toHaveBeenLastCalledWith(
+      'tr-route-1',
+      'etherfuse',
+      expect.objectContaining({
+        request_id: 'req-lifecycle-1',
+        correlation_id: 'corr-lifecycle-1',
+      }),
+    );
 
     await expect(routeRequest({
       method: 'POST',
@@ -500,6 +508,56 @@ describe('international transfer HTTP routes', () => {
         },
       },
     });
+  });
+
+  it('passes Circle destination options from the protected payout endpoint', async () => {
+    const payout = jest.spyOn(internationalTransferService, 'createPayoutInstruction').mockResolvedValue({
+      ...transfer('PAYOUT_PENDING'),
+      payout_provider: 'circle',
+      payout_instruction_id: 'circle-instruction-route',
+      provider_payout_id: 'circle-payout-route',
+      payout_status: 'pending',
+    });
+
+    const response = await routeRequest({
+      method: 'POST',
+      path: '/api/transfers/tr-route-1/payout-instruction',
+      headers: {
+        'x-request-id': 'req-circle-route',
+        'x-correlation-id': 'corr-circle-route',
+        'x-international-transfer-ops-secret': 'ops-secret',
+      },
+      body: {
+        provider: 'circle',
+        circleDestinationId: 'circle-bank-account-route',
+        circleDestinationType: 'wire',
+        circleSourceWalletId: 'circle-wallet-route',
+        circleIdempotencyKey: '8dd1a44f-8f52-4a9b-a0d0-968020b6df2f',
+      },
+    });
+
+    expect(response).toMatchObject({
+      status: 201,
+      body: {
+        success: true,
+        transfer: {
+          payout_provider: 'circle',
+          payout_instruction_id: 'circle-instruction-route',
+        },
+      },
+    });
+    expect(payout).toHaveBeenCalledWith(
+      'tr-route-1',
+      'circle',
+      expect.objectContaining({
+        circle_destination_id: 'circle-bank-account-route',
+        circle_destination_type: 'wire',
+        circle_source_wallet_id: 'circle-wallet-route',
+        circle_idempotency_key: '8dd1a44f-8f52-4a9b-a0d0-968020b6df2f',
+        request_id: 'req-circle-route',
+        correlation_id: 'corr-circle-route',
+      }),
+    );
   });
 
   it('blocks operator-only settlement and payout routes without ops authorization', async () => {

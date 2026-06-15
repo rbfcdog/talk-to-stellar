@@ -109,7 +109,7 @@ PAYOUT_WEBHOOK_SECRET              # Shared fallback webhook secret
 PAYOUT_PROVIDER_TIMEOUT_MS=30000
 ```
 
-Circle setup runbook: `backend/docs/CIRCLE_INTEGRATION_SETUP.md`.
+Circle setup runbook: `backend/docs/CIRCLE_INTEGRATION_SETUP.md`. Readiness check: `npm --prefix backend run circle:payout-readiness`. The linked bank destination can also be passed on the protected payout-instruction request as `circleDestinationId` for a single transfer.
 
 ### Ops Dashboard (D1)
 ```

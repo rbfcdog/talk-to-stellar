@@ -77,6 +77,7 @@ Required proof:
 
 ```bash
 npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts
+npm --prefix backend test -- --runInBand tests/international-transfer.routes.test.ts
 npm --prefix backend run build
 ```
 
@@ -206,6 +207,8 @@ CIRCLE_PAYOUT_DESTINATION_TYPE=wire
 
 `CIRCLE_PAYOUT_DESTINATION_ID` must be a real linked Circle bank account ID. It cannot be any random string for execution. In compatibility mode it can be blank, because no bank payout is sent.
 
+The current sandbox linked-bank setup has already returned a Circle wire bank account ID with status `pending`. Store the returned ID only in backend secret storage or local `.env`; evidence should show only that the destination is configured, plus a hash/tail from `npm --prefix backend run circle:payout-readiness`.
+
 Expected reviewer claim for compatibility mode:
 
 ```text
@@ -242,6 +245,15 @@ curl -s -X POST "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-instruction"
   -H "Authorization: Bearer ${OPS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"provider":"circle"}' | jq
+```
+
+If not using global `CIRCLE_PAYOUT_DESTINATION_ID`, pass the linked destination on the protected request:
+
+```bash
+curl -s -X POST "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-instruction" \
+  -H "Authorization: Bearer ${OPS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"circle","circleDestinationId":"<linked-circle-wire-bank-id>","circleDestinationType":"wire"}' | jq
 ```
 
 Refresh status:

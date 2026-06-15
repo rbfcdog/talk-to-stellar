@@ -82,6 +82,8 @@ Or store it on a transfer destination before payout creation:
 
 The adapter also accepts `circleBankAccountId` in `payout_destination` for the same purpose.
 
+Current sandbox note: the latest operator-created Circle wire bank returned status `pending` with description `WELLS FARGO BANK, NA ****0010`. Store the returned bank `id` only in backend secret storage or local `.env`; do not commit the raw ID, API key, account number, or routing number.
+
 ## 3. Configure Backend Environment
 
 Start in compatibility mode. This builds Circle-compatible payout evidence without calling Circle:
@@ -114,6 +116,14 @@ Notes:
 - `CIRCLE_PAYOUT_WEBHOOK_SECRET` is preferred for Circle webhooks. `PAYOUT_WEBHOOK_SECRET` is the shared fallback.
 
 ## 4. Check Adapter Capabilities
+
+Before starting the backend, verify the local backend env is ready:
+
+```bash
+npm --prefix backend run circle:payout-readiness
+```
+
+The output redacts the API key and destination ID. It should report `circle_sandbox_api_execution: true` only when `CIRCLE_API_KEY`, `CIRCLE_PAYOUT_DESTINATION_ID`, `CIRCLE_ENVIRONMENT=sandbox`, and `ENABLE_REAL_PAYOUT_EXECUTION=true` are all set.
 
 Run the backend and inspect provider capabilities:
 
@@ -159,6 +169,19 @@ curl -s -X POST "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-instruction"
   -H "Authorization: Bearer ${OPS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"provider":"circle"}' | jq
+```
+
+If you need to use the linked bank destination only for one request instead of global env:
+
+```bash
+curl -s -X POST "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-instruction" \
+  -H "Authorization: Bearer ${OPS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "circle",
+    "circleDestinationId": "replace-with-linked-bank-account-id",
+    "circleDestinationType": "wire"
+  }' | jq
 ```
 
 In compatibility mode, the response should move the transfer into payout coordination without executing Circle. The evidence should show a Circle Mint payout payload and a note that no bank payout was executed.
