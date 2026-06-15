@@ -29,8 +29,8 @@ Updated: 2026-06-14
 |---|----------|------|--------|
 | 1 | Repository link + capability map | `evidence/REPO.md` | Needs refresh after final run |
 | 2 | Dashboard instructions/screenshots | `evidence/DASHBOARD.md`, `dashboard-list.png`, `dashboard-detail.png` | Instructions exist; screenshots pending |
-| 3 | Orchestration logs | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-<public_ref>.json` | Pending; no JSON is committed until a reconciled real Stellar testnet transfer exists |
-| 4 | Transfer record | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-<public_ref>.json` | Pending; no JSON is committed until it passes the real-evidence export guard |
+| 3 | Orchestration logs | `docs/insta-awards/deliverables/deliverable-1/evidence/orchestration-logs-TTS-REAL-STELLAR-PAYMENT-2.json` | Real historical Stellar payment JSON exists; final D1 PIX-to-payout log still pending |
+| 4 | Transfer record | `docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-REAL-STELLAR-PAYMENT-2.json` | Real historical Stellar payment JSON exists; final D1 PIX-to-payout transfer record still pending |
 
 ## Verification This Run
 
@@ -61,9 +61,11 @@ npm --prefix backend test -- --runInBand tests/ops.routes.test.ts tests/ops-hist
 
 ## Evidence Export Policy
 
-The active evidence folder intentionally contains no log or transfer-record JSON until the final same-transfer run is complete.
+The active evidence folder intentionally contains no final D1 PIX-to-payout log or transfer-record JSON until the final same-transfer run is complete.
 
 The export scripts now reject non-final evidence before writing files. A transfer must be `RECONCILED`, include a real PIX evidence value, include a 64-character Stellar transaction hash, include a positive Stellar ledger number, and include reconciliation metadata.
+
+The active evidence folder also contains two real historical Stellar-payment JSON files exported from `payment_logs.id = 2` and verified against Horizon testnet ledger `2488252`. Those files are useful as non-generated Stellar evidence, but they are not the final D1 PIX-to-payout package.
 
 ## Documentation Pointers
 

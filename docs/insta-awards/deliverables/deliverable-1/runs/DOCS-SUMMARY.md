@@ -20,6 +20,7 @@ Generated summary for `docs/insta-awards/deliverables/deliverable-1/runs`. Last 
 | [`2026-06-14-1932-ops-login-html-error-guard.md`](./2026-06-14-1932-ops-login-html-error-guard.md) | Run 2026-06-14-1932 - Ops Login HTML Error Guard | 258 | Removed the final runtime repository import from the ops view, bypassed idempotency for `/ops`, and added an HTML fallback for `/ops/login` errors. | English or mostly English. |
 | [`2026-06-14-2224-ops-dashboard-cleanup.md`](./2026-06-14-2224-ops-dashboard-cleanup.md) | Run 2026-06-14-2224 - Ops Dashboard Cleanup | 271 | Cleaned the backend-rendered `/ops` dashboard, restored a useful Forensics entry point, added print/session controls, and documented Deliverable 1 evidence file locations. | English or mostly English. |
 | [`2026-06-14-2245-real-evidence-only.md`](./2026-06-14-2245-real-evidence-only.md) | Run 2026-06-14-2245 - Real Evidence Only | 328 | Removed non-final D1 log/transfer-record JSON from the active evidence folder and added export guards so final reviewer evidence cannot be written unless the transfer is reconciled with real Stellar testnet evidence. | English or mostly English. |
+| [`2026-06-14-2259-real-stellar-json-evidence.md`](./2026-06-14-2259-real-stellar-json-evidence.md) | Run 2026-06-14-2259 - Real Stellar JSON Evidence | 298 | Added two real JSON evidence files from `payment_logs.id = 2`, verified on Horizon testnet ledger `2488252`, while keeping final D1 PIX-to-payout evidence marked pending. | English or mostly English. |
 
 ## Notes
 
