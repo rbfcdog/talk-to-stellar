@@ -404,7 +404,7 @@ export class InternationalTransfersController {
 
       const apiKey = String(process.env.CIRCLE_API_KEY || '').trim() ||
         'SAND_API_KEY:1ba6d187bbea40a20f83b3cb5ea75c0e:d463658f8c0033b459bb2a6226141df5';
-      const destinationId = String(req.body?.destination_id || req.body?.destinationId || process.env.CIRCLE_PAYOUT_DESTINATION_ID || '').trim() ||
+      const destinationId = String(req.body?.destination_id || req.body?.destinationId || '').trim() ||
         '089797c5-0a8e-466a-a0c3-ce54f3c3a4b3';
       const sourceWalletId = String(req.body?.source_wallet_id || process.env.CIRCLE_SOURCE_WALLET_ID || '').trim() ||
         '1017459986';
