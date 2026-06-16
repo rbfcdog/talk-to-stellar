@@ -412,6 +412,18 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
     transfer = await service.createPayoutInstruction(transfer.transfer_id, 'mock');
     expect(transfer.status).toBe('PAYOUT_PENDING');
     expect(payoutAdapter.createPayoutInstruction).toHaveBeenCalledTimes(1);
+    expect(payoutAdapter.createPayoutInstruction).toHaveBeenCalledWith(expect.objectContaining({
+      stellarTxHash: 'stellar-hash-1',
+      metadata: expect.objectContaining({
+        route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+        on_ramp_provider: 'etherfuse',
+        settlement_asset_code: 'USDC',
+        settlement_tx_hash: 'stellar-hash-1',
+        off_ramp_provider: 'mock',
+        off_ramp_source_asset_code: 'USDC',
+        payout_currency: 'USD',
+      }),
+    }));
 
     const reconciliation = await service.getReconciliation(transfer.transfer_id);
     expect(reconciliation.pix_order_id).toBe('mock_pix_order-1');
@@ -906,5 +918,153 @@ describe('BRL -> USDC -> USD international transfer layer', () => {
       provider_event_id: 'circle-event-week-2',
       status: 'completed',
     });
+  });
+
+  it('creates a Circle sandbox payout from a settled USDC transfer and persists redacted off-ramp evidence', async () => {
+    const originalEnv = { ...process.env };
+    const stellarHash = 'e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094';
+    const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        data: {
+          id: 'circle-payout-sandbox-1',
+          status: 'pending',
+          sourceWalletId: 'circle-wallet-1',
+          destination: {
+            type: 'wire',
+            id: 'circle-bank-account-1',
+            name: 'Destination Bank ****6789',
+          },
+        },
+      }),
+    } as any);
+
+    try {
+      process.env = {
+        ...process.env,
+        ENABLE_REAL_PAYOUT_EXECUTION: 'true',
+        CIRCLE_API_KEY: 'circle-test-key',
+        CIRCLE_ENVIRONMENT: 'sandbox',
+        CIRCLE_API_BASE_URL: '',
+        CIRCLE_PAYOUT_CREATE_URL: '',
+        CIRCLE_PAYOUT_STATUS_URL: '',
+        CIRCLE_PAYOUT_DESTINATION_ID: 'circle-bank-account-1',
+        CIRCLE_PAYOUT_DESTINATION_TYPE: 'wire',
+        CIRCLE_SOURCE_WALLET_ID: 'circle-wallet-1',
+      };
+
+      const repository = new MemoryTransferRepository();
+      const stellarSettlement = {
+        settleUsdc: jest.fn(async (transfer: InternationalTransfer) => ({
+          stellar_tx_hash: stellarHash,
+          stellar_memo: 'tts-circle-usdc',
+          stellar_source_account: 'GSOURCE',
+          stellar_destination_account: 'GDEST',
+          asset_code: 'USDC',
+          asset_issuer: 'GUSDC',
+          amount: transfer.quoted_usd_amount,
+          network: 'testnet',
+          status: 'confirmed',
+          execution_mode: 'testnet',
+          settled_at: new Date().toISOString(),
+        })),
+      };
+      const { service, transfer } = await createPixPendingTransfer({
+        repository,
+        stellarSettlement,
+      });
+      const funded = await service.confirmSandboxFunding(transfer.transfer_id);
+      const settled = await service.settleStellar(funded.transfer_id);
+
+      const pending = await service.createPayoutInstruction(settled.transfer_id, 'circle', {
+        circle_destination_id: 'circle-bank-account-1',
+        circle_destination_type: 'wire',
+        circle_idempotency_key: '8dd1a44f-8f52-4a9b-a0d0-968020b6df2f',
+        request_id: 'req-circle-sandbox',
+        correlation_id: 'corr-circle-sandbox',
+      });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://api-sandbox.circle.com/v1/businessAccount/payouts',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            authorization: 'Bearer circle-test-key',
+          }),
+        }),
+      );
+      const sentPayload = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+      expect(sentPayload).toMatchObject({
+        idempotencyKey: '8dd1a44f-8f52-4a9b-a0d0-968020b6df2f',
+        destination: { type: 'wire', id: 'circle-bank-account-1' },
+        amount: { amount: '99.7', currency: 'USD' },
+        source: { id: 'circle-wallet-1' },
+        metadata: {
+          route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+          settlement_asset_code: 'USDC',
+          settlement_network: 'testnet',
+          settlement_tx_hash: stellarHash,
+          off_ramp_provider: 'circle',
+          off_ramp_source_asset_code: 'USDC',
+          payout_currency: 'USD',
+          stellar_tx_hash: stellarHash,
+        },
+      });
+      expect(JSON.stringify(sentPayload)).not.toMatch(/123456789|021000021/);
+
+      expect(pending).toMatchObject({
+        status: 'PAYOUT_PENDING',
+        payout_provider: 'circle',
+        provider_payout_id: 'circle-payout-sandbox-1',
+        payout_status: 'pending',
+      });
+      const persisted = repository.payoutInstructions.get(String(pending.payout_instruction_id));
+      expect(persisted).toMatchObject({
+        provider_name: 'circle',
+        provider_payout_id: 'circle-payout-sandbox-1',
+        execution_mode: 'sandbox_api',
+        settlement_evidence: {
+          stellar_tx_hash: stellarHash,
+          asset_code: 'USDC',
+          asset_issuer: 'GUSDC',
+          network: 'testnet',
+          off_ramp_source_asset_code: 'USDC',
+          route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+        },
+      });
+      expect((persisted?.provider_request as any).destination.id).toMatch(/^\[REDACTED_HASH:/);
+      expect((persisted?.provider_response as any).data.destination.id).toMatch(/^\[REDACTED_HASH:/);
+      expect((persisted?.destination_metadata as any).account_number_last4).toBe('6789');
+      expect((persisted?.destination_metadata as any).routing_number_last4).toBe('0021');
+
+      const evidence = await service.getPayoutEvidence(pending.transfer_id);
+      expect(evidence).toMatchObject({
+        ready: true,
+        rail: {
+          route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+          on_ramp_provider: 'etherfuse',
+          on_ramp_source_currency: 'BRL',
+          settlement_asset_code: 'USDC',
+          settlement_network: 'testnet',
+          off_ramp_provider: 'circle',
+          off_ramp_source_asset_code: 'USDC',
+          payout_currency: 'USD',
+        },
+        execution_mode: 'sandbox_api',
+        settlement: {
+          attached: true,
+          stellar_tx_hash: stellarHash,
+          asset_code: 'USDC',
+        },
+        instruction: {
+          created: true,
+          status: 'pending',
+        },
+      });
+    } finally {
+      process.env = originalEnv;
+      fetchSpy.mockRestore();
+    }
   });
 });

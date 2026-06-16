@@ -193,6 +193,16 @@ export type PayoutCoordinationEvidence = {
   }>;
   provider: PayoutProviderCapabilities;
   execution_mode?: PayoutExecutionMode;
+  rail: {
+    route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK';
+    on_ramp_provider: 'etherfuse';
+    on_ramp_source_currency: 'BRL';
+    settlement_asset_code: string;
+    settlement_network?: string;
+    off_ramp_provider: PayoutProviderName;
+    off_ramp_source_asset_code: string;
+    payout_currency: 'USD';
+  };
   settlement: {
     attached: boolean;
     stellar_tx_hash?: string;

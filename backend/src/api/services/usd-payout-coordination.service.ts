@@ -35,6 +35,11 @@ function last4(value: unknown): string | undefined {
   return digits ? digits.slice(-4) : undefined;
 }
 
+function settlementNetwork(transfer: InternationalTransfer): string | undefined {
+  const settlement = (transfer.reconciliation_metadata || {}).stellar_settlement as Record<string, unknown> | undefined;
+  return text(settlement?.network) || undefined;
+}
+
 function providerName(value: unknown): PayoutProviderName {
   const normalized = text(value).toLowerCase();
   if (normalized === 'circle' || normalized === 'bridge' || normalized === 'mock') return normalized;
@@ -179,6 +184,16 @@ export class UsdPayoutCoordinationService {
       checklist,
       provider: capability,
       execution_mode: instruction?.execution_mode,
+      rail: {
+        route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+        on_ramp_provider: 'etherfuse',
+        on_ramp_source_currency: 'BRL',
+        settlement_asset_code: transfer.stellar_asset_code || 'USDC',
+        settlement_network: settlementNetwork(transfer),
+        off_ramp_provider: selectedProvider,
+        off_ramp_source_asset_code: transfer.stellar_asset_code || 'USDC',
+        payout_currency: 'USD',
+      },
       settlement: {
         attached: Boolean(transfer.stellar_tx_hash),
         stellar_tx_hash: transfer.stellar_tx_hash,

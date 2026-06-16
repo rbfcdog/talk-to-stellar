@@ -2,25 +2,29 @@
 
 ## Status
 
-Foundation ready. Final evidence still requires one settled transfer with a real Stellar transaction hash and a provider payout instruction row.
+Ready. A Circle sandbox payout instruction was created through the TTS application and persisted in the database.
 
-Current database inspection on 2026-06-15:
+Current database inspection on 2026-06-16:
 
-- `public.international_payout_instructions`: 0 rows
+- `public.international_payout_instructions`: 1 row
 - `public.international_payout_events`: 0 rows
-- current `public.international_transfers` rows contain mock-prefixed Stellar and PIX identifiers
-- usable final D2 transfer count: 0
+- active D2 transfer: `tr_d2_circle_stellar_payment_2`
+- active D2 payout instruction: `circle_instruction_e0be3785-0b35-4690-9eb6-5f99b66167ab`
+- active D2 Stellar hash shape: `64:hex64`
+- active D2 provider: `circle`
+- active D2 execution mode: `sandbox_api`
+- active D2 payout status: `completed`
 
-This means payout-instruction evidence is ready as a route/service/schema package, but final real payout evidence cannot be claimed yet.
+This means payout-instruction evidence is ready. Circle sandbox status polling observed `completed`; do not claim production bank delivery from sandbox evidence.
 
 ## Create A Circle Payout Instruction
 
-After a transfer reaches `USDC_SETTLED`:
+Executed request shape after transfer reached `USDC_SETTLED`:
 
 ```bash
 BACKEND_URL=http://localhost:3001
 OPS_TOKEN=<internal ops token>
-TRANSFER_ID=<settled-transfer-id>
+TRANSFER_ID=tr_d2_circle_stellar_payment_2
 
 curl -s -X POST "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-instruction" \
   -H "Authorization: Bearer ${OPS_TOKEN}" \
@@ -48,14 +52,40 @@ curl -s -X POST "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-status-refre
   -H "Authorization: Bearer ${OPS_TOKEN}" | jq
 ```
 
+Status refresh was run after creation. Final observed result:
+
+```text
+transfer_status: PAYOUT_COMPLETED
+payout_status: completed
+status_history_count: 6
+```
+
+## Persisted USDC Rail Evidence
+
+When the transfer is eligible and the Circle instruction is created, the persisted row in `public.international_payout_instructions` must show:
+
+- `provider_name = circle`
+- `execution_mode = sandbox_api` for sandbox execution, or `compatibility` for non-mutating payload evidence
+- `settlement_evidence.asset_code = USDC`
+- `settlement_evidence.off_ramp_source_asset_code = USDC`
+- `settlement_evidence.route = PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK`
+- `provider_request.metadata.stellar_tx_hash` matching the transfer settlement hash
+- redacted `provider_response` from Circle when execution mode is `sandbox_api`
+
 ## Evidence Export
 
 ```bash
-curl -s "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/payout-evidence" \
+curl -s "${BACKEND_URL}/api/transfers/tr_d2_circle_stellar_payment_2/payout-evidence" \
   -H "Authorization: Bearer ${OPS_TOKEN}" | jq > raw-payout-evidence.json
 
-curl -s "${BACKEND_URL}/api/transfers/${TRANSFER_ID}/reconciliation" \
+curl -s "${BACKEND_URL}/api/transfers/tr_d2_circle_stellar_payment_2/reconciliation" \
   -H "Authorization: Bearer ${OPS_TOKEN}" | jq > raw-reconciliation.json
+```
+
+Redacted export committed for review:
+
+```text
+docs/insta-awards/deliverables/deliverable-2/evidence/circle-sandbox-payout-redacted.json
 ```
 
 ## Database Proof
@@ -85,10 +115,10 @@ where transfer_id = '<transfer_id>';
 
 Reviewer evidence must not expose raw API keys, account numbers, routing numbers, or raw linked destination IDs. Provider references are hashed; account and routing numbers show last four digits only.
 
-## Final Reviewer Claim After Execution
+## Reviewer Claim
 
-Use this only after a real settled transfer creates a payout instruction:
+Use this claim:
 
 ```text
-For the settled transfer, TalkToStellar created a USD payout instruction, linked it to Stellar settlement evidence, persisted provider request/response evidence, tracked provider status, and exposed a redacted reviewer evidence package.
+For transfer tr_d2_circle_stellar_payment_2, TalkToStellar created a Circle sandbox USD payout instruction, linked it to Stellar USDC settlement evidence, persisted provider request/response evidence, tracked provider status to completed, and exposed a redacted reviewer evidence package.
 ```

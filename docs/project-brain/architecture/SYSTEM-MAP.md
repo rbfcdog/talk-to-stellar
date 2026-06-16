@@ -11,6 +11,7 @@ graph TD
         LANDING[Landing Email List]
         OPS[/ops Dashboard]
         ADMIN[Admin Transactions Console]
+        WIRE_TEST[Wire Payout Test Screen]
     end
 
     subgraph "API Layer (Express.js)"
@@ -72,6 +73,7 @@ graph TD
     LANDING --> EARLY
     OPS --> OPS_HISTORY
     ADMIN --> XFERS
+    WIRE_TEST --> XFERS
 
     EVO --> AGENT
     AGENT --> FIN
@@ -110,6 +112,7 @@ graph TD
 - Landing email list: `frontend/components/landing-reluca/EarlyAccessSignup.tsx` posts through `frontend/app/api/early-access/route.ts`
 - Ops dashboard: `backend/src/api/controllers/ops.controller.ts` authenticates browser operators through `backend/src/api/services/ops-admin-auth.service.ts`, then reads complete database transaction history through `backend/src/api/repository/ops-history.repository.ts`
 - Admin transactions dashboard: `frontend/app/admin/transactions/` uses Next proxy routes under `frontend/app/api/transfers/`
+- Wire payout test screen: `frontend/app/wire-test/` uses the same Next transfer proxy to read payout evidence and run protected Circle wire payout instruction/status actions.
 
 ### API Layer
 - Agent: `backend/src/api/agent/` — routes, tools, prompt templates

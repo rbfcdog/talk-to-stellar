@@ -1,6 +1,6 @@
 # Deliverable Locations — D2 and D1 Evidence
 
-Updated: 2026-06-15
+Updated: 2026-06-16
 
 ## Deliverable 2 Active Package
 
@@ -16,7 +16,9 @@ docs/insta-awards/deliverables/deliverable-2/
 | Hash Transacao Stellar | `docs/insta-awards/deliverables/deliverable-2/evidence/stellar-transaction-hash.md` |
 | Integracao Circle/Bridge | `docs/insta-awards/deliverables/deliverable-2/evidence/circle-bridge-integration.md` and `docs/insta-awards/deliverables/deliverable-2/evidence/circle-readiness-redacted.json` |
 | Payout Instructions | `docs/insta-awards/deliverables/deliverable-2/evidence/payout-instructions.md` |
+| Circle sandbox payout execution | `docs/insta-awards/deliverables/deliverable-2/evidence/circle-sandbox-payout-redacted.json` |
 | Current DB proof boundary | `docs/insta-awards/deliverables/deliverable-2/evidence/current-db-state.md` |
+| Exact submission guide | `docs/insta-awards/deliverables/deliverable-2/SUBMIT-THIS.md` |
 | Final execution checklist | `docs/insta-awards/deliverables/deliverable-2/SUBMISSION-CHECKLIST.md` |
 | Run logs | `docs/insta-awards/deliverables/deliverable-2/runs/` |
 
@@ -33,6 +35,9 @@ docs/insta-awards/deliverables/deliverable-2/
 | Schema source | `backend/migrations/20260613_00_full_schema.sql` |
 | Circle setup guide | `backend/docs/CIRCLE_INTEGRATION_SETUP.md` |
 | Circle foundation guide | `backend/docs/CIRCLE_PAYOUT_FOUNDATION.md` |
+| Circle readiness script | `backend/scripts/circle-payout-readiness.ts` |
+| Circle sandbox smoke script | `scripts/circle-e2e-test.ts` |
+| Adapter/service tests | `backend/tests/payout-adapter-contract.test.ts`, `backend/tests/international-transfer.service.test.ts`, `backend/tests/international-transfer.routes.test.ts` |
 
 ## Deliverable 1 Verified Evidence Location
 

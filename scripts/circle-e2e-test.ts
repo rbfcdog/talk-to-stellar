@@ -5,8 +5,9 @@ dotenv.config();
 
 const KEY = process.env.CIRCLE_API_KEY!;
 const BASE = "https://api-sandbox.circle.com";
-const WALLET_ID = process.env.CIRCLE_SOURCE_WALLET_ID || "1017459986";
+const WALLET_ID = process.env.CIRCLE_SOURCE_WALLET_ID || "";
 const WIRE_ID = process.env.CIRCLE_PAYOUT_DESTINATION_ID || "";
+const WIRE_TRACKING_REF = process.env.CIRCLE_WIRE_TRACKING_REF || "";
 const FUND_AMOUNT = process.argv[2] || "1000.00";
 const PAYOUT_AMOUNT = process.argv[3] || "10.00";
 
@@ -41,22 +42,37 @@ function log(pad: string, msg: string) {
   console.log(`${pad.padEnd(3)} ${msg}`);
 }
 
+function masked(value: string) {
+  if (!value) return "(unset)";
+  if (value.length <= 8) return "****";
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
 async function main() {
+  if (!KEY || !WIRE_ID) {
+    console.error("Missing CIRCLE_API_KEY or CIRCLE_PAYOUT_DESTINATION_ID in backend/.env or shell env.");
+    process.exit(1);
+  }
+
   const sep = "=".repeat(64);
   console.log(sep);
   console.log("Circle Sandbox — End-to-End Integration Test");
-  console.log(`Wallet: ${WALLET_ID}  |  Wire: ${WIRE_ID}`);
+  console.log(`Wallet: ${WALLET_ID ? masked(WALLET_ID) : "main/default"}  |  Wire: ${masked(WIRE_ID)}`);
   console.log(sep);
   console.log();
 
   // ── STEP 1: Wallet check ──
-  log("1", "Wallet verification");
-  const w = await get(`/v1/wallets/${WALLET_ID}`);
-  if (!w.data?.data || w.data.data.status !== "active") {
-    console.log("  FAIL: Wallet not active");
-    return;
+  log("1", "Source wallet");
+  if (WALLET_ID) {
+    const w = await get(`/v1/wallets/${WALLET_ID}`);
+    if (!w.data?.data || w.data.data.status !== "active") {
+      console.log("  FAIL: configured wallet is not active");
+      return;
+    }
+    log("", `OK — configured wallet ${masked(WALLET_ID)} is active`);
+  } else {
+    log("", "Using Circle account main wallet");
   }
-  log("", `OK — wallet ${WALLET_ID} is active`);
   console.log();
 
   // ── STEP 2: Wire destination ──
@@ -84,13 +100,24 @@ async function main() {
     log("3", `Balance: $${usd?.amount || available[0].amount} ${usd?.currency || available[0].currency}`);
     log("", "Wallet already funded — skipping mock wire");
   } else {
+    if (process.env.CIRCLE_E2E_FUND_WITH_MOCK_WIRE !== "true") {
+      log("3", "Balance: $0.00");
+      log("", "Skipping mock wire funding. Set CIRCLE_E2E_FUND_WITH_MOCK_WIRE=true and CIRCLE_WIRE_TRACKING_REF to fund sandbox balance.");
+      return;
+    }
+    if (!WIRE_TRACKING_REF) {
+      log("3", "Balance: $0.00");
+      log("", "Missing CIRCLE_WIRE_TRACKING_REF for mock wire funding.");
+      return;
+    }
+
     log("3", "Wallet $0 — creating mock wire deposit");
     log("", `Amount: $${FUND_AMOUNT}`);
 
     const mock = await post("/v1/mocks/payments/wire", {
       idempotencyKey: uid(),
       amount: { amount: FUND_AMOUNT, currency: "USD" },
-      trackingRef: "CIR2KDZ28W",
+      trackingRef: WIRE_TRACKING_REF,
       beneficiary: {
         name: "CIRCLE INTERNET",
         address1: "99 HIGH STREET",
@@ -155,11 +182,13 @@ async function main() {
     idempotencyKey: uid(),
     destination: { type: "wire" as const, id: WIRE_ID },
     amount: { amount: PAYOUT_AMOUNT, currency: "USD" as const },
-    source: { id: WALLET_ID, type: "wallet" as const },
+    ...(WALLET_ID ? { source: { id: WALLET_ID } } : {}),
     metadata: {
       beneficiaryEmail: "team.talktostellar@gmail.com",
       transferId: `tts-e2e-${Date.now()}`,
       platform: "TalkToStellar",
+      route: "PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK",
+      settlementAsset: "USDC",
     },
   };
 
@@ -175,7 +204,7 @@ async function main() {
       const payoutId = payout.data.data.id;
       for (let attempt = 1; attempt <= 10; attempt++) {
         await sleep(10000);
-        const ps = await get(`/v1/payouts/${payoutId}`);
+        const ps = await get(`/v1/businessAccount/payouts/${payoutId}`);
         const s = ps.data?.data?.status;
         process.stdout.write(
           `  [${String(attempt).padStart(2)}/10] ${s}  `,

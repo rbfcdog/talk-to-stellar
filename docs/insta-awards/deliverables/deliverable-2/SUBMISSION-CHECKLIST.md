@@ -207,7 +207,7 @@ CIRCLE_PAYOUT_DESTINATION_TYPE=wire
 
 `CIRCLE_PAYOUT_DESTINATION_ID` must be a real linked Circle bank account ID. It cannot be any random string for execution. In compatibility mode it can be blank, because no bank payout is sent.
 
-The current sandbox linked-bank setup has already returned a Circle wire bank account ID with status `pending`. Store the returned ID only in backend secret storage or local `.env`; evidence should show only that the destination is configured, plus a hash/tail from `npm --prefix backend run circle:payout-readiness`.
+The current sandbox linked-bank setup has returned a Circle wire bank account ID that the Circle API now reports with status `complete`. Store the returned ID only in backend secret storage or local `.env`; evidence should show only that the destination is configured, plus a hash/tail from `npm --prefix backend run circle:payout-readiness`.
 
 Expected reviewer claim for compatibility mode:
 

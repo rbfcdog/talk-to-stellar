@@ -2,6 +2,12 @@
 
 Scope: Instawards Week 2, USD Delivery & Payout Coordination Layer.
 
+Rail scope:
+
+```text
+PIX BRL funding -> Stellar USDC settlement -> Circle Mint USD bank payout
+```
+
 ## Current Implementation
 
 The Circle foundation is implemented in:
@@ -23,6 +29,14 @@ The adapter uses Circle Mint's bank payout model:
 Circle payouts require a linked Circle bank account destination ID. Raw routing/account details are not sent to Circle payout execution; they remain redacted destination metadata for reviewer evidence and same-name controls.
 
 The protected payout-instruction route can use either backend env `CIRCLE_PAYOUT_DESTINATION_ID` or per-request provider options: `circleDestinationId`, `circleDestinationType`, `circleSourceWalletId`, and `circleIdempotencyKey`.
+
+Every Circle payout payload includes settlement metadata copied from the TTS transfer:
+
+- `route=PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK`
+- `settlement_asset_code=USDC`
+- `off_ramp_source_asset_code=USDC`
+- `payout_currency=USD`
+- `stellar_tx_hash=<confirmed settlement hash>`
 
 ## Execution Modes
 
@@ -58,6 +72,7 @@ Notes:
 - Set `CIRCLE_PAYOUT_DESTINATION_ID` to the linked Circle wire bank account ID before any sandbox or live execution.
 - `CIRCLE_PAYOUT_CREATE_URL` and `CIRCLE_PAYOUT_STATUS_URL` are optional overrides. If blank, the adapter derives Circle sandbox/production URLs from `CIRCLE_ENVIRONMENT` or `CIRCLE_API_BASE_URL`.
 - `CIRCLE_SOURCE_WALLET_ID` is optional. If omitted, Circle uses the account's main wallet.
+- Circle readiness on 2026-06-16: sandbox API key present, linked wire destination found with status `complete`, balance and wire-list API calls returned HTTP 200, execution gate enabled. TTS created Circle sandbox payout instruction `circle_instruction_e0be3785-0b35-4690-9eb6-5f99b66167ab` for transfer `tr_d2_circle_stellar_payment_2` and observed provider status `completed` through protected status polling.
 
 Readiness check:
 
@@ -107,11 +122,14 @@ GET /api/transfers/:id/reconciliation
 - Persisted `provider_payload`, `provider_response`, and webhook evidence are redacted through `payoutProviderEvidenceSnapshot()`.
 - Bank account and routing numbers show only last four digits in local evidence.
 - Circle destination IDs are stored as short hashes in evidence.
+- The persisted payout instruction stores `settlement_evidence.asset_code=USDC`, `settlement_evidence.off_ramp_source_asset_code=USDC`, and the route string for reviewer traceability.
 - A real/sandbox payout must not be claimed unless Circle returned a provider payout ID and the response is persisted in `international_payout_instructions`.
 
 ## Verification
 
 ```bash
 npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts
+npm --prefix backend test -- --runInBand tests/international-transfer.service.test.ts
+npm --prefix backend test -- --runInBand tests/international-transfer.routes.test.ts
 npm --prefix backend run build
 ```

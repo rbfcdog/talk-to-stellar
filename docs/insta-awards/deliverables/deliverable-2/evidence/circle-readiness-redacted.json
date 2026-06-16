@@ -1,33 +1,39 @@
 {
-  "captured_at": "2026-06-15",
+  "captured_at": "2026-06-16",
   "provider": "circle",
   "purpose": "D2 sandbox payout readiness",
   "environment": "sandbox",
-  "api_key_present": false,
-  "api_key_kind": "missing",
+  "api_key_present": true,
+  "api_key_kind": "circle_sandbox_key",
   "linked_destination": {
     "present": true,
     "type": "wire",
     "id_hash": "9c20e383eab6",
-    "id_tail": "cd88"
+    "id_tail": "cd88",
+    "status": "complete",
+    "description": "WELLS FARGO BANK, NA ****0010"
   },
-  "source_wallet_id_present": false,
-  "execution_gate_enabled": false,
+  "source_wallet_id_present": true,
+  "execution_gate_enabled": true,
   "derived_urls": {
     "create_payout": "https://api-sandbox.circle.com/v1/businessAccount/payouts",
     "get_payout": "https://api-sandbox.circle.com/v1/businessAccount/payouts/{id}"
   },
+  "sandbox_api_probe": {
+    "balances_http_status": 200,
+    "wires_http_status": 200,
+    "linked_destination_found": true,
+    "mutating_payout_created": false
+  },
   "ready_for": {
     "compatibility_evidence": true,
-    "circle_sandbox_api_execution": false
+    "circle_sandbox_api_execution": true
   },
-  "blockers": [
-    "CIRCLE_API_KEY is missing.",
-    "ENABLE_REAL_PAYOUT_EXECUTION is false."
-  ],
-  "next_action": "Set missing backend env values, restart backend, then re-run this script.",
+  "blockers": [],
+  "next_action": "Run a settled transfer through POST /api/transfers/:id/payout-instruction with provider=circle.",
   "safety": [
     "This script does not print API keys or raw bank account IDs.",
-    "The linked destination must come from Circle bank-account linking; do not use random strings for execution."
+    "The linked destination must come from Circle bank-account linking; do not use random strings for execution.",
+    "No payout was created by the readiness probe because the database has no final same-transfer D2 record yet."
   ]
 }

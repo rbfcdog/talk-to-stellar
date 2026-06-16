@@ -40,12 +40,21 @@ Unknown provider names throw and do not fall back silently to mock.
 
 This lets the backend use either a global `CIRCLE_PAYOUT_DESTINATION_ID` or a per-request/per-transfer linked Circle bank account ID.
 
+The payout service also stamps every payout instruction with the USDC rail metadata that reviewers need to follow the on/off-ramp path:
+
+- route: `PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK`
+- on-ramp source: BRL through Etherfuse PIX
+- settlement asset: Stellar `USDC`
+- off-ramp source asset: `USDC`
+- payout currency: USD
+- settlement transaction hash copied into the provider payload metadata
+
 ## Reviewer Claim
 
 Use this claim:
 
 ```text
-TalkToStellar implements a provider-agnostic payout adapter contract that can build USD payout instructions for Circle and Bridge-compatible workflows, preserve Etherfuse PIX proof metadata, and reject unsupported providers without silently falling back to mock behavior.
+TalkToStellar implements a provider-agnostic payout adapter contract that turns settled Stellar USDC transfers into USD payout instructions for Circle and Bridge-compatible workflows, preserves Etherfuse PIX proof metadata, and rejects unsupported providers without silently falling back to mock behavior.
 ```
 
 Do not claim final Circle payout execution from this artifact alone. Execution proof belongs in `circle-bridge-integration.md` and `payout-instructions.md` after a real same-transfer run.
@@ -53,6 +62,6 @@ Do not claim final Circle payout execution from this artifact alone. Execution p
 ## Verification
 
 ```bash
-npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts tests/international-transfer.routes.test.ts
+npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts tests/international-transfer.service.test.ts tests/international-transfer.routes.test.ts
 npm --prefix backend run build
 ```

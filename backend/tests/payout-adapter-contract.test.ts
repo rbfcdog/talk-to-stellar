@@ -30,6 +30,12 @@ const baseInput = {
   metadata: {
     same_name_match_status: 'MATCHED',
     on_ramp_provider: 'etherfuse',
+    route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+    settlement_asset_code: 'USDC',
+    settlement_network: 'testnet',
+    off_ramp_provider: 'circle',
+    off_ramp_source_asset_code: 'USDC',
+    payout_currency: 'USD',
   },
 };
 
@@ -119,6 +125,12 @@ describe('PayoutProviderAdapter contract', () => {
     expect((instruction.metadata as any).provider_payload).toMatchObject({
       destination: { type: 'wire' },
       amount: { amount: '99.50', currency: 'USD' },
+      metadata: {
+        route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+        settlement_asset_code: 'USDC',
+        off_ramp_source_asset_code: 'USDC',
+        payout_currency: 'USD',
+      },
     });
     expect((instruction.metadata as any).provider_payload.destination).not.toHaveProperty('account_number');
     expect((instruction.metadata as any).destination_metadata.account_holder_name).toBe('[REDACTED]');
@@ -189,6 +201,12 @@ describe('PayoutProviderAdapter contract', () => {
     expect(sentPayload.amount).toMatchObject({
       amount: '99.50',
       currency: 'USD',
+    });
+    expect(sentPayload.metadata).toMatchObject({
+      route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+      settlement_asset_code: 'USDC',
+      off_ramp_source_asset_code: 'USDC',
+      payout_currency: 'USD',
     });
     expect(JSON.stringify(sentPayload)).not.toMatch(/123456789|021000021/);
     expect(instruction).toMatchObject({
