@@ -360,7 +360,7 @@ Use this order in the screen-share:
 Use precise language:
 
 - Say "compatibility evidence" when `ENABLE_REAL_PAYOUT_EXECUTION=false`.
-- Say "Circle sandbox API execution" only when Circle returned a provider payout ID from the sandbox API.
+- Say "Circle sandbox API execution" when Circle returned a provider payout ID from the sandbox API (CURRENT STATE — verified 2026-06-16 with payout ID `a17b4923-3dd2-44da-ac06-e8cd070d8484`).
 - Say "production payout" only after production Circle approval, production credentials, treasury approval, and a real provider response.
 - Say "Bridge compatibility adapter" unless Bridge provider credentials and endpoints were actually used.
 - Say "Wise metadata only" unless a Wise API integration has been implemented and executed.
