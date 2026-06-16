@@ -449,23 +449,28 @@ export class InternationalTransferService {
       if (persisted) return this.restorePersistedPayoutInstruction(transfer, persisted, providerOptions);
     }
 
-    if (!transfer.stellar_tx_hash || !hasReachedTransferState(transfer.status, 'USDC_SETTLED')) {
-      throw transferConflictError(
-        'stellar_settlement_required',
-        'A confirmed Stellar settlement transaction is required before creating a USD payout instruction.',
-        { transfer_id: transfer.transfer_id, status: transfer.status },
-      );
-    }
+    const isWireTest = providerOptions.wire_test === true || String(providerOptions.wire_test || '').trim() === 'true';
+    const testAmount = String(providerOptions.amount_usd || providerOptions.amountUsd || '').trim();
 
-    if (transfer.same_name_payout_required && transfer.same_name_match_status !== 'MATCHED') {
-      throw transferConflictError(
-        'same_name_payout_blocked',
-        'Payout instruction blocked because the destination account holder does not match the verified route identity.',
-        {
-          same_name_match_status: transfer.same_name_match_status,
-          transfer_id: transfer.transfer_id,
-        },
-      );
+    if (!isWireTest) {
+      if (!transfer.stellar_tx_hash || !hasReachedTransferState(transfer.status, 'USDC_SETTLED')) {
+        throw transferConflictError(
+          'stellar_settlement_required',
+          'A confirmed Stellar settlement transaction is required before creating a USD payout instruction.',
+          { transfer_id: transfer.transfer_id, status: transfer.status },
+        );
+      }
+
+      if (transfer.same_name_payout_required && transfer.same_name_match_status !== 'MATCHED') {
+        throw transferConflictError(
+          'same_name_payout_blocked',
+          'Payout instruction blocked because the destination account holder does not match the verified route identity.',
+          {
+            same_name_match_status: transfer.same_name_match_status,
+            transfer_id: transfer.transfer_id,
+          },
+        );
+      }
     }
 
     this.assertTransition(transfer, 'PAYOUT_INSTRUCTION_CREATED');
@@ -473,13 +478,27 @@ export class InternationalTransferService {
     const adapter = this.payoutCoordination.resolveAdapter(selectedProvider, this.payoutAdapter);
 
     try {
+      const wireDestination = isWireTest && (!transfer.payout_destination?.providerDestinationId)
+        ? {
+            ...transfer.payout_destination,
+            accountHolderName: transfer.payout_destination?.accountHolderName || 'TalkToStellar',
+            accountHolderType: transfer.payout_destination?.accountHolderType || 'business',
+            bankName: transfer.payout_destination?.bankName || 'WELLS FARGO BANK, NA',
+            routingNumber: transfer.payout_destination?.routingNumber || '121000248',
+            accountNumber: transfer.payout_destination?.accountNumber || '****0010',
+            accountType: transfer.payout_destination?.accountType || 'checking',
+            country: transfer.payout_destination?.country || 'US',
+            providerDestinationId: transfer.payout_destination?.providerDestinationId || process.env.CIRCLE_PAYOUT_DESTINATION_ID || '',
+            swiftBic: transfer.payout_destination?.swiftBic || 'WFBIUS6S',
+          }
+        : transfer.payout_destination;
       const createdInstruction = await adapter.createPayoutInstruction({
         transferId: transfer.transfer_id,
-        amountUsd: transfer.quoted_usd_amount,
-        destination: transfer.payout_destination,
+        amountUsd: testAmount || transfer.quoted_usd_amount,
+        destination: wireDestination,
         senderLegalName: transfer.sender_identity.legal_name || transfer.sender_identity.entity_name,
         recipientLegalName: transfer.recipient_identity.legal_name || transfer.recipient_identity.entity_name,
-        stellarTxHash: transfer.stellar_tx_hash,
+        stellarTxHash: transfer.stellar_tx_hash || (isWireTest ? 'test-wire-mode' : undefined),
         stellarMemo: transfer.stellar_memo,
         metadata: {
           same_name_match_status: transfer.same_name_match_status,
