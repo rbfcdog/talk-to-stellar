@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const OPS_SECRET_STORAGE_KEY = "tts-wire-test-ops-secret";
+const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -47,7 +48,7 @@ export default function WireTestClient() {
   const [wireResult, setWireResult] = useState<WireResponse | null>(null);
   const [wireSent, setWireSent] = useState(false);
 
-  const wireSendPath = "/api/transfers/wire-test/send";
+  const wireSendPath = `${BACKEND_BASE}/api/transfers/wire-test/send`;
 
   const runApi = useCallback(
     async (label: string, path: string, body: Record<string, unknown>) => {
