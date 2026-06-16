@@ -47,6 +47,13 @@ export function compact(value: unknown, size = 20) {
   return raw.length > size ? `${raw.slice(0, size)}...` : raw;
 }
 
+export function stellarExpertUrl(hash: unknown, network: unknown = "testnet") {
+  const txHash = text(hash);
+  if (!/^[a-f0-9]{64}$/i.test(txHash)) return "";
+  const explorerNetwork = /^(mainnet|public)$/i.test(text(network)) ? "public" : "testnet";
+  return `https://stellar.expert/explorer/${explorerNetwork}/tx/${encodeURIComponent(txHash)}`;
+}
+
 export function pretty(value: unknown) {
   return JSON.stringify(value || {}, null, 2);
 }

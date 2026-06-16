@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { AlertTriangle, KeyRound, Loader2, Send } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, ExternalLink, Hash, KeyRound, Loader2, Send } from "lucide-react";
 import { OperationalCard, OperationalHeader, OperationalPage, OperationalStat, StatusPill } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,10 +15,16 @@ type WirePayoutResult = {
   status?: string;
   amount?: string;
   currency?: string;
-  destination_id?: string;
   destination_tail?: string;
+  destination_reference_hash?: string;
   source_wallet_id?: string;
   idempotency_key?: string;
+};
+
+type StellarEvidence = {
+  transaction_hash?: string;
+  network?: string;
+  explorer?: string;
 };
 
 type WireResponse = {
@@ -27,6 +33,7 @@ type WireResponse = {
   message?: string;
   error?: string;
   payout?: WirePayoutResult;
+  stellar_evidence?: StellarEvidence;
   circle_raw?: JsonRecord;
   circle_http_status?: number;
   backend_http_status?: number;
@@ -35,6 +42,8 @@ type WireResponse = {
 };
 
 type LastResult = { label: string; status: number; at: string };
+
+const STELLAR_TX_HASH_RE = /^[a-f0-9]{64}$/i;
 
 function isoTime(value?: string) {
   if (!value) return "-";
@@ -51,9 +60,21 @@ function wireErrorMessage(label: string, status: number, payload: WireResponse) 
     : `${label} failed with HTTP ${status}${backendStatus}`;
 }
 
+function stellarExplorerUrl(hash: string, network: string) {
+  const explorerNetwork = network === "mainnet" || network === "public" ? "public" : "testnet";
+  return `https://stellar.expert/explorer/${explorerNetwork}/tx/${encodeURIComponent(hash)}`;
+}
+
+function compactHash(value?: string) {
+  if (!value) return "-";
+  return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-8)}` : value;
+}
+
 export default function WireTestClient() {
   const [opsSecret, setOpsSecret] = useState("");
   const [amount, setAmount] = useState("10");
+  const [stellarHash, setStellarHash] = useState("");
+  const [stellarNetwork, setStellarNetwork] = useState<"testnet" | "mainnet">("testnet");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [lastResult, setLastResult] = useState<LastResult | null>(null);
@@ -61,6 +82,20 @@ export default function WireTestClient() {
   const [wireSent, setWireSent] = useState(false);
 
   const wireSendPath = "/api/wire-test/send";
+  const normalizedStellarHash = stellarHash.trim();
+  const stellarHashValid = STELLAR_TX_HASH_RE.test(normalizedStellarHash);
+  const resultStellarHash = wireResult?.stellar_evidence?.transaction_hash || normalizedStellarHash;
+  const resultStellarNetwork = (wireResult?.stellar_evidence?.network || stellarNetwork) as "testnet" | "mainnet";
+  const resultStellarUrl = wireResult?.stellar_evidence?.explorer ||
+    (STELLAR_TX_HASH_RE.test(resultStellarHash) ? stellarExplorerUrl(resultStellarHash, resultStellarNetwork) : "");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hash = params.get("stellar_hash") || params.get("stellar_tx_hash") || "";
+    const network = params.get("stellar_network") || params.get("network") || "";
+    if (STELLAR_TX_HASH_RE.test(hash)) setStellarHash(hash);
+    if (/^(mainnet|public)$/i.test(network)) setStellarNetwork("mainnet");
+  }, []);
 
   const runApi = useCallback(
     async (label: string, path: string, body: Record<string, unknown>) => {
@@ -110,7 +145,11 @@ export default function WireTestClient() {
     const amt = amount || "10";
     setWireResult(null);
     try {
-      const result = await runApi(`Send wire $${amt}`, wireSendPath, { amount: amt });
+      const result = await runApi(`Send wire $${amt}`, wireSendPath, {
+        amount: amt,
+        stellar_transaction_hash: normalizedStellarHash,
+        stellar_network: stellarNetwork,
+      });
       setWireResult(result);
       if (result?.success && result?.payout?.id) setWireSent(true);
     } catch (err: any) {
@@ -118,6 +157,15 @@ export default function WireTestClient() {
       setWireResult({
         success: false,
         payout: { id: null, status: err.message || String(err), amount: amt, destination_tail: "-" },
+        stellar_evidence: payload?.stellar_evidence || (
+          STELLAR_TX_HASH_RE.test(normalizedStellarHash)
+            ? {
+                transaction_hash: normalizedStellarHash,
+                network: stellarNetwork,
+                explorer: stellarExplorerUrl(normalizedStellarHash, stellarNetwork),
+              }
+            : undefined
+        ),
         circle_raw: payload || { error: err.message || String(err) },
         backend_http_status: payload?.backend_http_status,
         backend_url: payload?.backend_url,
@@ -131,7 +179,7 @@ export default function WireTestClient() {
       <OperationalHeader
         eyebrow="Circle sandbox"
         title="Wire payout test"
-        description="Send a USD wire payout via Circle Mint sandbox. Credentials are hardcoded — just enter the ops secret and amount."
+        description="Send a USD wire payout via Circle Mint sandbox with the matching Stellar settlement evidence attached."
         actions={
           <StatusPill tone={wireSent ? "confirm" : "default"}>
             {wireSent ? "Wire sent" : "Ready"}
@@ -139,7 +187,7 @@ export default function WireTestClient() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <OperationalStat label="Destination" value="BANK OF AMERICA" detail="****1098 · wire" tone="confirm" />
         <OperationalStat
           label="Last result"
@@ -152,6 +200,12 @@ export default function WireTestClient() {
           value={wireResult?.payout?.id?.slice(0, 12) || (wireResult ? "Failed" : "-")}
           detail={wireResult?.payout?.status || "Pending"}
           tone={wireResult?.success ? "confirm" : wireResult ? "error" : "default"}
+        />
+        <OperationalStat
+          label="Stellar"
+          value={stellarHashValid ? "Attached" : "Required"}
+          detail={stellarHashValid ? `${stellarNetwork} explorer ready` : "Paste settlement hash"}
+          tone={stellarHashValid ? "confirm" : "gold"}
         />
       </div>
 
@@ -175,6 +229,22 @@ export default function WireTestClient() {
                 spellCheck={false}
               />
             </label>
+            <label className="grid gap-2">
+              <span className="flex items-center gap-2 text-xs font-bold uppercase text-tts-muted">
+                <Hash className="h-4 w-4" />
+                Stellar settlement hash
+              </span>
+              <Input
+                value={stellarHash}
+                onChange={(e) => setStellarHash(e.target.value.trim())}
+                placeholder="64-character Stellar transaction hash"
+                spellCheck={false}
+                className="font-mono-financial text-xs"
+              />
+              {normalizedStellarHash && !stellarHashValid ? (
+                <span className="text-xs font-semibold text-tts-error">Use a 64-character Stellar transaction hash.</span>
+              ) : null}
+            </label>
           </div>
           <div className="flex flex-col justify-end gap-3 sm:w-48">
             <label className="grid gap-1">
@@ -188,12 +258,23 @@ export default function WireTestClient() {
                 className="h-10 w-full font-mono-financial text-lg"
               />
             </label>
+            <label className="grid gap-1">
+              <span className="text-xs font-bold uppercase text-tts-muted">Network</span>
+              <select
+                value={stellarNetwork}
+                onChange={(e) => setStellarNetwork(e.target.value === "mainnet" ? "mainnet" : "testnet")}
+                className="h-10 w-full rounded-md border border-tts-border bg-tts-surface px-3 text-sm font-bold text-tts-deep outline-none transition focus:border-tts-gold focus:ring-2 focus:ring-tts-gold/30"
+              >
+                <option value="testnet">Testnet</option>
+                <option value="mainnet">Mainnet</option>
+              </select>
+            </label>
             <Button
               type="button"
               size="lg"
               className="w-full"
               onClick={sendWire}
-              disabled={Boolean(busy) || !opsSecret.trim()}
+              disabled={Boolean(busy) || !opsSecret.trim() || !stellarHashValid}
             >
               {busy ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-5 w-5" />}
               Send
@@ -238,8 +319,27 @@ export default function WireTestClient() {
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
               <p className="text-xs font-bold uppercase text-tts-muted">Destination</p>
               <p className="mt-1 font-mono-financial text-xs text-tts-deep">
-                ****{String(wireResult.payout?.destination_tail || "-")}
+                {wireResult.payout?.destination_tail ? `****${wireResult.payout.destination_tail}` : "Linked destination"}
               </p>
+            </div>
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3 sm:col-span-2">
+              <p className="text-xs font-bold uppercase text-tts-muted">Stellar settlement</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="font-mono-financial text-xs text-tts-deep break-all">
+                  {compactHash(resultStellarHash)}
+                </p>
+                {resultStellarUrl ? (
+                  <a
+                    href={resultStellarUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-8 items-center gap-1 rounded-md border border-tts-border px-2 text-xs font-bold text-tts-gold transition hover:border-tts-gold"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Stellar Expert
+                  </a>
+                ) : null}
+              </div>
             </div>
           </div>
           <details className="mt-4">

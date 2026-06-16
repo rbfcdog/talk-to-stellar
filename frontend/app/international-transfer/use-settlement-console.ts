@@ -228,6 +228,7 @@ export function useSettlementConsole() {
           fees: value.fees,
           pix_status: record.pix_funding?.status,
           stellar_tx_hash: record.stellar_settlement?.transaction_hash,
+          stellar_network: record.stellar_settlement?.network || record.stellar_settlement?.stellar_network || "testnet",
           stellar_memo: record.stellar_settlement?.memo,
           payout_provider: record.payout?.provider,
           payout_instruction_id: record.payout?.instruction_id,

@@ -39,6 +39,7 @@ import {
   percent,
   pretty,
   redactSensitive,
+  stellarExpertUrl,
 } from "./settlement-console.model";
 import type {
   ConsoleForm,
@@ -421,6 +422,7 @@ function Overview({ console }: { console: Console }) {
   const nextAction = console.workflow?.next_action;
   const settlement = console.reconciliation?.evidence?.stellar_settlement;
   const payout = console.reconciliation?.evidence?.payout_instruction;
+  const settlementUrl = stellarExpertUrl(console.transfer?.stellar_tx_hash, console.transfer?.stellar_network);
   return (
     <>
       {console.error ? (
@@ -442,7 +444,20 @@ function Overview({ console }: { console: Console }) {
             <div className="border-y border-tts-border py-4 md:border-x md:border-y-0 md:px-5 md:py-0">
               <p className="text-xs font-bold uppercase text-tts-gold">Stellar settlement</p>
               <p className="mt-2 text-xl font-black text-tts-deep">{money(economics.grossUsd, "USD")} USDC</p>
-              <p className="mt-1 font-mono text-xs text-tts-muted">{compact(console.transfer?.stellar_tx_hash, 24)}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="font-mono text-xs text-tts-muted">{compact(console.transfer?.stellar_tx_hash, 24)}</p>
+                {settlementUrl ? (
+                  <Link
+                    href={settlementUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-7 items-center gap-1 rounded-md border border-tts-border px-2 text-[11px] font-bold text-tts-gold transition hover:border-tts-gold"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Stellar Expert
+                  </Link>
+                ) : null}
+              </div>
             </div>
             <ArrowRight className="hidden h-5 w-5 text-tts-muted md:block" />
             <div>
@@ -594,6 +609,7 @@ function Evidence({ console }: { console: Console }) {
 function PayoutCoordination({ console }: { console: Console }) {
   const evidence = console.payoutEvidence;
   const history = Array.isArray(evidence?.status_history) ? evidence.status_history : [];
+  const settlementUrl = stellarExpertUrl(evidence?.settlement?.stellar_tx_hash, evidence?.settlement?.network || evidence?.rail?.settlement_network);
   return (
     <div>
       <section className="grid border-b border-tts-border lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -601,8 +617,24 @@ function PayoutCoordination({ console }: { console: Console }) {
           <p className="text-xs font-bold uppercase text-tts-confirm">USD delivery coordination</p>
           <h2 className="mt-1 text-lg font-black text-tts-deep">{evidence?.provider?.display_name || "Select and create a payout instruction"}</h2>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="border-y border-tts-border py-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Stellar evidence</p>
+              <p className="mt-2 font-mono text-sm font-black text-tts-deep">
+                {evidence?.settlement?.stellar_tx_hash ? compact(evidence.settlement.stellar_tx_hash, 22) : "waiting"}
+              </p>
+              {settlementUrl ? (
+                <Link
+                  href={settlementUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-md border border-tts-border px-2 text-xs font-bold text-tts-gold transition hover:border-tts-gold"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Stellar Expert
+                </Link>
+              ) : null}
+            </div>
             {[
-              ["Stellar evidence", evidence?.settlement?.stellar_tx_hash ? "attached" : "waiting"],
               ["Same-name control", evidence ? (evidence.identity_control?.payout_allowed ? "pass" : "blocked") : "waiting"],
               ["Payout instruction", evidence?.instruction?.status || "waiting"],
             ].map(([label, value]) => (
