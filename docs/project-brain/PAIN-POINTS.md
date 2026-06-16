@@ -420,6 +420,15 @@
 - **Status**: **Fixed by `002ccd9`**. Server-rendered `/ops` browser routes now bypass CORS middleware while JSON APIs keep strict CORS behavior. `/ops` remains protected by CSRF, DB-backed admin credentials, and HTTP-only session cookies. A regression test verifies only `/ops` browser paths are marked for the bypass and `/api/ops/*` remains outside it.
 - **Lesson**: **Do not put CORS in front of same-site server-rendered form posts**. CORS is for browser API access; `/ops` HTML uses CSRF and cookie auth.
 
+### #51 — Wire Test Screen Returned 404 Until Servers Were Rebuilt
+> **Quote**: "iterate rn, it doesnt work, make until wire works on circle"
+> **Gloss**: The `/wire-test` page loaded, but the new Circle wire-send API path was not available from the running frontend/backend processes, so the screen could not send a Circle wire payout.
+
+- **Where**: `frontend/app/wire-test/wire-test-client.tsx`, `frontend/app/api/wire-test/send/route.ts`, `backend/src/api/routes/international-transfers.router.ts`, `backend/src/api/controllers/international-transfers.controller.ts`.
+- **Root cause**: The current source contained `POST /api/wire-test/send` and backend `POST /api/transfers/wire-test/send`, but the running frontend/backend processes were started before those routes were loaded. The running servers returned 404 until rebuilt/restarted from current source.
+- **Status**: **Fixed by current code and verified deployment restart**. `frontend/app/api/wire-test/send/route.ts` proxies to `backend/src/api/controllers/international-transfers.controller.ts:399`, and a clean `npm --prefix frontend run build` lists `/api/wire-test/send`. Verified on 2026-06-16: direct backend send returned Circle HTTP 201 with payout ID present; frontend proxy returned HTTP 200 with Circle HTTP 201; Playwright drove `/wire-test`, clicked `Send`, and the UI showed "Wire sent".
+- **Lesson**: **After adding server/API routes, rebuild and restart every process before testing the browser surface**. A page can render while its newly added route is missing from the running server.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -468,19 +477,19 @@ Ranked by frequency × severity across the 47 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
-| 5 | **H — Reliability** | 9 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 10 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 22 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50)
+- **Confirmed fixed**: 23 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 22 of 47 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 23 of 48 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -510,3 +519,4 @@ Fixing commits verified in codebase:
 | #47 | `002ccd9` | Let server-rendered `/ops` browser routes bypass CORS so frontend-hosted login form POST reaches the controller |
 | #48 | `6555da6` | Clean the ops dashboard visual hierarchy, restore Forensics entry, and add printable controls |
 | #50 | `fe90af9` | Change ops dashboard hero metrics from today-only to all loaded ledger records |
+| #51 | Current code, deployment restart | Build/start current frontend and backend so `/api/wire-test/send` and `/api/transfers/wire-test/send` are mounted; verified Circle HTTP 201 through UI |
