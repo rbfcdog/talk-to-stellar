@@ -23,10 +23,15 @@ type WirePayoutResult = {
 
 type WireResponse = {
   success?: boolean;
+  code?: string;
   message?: string;
+  error?: string;
   payout?: WirePayoutResult;
   circle_raw?: JsonRecord;
   circle_http_status?: number;
+  backend_http_status?: number;
+  backend_url?: string;
+  attempts?: Array<Record<string, unknown>>;
 };
 
 type LastResult = { label: string; status: number; at: string };
@@ -36,6 +41,14 @@ function isoTime(value?: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "Z");
+}
+
+function wireErrorMessage(label: string, status: number, payload: WireResponse) {
+  const detail = payload.message || payload.error || payload.code || payload.circle_raw?.message || payload.circle_raw?.error;
+  const backendStatus = payload.backend_http_status ? ` backend ${payload.backend_http_status}` : "";
+  return detail
+    ? `${label} failed: ${String(detail)} (HTTP ${status}${backendStatus})`
+    : `${label} failed with HTTP ${status}${backendStatus}`;
 }
 
 export default function WireTestClient() {
@@ -71,7 +84,9 @@ export default function WireTestClient() {
         const payload: WireResponse = await r.json().catch(() => ({}));
         setLastResult({ label, status: r.status, at: new Date(started).toISOString() });
         if (!r.ok || payload.success === false) {
-          throw new Error(payload.message || `${label} failed with HTTP ${r.status}`);
+          const error = new Error(wireErrorMessage(label, r.status, payload)) as Error & { payload?: WireResponse };
+          error.payload = payload;
+          throw error;
         }
         return payload;
       } catch (e: any) {
@@ -99,10 +114,14 @@ export default function WireTestClient() {
       setWireResult(result);
       if (result?.success && result?.payout?.id) setWireSent(true);
     } catch (err: any) {
+      const payload = err?.payload as WireResponse | undefined;
       setWireResult({
         success: false,
         payout: { id: null, status: err.message || String(err), amount: amt, destination_tail: "-" },
-        circle_raw: { error: err.message || String(err) },
+        circle_raw: payload || { error: err.message || String(err) },
+        backend_http_status: payload?.backend_http_status,
+        backend_url: payload?.backend_url,
+        attempts: payload?.attempts,
       });
     }
   }
