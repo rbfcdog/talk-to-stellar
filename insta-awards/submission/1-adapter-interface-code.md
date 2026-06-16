@@ -1,41 +1,21 @@
 # 1. Adapter Interface Code
 
-**Repo**: https://github.com/rbfcdog/talk-to-stellar — `main` — `bf9c55a`
+Repo: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `c105d1b`
 
-## Code
-
-| File | Lines |
-|------|-------|
-| `backend/src/api/services/usd-payout-adapters.ts` | 943 |
-| `backend/src/api/services/usd-payout-coordination.service.ts` | 246 |
-| `backend/src/api/services/international-transfer.service.ts` | 953 |
-| `backend/src/api/routes/international-transfers.router.ts` | 23 |
-| `backend/tests/payout-adapter-contract.test.ts` | 287 |
-
-## Interface
+The payout adapter lives in `backend/src/api/services/usd-payout-adapters.ts` (943 lines). Every provider implements the same contract:
 
 ```typescript
 interface PayoutProviderAdapter {
   providerName: PayoutProviderName;
   getCapabilities(): PayoutProviderCapabilities;
-  createPayoutInstruction(input: CreatePayoutInput): Promise<PayoutInstruction>;
+  createPayoutInstruction(input): Promise<PayoutInstruction>;
   getPayoutStatus(providerPayoutId: string): Promise<PayoutStatus>;
   normalizeWebhookEvent?(payload): PayoutProviderEvent | null;
 }
 ```
 
-**Providers**: `circle` (live sandbox), `bridge` (compatibility), `etherfuse` (proof), `mock` (ops)
+We have four adapters: **circle** (live sandbox, sends real payouts), **bridge** (builds payloads, waiting for provider access), **etherfuse** (PIX proof path), and **mock** (for ops testing). Calling `getPayoutProviderAdapter('circle')` returns the right one — unknown names throw instead of silently falling back to mock.
 
-## Tests
+Supporting files: `usd-payout-coordination.service.ts` (evidence builder, 246 lines), `international-transfer.service.ts` (transfer-to-payout wiring, 953 lines), `international-transfers.router.ts` (HTTP routes, 23 lines).
 
-```
-npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts
-
-PASS — 8/8 tests
-✓ Circle payload, Bridge payload, redaction, sandbox endpoint,
-✓ status polling, provider rejection, webhook normalization
-```
-
-## Claim
-
-TalkToStellar implements a provider-agnostic payout adapter contract. Builds USD payout instructions for Circle sandbox API execution (live verified), Bridge-compatible payloads, Etherfuse PIX proof, and mock evidence. Unknown providers are rejected without silent fallback.
+Tests: `payout-adapter-contract.test.ts` (287 lines, 8 tests). Run with `npm --prefix backend test -- --runInBand tests/payout-adapter-contract.test.ts`. All pass — covers payload construction, redaction of bank details, sandbox endpoint selection, Circle status polling, rejecting bad providers, and webhook normalization.
