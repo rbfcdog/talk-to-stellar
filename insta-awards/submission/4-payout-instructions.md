@@ -1,48 +1,41 @@
 # 4. Payout Instructions
 
-**Repo**: https://github.com/rbfcdog/talk-to-stellar — `main` — `bf9c55a`
+A transfer goes through these states: `USDC_SETTLED → PAYOUT_ROUTING → PAYOUT_INSTRUCTED → RECONCILED`.
 
-## Flow
-
-```
-Transfer → USDC_SETTLED → PAYOUT_ROUTING → PAYOUT_INSTRUCTED → RECONCILED
-```
-
-## API
+## Creating an instruction
 
 ```
 POST /api/transfers/:id/payout-instruction
-Body: { "provider": "circle" }
-
-GET  /api/transfers/:id/payout-evidence
-
-POST /api/transfers/:id/payout-status-refresh
-
-GET  /api/transfers/:id/reconciliation
+{ "provider": "circle" }
 ```
+
+This triggers the adapter. If Circle sandbox execution is enabled, it fires a real API call. The response is persisted in `international_payout_instructions`.
+
+## Evidence endpoints
+
+```
+GET  /api/transfers/:id/payout-evidence
+GET  /api/transfers/:id/reconciliation
+POST /api/transfers/:id/payout-status-refresh
+```
+
+The evidence endpoint returns a checklist (4 items: adapter code, tx hash, Circle/Bridge, payout instructions), rail info (PIX → Stellar USDC → USD bank wire), settlement evidence, identity check status, instruction details, status history, and destination metadata.
 
 ## Database
 
 ```sql
--- Payout instruction created
-SELECT id, transfer_id, provider_name, provider_payout_id,
+-- Payout row
+select id, transfer_id, provider_name, provider_payout_id,
        status, execution_mode, amount_usd, created_at
-FROM public.international_payout_instructions
-WHERE transfer_id = '<transfer-id>';
+from public.international_payout_instructions
+where transfer_id = '<transfer-id>';
 
 -- Status events
-SELECT id, provider_name, provider_event_id, status, event_type
-FROM public.international_payout_events
-WHERE transfer_id = '<transfer-id>';
+select id, provider_name, provider_event_id, status, event_type
+from public.international_payout_events
+where transfer_id = '<transfer-id>';
 ```
 
 ## Redaction
 
-- Provider destination IDs: hashed, last-4 only
-- Account numbers: `****0010`
-- Routing numbers: `****0248`
-- API keys: never stored
-
-## Claim
-
-For a settled Stellar USDC transfer, TalkToStellar created a USD payout instruction via Circle Mint sandbox, persisted provider request/response evidence, tracked status through the provider lifecycle, and exposed a redacted reviewer evidence package via `/api/transfers/:id/payout-evidence`.
+All exported evidence is redacted. Bank account numbers show only last 4 digits. Routing numbers are truncated. API keys and raw destination IDs stay on the backend. What the reviewer sees is clean and safe to share.

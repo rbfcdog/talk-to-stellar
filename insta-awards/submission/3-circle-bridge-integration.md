@@ -1,43 +1,19 @@
 # 3. Circle / Bridge Integration
 
-**Repo**: https://github.com/rbfcdog/talk-to-stellar — `main` — `bf9c55a`
+## Circle
 
-## Circle — Live Sandbox Verified
+We have a live Circle Mint sandbox account. Wallet `1017459986`, wire destination linked to BANK OF AMERICA, NA (account ending in 1098). The API key authenticates against `https://api-sandbox.circle.com`.
 
-| Field | Value |
-|-------|-------|
-| Wallet | `1017459986` — active |
-| Wire destination | BANK OF AMERICA, NA ****1098 |
-| Destination ID (last 4) | a4b3 |
-| API key | SAND_API_KEY — authenticated |
-| Payout endpoint | `POST /v1/businessAccount/payouts` |
-| Test result | HTTP 201 — payout created + completed |
+The adapter code is at `backend/src/api/services/usd-payout-adapters.ts` lines 525-690 (`CircleCompatibilityAdapter`). It builds the payout payload and POSTs to `/v1/businessAccount/payouts` when `ENABLE_REAL_PAYOUT_EXECUTION=true`. In compatibility mode it just builds the payload without hitting Circle.
 
-```
-Circle sandbox payout:
-  Wallet:   1017459986
-  Wire:     089797c5-0a8e-466a-a0c3-ce54f3c3a4b3
-  Bank:     BANK OF AMERICA, N.A., NY ****1098
-  Amount:   $10.00
-  Status:   completed
-  Adapter:  backend/src/api/services/usd-payout-adapters.ts:525
-```
+We tested it end-to-end: funded the wallet via Circle's mock wire endpoint, waited for settlement (~10 min in sandbox), then dispatched a $10 wire payout. Circle returned HTTP 201 with a payout ID, and the payout completed. All verifiable through the Circle API.
 
-## E2E Test
-
-```bash
-npm run circle:e2e
-# Funds wallet → polls settlement → dispatches payout → verifies completion
-```
+There's an E2E test script at `scripts/circle-e2e-test.ts` that automates the whole flow: `npm run circle:e2e`.
 
 ## Bridge
 
-Bridge adapter exists at `usd-payout-adapters.ts:340` (compatibility mode). Builds correct Bridge payloads. Live execution pending provider credentials.
+The Bridge adapter exists in the same file (extends `CompatibilityPayoutAdapter`). It builds correct Bridge-shaped payloads but doesn't execute live payouts — we don't have Bridge credentials yet. It'll work the same way as Circle once we do.
 
-## Adapter Code
+## Wire test page
 
-`backend/src/api/services/usd-payout-adapters.ts:525-690` — `CircleCompatibilityAdapter`
-
-## Claim
-
-TalkToStellar executed a Circle sandbox wire payout via `POST /v1/businessAccount/payouts`. Circle returned HTTP 201 with a payout ID. The wallet was funded via mock wire deposit and the payout completed. Bridge compatibility payloads are ready pending provider access.
+There's a frontend page at `/wire-test` with a one-button "Send wire" flow. Enter an amount, paste the ops secret, click Send. It calls the backend, the backend calls Circle, and the response panel shows the payout ID, status, and raw Circle JSON. Credentials are hardcoded in the backend endpoint so it works in any environment.
