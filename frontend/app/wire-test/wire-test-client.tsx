@@ -254,6 +254,7 @@ export default function WireTestClient() {
   const [error, setError] = useState("");
   const [lastResult, setLastResult] = useState<LastResult | null>(null);
   const [copied, setCopied] = useState("");
+  const [wireSent, setWireSent] = useState(false);
 
   const circleProvider = useMemo(() => {
     return providers.find((provider) => provider.provider_name === "circle") ||
@@ -349,6 +350,7 @@ export default function WireTestClient() {
       requiresOps: true,
     });
     setTransfer(payload.transfer || null);
+    setWireSent(true);
     await loadEvidence();
   }
 
@@ -513,6 +515,7 @@ export default function WireTestClient() {
                         body: { provider: "circle", wire_test: true, amount_usd: amount },
                         requiresOps: true,
                       });
+                      setWireSent(true);
                       await loadEvidence();
                     } catch { /* error handled by runApi */ }
                   }}
@@ -540,7 +543,7 @@ export default function WireTestClient() {
         ) : null}
       </OperationalCard>
 
-      {evidence?.instruction?.created ? (
+      {wireSent ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(18rem,0.95fr)]">
           <OperationalCard>
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
