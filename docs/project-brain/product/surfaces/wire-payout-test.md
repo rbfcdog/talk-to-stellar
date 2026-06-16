@@ -26,11 +26,13 @@ Operator opens /wire-test
 - The visible form accepts only ops token and amount.
 - Mutations require backend ops authorization.
 - The result panel displays Circle HTTP status indirectly through success/failure, payout id, provider status, amount, destination tail, and raw Circle response details for debugging.
+- The frontend proxy adds `backend_url` and `backend_http_status` to responses so deployed-route failures are diagnosable from the browser.
 
 ## Known Issues
 
 - This screen proves Circle sandbox payout creation when Circle returns HTTP 201 and a provider payout id. Initial Circle status can be `pending`.
-- It depends on `BACKEND_URL` or `NEXT_PUBLIC_BACKEND_URL` resolving from `frontend/app/api/wire-test/send/route.ts`; local default is `http://localhost:3001`.
+- It prefers `BACKEND_URL` or `NEXT_PUBLIC_BACKEND_URL` from `frontend/app/api/wire-test/send/route.ts`; local browser hosts fall back to `http://localhost:3001`, and deployed hosts fall back to the Railway backend.
+- If the backend is unreachable or returns non-JSON, the frontend route returns structured JSON with `wire_backend_unreachable`, `backend_http_status`, `backend_url`, or attempts metadata instead of a generic proxy HTTP 500.
 - If `/api/wire-test/send` returns 404 after code changes, rebuild/restart the frontend and backend processes from current source.
 
 ## Key Files
@@ -59,3 +61,4 @@ Operator opens /wire-test
 - Direct backend call returned HTTP 200 wrapper with Circle HTTP 201, payout id present, status `pending`, amount `$1`.
 - Frontend proxy call returned HTTP 200 wrapper with Circle HTTP 201, payout id present, status `pending`, amount `$1`.
 - Playwright filled the `/wire-test` form, clicked `Send`, and verified the UI displayed `Wire sent`.
+- After `1ab10cd`, the built frontend proxy was re-tested locally against the backend: valid ops auth returned frontend HTTP 200, backend HTTP 200, Circle HTTP 201, payout id present, amount `$1`; invalid ops auth returned structured frontend HTTP 403 with backend HTTP 403, not HTTP 500.
