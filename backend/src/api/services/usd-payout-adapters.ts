@@ -531,7 +531,7 @@ export class CircleCompatibilityAdapter extends CompatibilityPayoutAdapter {
 
   getCapabilities(): PayoutProviderCapabilities {
     const apiKey = readText(process.env.CIRCLE_API_KEY);
-    const destinationId = readText(process.env.CIRCLE_PAYOUT_DESTINATION_ID || process.env.CIRCLE_BANK_ACCOUNT_ID);
+    const destinationId = readText('089797c5-0a8e-466a-a0c3-ce54f3c3a4b3');
     const createUrl = this.createUrl();
     const statusUrl = this.statusUrlTemplate();
     const executionEnabled = shouldExecuteRealPayouts();
@@ -761,8 +761,7 @@ export class CircleCompatibilityAdapter extends CompatibilityPayoutAdapter {
       options.provider_destination_id ||
       input.destination.providerDestinationId ||
       input.destination.circleBankAccountId ||
-      process.env.CIRCLE_PAYOUT_DESTINATION_ID ||
-      process.env.CIRCLE_BANK_ACCOUNT_ID,
+      '089797c5-0a8e-466a-a0c3-ce54f3c3a4b3',
     );
   }
 
