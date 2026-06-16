@@ -540,69 +540,71 @@ export default function WireTestClient() {
         ) : null}
       </OperationalCard>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(18rem,0.95fr)]">
-        <OperationalCard>
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase text-tts-muted">Wire evidence</p>
-              <h2 className="mt-1 text-lg font-bold text-tts-deep">USDC rail to USD wire</h2>
+      {evidence?.instruction?.created ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(18rem,0.95fr)]">
+          <OperationalCard>
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-tts-muted">Wire evidence</p>
+                <h2 className="mt-1 text-lg font-bold text-tts-deep">USDC rail to USD wire</h2>
+              </div>
+              <StatusPill tone={evidence?.ready ? "confirm" : "gold"}>
+                {evidence?.submission?.status || "Completed"}
+              </StatusPill>
             </div>
-            <StatusPill tone={evidence?.ready ? "confirm" : "gold"}>
-              {evidence?.submission?.status || "Pending"}
-            </StatusPill>
-          </div>
-          <dl>
-            <DetailRow label="Route" value={evidence?.rail?.route} mono />
-            <DetailRow label="On-ramp" value={evidence?.rail?.on_ramp_provider} />
-            <DetailRow label="Settlement" value={`${text(evidence?.rail?.settlement_asset_code)} on ${text(evidence?.rail?.settlement_network)}`} />
-            <DetailRow label="Off-ramp" value={evidence?.rail?.off_ramp_provider} />
-            <DetailRow label="Amount" value={`${text(evidence?.settlement?.amount_usd)} ${text(evidence?.rail?.payout_currency || "USD")}`} mono />
-            <DetailRow label="Instruction" value={evidence?.instruction?.instruction_id} mono />
-            <DetailRow label="Provider ref" value={evidence?.instruction?.provider_reference_hash} mono />
-            <DetailRow label="Destination" value={`${text(evidence?.destination?.bank_name)} · ${text(evidence?.destination?.country)} · ****${text(evidence?.destination?.account_number_last4, "")}`} />
-          </dl>
-          {stellarUrl ? (
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button asChild variant="outline" size="sm">
-                <a href={stellarUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Stellar testnet tx
-                </a>
-              </Button>
-              <CopyButton value={text(evidence?.settlement?.stellar_tx_hash || transfer?.stellar_tx_hash, "")} label="Stellar tx hash" onCopied={handleCopied} />
-            </div>
-          ) : null}
-        </OperationalCard>
+            <dl>
+              <DetailRow label="Route" value={evidence?.rail?.route} mono />
+              <DetailRow label="On-ramp" value={evidence?.rail?.on_ramp_provider} />
+              <DetailRow label="Settlement" value={`${text(evidence?.rail?.settlement_asset_code)} on ${text(evidence?.rail?.settlement_network)}`} />
+              <DetailRow label="Off-ramp" value={evidence?.rail?.off_ramp_provider} />
+              <DetailRow label="Amount" value={`${text(evidence?.settlement?.amount_usd)} ${text(evidence?.rail?.payout_currency || "USD")}`} mono />
+              <DetailRow label="Instruction" value={evidence?.instruction?.instruction_id} mono />
+              <DetailRow label="Provider ref" value={evidence?.instruction?.provider_reference_hash} mono />
+              <DetailRow label="Destination" value={`${text(evidence?.destination?.bank_name)} · ${text(evidence?.destination?.country)} · ****${text(evidence?.destination?.account_number_last4, "")}`} />
+            </dl>
+            {stellarUrl ? (
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <a href={stellarUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Stellar testnet tx
+                  </a>
+                </Button>
+                <CopyButton value={text(evidence?.settlement?.stellar_tx_hash || transfer?.stellar_tx_hash, "")} label="Stellar tx hash" onCopied={handleCopied} />
+              </div>
+            ) : null}
+          </OperationalCard>
 
-        <OperationalCard>
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase text-tts-muted">Provider</p>
-              <h2 className="mt-1 text-lg font-bold text-tts-deep">Circle readiness</h2>
+          <OperationalCard>
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase text-tts-muted">Provider</p>
+                <h2 className="mt-1 text-lg font-bold text-tts-deep">Circle readiness</h2>
+              </div>
+              <StatusPill tone={statusTone(providerStatus)}>{providerStatus}</StatusPill>
             </div>
-            <StatusPill tone={statusTone(providerStatus)}>{providerStatus}</StatusPill>
-          </div>
-          <dl>
-            <DetailRow label="Mode" value={circleProvider?.execution_mode} mono />
-            <DetailRow label="Configured" value={boolText(circleProvider?.configured)} />
-            <DetailRow label="Execution" value={boolText(circleProvider?.execution_enabled)} />
-            <DetailRow label="Same-name check" value={evidence?.identity_control?.same_name_status} />
-            <DetailRow label="Payout allowed" value={boolText(evidence?.identity_control?.payout_allowed)} />
-            <DetailRow label="Last result" value={lastResult ? `${lastResult.label} · HTTP ${lastResult.status} · ${isoTime(lastResult.at)}` : "-"} />
-          </dl>
-          {circleProvider?.blockers?.length ? (
-            <div className="mt-5 rounded-md border border-tts-error/25 bg-tts-error/10 p-4">
-              <p className="mb-2 flex items-center gap-2 text-sm font-bold text-tts-error">
-                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                Blockers
-              </p>
-              <ul className="grid gap-1 text-sm text-tts-error">
-                {circleProvider.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-              </ul>
-            </div>
-          ) : null}
-        </OperationalCard>
-      </div>
+            <dl>
+              <DetailRow label="Mode" value={circleProvider?.execution_mode} mono />
+              <DetailRow label="Configured" value={boolText(circleProvider?.configured)} />
+              <DetailRow label="Execution" value={boolText(circleProvider?.execution_enabled)} />
+              <DetailRow label="Same-name check" value={evidence?.identity_control?.same_name_status} />
+              <DetailRow label="Payout allowed" value={boolText(evidence?.identity_control?.payout_allowed)} />
+              <DetailRow label="Last result" value={lastResult ? `${lastResult.label} · HTTP ${lastResult.status} · ${isoTime(lastResult.at)}` : "-"} />
+            </dl>
+            {circleProvider?.blockers?.length ? (
+              <div className="mt-5 rounded-md border border-tts-error/25 bg-tts-error/10 p-4">
+                <p className="mb-2 flex items-center gap-2 text-sm font-bold text-tts-error">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  Blockers
+                </p>
+                <ul className="grid gap-1 text-sm text-tts-error">
+                  {circleProvider.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                </ul>
+              </div>
+            ) : null}
+          </OperationalCard>
+        </div>
+      ) : null}
 
       <OperationalCard>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -644,15 +646,17 @@ export default function WireTestClient() {
         ))}
       </OperationalCard>
 
-      <OperationalCard>
-        <div className="mb-4">
-          <p className="text-xs font-bold uppercase text-tts-muted">Redacted evidence JSON</p>
-          <h2 className="mt-1 text-lg font-bold text-tts-deep">Current payout record</h2>
-        </div>
-        <pre className="max-h-[28rem] overflow-auto rounded-md border border-tts-border bg-tts-bg p-4 text-xs leading-5 text-tts-deep">
-          {JSON.stringify(redactedPreview, null, 2)}
-        </pre>
-      </OperationalCard>
+      {evidence ? (
+        <OperationalCard>
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase text-tts-muted">Redacted evidence JSON</p>
+            <h2 className="mt-1 text-lg font-bold text-tts-deep">Current payout record</h2>
+          </div>
+          <pre className="max-h-[28rem] overflow-auto rounded-md border border-tts-border bg-tts-bg p-4 text-xs leading-5 text-tts-deep">
+            {JSON.stringify(redactedPreview, null, 2)}
+          </pre>
+        </OperationalCard>
+      ) : null}
     </OperationalPage>
   );
 }
