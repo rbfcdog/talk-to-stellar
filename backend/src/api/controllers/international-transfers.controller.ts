@@ -266,6 +266,8 @@ export class InternationalTransfersController {
             req.body?.providerDestinationType,
           circle_source_wallet_id: req.body?.circle_source_wallet_id || req.body?.circleSourceWalletId,
           circle_idempotency_key: req.body?.circle_idempotency_key || req.body?.circleIdempotencyKey || req.body?.idempotency_key || req.body?.idempotencyKey,
+          wire_test: req.body?.wire_test === true || String(req.body?.wire_test || '').trim() === 'true' || undefined,
+          amount_usd: String(req.body?.amount_usd || req.body?.amountUsd || '').trim() || undefined,
           request_id: context.request_id,
           correlation_id: context.correlation_id,
         },

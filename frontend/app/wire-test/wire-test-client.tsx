@@ -471,7 +471,7 @@ export default function WireTestClient() {
               />
             </label>
           </div>
-          <div className="grid content-end gap-3">
+           <div className="grid content-end gap-3">
             <Button type="button" variant="outline" onClick={() => void loadAll().catch(() => undefined)} disabled={Boolean(busy)}>
               {busy === "Load payout evidence" || busy === "Load Circle readiness"
                 ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -490,6 +490,41 @@ export default function WireTestClient() {
                 : <RefreshCw className="mr-2 h-4 w-4" />}
               Refresh wire status
             </Button>
+            <div className="border-t border-tts-border pt-3">
+              <p className="mb-2 text-xs font-bold uppercase text-tts-muted">Direct Circle sandbox wire</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-tts-muted">$</span>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  defaultValue="10"
+                  id="wire-amount"
+                  className="h-9 w-24 font-mono-financial text-sm"
+                />
+                <Button
+                  type="button"
+                  className="flex-1"
+                  onClick={async () => {
+                    const amount = (document.getElementById("wire-amount") as HTMLInputElement)?.value || "10";
+                    try {
+                      await runApi(`Send wire $${amount}`, createPath, {
+                        method: "POST",
+                        body: { provider: "circle", wire_test: true, amount_usd: amount },
+                        requiresOps: true,
+                      });
+                      await loadEvidence();
+                    } catch { /* error handled by runApi */ }
+                  }}
+                  disabled={Boolean(busy) || !opsSecret.trim()}
+                >
+                  {busy?.startsWith("Send wire")
+                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    : <Banknote className="mr-2 h-4 w-4" />}
+                  Send wire
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
         {error ? (
