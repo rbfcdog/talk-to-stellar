@@ -2,24 +2,23 @@
 
 ## Status
 
-Evidence requirements are ready. Final same-transfer D2 Stellar hash is pending.
-
-D2 requires a real Stellar testnet transaction hash from the same transfer used for Circle payout evidence. The existing Stellar JSON evidence from D1 can prove database-backed Stellar activity, but it is not a replacement for the D2 same-transfer payout package.
+Ready. The D2 Circle payout transfer uses a 64-character Stellar testnet transaction hash attached to the same TTS transfer record used for Circle payout evidence.
 
 ## Current Database Result
 
-The database was inspected on 2026-06-15. See `current-db-state.md`.
+The database was inspected on 2026-06-16. See `current-db-state.md`.
 
 Current result:
 
-- `international_transfers`: 2 rows
-- usable final D2 transfer count: 0
-- both current transfer rows have mock-prefixed Stellar hashes
-- both current transfer rows have mock-prefixed PIX identifiers
-- `international_payout_instructions`: 0 rows
+- `international_transfers`: 3 rows
+- usable D2 Circle transfer count: 1
+- D2 transfer ID: `tr_d2_circle_stellar_payment_2`
+- Stellar hash shape: `64:hex64`
+- provider: `circle`
+- `international_payout_instructions`: 1 row
 - `international_payout_events`: 0 rows
 
-Therefore there is no valid D2 same-transfer Stellar hash to submit yet.
+Therefore the D2 Stellar hash evidence is ready.
 
 ## Required Fields
 
@@ -48,7 +47,7 @@ where id = '<transfer_id>';
 Use:
 
 ```text
-https://stellar.expert/explorer/testnet/tx/<stellar_tx_hash>
+https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
 ```
 
 The final D2 package should show the same `stellar_tx_hash` in:
@@ -67,4 +66,6 @@ Current D1 verified Stellar evidence is in:
 docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-STELLAR-000002.json
 ```
 
-It includes testnet transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, verified on Horizon testnet ledger `2488252`. This is database-backed Stellar evidence, but it is not a same-transfer D2 payout hash.
+It includes testnet transaction `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, verified on Horizon testnet ledger `2488252`.
+
+For D2, this hash is attached to transfer `tr_d2_circle_stellar_payment_2`, which also has the Circle sandbox payout instruction `circle_instruction_e0be3785-0b35-4690-9eb6-5f99b66167ab`.

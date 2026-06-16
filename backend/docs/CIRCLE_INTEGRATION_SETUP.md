@@ -4,6 +4,12 @@ Scope: backend setup for the Circle Mint USD payout path in the BRL -> USDC -> U
 
 This guide explains how to connect TalkToStellar's Circle payout adapter to Circle Mint. It is an operator setup runbook, not a replacement for Circle onboarding, compliance review, treasury approval, or production account approval.
 
+TTS rail covered here:
+
+```text
+PIX BRL funding -> Stellar USDC settlement -> Circle Mint USD bank payout
+```
+
 ## Official Circle References
 
 - Set up a Circle Mint sandbox account and API key: `https://developers.circle.com/circle-mint/quickstarts/getting-started`
@@ -82,7 +88,7 @@ Or store it on a transfer destination before payout creation:
 
 The adapter also accepts `circleBankAccountId` in `payout_destination` for the same purpose.
 
-Current sandbox note: the latest operator-created Circle wire bank returned status `pending` with description `WELLS FARGO BANK, NA ****0010`. Store the returned bank `id` only in backend secret storage or local `.env`; do not commit the raw ID, API key, account number, or routing number.
+Current sandbox note: the configured Circle wire bank is found by the sandbox API with status `complete` and description `WELLS FARGO BANK, NA ****0010`. Store the returned bank `id` only in backend secret storage or local `.env`; do not commit the raw ID, API key, account number, or routing number.
 
 ## 3. Configure Backend Environment
 
@@ -124,6 +130,15 @@ npm --prefix backend run circle:payout-readiness
 ```
 
 The output redacts the API key and destination ID. It should report `circle_sandbox_api_execution: true` only when `CIRCLE_API_KEY`, `CIRCLE_PAYOUT_DESTINATION_ID`, `CIRCLE_ENVIRONMENT=sandbox`, and `ENABLE_REAL_PAYOUT_EXECUTION=true` are all set.
+
+Current verified readiness on 2026-06-16:
+
+- Circle sandbox API key present in backend env.
+- Linked wire destination present and found through Circle API.
+- Linked destination status: `complete`.
+- Circle balances endpoint returned HTTP 200.
+- Circle wire-bank list endpoint returned HTTP 200.
+- No mutating payout was created by the readiness probe.
 
 Run the backend and inspect provider capabilities:
 
@@ -214,6 +229,9 @@ The adapter sends:
 - `amount.currency=USD`
 - optional `source.id`
 - metadata linking the payout to the TalkToStellar transfer and Stellar settlement
+- `route=PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK`
+- `settlement_asset_code=USDC`
+- `off_ramp_source_asset_code=USDC`
 
 ## 7. Poll Status
 

@@ -1,0 +1,83 @@
+{
+  "captured_at": "2026-06-16T11:14:53-03:00",
+  "evidence": "circle_sandbox_payout_execution",
+  "transfer": {
+    "id": "tr_d2_circle_stellar_payment_2",
+    "status": "PAYOUT_COMPLETED",
+    "stellar_hash_shape": "64:hex64",
+    "stellar_asset_code": "USDC",
+    "quoted_usd_amount": "10",
+    "payout_provider": "circle",
+    "payout_instruction_id": "circle_instruction_e0be3785-0b35-4690-9eb6-5f99b66167ab",
+    "provider_payout_reference": {
+      "hash": "d6a354577130d3e1",
+      "tail": "ef7481"
+    },
+    "payout_status": "completed"
+  },
+  "stellar_settlement_source": {
+    "payment_logs_id": 2,
+    "operation_id": "259de57a-ca16-409b-bf73-79c5641cbf16",
+    "transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+    "asset_code": "USDC",
+    "amount": "10.0000000",
+    "network": "testnet",
+    "explorer": "https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094"
+  },
+  "payout_instruction": {
+    "id": "circle_instruction_e0be3785-0b35-4690-9eb6-5f99b66167ab",
+    "provider_name": "circle",
+    "provider_payout_reference": {
+      "hash": "d6a354577130d3e1",
+      "tail": "ef7481"
+    },
+    "status": "completed",
+    "execution_mode": "sandbox_api",
+    "amount_usd": "10",
+    "currency": "USD",
+    "settlement_hash_shape": "64:hex64",
+    "settlement_asset_code": "USDC",
+    "route": "PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK",
+    "provider_response_present": true,
+    "status_history_count": 6
+  },
+  "http_evidence_endpoint": {
+    "url": "/api/transfers/tr_d2_circle_stellar_payment_2/payout-evidence",
+    "success": true,
+    "ready": true,
+    "ready_count": 4,
+    "required_count": 4,
+    "execution_mode": "sandbox_api",
+    "status_history_count": 6
+  },
+  "provider_capability_endpoint": {
+    "url": "/api/transfers/payout-providers",
+    "circle_execution_mode": "sandbox_api",
+    "circle_configured": true,
+    "circle_execution_enabled": true,
+    "circle_blockers": []
+  },
+  "rail": {
+    "route": "PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK",
+    "on_ramp_provider": "etherfuse",
+    "on_ramp_source_currency": "BRL",
+    "settlement_asset_code": "USDC",
+    "settlement_network": "testnet",
+    "off_ramp_provider": "circle",
+    "off_ramp_source_asset_code": "USDC",
+    "payout_currency": "USD"
+  },
+  "database_counts_after_execution": {
+    "international_transfers": 3,
+    "international_payout_instructions": 1,
+    "international_payout_events": 0,
+    "international_transfer_reconciliations": 3
+  },
+  "redaction": {
+    "raw_circle_api_key_committed": false,
+    "raw_circle_destination_id_committed": false,
+    "raw_circle_provider_payout_id_committed": false,
+    "provider_payout_reference_policy": "hash plus final six characters only"
+  },
+  "boundary": "Circle sandbox payout was created, persisted, and observed completed by protected status refresh through the TTS application. This proves Circle sandbox completion, not production bank delivery."
+}

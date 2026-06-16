@@ -118,6 +118,24 @@ function normalizePayoutProvider(provider?: string): 'mock' | 'circle' | 'bridge
   );
 }
 
+function usdcRailMetadata(transfer: InternationalTransfer, offRampProvider: string): Record<string, unknown> {
+  const settlement = (transfer.reconciliation_metadata || {}).stellar_settlement as Record<string, unknown> | undefined;
+  const settlementAssetCode = String(transfer.stellar_asset_code || settlement?.asset_code || 'USDC').trim() || 'USDC';
+
+  return {
+    route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+    on_ramp_provider: 'etherfuse',
+    on_ramp_source_currency: 'BRL',
+    settlement_asset_code: settlementAssetCode,
+    settlement_asset_issuer: transfer.stellar_asset_issuer || settlement?.asset_issuer,
+    settlement_network: settlement?.network,
+    settlement_tx_hash: transfer.stellar_tx_hash,
+    off_ramp_provider: offRampProvider,
+    off_ramp_source_asset_code: settlementAssetCode,
+    payout_currency: 'USD',
+  };
+}
+
 export class InternationalTransferService {
   private readonly repository: InternationalTransferRepository;
   private readonly quoteService: BrlUsdQuoteService;
@@ -466,8 +484,7 @@ export class InternationalTransferService {
         metadata: {
           same_name_match_status: transfer.same_name_match_status,
           identity_risk_notes: transfer.identity_risk_notes,
-          on_ramp_provider: 'etherfuse',
-          off_ramp_provider: adapter.providerName,
+          ...usdcRailMetadata(transfer, adapter.providerName),
           ...requestTrace({
             request_id: String(providerOptions.request_id || providerOptions.requestId || '').trim(),
             correlation_id: String(providerOptions.correlation_id || providerOptions.correlationId || '').trim(),
@@ -836,7 +853,11 @@ export class InternationalTransferService {
         stellar_tx_hash: transfer.stellar_tx_hash,
         stellar_memo: transfer.stellar_memo,
         asset_code: transfer.stellar_asset_code,
+        asset_issuer: transfer.stellar_asset_issuer,
         amount_usd: transfer.quoted_usd_amount,
+        network: ((transfer.reconciliation_metadata || {}).stellar_settlement as Record<string, unknown> | undefined)?.network,
+        off_ramp_source_asset_code: transfer.stellar_asset_code || 'USDC',
+        route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
       },
       provider_request: payoutProviderEvidenceSnapshot(instructionMetadata.provider_payload),
       provider_response: payoutProviderEvidenceSnapshot(instructionMetadata.provider_response),

@@ -65,6 +65,7 @@ Their source documents now live under categorized root `docs/` folders:
 | `docs/planning/` | TODO and planning notes | ⚠️ Check against current code before using as backlog |
 | `docs/presentations/` | Pitch deck, user demo, and presentation script | ⚠️ Presentation material may lag implementation |
 | `docs/product/` | UX audits, no-mocks plan, invisible wallet, and upgrade roadmap | ✅ Product guidance; dated audits remain snapshots |
+| `docs/project-brain/product/surfaces/wire-payout-test.md` | Frontend `/wire-test` Circle wire payout test screen, endpoint map, and key files | ✅ Current |
 | `docs/qa-session-logs/` | QA session logs and user-flow smoke tests | ⚠️ Historical runs should be rerun before claiming pass |
 | `docs/reference/` | Current feature documentation index | ✅ Current index; verify links after moves |
 | `docs/research/` | Dated scans, mock inventory, feature-state review, refactor scans, folder-reorg notes | ⚠️ Historical snapshots |
@@ -77,10 +78,10 @@ Their source documents now live under categorized root `docs/` folders:
 | File | Description | Freshness |
 |------|-------------|-----------|
 | `docs/insta-awards/deliverables/deliverable-1/` | D1 implementation plan, migrations, status, runs, and evidence | ⚠️ Active; final same-transfer real testnet evidence still pending |
-| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle linked-bank foundation status, active evidence docs, current DB boundary, and final evidence checklist | ⚠️ Active; final same-transfer Circle payout evidence still pending |
-| `docs/insta-awards/deliverables/deliverable-2/STATUS.md` | Current D2 all-deliverables status and completion blockers | ⚠️ Foundation package ready; final execution pending |
+| `docs/insta-awards/deliverables/deliverable-2/README.md` | D2 USD payout coordination scope, Circle sandbox execution status, active evidence docs, current DB boundary, and final evidence checklist | ✅ Circle sandbox payout instruction completed through TTS application |
+| `docs/insta-awards/deliverables/deliverable-2/STATUS.md` | Current D2 all-deliverables status and provider-status boundary | ✅ Circle sandbox payout instruction completed |
 | `docs/insta-awards/deliverables/deliverable-2/DELIVERABLE-LOCATIONS.md` | Exact D2 evidence locations and D1 real-evidence cross-reference | ✅ Current |
-| `docs/insta-awards/deliverables/deliverable-2/evidence/` | Active D2 foundation evidence for adapter code, Stellar hash requirements, Circle/Bridge setup, payout instructions, redacted Circle readiness, and current DB state | ⚠️ Foundation evidence; final same-transfer evidence pending |
+| `docs/insta-awards/deliverables/deliverable-2/evidence/` | Active D2 evidence for adapter code, Stellar hash, Circle/Bridge setup, payout instructions, redacted Circle sandbox readiness, redacted Circle payout completion, USDC rail metadata, and current DB state | ✅ Circle sandbox payout instruction completed |
 | `docs/insta-awards/deliverables/deliverable-3/` | D3 institutional settlement demo foundation, walkthrough, setup, screenshot/video plans, and reviewer package | ⚠️ Active; final video/screenshots/same-transfer evidence pending |
 
 ## Backend Docs

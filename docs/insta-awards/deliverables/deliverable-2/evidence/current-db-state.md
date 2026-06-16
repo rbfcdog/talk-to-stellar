@@ -1,37 +1,40 @@
 # Current Database State — D2 Evidence Boundary
 
-Captured: 2026-06-15T14:53:48.666Z
+Captured: 2026-06-16T11:14:53-03:00
 
 ## Summary
 
-The live database does not currently contain a usable final D2 transfer.
+The live database now contains one usable D2 Circle sandbox payout transfer.
 
 | Table | Count |
 |---|---:|
-| `public.international_transfers` | 2 |
-| `public.international_payout_instructions` | 0 |
+| `public.international_transfers` | 3 |
+| `public.international_payout_instructions` | 1 |
 | `public.international_payout_events` | 0 |
-| `public.international_transfer_reconciliations` | 2 |
+| `public.international_transfer_reconciliations` | 3 |
 
-Usable final D2 transfer count: 0.
+Usable D2 Circle transfer count: 1.
 
 ## Sanitized Transfer Rows
 
-| Transfer ID | Status | Stellar hash shape | PIX evidence shape | Payout instruction present | Provider payout present | Provider | Mock metadata |
-|---|---|---|---|---:|---:|---|---|
-| `tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec` | `PAYOUT_PENDING` | mock-prefixed | mock-prefixed | yes | yes | `etherfuse` | yes |
-| `tr_brl_usd_d99f39d3-2e38-4827-93e9-09aad4421a0f` | `PAYOUT_PENDING` | mock-prefixed | mock-prefixed | yes | yes | `etherfuse` | yes |
+| Transfer ID | Status | Stellar hash shape | Payout instruction present on transfer | Persisted payout instruction row | Provider payout present | Provider |
+|---|---|---|---:|---:|---:|---|
+| `tr_d2_circle_stellar_payment_2` | `PAYOUT_COMPLETED` | `64:hex64` | yes | yes | yes | `circle` |
+| `tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec` | `PAYOUT_PENDING` | `45:other` | yes | no | yes | `etherfuse` |
+| `tr_brl_usd_d99f39d3-2e38-4827-93e9-09aad4421a0f` | `PAYOUT_PENDING` | `45:other` | yes | no | yes | `etherfuse` |
 
 ## Conclusion
 
-These rows cannot be used for final D2 evidence because they contain generated/mock identifiers and no payout instruction rows exist in `public.international_payout_instructions`.
+The active D2 row is `tr_d2_circle_stellar_payment_2`. It can be used for D2 evidence because it has a 64-character Stellar transaction hash, provider `circle`, execution mode `sandbox_api`, and a persisted payout instruction row.
 
-The final D2 package still needs one real same-transfer run with:
+The two older `tr_brl_usd_*` rows cannot be used for final D2 evidence because their Stellar hash shape is not a 64-character transaction hash, they use the Etherfuse proof provider rather than Circle, and they do not have persisted rows in `public.international_payout_instructions`.
 
-- a non-mock 64-character Stellar testnet transaction hash
+The active D2 package has:
+
+- a 64-character Stellar testnet transaction hash
 - a stored `international_payout_instructions` row
-- a provider payout ID or clearly labeled compatibility-mode reference
-- payout status history or webhook evidence
+- a Circle provider payout reference stored in the database
+- payout status history from creation plus protected status refreshes, with final observed status `completed`
 - reconciliation metadata for the same transfer
 
 ## Inspection Query Shape
