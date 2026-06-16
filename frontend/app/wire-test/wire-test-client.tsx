@@ -265,6 +265,7 @@ export default function WireTestClient() {
   const encodedTransferId = encodeURIComponent(transferId.trim() || DEFAULT_TRANSFER_ID);
   const evidencePath = `/api/transfers/${encodedTransferId}/payout-evidence`;
   const createPath = `/api/transfers/${encodedTransferId}/payout-instruction`;
+  const wireSendPath = "/api/transfers/wire-test/send";
   const refreshPath = `/api/transfers/${encodedTransferId}/payout-status-refresh`;
   const providersPath = "/api/transfers/payout-providers";
 
@@ -510,12 +511,14 @@ export default function WireTestClient() {
                   onClick={async () => {
                     const amount = (document.getElementById("wire-amount") as HTMLInputElement)?.value || "10";
                     try {
-                      await runApi(`Send wire $${amount}`, createPath, {
+                      const result = await runApi(`Send wire $${amount}`, wireSendPath, {
                         method: "POST",
-                        body: { provider: "circle", wire_test: true, amount_usd: amount },
+                        body: { amount },
                         requiresOps: true,
                       });
-                      setWireSent(true);
+                      if (result?.payout?.id) {
+                        setWireSent(true);
+                      }
                       await loadEvidence();
                     } catch { /* error handled by runApi */ }
                   }}
