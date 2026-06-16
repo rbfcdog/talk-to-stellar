@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-15. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-16. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-47 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+49 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -373,7 +373,7 @@
 
 ---
 
-## Cluster H — Reliability (9 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (11 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -429,6 +429,15 @@
 - **Status**: **Fixed by current code and verified deployment restart**. `frontend/app/api/wire-test/send/route.ts` proxies to `backend/src/api/controllers/international-transfers.controller.ts:399`, and a clean `npm --prefix frontend run build` lists `/api/wire-test/send`. Verified on 2026-06-16: direct backend send returned Circle HTTP 201 with payout ID present; frontend proxy returned HTTP 200 with Circle HTTP 201; Playwright drove `/wire-test`, clicked `Send`, and the UI showed "Wire sent".
 - **Lesson**: **After adding server/API routes, rebuild and restart every process before testing the browser surface**. A page can render while its newly added route is missing from the running server.
 
+### #52 — Wire Test Send Collapsed Upstream Failure Into HTTP 500
+> **Quote**: "HTTP 500 2026-06-16 19:14:52Z Status Failed Send wire $10 failed with HTTP 500 ... still given 500 when trying to use. when you tested it work"
+> **Gloss**: The deployed `/wire-test` screen showed a generic HTTP 500 even though the Circle/backend result needed to be visible to the operator.
+
+- **Where**: `frontend/app/api/wire-test/send/route.ts`, `frontend/app/wire-test/wire-test-client.tsx`, `docs/project-brain/product/surfaces/wire-payout-test.md`.
+- **Root cause**: The Next.js route handler assumed a single configured backend URL and assumed the upstream response was JSON. If the frontend deployment had a missing/stale backend URL, network failure, or non-JSON upstream response, the browser-facing route returned `Failed to proxy request to backend` with HTTP 500 instead of preserving the backend/Circle status. The production backend route itself was mounted: Railway `/health` returned 200 and unauthenticated `POST /api/transfers/wire-test/send` returned 403.
+- **Status**: **Fixed by `1ab10cd`**. The frontend wire-test proxy now tries configured backend URLs, uses the Railway backend as deployed fallback, reads non-JSON backend responses safely, and returns structured `backend_url`, `backend_http_status`, and attempts metadata. The UI now displays the upstream message and keeps raw details visible. Verified on 2026-06-16: built frontend route returned HTTP 200 with Circle HTTP 201 and payout id present for a $1 sandbox wire; invalid ops auth returned structured HTTP 403 rather than HTTP 500.
+- **Lesson**: **Serverless proxy routes must preserve upstream status and diagnostics**. Do not turn backend reachability, authorization, or provider errors into an opaque 500.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -469,7 +478,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 47 documented incidents:
+Ranked by frequency × severity across the 49 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -477,19 +486,19 @@ Ranked by frequency × severity across the 47 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
-| 5 | **H — Reliability** | 10 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 11 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 23 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51)
+- **Confirmed fixed**: 24 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 23 of 48 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 24 of 49 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -520,3 +529,4 @@ Fixing commits verified in codebase:
 | #48 | `6555da6` | Clean the ops dashboard visual hierarchy, restore Forensics entry, and add printable controls |
 | #50 | `fe90af9` | Change ops dashboard hero metrics from today-only to all loaded ledger records |
 | #51 | Current code, deployment restart | Build/start current frontend and backend so `/api/wire-test/send` and `/api/transfers/wire-test/send` are mounted; verified Circle HTTP 201 through UI |
+| #52 | `1ab10cd` | Harden `/api/wire-test/send` backend fallback/error passthrough and show upstream Circle/backend status in the UI |

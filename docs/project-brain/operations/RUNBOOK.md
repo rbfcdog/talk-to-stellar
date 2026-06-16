@@ -192,3 +192,22 @@
 
 **Files**: `backend/src/utils/public-error.ts`, `frontend/lib/public-errors.ts`, `backend/tests/public-error.test.ts`, `frontend/__tests__/unit/public-errors.test.ts`
 **Related**: Pain point #49
+
+## 13. `/wire-test` send shows generic HTTP 500 (FIXED)
+
+**Symptom**: The Circle sandbox wire test page loads, but clicking `Send` shows `Send wire $10 failed with HTTP 500`.
+
+**Status**: Fixed by `1ab10cd`. The frontend route handler now falls back to the deployed Railway backend when a deployed frontend has no usable backend env, preserves upstream backend/Circle statuses, and returns structured diagnostics instead of a generic proxy 500.
+
+**Diagnosis steps**:
+1. Confirm the frontend build includes `frontend/app/api/wire-test/send/route.ts`; `npm --prefix frontend run build` should list `/api/wire-test/send`.
+2. Confirm backend health: `GET https://talk-to-stellar-production-e284.up.railway.app/health` should return 200.
+3. Confirm the backend route is mounted: unauthenticated `POST /api/transfers/wire-test/send` should return 403, not 404.
+4. If the frontend still shows 500 after `1ab10cd`, open the raw response panel and check `backend_url`, `backend_http_status`, and `attempts`.
+5. If the frontend returns 403, the route is working and the ops secret is wrong or missing.
+6. If Circle returns a non-201 status, the route is working and the issue is provider configuration, linked bank status, source wallet balance, or Circle sandbox availability.
+
+**Verification**: On 2026-06-16, built frontend `POST /api/wire-test/send` returned frontend HTTP 200, backend HTTP 200, Circle HTTP 201, payout id present, amount `$1`. A bad ops secret returned structured frontend HTTP 403 with backend HTTP 403.
+
+**Files**: `frontend/app/api/wire-test/send/route.ts`, `frontend/app/wire-test/wire-test-client.tsx`, `backend/src/api/controllers/international-transfers.controller.ts`
+**Related**: Pain point #52
