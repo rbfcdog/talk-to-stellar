@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { internationalTransferService } from '../services/international-transfer.service';
 import { publicErrorMessage } from '../../utils/public-error';
 import { timingSafeEqualString } from '../../utils/password';
@@ -390,6 +391,67 @@ export class InternationalTransfersController {
         next_action: workflow.next_action.code,
       });
       res.status(200).json({ success: true, ...responseContext(context), workflow });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+    }
+  }
+
+  static async sendWireTest(req: Request, res: Response) {
+    const context = readApiRequestContext(req);
+    applyApiRequestContext(res, context);
+    try {
+      if (!requireInternalOpsAuthorization(req, res, context)) return;
+
+      const apiKey = String(process.env.CIRCLE_API_KEY || '').trim();
+      const destinationId = String(process.env.CIRCLE_PAYOUT_DESTINATION_ID || '').trim();
+      const sourceWalletId = String(process.env.CIRCLE_SOURCE_WALLET_ID || '1017459986').trim();
+      const baseUrl = process.env.CIRCLE_API_BASE_URL?.replace(/\/+$/, '') || 'https://api-sandbox.circle.com';
+      const amount = String(req.body?.amount || req.body?.amount_usd || '10').trim();
+
+      if (!apiKey) {
+        res.status(500).json({ success: false, message: 'CIRCLE_API_KEY not configured.' });
+        return;
+      }
+      if (!destinationId) {
+        res.status(500).json({ success: false, message: 'CIRCLE_PAYOUT_DESTINATION_ID not configured.' });
+        return;
+      }
+
+      const idempotencyKey = crypto.randomUUID();
+      const payload = {
+        idempotencyKey,
+        destination: { type: 'wire', id: destinationId },
+        amount: { amount, currency: 'USD' },
+        source: { id: sourceWalletId, type: 'wallet' },
+        metadata: {
+          beneficiaryEmail: 'team.talktostellar@gmail.com',
+          platform: 'TalkToStellar',
+          test: true,
+        },
+      };
+
+      const circleResponse = await fetch(`${baseUrl}/v1/businessAccount/payouts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+      });
+
+      const circleData: any = await circleResponse.json().catch(() => ({}));
+
+      res.status(circleResponse.status === 201 || circleResponse.status === 200 ? 201 : circleResponse.status).json({
+        success: circleResponse.ok,
+        ...responseContext(context),
+        payout: {
+          id: circleData?.data?.id || null,
+          status: circleData?.data?.status || circleData?.code ? `error:${circleData.code}` : 'unknown',
+          amount,
+          currency: 'USD',
+          destinationId: destinationId.slice(-4),
+          sourceWalletId,
+          idempotencyKey,
+          circle: circleData,
+        },
+      });
     } catch (error: any) {
       res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
     }

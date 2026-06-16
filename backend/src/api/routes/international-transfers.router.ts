@@ -12,6 +12,7 @@ router.post('/:id/funding-confirmation', InternationalTransfersController.confir
 router.post('/:id/settle-stellar', InternationalTransfersController.settleStellar);
 router.post('/:id/payout-instruction', InternationalTransfersController.createPayoutInstruction);
 router.post('/:id/payout-status-refresh', InternationalTransfersController.refreshPayoutStatus);
+router.post('/wire-test/send', InternationalTransfersController.sendWireTest);
 router.get('/:id/reconciliation', InternationalTransfersController.getReconciliation);
 router.get('/:id/orchestration-log', InternationalTransfersController.getOrchestrationLog);
 router.get('/:id/reviewer-evidence', InternationalTransfersController.getReviewerEvidence);
