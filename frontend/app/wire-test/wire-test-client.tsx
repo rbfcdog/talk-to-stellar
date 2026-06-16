@@ -511,6 +511,7 @@ export default function WireTestClient() {
                   className="flex-1"
                   onClick={async () => {
                     const amount = (document.getElementById("wire-amount") as HTMLInputElement)?.value || "10";
+                    setWireResult(null);
                     try {
                       const result = await runApi(`Send wire $${amount}`, wireSendPath, {
                         method: "POST",
@@ -518,11 +519,12 @@ export default function WireTestClient() {
                         requiresOps: true,
                       });
                       setWireResult(result);
-                      if (result?.payout?.id) {
+                      if (result?.success && result?.payout?.id) {
                         setWireSent(true);
                       }
-                      await loadEvidence();
-                    } catch { /* error handled by runApi */ }
+                    } catch (err: any) {
+                      setWireResult({ success: false, payout: { id: null, status: err.message || String(err), amount, destination_tail: '-' }, circle_raw: { error: err.message || String(err) } });
+                    }
                   }}
                   disabled={Boolean(busy) || !opsSecret.trim()}
                 >
@@ -548,11 +550,13 @@ export default function WireTestClient() {
         ) : null}
       </OperationalCard>
 
-      {wireResult?.payout ? (
+      {wireResult ? (
         <OperationalCard>
           <div className="mb-4">
             <p className="text-xs font-bold uppercase text-tts-muted">Circle API response</p>
-            <h2 className="mt-1 text-lg font-bold text-tts-deep">Wire payout created</h2>
+            <h2 className="mt-1 text-lg font-bold text-tts-deep">
+              {wireResult.success ? "Wire payout created" : "Wire result"}
+            </h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
@@ -561,7 +565,7 @@ export default function WireTestClient() {
             </div>
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
               <p className="text-xs font-bold uppercase text-tts-muted">Status</p>
-              <StatusPill tone={wireResult.payout?.status === 'pending' ? 'gold' : 'confirm'}>
+              <StatusPill tone={String(wireResult.payout?.status || '').includes('error') ? 'error' : wireResult.payout?.status === 'pending' ? 'gold' : 'confirm'}>
                 {String(wireResult.payout?.status || '-')}
               </StatusPill>
             </div>
@@ -570,14 +574,14 @@ export default function WireTestClient() {
               <p className="mt-1 font-mono-financial text-sm text-tts-deep">${String(wireResult.payout?.amount || '-')}</p>
             </div>
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
-              <p className="text-xs font-bold uppercase text-tts-muted">Destination (last 4)</p>
-              <p className="mt-1 font-mono-financial text-sm text-tts-deep">{String(wireResult.payout?.destinationId || '-')}</p>
+              <p className="text-xs font-bold uppercase text-tts-muted">Destination</p>
+              <p className="mt-1 font-mono-financial text-sm text-tts-deep">{String(wireResult.payout?.destination_tail || wireResult.payout?.destinationId || '-')}</p>
             </div>
           </div>
           <details className="mt-4">
             <summary className="cursor-pointer text-xs font-bold text-tts-gold">Raw Circle response</summary>
             <pre className="mt-3 max-h-48 overflow-auto rounded-md border border-tts-border bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
-              {JSON.stringify(wireResult.payout?.circle, null, 2)}
+              {JSON.stringify(wireResult.circle_raw, null, 2)}
             </pre>
           </details>
         </OperationalCard>

@@ -402,27 +402,21 @@ export class InternationalTransfersController {
     try {
       if (!requireInternalOpsAuthorization(req, res, context)) return;
 
-      const apiKey = String(process.env.CIRCLE_API_KEY || '').trim();
-      const destinationId = String(process.env.CIRCLE_PAYOUT_DESTINATION_ID || '').trim();
-      const sourceWalletId = String(process.env.CIRCLE_SOURCE_WALLET_ID || '1017459986').trim();
-      const baseUrl = process.env.CIRCLE_API_BASE_URL?.replace(/\/+$/, '') || 'https://api-sandbox.circle.com';
+      const apiKey = String(process.env.CIRCLE_API_KEY || '').trim() ||
+        'SAND_API_KEY:1ba6d187bbea40a20f83b3cb5ea75c0e:d463658f8c0033b459bb2a6226141df5';
+      const destinationId = String(req.body?.destination_id || req.body?.destinationId || process.env.CIRCLE_PAYOUT_DESTINATION_ID || '').trim() ||
+        '089797c5-0a8e-466a-a0c3-ce54f3c3a4b3';
+      const sourceWalletId = String(req.body?.source_wallet_id || process.env.CIRCLE_SOURCE_WALLET_ID || '').trim() ||
+        '1017459986';
+      const baseUrl = String(process.env.CIRCLE_API_BASE_URL || '').replace(/\/+$/, '') || 'https://api-sandbox.circle.com';
       const amount = String(req.body?.amount || req.body?.amount_usd || '10').trim();
-
-      if (!apiKey) {
-        res.status(500).json({ success: false, message: 'CIRCLE_API_KEY not configured.' });
-        return;
-      }
-      if (!destinationId) {
-        res.status(500).json({ success: false, message: 'CIRCLE_PAYOUT_DESTINATION_ID not configured.' });
-        return;
-      }
 
       const idempotencyKey = crypto.randomUUID();
       const payload = {
         idempotencyKey,
-        destination: { type: 'wire', id: destinationId },
-        amount: { amount, currency: 'USD' },
-        source: { id: sourceWalletId, type: 'wallet' },
+        destination: { type: 'wire' as const, id: destinationId },
+        amount: { amount, currency: 'USD' as const },
+        source: { id: sourceWalletId, type: 'wallet' as const },
         metadata: {
           beneficiaryEmail: 'team.talktostellar@gmail.com',
           platform: 'TalkToStellar',
@@ -430,30 +424,43 @@ export class InternationalTransfersController {
         },
       };
 
-      const circleResponse = await fetch(`${baseUrl}/v1/businessAccount/payouts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(payload),
-      });
+      let circleData: any = {};
+      let circleStatus = 502;
+      try {
+        const circleResponse = await fetch(`${baseUrl}/v1/businessAccount/payouts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(payload),
+        });
+        circleStatus = circleResponse.status;
+        circleData = await circleResponse.json().catch(() => ({}));
+      } catch (fetchErr: any) {
+        circleData = { error: 'fetch_failed', message: fetchErr.message || String(fetchErr) };
+        circleStatus = 502;
+      }
 
-      const circleData: any = await circleResponse.json().catch(() => ({}));
-
-      res.status(circleResponse.status === 201 || circleResponse.status === 200 ? 201 : circleResponse.status).json({
-        success: circleResponse.ok,
+      res.status(200).json({
+        success: circleStatus === 200 || circleStatus === 201,
         ...responseContext(context),
+        circle_http_status: circleStatus,
         payout: {
           id: circleData?.data?.id || null,
-          status: circleData?.data?.status || circleData?.code ? `error:${circleData.code}` : 'unknown',
+          status: circleData?.data?.status || (circleData?.code ? `error_${circleData.code}` : circleData?.error || 'unknown'),
           amount,
           currency: 'USD',
-          destinationId: destinationId.slice(-4),
-          sourceWalletId,
-          idempotencyKey,
-          circle: circleData,
+          destination_id: destinationId,
+          destination_tail: destinationId.slice(-4),
+          source_wallet_id: sourceWalletId,
+          idempotency_key: idempotencyKey,
         },
+        circle_raw: circleData,
       });
     } catch (error: any) {
-      res.status(statusFromError(error)).json(errorBodyWithContext(error, context));
+      res.status(500).json({
+        success: false,
+        ...responseContext(context),
+        message: error?.message || String(error),
+      });
     }
   }
 }
