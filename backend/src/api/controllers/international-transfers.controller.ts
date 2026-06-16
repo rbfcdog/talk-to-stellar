@@ -76,6 +76,28 @@ function requireInternalOpsAuthorization(req: Request, res: Response, context?: 
   return false;
 }
 
+function readText(value: unknown): string {
+  return String(value || '').trim();
+}
+
+function isStellarTxHash(value: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(value);
+}
+
+function stellarExplorerUrl(hash: string, network: string): string {
+  const explorerNetwork = network === 'mainnet' || network === 'public' ? 'public' : 'testnet';
+  return `https://stellar.expert/explorer/${explorerNetwork}/tx/${encodeURIComponent(hash)}`;
+}
+
+function shortHash(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
+}
+
+function bankLast4(value: unknown): string | null {
+  const raw = readText(value);
+  return /^\d{4}$/.test(raw) ? raw : null;
+}
+
 function requirePayoutProviderAuthorization(
   req: Request,
   res: Response,
@@ -402,24 +424,70 @@ export class InternationalTransfersController {
     try {
       if (!requireInternalOpsAuthorization(req, res, context)) return;
 
-      const apiKey = String(process.env.CIRCLE_API_KEY || '').trim() ||
-        'SAND_API_KEY:1ba6d187bbea40a20f83b3cb5ea75c0e:d463658f8c0033b459bb2a6226141df5';
-      const destinationId = String(req.body?.destination_id || req.body?.destinationId || '').trim() ||
-        '089797c5-0a8e-466a-a0c3-ce54f3c3a4b3';
-      const sourceWalletId = String(req.body?.source_wallet_id || process.env.CIRCLE_SOURCE_WALLET_ID || '').trim() ||
-        '1017459986';
-      const baseUrl = String(process.env.CIRCLE_API_BASE_URL || '').replace(/\/+$/, '') || 'https://api-sandbox.circle.com';
-      const amount = String(req.body?.amount || req.body?.amount_usd || '10').trim();
+      const apiKey = readText(process.env.CIRCLE_API_KEY);
+      const destinationId = readText(
+        req.body?.destination_id ||
+        req.body?.destinationId ||
+        process.env.CIRCLE_PAYOUT_DESTINATION_ID ||
+        process.env.CIRCLE_BANK_ACCOUNT_ID,
+      );
+      const sourceWalletId = readText(req.body?.source_wallet_id || process.env.CIRCLE_SOURCE_WALLET_ID);
+      const baseUrl = readText(process.env.CIRCLE_API_BASE_URL).replace(/\/+$/, '') || 'https://api-sandbox.circle.com';
+      const amount = readText(req.body?.amount || req.body?.amount_usd || '10');
+      const destinationTail = bankLast4(req.body?.destination_tail || req.body?.destinationTail || process.env.CIRCLE_PAYOUT_DESTINATION_LAST4);
+      const stellarTxHash = readText(req.body?.stellar_transaction_hash || req.body?.stellarTxHash);
+      const stellarNetworkRaw = readText(req.body?.stellar_network || req.body?.stellarNetwork || process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
+      const stellarNetwork = stellarNetworkRaw === 'mainnet' || stellarNetworkRaw === 'public' ? 'mainnet' : 'testnet';
+
+      const missing = [
+        ...(!apiKey ? ['CIRCLE_API_KEY'] : []),
+        ...(!destinationId ? ['CIRCLE_PAYOUT_DESTINATION_ID'] : []),
+        ...(!stellarTxHash ? ['stellar_transaction_hash'] : []),
+      ];
+      if (missing.length) {
+        res.status(400).json({
+          success: false,
+          ...responseContext(context),
+          code: 'circle_wire_test_not_configured',
+          message: `Wire payout test is missing required configuration: ${missing.join(', ')}.`,
+          missing,
+        });
+        return;
+      }
+
+      if (!isStellarTxHash(stellarTxHash)) {
+        res.status(400).json({
+          success: false,
+          ...responseContext(context),
+          code: 'invalid_stellar_transaction_hash',
+          message: 'Wire payout test requires a 64-character Stellar transaction hash.',
+        });
+        return;
+      }
+
+      const stellarEvidence = {
+        transaction_hash: stellarTxHash,
+        network: stellarNetwork,
+        explorer: stellarExplorerUrl(stellarTxHash, stellarNetwork),
+      };
 
       const idempotencyKey = crypto.randomUUID();
       const payload = {
         idempotencyKey,
         destination: { type: 'wire' as const, id: destinationId },
         amount: { amount, currency: 'USD' as const },
-        source: { id: sourceWalletId, type: 'wallet' as const },
+        source: sourceWalletId ? { id: sourceWalletId, type: 'wallet' as const } : undefined,
         metadata: {
           beneficiaryEmail: 'team.talktostellar@gmail.com',
           platform: 'TalkToStellar',
+          route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
+          settlement_asset_code: 'USDC',
+          settlement_network: stellarEvidence.network,
+          off_ramp_provider: 'circle',
+          off_ramp_source_asset_code: 'USDC',
+          payout_currency: 'USD',
+          stellar_tx_hash: stellarEvidence.transaction_hash,
+          stellar_explorer_url: stellarEvidence.explorer,
           test: true,
         },
       };
@@ -448,11 +516,12 @@ export class InternationalTransfersController {
           status: circleData?.data?.status || (circleData?.code ? `error_${circleData.code}` : circleData?.error || 'unknown'),
           amount,
           currency: 'USD',
-          destination_id: destinationId,
-          destination_tail: destinationId.slice(-4),
-          source_wallet_id: sourceWalletId,
+          destination_tail: destinationTail,
+          destination_reference_hash: shortHash(destinationId),
+          source_wallet_id: sourceWalletId ? shortHash(sourceWalletId) : null,
           idempotency_key: idempotencyKey,
         },
+        stellar_evidence: stellarEvidence,
         circle_raw: circleData,
       });
     } catch (error: any) {

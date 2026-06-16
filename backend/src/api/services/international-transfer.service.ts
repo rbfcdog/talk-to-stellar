@@ -488,7 +488,7 @@ export class InternationalTransferService {
             accountNumber: transfer.payout_destination?.accountNumber || '****0010',
             accountType: transfer.payout_destination?.accountType || 'checking',
             country: transfer.payout_destination?.country || 'US',
-            providerDestinationId: transfer.payout_destination?.providerDestinationId || '089797c5-0a8e-466a-a0c3-ce54f3c3a4b3',
+            providerDestinationId: transfer.payout_destination?.providerDestinationId,
             swiftBic: transfer.payout_destination?.swiftBic || 'WFBIUS6S',
           }
         : transfer.payout_destination;
