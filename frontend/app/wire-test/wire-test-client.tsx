@@ -120,6 +120,17 @@ type TransferSnapshot = {
   quoted_usd_amount?: string;
 };
 
+type WirePayoutResult = {
+  id?: string | null;
+  status?: string;
+  amount?: string;
+  currency?: string;
+  destination_id?: string;
+  destination_tail?: string;
+  source_wallet_id?: string;
+  idempotency_key?: string;
+};
+
 type ApiResponse = JsonRecord & {
   success?: boolean;
   message?: string;
@@ -127,6 +138,8 @@ type ApiResponse = JsonRecord & {
   providers?: ProviderCapability[];
   payout_evidence?: PayoutEvidence;
   transfer?: TransferSnapshot;
+  payout?: WirePayoutResult;
+  circle_raw?: JsonRecord;
 };
 
 type ApiOptions = {
@@ -575,7 +588,7 @@ export default function WireTestClient() {
             </div>
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
               <p className="text-xs font-bold uppercase text-tts-muted">Destination</p>
-              <p className="mt-1 font-mono-financial text-sm text-tts-deep">{String(wireResult.payout?.destination_tail || wireResult.payout?.destinationId || '-')}</p>
+              <p className="mt-1 font-mono-financial text-sm text-tts-deep">{String(wireResult.payout?.destination_tail || wireResult.payout?.destination_id || '-')}</p>
             </div>
           </div>
           <details className="mt-4">
