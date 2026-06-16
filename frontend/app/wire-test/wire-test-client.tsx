@@ -255,6 +255,7 @@ export default function WireTestClient() {
   const [lastResult, setLastResult] = useState<LastResult | null>(null);
   const [copied, setCopied] = useState("");
   const [wireSent, setWireSent] = useState(false);
+  const [wireResult, setWireResult] = useState<ApiResponse | null>(null);
 
   const circleProvider = useMemo(() => {
     return providers.find((provider) => provider.provider_name === "circle") ||
@@ -516,6 +517,7 @@ export default function WireTestClient() {
                         body: { amount },
                         requiresOps: true,
                       });
+                      setWireResult(result);
                       if (result?.payout?.id) {
                         setWireSent(true);
                       }
@@ -545,6 +547,41 @@ export default function WireTestClient() {
           </div>
         ) : null}
       </OperationalCard>
+
+      {wireResult?.payout ? (
+        <OperationalCard>
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase text-tts-muted">Circle API response</p>
+            <h2 className="mt-1 text-lg font-bold text-tts-deep">Wire payout created</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Payout ID</p>
+              <p className="mt-1 font-mono-financial text-sm text-tts-deep break-all">{String(wireResult.payout?.id || '-')}</p>
+            </div>
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Status</p>
+              <StatusPill tone={wireResult.payout?.status === 'pending' ? 'gold' : 'confirm'}>
+                {String(wireResult.payout?.status || '-')}
+              </StatusPill>
+            </div>
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Amount</p>
+              <p className="mt-1 font-mono-financial text-sm text-tts-deep">${String(wireResult.payout?.amount || '-')}</p>
+            </div>
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Destination (last 4)</p>
+              <p className="mt-1 font-mono-financial text-sm text-tts-deep">{String(wireResult.payout?.destinationId || '-')}</p>
+            </div>
+          </div>
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs font-bold text-tts-gold">Raw Circle response</summary>
+            <pre className="mt-3 max-h-48 overflow-auto rounded-md border border-tts-border bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
+              {JSON.stringify(wireResult.payout?.circle, null, 2)}
+            </pre>
+          </details>
+        </OperationalCard>
+      ) : null}
 
       {wireSent ? (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(18rem,0.95fr)]">
