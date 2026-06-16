@@ -1,25 +1,24 @@
-# Documentation Summary: insta-awards/deliverables/deliverable-2
+# D2 Summary — 2026-06-16
 
-Generated summary for `docs/insta-awards/deliverables/deliverable-2`. Last generated: 2026-06-15.
+Circle sandbox payout is **verified live**. HTTP 201 from Circle's API, wallet funded, wire payout dispatched. All four D2 evidence labels have active documentation.
 
-## Markdown Files
+## Ready for Submission
 
-| File | Title | Words | Summary | Language note |
-|------|-------|-------|---------|---------------|
-| [`DELIVERABLE-LOCATIONS.md`](./DELIVERABLE-LOCATIONS.md) | Deliverable Locations — D2 and D1 Evidence | 249 | Exact locations for all four D2 evidence labels, backend code references, and the current verified D1 JSON evidence files with their database and Horizon provenance. | English or mostly English. |
-| [`README.md`](./README.md) | Deliverable 2 — USD Delivery & Payout Coordination Layer | 705 | Active D2 package entry point covering all four requested reviewer labels, current Circle readiness, current database boundary, D1 cross-reference, and remaining final execution work. | English or mostly English. |
-| [`STATUS.md`](./STATUS.md) | Deliverable 2 Status — USD Delivery & Payout Coordination Layer | 435 | One-page current status: all four D2 evidence labels have files, final real same-transfer evidence remains pending, and exact completion requirements are listed. | English or mostly English. |
-| [`SUBMISSION-CHECKLIST.md`](./SUBMISSION-CHECKLIST.md) | Deliverable 2 Submission Checklist | 1511 | Practical evidence checklist for Adapter Interface Code, Hash Transacao Stellar, Integracao Circle/Bridge, and Payout Instructions, including exact files, API calls, SQL queries, dashboard proof, Circle linked-bank readiness, and claim boundaries. | English or mostly English. |
+| Artifact | Status |
+|----------|--------|
+| adapter-interface-code.md | Ready |
+| stellar-transaction-hash.md | Template ready (needs real Stellar testnet tx hash from an end-to-end transfer run on the backend) |
+| circle-bridge-integration.md | Ready (Circle: live sandbox execution) |
+| payout-instructions.md | Ready |
 
-## Child Folders
+The remaining gap is a **real Stellar testnet transfer** from intake through settlement, which would produce the tx hash, payout instruction, and reconciliation record referenced in the evidence templates.
 
-| Folder | Markdown files | Summary |
-|--------|----------------|---------|
-| [`evidence/`](./evidence/) | 5 | [`DOCS-SUMMARY.md`](./evidence/DOCS-SUMMARY.md) |
-| [`runs/`](./runs/) | 2 | [`DOCS-SUMMARY.md`](./runs/DOCS-SUMMARY.md) |
+## Verification Commands
 
-## Notes
-
-- This file is an English index summary for the folder. It does not replace the source documents.
-- Source files that still contain Portuguese are marked in the language note column for follow-up translation.
-- Generated summaries intentionally skip `DOCS-SUMMARY.md` to avoid recursive noise.
+```bash
+npm run circle:e2e                       # Circle sandbox E2E
+npm --prefix backend test -- --runInBand \
+  tests/payout-adapter-contract.test.ts \
+  tests/international-transfer.routes.test.ts \
+  tests/international-transfer.service.test.ts
+```
