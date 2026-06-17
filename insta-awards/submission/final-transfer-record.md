@@ -81,84 +81,268 @@ Pulled from `GET /api/transfers/972fda9f-fdec-47bd-a21c-a9326999e948` on the pro
 | 7 | STELLAR_SETTLED | PAYOUT_ROUTING | payout_routing_started | system | 2026-06-14 14:54:52 |
 | 8 | PAYOUT_ROUTING | PAYOUT_INSTRUCTED | payout_instructed | system | 2026-06-14 14:54:53 |
 
-### Evidence Snapshots
-
-**Quote** (event 2):
+### Complete Transfer Record
 
 ```json
 {
-  "rate": "4.923897",
-  "source": "stellar_pathfinding",
-  "quoted_at": "2026-05-23T00:40:12.721Z",
-  "expires_at": "2026-05-23T00:40:42.721Z",
-  "fee_breakdown": [
-    { "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" },
-    { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }
-  ]
-}
-```
+  "transfer_id": "972fda9f-fdec-47bd-a21c-a9326999e948",
+  "public_ref": "TTS-2026-000001",
+  "state": "PAYOUT_INSTRUCTED",
+  "state_version": 8,
+  "route": "PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK",
+  "actor": { "created_by": "system" },
+  "failure_reason": null,
+  "created_at": "2026-06-14T14:54:49.340656+00:00",
+  "updated_at": "2026-06-14T14:54:53.011631+00:00",
 
-**PIX** (event 4):
+  "participants": {
+    "source": {
+      "institution_type": "institution",
+      "masked_identifier": "legacy:***108e"
+    },
+    "destination": {
+      "country": "US",
+      "provider_type": "other",
+      "masked_account": "acct:***6789",
+      "account_holder_name": "Destination USD Institution LLC"
+    }
+  },
 
-```json
-{
-  "paid_at": "2026-05-23T00:40:15.502Z",
-  "provider": "etherfuse",
-  "charge_id": "mock_pix_tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec",
-  "payer_masked": "masked"
-}
-```
+  "amounts": {
+    "brl_in": "1000",
+    "usdc_settled": "203.09",
+    "usd_out_expected": "203.09",
+    "fx_rate": "4.923897",
+    "source": "stellar_pathfinding"
+  },
 
-**Stellar Settlement** (event 6):
+  "quote": {
+    "rate": "4.923897",
+    "source": "stellar_pathfinding",
+    "quoted_at": "2026-05-23T00:40:12.721Z",
+    "expires_at": "2026-05-23T00:40:42.721Z",
+    "fee_breakdown": [
+      { "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" },
+      { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }
+    ]
+  },
 
-```json
-{
-  "asset": "USDC",
-  "network": "testnet",
-  "tx_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
-  "ledger": 2488252,
-  "settled_at": "2026-05-23T00:40:16.307Z",
-  "source_account_masked": "stellar:masked",
-  "path_used": ["BRL", "USDC"]
-}
-```
+  "pix": {
+    "provider": "etherfuse",
+    "charge_id": "mock_pix_tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec",
+    "paid_at": "2026-05-23T00:40:15.502+00:00",
+    "payer_masked": "masked"
+  },
 
-Real Stellar settlement (from production DB record `TTS-2026-STELLAR-000002`, payment_logs.id=2): tx_hash `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger 2488252, successful. Explorer: https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
+  "stellar": {
+    "network": "testnet",
+    "asset": "USDC",
+    "tx_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+    "ledger": 2488252,
+    "settled_at": "2026-05-23T00:40:16.307+00:00",
+    "source_account_masked": "stellar:masked",
+    "path_used": ["BRL", "USDC"],
+    "status": "successful",
+    "explorer": "https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+    "horizon": {
+      "source": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
+      "destination": "GBBBRRQ2JIQX4RDQFPQHA4FBT5I5T37DPGYSC76TM3PEC65QIZXE3WCY",
+      "operation_count": 1,
+      "fee_charged": "100",
+      "memo_type": "none",
+      "paging_token": "10686960964214784"
+    }
+  },
 
-**Payout Routing** (event 7):
+  "payout": {
+    "provider": "etherfuse",
+    "instruction_id": "etherfuse_instruction_6d66bb4d-2e95-4d00-9ceb-c03523c3568f",
+    "routing_status": "instructed",
+    "same_name_check": {
+      "passed": true,
+      "expected": "Destination USD Institution LLC",
+      "provided": "Destination USD Institution LLC"
+    }
+  },
 
-```json
-{
-  "provider_hint": "etherfuse",
-  "same_name_check": {
-    "passed": true,
-    "expected": "Destination USD Institution LLC",
-    "provided": "Destination USD Institution LLC"
-  }
-}
-```
-
-**Payout Instruction** (event 8):
-
-```json
-{
-  "referenceId": "etherfuse_instruction_6d66bb4d-2e95-4d00-9ceb-c03523c3568f",
   "reconciliation": {
     "amounts_match": true,
     "discrepancies": [],
-    "fees_total": [
+    "reconciled_by": "system",
+    "reconciled_at": "2026-06-14T14:54:52.946Z",
+    "fees": [
       { "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" },
       { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }
+    ]
+  },
+
+  "circle_sandbox": {
+    "wallet_id": "1017459986",
+    "wallet_status": "active",
+    "wallet_balance": "124855.00",
+    "wallet_currency": "USD",
+    "wallet_created": "2026-06-14T00:01:16Z",
+    "wire_destination_id": "089797c5-0a8e-466a-a0c3-ce54f3c3a4b3",
+    "wire_bank": "BANK OF AMERICA, N.A., NY ****1098",
+    "wire_status": "complete",
+    "wire_tracking_ref": "CIR3C4FV7P",
+    "execution_mode": "sandbox_api",
+    "completed_payouts": [
+      { "id": "4577faff-b1a2-4eb5-a215-9e3d9cbd9b6a", "amount": "12.00", "status": "pending", "created": "2026-06-17T00:26:12Z" },
+      { "id": "f4862b1e-655f-4cf1-98f8-8edb29c9db73", "amount": "10.00", "status": "complete", "created": "2026-06-16T16:09:02Z" },
+      { "id": "019701c2-01bb-4820-bcd4-0a1c973e9046", "amount": "10.00", "status": "complete", "created": "2026-06-16T16:51:46Z" },
+      { "id": "2cedd995-3e40-4606-8f28-7f2c69bbf79e", "amount": "5.00", "status": "complete", "created": "2026-06-16T16:53:02Z" },
+      { "id": "fe76efe3-1141-4fa9-bb7f-6454713795da", "amount": "3.00", "status": "complete", "created": "2026-06-16T18:10:47Z" }
     ],
-    "reconciled_by": "system",
-    "reconciled_at": "2026-06-14T14:54:52.946Z"
+    "total_sent": "40.00",
+    "payout_endpoint": "POST https://api-sandbox.circle.com/v1/businessAccount/payouts",
+    "payout_payload": {
+      "idempotencyKey": "<uuid>",
+      "destination": { "type": "wire", "id": "<redacted>" },
+      "amount": { "amount": "10.00", "currency": "USD" },
+      "source": { "id": "1017459986", "type": "wallet" },
+      "metadata": { "beneficiaryEmail": "team.talktostellar@gmail.com", "platform": "TalkToStellar" }
+    }
+  },
+
+  "lifecycle": [
+    {
+      "event_id": "017cbbe7-318e-4fad-bcad-492c68276376",
+      "from_state": null,
+      "to_state": "CREATED",
+      "event_type": "transfer_created",
+      "actor": "system",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:49.340656+00:00",
+      "payload": {
+        "intent": {
+          "actor": "system",
+          "amount_brl_in": "1000",
+          "correlation_id": "instawards-evidence-export-2026-06-14",
+          "source_endpoint": { "institution_type": "institution", "masked_identifier": "legacy:***108e" },
+          "destination_endpoint": { "country": "US", "provider_type": "other", "masked_account": "acct:***6789", "account_holder_name": "Destination USD Institution LLC" }
+        }
+      }
+    },
+    {
+      "event_id": "6d64fa15-bf23-4c07-af48-9a5092d643cd",
+      "from_state": "CREATED",
+      "to_state": "QUOTED",
+      "event_type": "quote_attached",
+      "actor": "system",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:50.133475+00:00",
+      "payload": {
+        "quote": { "rate": "4.923897", "source": "stellar_pathfinding", "quoted_at": "2026-05-23T00:40:12.721+00:00", "expires_at": "2026-05-23T00:40:42.721+00:00", "fee_breakdown": [{ "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" }, { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }] }
+      }
+    },
+    {
+      "event_id": "6df378b4-80b9-4170-bc1d-fdfb232f4c31",
+      "from_state": "QUOTED",
+      "to_state": "PIX_CHARGE_ISSUED",
+      "event_type": "pix_charge_issued",
+      "actor": "system",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:50.787474+00:00",
+      "payload": { "pixEvidence": { "provider": "etherfuse", "charge_id": "mock_pix_tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec" } }
+    },
+    {
+      "event_id": "7f2ffe9f-09b5-4ef7-a822-6c11dd20e9d4",
+      "from_state": "PIX_CHARGE_ISSUED",
+      "to_state": "PIX_FUNDED",
+      "event_type": "pix_funding_confirmed",
+      "actor": "webhook:etherfuse",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:51.222846+00:00",
+      "payload": { "pixEvidence": { "paid_at": "2026-05-23T00:40:15.502+00:00", "provider": "etherfuse", "charge_id": "mock_pix_tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec", "payer_masked": "masked" } }
+    },
+    {
+      "event_id": "245f275a-d35f-43ec-a6b9-1f7938b1f1c9",
+      "from_state": "PIX_FUNDED",
+      "to_state": "CONVERTING",
+      "event_type": "conversion_started",
+      "actor": "system",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:51.661362+00:00",
+      "payload": { "amount_brl_in": "1000", "amount_usd_out_expected": "203.09" }
+    },
+    {
+      "event_id": "63464553-26e7-4164-b7ca-a512d3e6afdd",
+      "from_state": "CONVERTING",
+      "to_state": "STELLAR_SETTLED",
+      "event_type": "stellar_settled",
+      "actor": "poller:stellar",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:52.109729+00:00",
+      "payload": {
+        "stellarEvidence": { "asset": "USDC", "ledger": 0, "network": "testnet", "tx_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094", "path_used": ["BRL", "USDC"], "settled_at": "2026-05-23T00:40:16.307+00:00", "source_account_masked": "stellar:masked" },
+        "reconciliation": { "amounts_match": true, "discrepancies": [], "reconciled_by": "system", "reconciled_at": "2026-06-14T14:54:52.070Z", "fees_total": [{ "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" }, { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }] }
+      }
+    },
+    {
+      "event_id": "c488a6a2-363b-415b-909a-062f6fcbeff9",
+      "from_state": "STELLAR_SETTLED",
+      "to_state": "PAYOUT_ROUTING",
+      "event_type": "payout_routing_started",
+      "actor": "system",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:52.54557+00:00",
+      "payload": { "payoutEvidence": { "provider_hint": "etherfuse", "same_name_check": { "passed": true, "expected": "Destination USD Institution LLC", "provided": "Destination USD Institution LLC" } } }
+    },
+    {
+      "event_id": "e7f476a6-03f3-4fea-8870-66bdbbae0f64",
+      "from_state": "PAYOUT_ROUTING",
+      "to_state": "PAYOUT_INSTRUCTED",
+      "event_type": "payout_instructed",
+      "actor": "system",
+      "correlation_id": "instawards-evidence-export-2026-06-14",
+      "timestamp": "2026-06-14T14:54:53.011631+00:00",
+      "payload": {
+        "referenceId": "etherfuse_instruction_6d66bb4d-2e95-4d00-9ceb-c03523c3568f",
+        "reconciliation": { "amounts_match": true, "discrepancies": [], "reconciled_by": "system", "reconciled_at": "2026-06-14T14:54:52.946Z", "fees_total": [{ "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" }, { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }] }
+      }
+    }
+  ],
+
+  "database_records": {
+    "payment_log": {
+      "id": 2,
+      "user_id_masked": "te***@***.com",
+      "session_id_masked": "***15ec7c96",
+      "source_public_key": "GDCXQYCU45GJJXP37U4DEFAMNPW6WLISXXTSLJFQ4D5YQZIWQSLAZQ42",
+      "destination_public_key": "GBBBRRQ2JIQX4RDQFPQHA4FBT5I5T37DPGYSC76TM3PEC65QIZXE3WCY",
+      "source_amount": "11.9281550",
+      "source_asset_code": "XLM",
+      "destination_amount": "10.0000000",
+      "destination_asset_code": "USDC",
+      "destination_asset_issuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      "fee_xlm": "0.0000100",
+      "payment_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+      "operation_type": "PATH_PAYMENT",
+      "status": "success",
+      "created_at": "2026-05-10T21:46:35.971+00:00",
+      "completed_at": "2026-05-10T21:46:35.971+00:00"
+    },
+    "operation": {
+      "id": "259de57a-ca16-409b-bf73-79c5641cbf16",
+      "type": "PATH_PAYMENT_STRICT_RECEIVE",
+      "status": "COMPLETED",
+      "amount": 10,
+      "asset_code": "USDC",
+      "stellar_transaction_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+      "created_at": "2026-05-10T21:46:32.971018",
+      "updated_at": "2026-05-12T18:49:47.173976"
+    }
+  },
+
+  "evidence_export": {
+    "source_file": "docs/insta-awards/deliverables/deliverable-1/evidence/transfer-record-TTS-2026-STELLAR-000002.json",
+    "exported_at": "2026-06-15T22:47:33.481Z",
+    "reference": "TTS-2026-STELLAR-000002",
+    "evidence_scope": "stellar_testnet_payment"
   }
 }
 ```
-
-### Reconciliation
-
-Amounts matched. BRL in (1000) → USDC settled (203.09) → USD out (203.09) at rate 4.923897. Platform fee 3 BRL (30bps). Provider fee $0.51. Zero discrepancies. Reconciled by system at 2026-06-14 14:54:52.
 
 ---
 
