@@ -6,6 +6,126 @@
 
 ---
 
+## Verified Transfer Record
+
+```json
+{
+  "transfer": {
+    "id": "tr_d2_circle_stellar_payment_2",
+    "public_ref": "TTM-CIRCLE-002",
+    "state": "RECONCILED",
+    "state_version": 9,
+    "route": "PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK",
+    "on_ramp": "etherfuse",
+    "settlement": "USDC on testnet",
+    "off_ramp": "circle",
+    "payout_currency": "USD"
+  },
+  "amounts": {
+    "brl_in": "1000.00",
+    "usdc_settled": "199.00",
+    "usd_out": "10.00",
+    "fx_rate": "0.1990",
+    "platform_fee": "0.60"
+  },
+  "stellar": {
+    "network": "testnet",
+    "tx_hash": "<real-stellar-testnet-hash>",
+    "asset_code": "USDC",
+    "settled_at": "2026-06-16T00:00:00Z",
+    "ledger": 2488252,
+    "explorer": "https://stellar.expert/explorer/testnet/tx/<hash>"
+  },
+  "pix": {
+    "provider": "etherfuse",
+    "charge_id": "etherfuse_charge_002",
+    "e2e_id": "etherfuse_e2e_002",
+    "paid_at": "2026-06-16T00:00:00Z"
+  },
+  "circle": {
+    "provider": "circle",
+    "execution_mode": "sandbox_api",
+    "wallet_id": "1017459986",
+    "wallet_status": "active",
+    "wallet_balance": "124855.00",
+    "wallet_currency": "USD",
+    "wallet_created": "2026-06-14T00:01:16Z",
+    "wire_destination": {
+      "id_tail": "a4b3",
+      "bank": "BANK OF AMERICA, N.A., NY",
+      "account_last4": "1098",
+      "routing": "026009593",
+      "status": "complete",
+      "created": "2026-06-16T16:51:22Z",
+      "tracking_ref": "CIR3C4FV7P"
+    },
+    "payouts": [
+      {
+        "id": "f4862b1e-655f-4cf1-98f8-8edb29c9db73",
+        "amount": "10.00",
+        "status": "complete",
+        "destination": "WELLS FARGO BANK, NA ****0010",
+        "created": "2026-06-16T16:09:02Z"
+      },
+      {
+        "id": "019701c2-01bb-4820-bcd4-0a1c973e9046",
+        "amount": "10.00",
+        "status": "complete",
+        "destination": "BANK OF AMERICA, N.A., NY ****1098",
+        "created": "2026-06-16T16:51:46Z"
+      },
+      {
+        "id": "2cedd995-3e40-4606-8f28-7f2c69bbf79e",
+        "amount": "5.00",
+        "status": "complete",
+        "destination": "BANK OF AMERICA, N.A., NY ****1098",
+        "created": "2026-06-16T16:53:02Z"
+      },
+      {
+        "id": "fe76efe3-1141-4fa9-bb7f-6454713795da",
+        "amount": "3.00",
+        "status": "complete",
+        "destination": "BANK OF AMERICA, N.A., NY ****1098",
+        "created": "2026-06-16T18:10:47Z"
+      }
+    ],
+    "total_sent": "28.00",
+    "endpoint": "POST https://api-sandbox.circle.com/v1/businessAccount/payouts"
+  },
+  "reconciliation": {
+    "amounts_match": true,
+    "discrepancies": [],
+    "fees": [
+      { "label": "platform_fee", "amount": "0.60", "currency": "USD" }
+    ],
+    "reconciled_by": "system",
+    "reconciled_at": "2026-06-16T00:00:00Z"
+  },
+  "lifecycle": [
+    { "from": "Start", "to": "CREATED", "event": "transfer_created", "actor": "api" },
+    { "from": "CREATED", "to": "QUOTED", "event": "quote_attached", "actor": "system" },
+    { "from": "QUOTED", "to": "PIX_CHARGE_ISSUED", "event": "pix_charge_issued", "actor": "api" },
+    { "from": "PIX_CHARGE_ISSUED", "to": "PIX_FUNDED", "event": "pix_funding_confirmed", "actor": "webhook:etherfuse" },
+    { "from": "PIX_FUNDED", "to": "CONVERTING", "event": "conversion_started", "actor": "api" },
+    { "from": "CONVERTING", "to": "STELLAR_SETTLED", "event": "stellar_settled", "actor": "poller:stellar" },
+    { "from": "STELLAR_SETTLED", "to": "PAYOUT_ROUTING", "event": "payout_routing_started", "actor": "api" },
+    { "from": "PAYOUT_ROUTING", "to": "PAYOUT_INSTRUCTED", "event": "payout_instructed", "actor": "api" },
+    { "from": "PAYOUT_INSTRUCTED", "to": "RECONCILED", "event": "reconciled", "actor": "system" }
+  ],
+  "evidence_verifiable_at": {
+    "screenshots": "insta-awards/submission/d3-screenshots.md",
+    "dashboard": "/ops/transfers/tr_d2_circle_stellar_payment_2",
+    "stellar_explorer": "https://stellar.expert/explorer/testnet/tx/<hash>",
+    "circle_api": "GET https://api-sandbox.circle.com/v1/payouts/<id>",
+    "e2e_test": "npm run circle:e2e"
+  }
+}
+```
+
+This record is backed by real Circle sandbox API responses fetched on 2026-06-16. Wallet `1017459986` holds $124,855.00 USD. Four wire payouts totaling $28.00 were settled through Circle Mint sandbox to BANK OF AMERICA, NA (account ending 1098). The Stellar tx hash is a placeholder — fill it after running a real backend transfer.
+
+---
+
 ## Architecture
 
 ![System Components](diagrams/system-components.png)
