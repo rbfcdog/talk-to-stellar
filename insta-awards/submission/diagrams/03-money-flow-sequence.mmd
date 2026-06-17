@@ -1,0 +1,53 @@
+sequenceDiagram
+    actor User
+    participant Agent
+    participant Orchestrator
+    participant Etherfuse
+    participant Stellar
+    participant Circle
+
+    User->>Agent: "Send R$1000 to US bank account"
+    Agent->>Orchestrator: createTransfer(amount=1000, dest=US)
+    Orchestrator->>Orchestrator: create_transfer_with_event() RPC
+    Note over Orchestrator: CREATED
+
+    Agent->>Agent: Get BRL/USDC quote from DEX
+    Agent->>Orchestrator: attachQuote(rate=4.92)
+    Orchestrator->>Orchestrator: transition_transfer()
+    Note over Orchestrator: QUOTED — \$203.09 expected
+
+    Agent->>Etherfuse: Create PIX charge
+    Etherfuse-->>Agent: BrCode + charge_id
+    Agent->>Orchestrator: issuePixCharge(chargeId)
+    Note over Orchestrator: PIX_CHARGE_ISSUED
+
+    User->>Etherfuse: Pay PIX (sandbox)
+    Etherfuse->>Agent: Webhook (e2e_id, paid_at)
+    Agent->>Orchestrator: confirmPixFunding(evidence)
+    Note over Orchestrator: PIX_FUNDED
+
+    Agent->>Orchestrator: beginConversion()
+    Note over Orchestrator: CONVERTING — R$1000 → 203.09 USDC
+
+    Agent->>Stellar: Submit PATH_PAYMENT XLM→USDC
+    Stellar-->>Agent: tx_hash: e0309ddf...
+    loop Poll every 10s
+        StellarSettlementWatcher->>Stellar: GET /transactions/:hash
+        Stellar-->>StellarSettlementWatcher: successful, ledger 2488252
+    end
+    Orchestrator->>Orchestrator: confirmStellarSettlement()
+    Note over Orchestrator: STELLAR_SETTLED
+
+    Agent->>Orchestrator: routePayout(provider=circle)
+    Note over Orchestrator: PAYOUT_ROUTING — same_name_check passed
+
+    Orchestrator->>Circle: POST /v1/businessAccount/payouts
+    Circle-->>Orchestrator: HTTP 201, payout_id, status pending
+    Note over Orchestrator: PAYOUT_INSTRUCTED
+
+    Note over Circle: ~10 min sandbox settlement
+    Circle-->>Orchestrator: status: complete
+
+    Orchestrator->>Orchestrator: computeReconciliation()
+    Note over Orchestrator: BRL in = USDC settled = USD out
+    Note over Orchestrator: RECONCILED

@@ -1,0 +1,52 @@
+graph LR
+    subgraph Frontend["Next.js Frontend"]
+        WIRE_TEST["/wire-test — Operator Console"]
+        OPS_DASH["/ops — Ops Dashboard"]
+        AGENT_UI["Chat UI"]
+    end
+
+    subgraph Proxy["Next.js Rewrites"]
+        API_PROXY["/api/:path* → Backend"]
+        OPS_PROXY["/ops → Backend"]
+    end
+
+    subgraph Backend["Express.js Backend :3001"]
+        subgraph Routes["API Routes"]
+            INT_XFERS["/api/transfers"]
+            OPS_ROUTES["/api/ops"]
+            AGENT_ROUTE["/api/agent"]
+            QUOTE_ROUTES["/api/quotes"]
+            RAMP_ROUTES["/api/ramp"]
+            AUTH_ROUTES["/api/auth"]
+            WH_ROUTES["/api/webhooks"]
+            EXT_ROUTES["/api/external"]
+        end
+        subgraph Controllers["Controllers"]
+            IT_CTRL["InternationalTransfersController"]
+            OPS_CTRL["OpsController"]
+            AGENT_CTRL["AgentController"]
+            QUOTE_CTRL["QuotesController"]
+        end
+    end
+
+    WIRE_TEST --> API_PROXY
+    OPS_DASH --> OPS_PROXY
+    AGENT_UI --> API_PROXY
+
+    API_PROXY --> INT_XFERS
+    API_PROXY --> AGENT_ROUTE
+    API_PROXY --> QUOTE_ROUTES
+
+    INT_XFERS --> IT_CTRL
+    OPS_ROUTES --> OPS_CTRL
+
+    INT_XFERS -->|GET| PROVIDERS["/payout-providers"]
+    INT_XFERS -->|POST| CREATE["/ — create transfer"]
+    INT_XFERS -->|POST| SETTLE["/:id/settle-stellar"]
+    INT_XFERS -->|POST| PAYOUT["/:id/payout-instruction"]
+    INT_XFERS -->|POST| REFRESH["/:id/payout-status-refresh"]
+    INT_XFERS -->|POST| WIRE_TEST["/wire-test/send — direct Circle"]
+    INT_XFERS -->|GET| EVIDENCE["/:id/payout-evidence"]
+    INT_XFERS -->|GET| RECONCIL["/:id/reconciliation"]
+    INT_XFERS -->|GET| TRANSFER["/:id — get transfer"]
+    INT_XFERS -->|POST| WH_EVENTS["/payout-events/:provider"]

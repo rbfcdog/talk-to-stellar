@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant Backend as Backend (Express)
+    participant Adapter as CircleCompatibilityAdapter
+    participant Circle as Circle Mint Sandbox
+    participant Wallet as Wallet 1017459986
+    participant Bank as BANK OF AMERICA
+
+    Note over Backend,Bank: Setup Phase
+    Backend->>Circle: POST /v1/businessAccount/banks/wires
+    Circle-->>Backend: Wire destination created (089797c5...)
+    Note over Backend: Destination linked, status: complete
+
+    Note over Backend,Bank: Funding Phase
+    Backend->>Circle: POST /v1/mocks/payments/wire
+    Circle-->>Backend: Mock wire created (pending)
+    Note over Circle: ~10 min sandbox settlement
+    Circle->>Wallet: Balance credited ($124,855 USD)
+
+    Note over Backend,Bank: Payout Phase
+    Backend->>Adapter: createPayoutInstruction(amount=$10)
+    Adapter->>Adapter: Build payload — idempotencyKey, destination, amount, source, metadata
+    Adapter->>Circle: POST /v1/businessAccount/payouts
+    Circle-->>Adapter: HTTP 201, payout ID, status: pending
+    Adapter-->>Backend: Payout instruction created
+
+    Note over Circle: Sandbox processing
+    Circle->>Wallet: Deduct $10 from balance
+    Circle->>Bank: Initiate wire transfer
+    Circle-->>Bank: Wire completed (status: complete)
+
+    Backend->>Circle: GET /v1/payouts/:id
+    Circle-->>Backend: status: complete
+    Backend->>Wallet: Balance: $124,845 USD
+
+    Note over Backend,Bank: Verification
+    Backend->>Circle: GET /v1/businessAccount/balances
+    Circle-->>Backend: $124,845.00 USD
+    Note over Backend: Payout verified

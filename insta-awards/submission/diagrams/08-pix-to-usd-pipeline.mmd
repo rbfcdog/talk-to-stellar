@@ -1,0 +1,57 @@
+graph LR
+    subgraph Intake["Intake"]
+        PIX_IN["PIX Payment<br/>Etherfuse Sandbox"]
+        BRL["R$1000 BRL"]
+    end
+
+    subgraph Conversion["Conversion"]
+        QUOTE["Quote Engine<br/>BRL/USDC DEX Rate"]
+        FEE["Fee Engine<br/>30bps Platform Spread"]
+        PATH["Pathfinding<br/>Stellar DEX Paths"]
+    end
+
+    subgraph Settlement["Stellar Settlement"]
+        XDR["XDR Transaction<br/>PATH_PAYMENT"]
+        HORIZON["Horizon Testnet<br/>Confirmation"]
+        TX["Tx Hash<br/>e0309ddf..."]
+        LEDGER["Ledger #2488252"]
+    end
+
+    subgraph Payout["USD Payout"]
+        CIRCLE_ADAPTER["Circle Adapter<br/>sandbox_api"]
+        CIRCLE_API["Circle Mint API<br/>POST /payouts"]
+        WIRE["Wire Transfer<br/>BANK OF AMERICA"]
+    end
+
+    subgraph Evidence["Evidence & Audit"]
+        EVENT_LOG["transfer_events<br/>Append-only Log"]
+        RECONCILE["Reconciliation<br/>Decimal-Safe Arithmetic"]
+        OPS_DASH["/ops Dashboard<br/>Forensics View"]
+        EXPLORER["stellar.expert<br/>Public Verification"]
+    end
+
+    PIX_IN --> BRL
+    BRL --> QUOTE
+    BRL --> FEE
+    QUOTE --> PATH
+    FEE --> PATH
+    PATH --> XDR
+    XDR --> HORIZON
+    HORIZON --> TX
+    HORIZON --> LEDGER
+    TX --> CIRCLE_ADAPTER
+    LEDGER --> RECONCILE
+    CIRCLE_ADAPTER --> CIRCLE_API
+    CIRCLE_API --> WIRE
+    TX --> EXPLORER
+    CIRCLE_API --> EVENT_LOG
+    PIX_IN --> EVENT_LOG
+    QUOTE --> EVENT_LOG
+    WIRE --> RECONCILE
+    EVENT_LOG --> OPS_DASH
+    RECONCILE --> OPS_DASH
+
+    style BRL fill:#f9f,stroke:#333
+    style TX fill:#9f9,stroke:#333
+    style WIRE fill:#9cf,stroke:#333
+    style RECONCILE fill:#ff9,stroke:#333
