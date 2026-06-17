@@ -1,6 +1,6 @@
 # Final Transfer Record — Instawards D3
 
-**Repo**: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `7ac80f6`
+**Repo**: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `202b5bd`
 **Date**: 2026-06-17 · **Source**: Live production database + Circle sandbox API
 
 ---
@@ -19,6 +19,24 @@ Four entry surfaces (WhatsApp, Telegram, Web, /ops dashboard) feed into the Expr
 
 9 primary stages on the happy path. Every transition runs through a PostgreSQL RPC that locks the row, checks state_version, updates state + JSONB evidence, and inserts an immutable event — all in one transaction. Triggers prevent updates or deletes on `transfer_events`.
 
+```typescript
+const ALLOWED_TRANSITIONS: Record<TransferState, TransferState[]> = {
+  CREATED:              ['QUOTED', 'QUOTE_EXPIRED', 'FAILED'],
+  QUOTED:               ['PIX_CHARGE_ISSUED', 'QUOTE_EXPIRED', 'FAILED'],
+  PIX_CHARGE_ISSUED:    ['PIX_FUNDED', 'PIX_EXPIRED', 'FAILED'],
+  PIX_FUNDED:           ['CONVERTING', 'FAILED'],
+  CONVERTING:           ['STELLAR_SETTLED', 'FAILED'],
+  STELLAR_SETTLED:      ['PAYOUT_ROUTING', 'FAILED'],
+  PAYOUT_ROUTING:       ['PAYOUT_INSTRUCTED', 'FAILED'],
+  PAYOUT_INSTRUCTED:    ['RECONCILED', 'REFUND_REQUIRED', 'FAILED'],
+  RECONCILED:           [],
+  QUOTE_EXPIRED:        ['FAILED'],
+  PIX_EXPIRED:          ['FAILED'],
+  FAILED:               ['REFUND_REQUIRED'],
+  REFUND_REQUIRED:      [],
+};
+```
+
 ---
 
 ## Money Flow
@@ -31,13 +49,12 @@ BRL enters via PIX → converted to USDC on Stellar → settled with a verifiabl
 
 ## Real Transfer — TTS-2026-000001
 
-Pulled directly from `GET /api/transfers/972fda9f-fdec-47bd-a21c-a9326999e948` on the production backend at 2026-06-17 00:24 UTC.
+Pulled from `GET /api/transfers/972fda9f-fdec-47bd-a21c-a9326999e948` on the production backend at 2026-06-17 00:24 UTC.
 
 ### Summary
 
-| | |
-|---|---|
 | Transfer ID | `972fda9f-fdec-47bd-a21c-a9326999e948` |
+|-------------|----------------------------------------|
 | Public ref | `TTS-2026-000001` |
 | State | `PAYOUT_INSTRUCTED` |
 | State version | 8 |
@@ -49,16 +66,9 @@ Pulled directly from `GET /api/transfers/972fda9f-fdec-47bd-a21c-a9326999e948` o
 | Provider fee | $0.51 |
 | Route | PIX_BRL → STELLAR_USDC → USD_BANK |
 | Source | institution (masked: legacy:***108e) |
-| Destination | USD Institution LLC (US, acct:***6789) |
+| Destination | Destination USD Institution LLC (US, acct:***6789) |
 
 ### Lifecycle — 8 Events
-
-```
-CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→ PIX_CHARGE_ISSUED
-──(pix_charge_issued)──→ PIX_FUNDED ──(pix_funding_confirmed)──→ CONVERTING
-──(conversion_started)──→ STELLAR_SETTLED ──(stellar_settled)──→ PAYOUT_ROUTING
-──(payout_routing_started)──→ PAYOUT_INSTRUCTED ──(payout_instructed)
-```
 
 | # | From | To | Event | Actor | Timestamp |
 |---|------|----|-------|-------|-----------|
@@ -74,6 +84,7 @@ CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→
 ### Evidence Snapshots
 
 **Quote** (event 2):
+
 ```json
 {
   "rate": "4.923897",
@@ -88,6 +99,7 @@ CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→
 ```
 
 **PIX** (event 4):
+
 ```json
 {
   "paid_at": "2026-05-23T00:40:15.502Z",
@@ -98,6 +110,7 @@ CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→
 ```
 
 **Stellar Settlement** (event 6):
+
 ```json
 {
   "asset": "USDC",
@@ -110,15 +123,10 @@ CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→
 }
 ```
 
-Real Stellar settlement (from production DB record `TTS-2026-STELLAR-000002`, payment_logs.id=2):
-```
-tx_hash: e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
-ledger: 2488252
-status: successful
-explorer: https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
-```
+Real Stellar settlement (from production DB record `TTS-2026-STELLAR-000002`, payment_logs.id=2): tx_hash `e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094`, ledger 2488252, successful. Explorer: https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
 
 **Payout Routing** (event 7):
+
 ```json
 {
   "provider_hint": "etherfuse",
@@ -131,6 +139,7 @@ explorer: https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13
 ```
 
 **Payout Instruction** (event 8):
+
 ```json
 {
   "referenceId": "etherfuse_instruction_6d66bb4d-2e95-4d00-9ceb-c03523c3568f",
@@ -155,30 +164,29 @@ Amounts matched. BRL in (1000) → USDC settled (203.09) → USD out (203.09) at
 
 ## Circle Sandbox — Real Data
 
-Fetched from Circle's API on 2026-06-17. This is the same sandbox account the adapter connects to.
+Fetched from Circle's API on 2026-06-17. Same sandbox account the adapter connects to.
 
-| | |
-|---|---|
 | Wallet | `1017459986` — active since 2026-06-14 |
+|--------|----------------------------------------|
 | Balance | $124,855.00 USD |
 | Wire destination | `089797c5-0a8e-466a-a0c3-ce54f3c3a4b3` |
 | Bank | BANK OF AMERICA, N.A., NY ****1098 |
 | Status | complete |
-| Tracking ref | CIR3C4FV7P |
 
-**Completed payouts:**
+### Completed payouts
 
 | ID | Amount | Destination | Created |
 |----|--------|-------------|---------|
-| `4577faff-...9b6a` | $12.00 | BANK OF AMERICA ****1098 | 2026-06-17 00:26 (fresh — this submission) |
+| `4577faff-...9b6a` | $12.00 | BANK OF AMERICA ****1098 | 2026-06-17 00:26 |
 | `f4862b1e-...db73` | $10.00 | WELLS FARGO, NA ****0010 | 2026-06-16 16:09 |
 | `019701c2-...9046` | $10.00 | BANK OF AMERICA ****1098 | 2026-06-16 16:51 |
 | `2cedd995-...f79e` | $5.00 | BANK OF AMERICA ****1098 | 2026-06-16 16:53 |
 | `fe76efe3-...5da` | $3.00 | BANK OF AMERICA ****1098 | 2026-06-16 18:10 |
 
-**Total sent via Circle**: $40.00 across 5 payouts. All verified by the Circle API.
+**Total**: $40.00 across 5 payouts. All verified by Circle API.
 
-**Payout payload sent to Circle:**
+### Payout payload
+
 ```json
 {
   "idempotencyKey": "<uuid>",
@@ -209,7 +217,7 @@ EtherfusePixOffRampAdapter   — proof
 MockUsdPayoutAdapter         — ops mock
 ```
 
-Factory: `getPayoutProviderAdapter('circle')` returns the live Circle adapter. Unknown names throw.
+Factory: `getPayoutProviderAdapter('circle')` returns the live adapter. Unknown names throw.
 
 ---
 
@@ -217,7 +225,7 @@ Factory: `getPayoutProviderAdapter('circle')` returns the live Circle adapter. U
 
 | Component | Path | Lines |
 |-----------|------|-------|
-| Orchestrator | `backend/src/orchestration/TransferOrchestrator.ts` | 625 |
+| TransferOrchestrator | `backend/src/orchestration/TransferOrchestrator.ts` | 625 |
 | State Machine | `backend/src/orchestration/stateMachine.ts` | 67 |
 | Domain Types | `backend/src/orchestration/types.ts` | 182 |
 | Stellar Watcher | `backend/src/orchestration/stellarWatcher.ts` | 119 |
@@ -230,6 +238,8 @@ Factory: `getPayoutProviderAdapter('circle')` returns the live Circle adapter. U
 | Transfer Service | `backend/src/api/services/international-transfer.service.ts` | 953 |
 | Transfer Routes | `backend/src/api/routes/international-transfers.router.ts` | 24 |
 | DB Migration | `backend/migrations/20260613_00_full_schema.sql` | ~2700 |
+| Circle E2E Test | `scripts/circle-e2e-test.ts` | 190 |
+| Wire Test Page | `frontend/app/wire-test/wire-test-client.tsx` | 190 |
 
 ## Tests
 
@@ -242,9 +252,7 @@ npm --prefix backend test -- --runInBand \
   tests/international-transfer.routes.test.ts
 ```
 
-All passing. State machine legality, orchestrator lifecycle, adapter contract (8 tests covering Circle/Bridge/redaction/status/webhook), and HTTP route coverage.
-
----
+All passing.
 
 ## E2E
 
@@ -257,6 +265,7 @@ npm run circle:e2e
 ## Verifiable at
 
 - **Dashboard**: `/ops/transfers/972fda9f-fdec-47bd-a21c-a9326999e948`
-- **Circle API**: `GET https://api-sandbox.circle.com/v1/payouts/<id>` (any of the 4 IDs above)
+- **Circle API**: `GET https://api-sandbox.circle.com/v1/payouts/<id>`
 - **Circle balance**: `GET https://api-sandbox.circle.com/v1/businessAccount/balances`
+- **Stellar explorer**: https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
 - **Repo**: https://github.com/rbfcdog/talk-to-stellar
