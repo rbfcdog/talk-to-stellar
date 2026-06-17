@@ -1,0 +1,32 @@
+graph TD
+    TRANSFERS["transfers<br/>orchestration records"]
+    EVENTS["transfer_events<br/>append-only, immutable"]
+    INT_TRANSFERS["international_transfers<br/>legacy + enriched"]
+    INT_INSTRUCTIONS["international_payout_instructions<br/>Circle/Bridge/Etherfuse"]
+    INT_EVENTS["international_payout_events<br/>provider webhook events"]
+    INT_RECON["international_transfer_reconciliations"]
+    PAYMENT_LOGS["payment_logs<br/>Stellar tx history"]
+    OPERATIONS["operations<br/>Horizon records"]
+    OPS_ADMIN["ops_admin_users<br/>scrypt auth"]
+    IDEMPOTENCY["idempotency_keys<br/>request dedup"]
+    QUOTES["quotes<br/>BRL/USDC rates"]
+    USERS["users<br/>profiles + wallets"]
+
+    CREATE_RPC["create_transfer_with_event() RPC"]
+    TRANSITION_RPC["transition_transfer() RPC"]
+    PREVENT_UPDATE["BEFORE UPDATE trigger → throw"]
+    PREVENT_DELETE["BEFORE DELETE trigger → throw"]
+
+    TRANSFERS -->|"1:N"| EVENTS
+    TRANSFERS -->|"sync"| INT_TRANSFERS
+    INT_TRANSFERS -->|"1:N"| INT_INSTRUCTIONS
+    INT_TRANSFERS -->|"1:N"| INT_EVENTS
+    INT_TRANSFERS -->|"1:1"| INT_RECON
+    PAYMENT_LOGS -->|"1:N"| OPERATIONS
+    INT_TRANSFERS -->|"link"| PAYMENT_LOGS
+    CREATE_RPC --> TRANSFERS
+    CREATE_RPC --> EVENTS
+    TRANSITION_RPC --> TRANSFERS
+    TRANSITION_RPC --> EVENTS
+    EVENTS --> PREVENT_UPDATE
+    EVENTS --> PREVENT_DELETE

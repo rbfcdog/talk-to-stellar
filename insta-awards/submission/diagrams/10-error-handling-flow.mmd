@@ -1,0 +1,65 @@
+graph TD
+    subgraph Auth["Authorization"]
+        HEADER["Read Bearer Token + Headers"]
+        CHECK["hasInternalOpsAuthorization()"]
+        ENV["Checks: OPS_TOKEN, API_SECRET, TRANSFER_TOKEN"]
+        COMPARE["timingSafeEqualString()"]
+    end
+
+    subgraph Transfer["Transfer Validation"]
+        EXISTS["Transfer exists in DB?"]
+        STATE_OK["State allows transition?"]
+        SAME_NAME["Same-name check passed?"]
+        STELLAR_OK["Stellar tx hash present?"]
+        BALANCE_OK["Circle balance sufficient?"]
+    end
+
+    subgraph Execution["Execution"]
+        RPC["transition_transfer() RPC"]
+        LOCK["SELECT FOR UPDATE — row lock"]
+        VERSION["Check state_version"]
+        UPDATE["UPDATE state + JSONB"]
+        INSERT["INSERT transfer_events"]
+        COMMIT["Transaction committed"]
+    end
+
+    subgraph Errors["Error Handling"]
+        E401["401 — ops auth failed"]
+        E400["400 — transfer not found"]
+        E409["409 — state conflict"]
+        E400_1["40001 — optimistic lock"]
+        E403["403 — same-name blocked"]
+        E412["412 — settlement required"]
+        E500["500 — Circle API error"]
+
+        E401 --> RETRY1["Check ops secret"]
+        E409 --> RETRY2["Retry with fresh state_version"]
+        E500 --> RETRY3["Log Circle error, try compatibility mode"]
+    end
+
+    HEADER --> CHECK
+    CHECK --> COMPARE
+    COMPARE --> ENV
+    COMPARE -->|fail| E401
+    COMPARE -->|pass| EXISTS
+    EXISTS -->|no| E400
+    EXISTS -->|yes| STATE_OK
+    STATE_OK -->|illegal| E409
+    STATE_OK -->|legal| SAME_NAME
+    SAME_NAME -->|blocked| E403
+    SAME_NAME -->|passed| STELLAR_OK
+    STELLAR_OK -->|missing| E412
+    STELLAR_OK -->|present| BALANCE_OK
+    BALANCE_OK -->|no| E500
+    BALANCE_OK -->|yes| RPC
+    RPC --> LOCK
+    LOCK --> VERSION
+    VERSION -->|conflict| E400_1
+    VERSION -->|ok| UPDATE
+    UPDATE --> INSERT
+    INSERT --> COMMIT
+
+    style COMMIT fill:#5f5,stroke:#333
+    style E401 fill:#f55,stroke:#333
+    style E409 fill:#f55,stroke:#333
+    style E500 fill:#f55,stroke:#333

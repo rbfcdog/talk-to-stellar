@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant PIX as Etherfuse Webhook
+    participant Backend
+    participant Orchestrator
+    participant DB as PostgreSQL
+
+    Note over PIX,DB: PIX Funding Webhook
+    PIX->>Backend: POST /api/webhooks — PIX payment confirmed
+    Backend->>Orchestrator: confirmPixFunding(transferId)
+    Orchestrator->>DB: transition_transfer() → PIX_FUNDED
+    DB-->>Orchestrator: state_version incremented
+
+    Note over PIX,DB: Duplicate Webhook (Idempotency)
+    PIX->>Backend: Same webhook arrives again
+    Backend->>Orchestrator: confirmPixFunding(transferId)
+    Orchestrator->>Orchestrator: PIX already funded — idempotent
+    Orchestrator->>DB: Append idempotent_replay event
+    DB-->>Orchestrator: No state change
+
+    Note over PIX,DB: Circle Webhook (Payout Complete)
+    participant Circle as Circle Webhook
+    Circle->>Backend: POST /api/transfers/payout-events/circle
+    Backend->>Orchestrator: handlePayoutProviderEvent()
+    Orchestrator->>Orchestrator: Same-name check + status normalization
+    Orchestrator->>DB: transition_transfer() → RECONCILED
+    DB-->>Orchestrator: state_version 9
+
+    Note over PIX,DB: Webhook Authorization
+    participant Bridge as Bridge Webhook
+    Bridge->>Backend: POST /api/transfers/payout-events/bridge
+    Backend->>Backend: Validate x-payout-webhook-secret header
+    Backend->>Backend: timingSafeEqualString() check
+    alt Secret matches
+        Backend->>Orchestrator: handlePayoutProviderEvent()
+    else Secret mismatch
+        Backend-->>Bridge: 401 Unauthorized
+    end

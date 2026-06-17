@@ -1,23 +1,73 @@
 # Final Transfer Record — Instawards D3
 
-**Repo**: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `202b5bd`
+**Repo**: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `7649719`
 **Date**: 2026-06-17 · **Source**: Live production database + Circle sandbox API
+
+---
+
+## Diagrams
+
+### 1. System Architecture
+![01](diagrams/01-system-architecture.png)
+
+Full system architecture: WhatsApp/Telegram/Web/Ops surfaces → Express.js API → Orchestration → Services → Payout Adapters → PostgreSQL → External APIs.
+
+### 2. Transfer State Machine
+![02](diagrams/02-transfer-state-machine.png)
+
+13-state FSM. Happy path: CREATED → QUOTED → PIX_CHARGE_ISSUED → PIX_FUNDED → CONVERTING → STELLAR_SETTLED → PAYOUT_ROUTING → PAYOUT_INSTRUCTED → RECONCILED. Failure branches handle quote expiry, PIX expiry, failures, and refunds.
+
+### 3. Money Flow Sequence
+![03](diagrams/03-money-flow-sequence.png)
+
+End-to-end sequence: user requests transfer → agent orchestrates → Etherfuse PIX sandbox → Stellar testnet settlement → Circle wire payout → reconciliation.
+
+### 4. Payout Adapter Architecture
+![04](diagrams/04-payout-adapter-architecture.png)
+
+Four adapters implementing `PayoutProviderAdapter`: Circle (sandbox_api, live), Bridge (compatibility), Etherfuse (PIX proof), Mock (ops). Factory pattern with execution gates.
+
+### 5. Database Schema
+![05](diagrams/05-database-schema.png)
+
+Table relationships: transfers → events (append-only with triggers), international_transfers → payout_instructions + payout_events + reconciliations, payment_logs → operations. RPCs and triggers.
+
+### 6. API Route Map
+![06](diagrams/06-api-route-map.png)
+
+Frontend → Next.js Rewrites → Express.js routes: /api/transfers, /api/agent, /api/quotes, /api/ops. All international transfer endpoints mapped.
+
+### 7. Circle Integration Flow
+![07](diagrams/07-circle-integration-flow.png)
+
+Setup (wire destination creation) → Funding (mock wire deposit, 10 min settlement) → Payout (POST /payouts, HTTP 201) → Verification (balance check, status polling).
+
+### 8. PIX-to-USD Pipeline
+![08](diagrams/08-pix-to-usd-pipeline.png)
+
+R$1000 BRL intake → Quote/Fee engines → Stellar PATH_PAYMENT → tx hash e0309ddf... → Circle adapter → Wire to BANK OF AMERICA → Evidence log + reconciliation.
+
+### 9. Webhook Flow
+![09](diagrams/09-webhook-flow.png)
+
+Etherfuse PIX webhook → idempotent replay handling. Circle/Bridge payout webhooks → HMAC validation → status normalization → state transitions.
+
+### 10. Error Handling Flow
+![10](diagrams/10-error-handling-flow.png)
+
+Authorization (ops token) → Transfer validation (existence, state, same-name, Stellar, balance) → RPC execution (FOR UPDATE, state_version check) → Error codes (401, 400, 409, 40001, 403, 412, 500).
 
 ---
 
 ## Architecture
 
-![System Components](diagrams/system-components.png)
-
-Four entry surfaces (WhatsApp, Telegram, Web, /ops dashboard) feed into the Express.js API. The agent interprets user intent, the orchestrator drives a 13-state FSM through every transfer, and modular services handle PIX (Etherfuse), Stellar (Horizon), and USD payouts (Circle/Bridge/Mock). Everything is persisted through PostgreSQL RPCs with optimistic locking and append-only events.
+See Diagram 1 above. Four entry surfaces (WhatsApp, Telegram, Web, /ops dashboard) feed into the Express.js API. The agent interprets user intent, the orchestrator drives a 13-state FSM through every transfer, and modular services handle PIX (Etherfuse), Stellar (Horizon), and USD payouts (Circle/Bridge/Mock). Everything is persisted through PostgreSQL RPCs with optimistic locking and append-only events.
 
 ---
 
 ## Transfer Lifecycle
 
-![State Machine](diagrams/state-machine.png)
-
-9 primary stages on the happy path. Every transition runs through a PostgreSQL RPC that locks the row, checks state_version, updates state + JSONB evidence, and inserts an immutable event — all in one transaction. Triggers prevent updates or deletes on `transfer_events`.
+See Diagram 2 above. 9 primary stages on the happy path. Every transition runs through a PostgreSQL RPC that locks the row, checks state_version, updates state + JSONB evidence, and inserts an immutable event — all in one transaction. Triggers prevent updates or deletes on `transfer_events`.
 
 ```typescript
 const ALLOWED_TRANSITIONS: Record<TransferState, TransferState[]> = {
@@ -41,9 +91,7 @@ const ALLOWED_TRANSITIONS: Record<TransferState, TransferState[]> = {
 
 ## Money Flow
 
-![Money Flow](diagrams/money-flow.png)
-
-BRL enters via PIX → converted to USDC on Stellar → settled with a verifiable tx hash → USD wire payout via Circle Mint sandbox → reconciled against expected amounts.
+See Diagram 3 above. BRL enters via PIX → converted to USDC on Stellar → settled with a verifiable tx hash → USD wire payout via Circle Mint sandbox → reconciled against expected amounts.
 
 ---
 

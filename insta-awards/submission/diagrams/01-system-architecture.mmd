@@ -1,0 +1,78 @@
+graph TD
+    subgraph Surfaces["User Surfaces"]
+        WA["WhatsApp"]
+        TG["Telegram"]
+        WEB["Web Frontend"]
+        OPS["/ops Dashboard"]
+    end
+    subgraph API["API Layer"]
+        AGENT["/api/agent — AI"]
+        TRANSFERS["/api/transfers"]
+        OPS_API["/api/ops"]
+        QUOTES["/api/quotes"]
+        WH["/api/webhooks"]
+        RAMP["/api/ramp"]
+        AUTH["/api/auth"]
+    end
+    subgraph Core["Orchestration"]
+        ORCH["TransferOrchestrator"]
+        SM["StateMachine"]
+        WATCHER["StellarSettlementWatcher"]
+        LOGGER["orchestrationLogger"]
+    end
+    subgraph Services["Business Services"]
+        PIX_SVC["AnchorService — Etherfuse"]
+        STELLAR_SVC["StellarService — Pathfinding"]
+        QUOTE_SVC["QuoteService — BRL/USDC"]
+        FEE_SVC["FeeService — 30bps"]
+        PAYOUT_SVC["PayoutService — Adapters"]
+        RECEIPT_SVC["ReceiptService"]
+        IDENTITY_SVC["IdentityAlignmentService"]
+    end
+    subgraph Adapters["Payout Adapters"]
+        CIRCLE["CircleCompatibilityAdapter"]
+        BRIDGE["BridgeCompatibilityAdapter"]
+        ETHERFUSE["EtherfusePixOffRampAdapter"]
+        MOCK["MockUsdPayoutAdapter"]
+    end
+    subgraph DB["Persistence"]
+        PG["PostgreSQL / Supabase"]
+        TRANSFER_REPO["transfer.repository.ts"]
+        OPS_REPO["ops-history.repository.ts"]
+        MIGRATIONS["20260613_00_full_schema.sql"]
+    end
+    subgraph External["External"]
+        ETHER_API["Etherfuse Sandbox"]
+        HORIZON["Stellar Horizon Testnet"]
+        OPENAI["OpenAI GPT-4o"]
+        CIRCLE_API["Circle Mint Sandbox"]
+        EVOLUTION["Evolution API v2"]
+    end
+    WA-->AGENT
+    TG-->AGENT
+    WEB-->AGENT
+    WEB-->TRANSFERS
+    WEB-->QUOTES
+    OPS-->OPS_API
+    AGENT-->TRANSFERS
+    AGENT-->QUOTES
+    AGENT-->RAMP
+    TRANSFERS-->ORCH
+    OPS_API-->OPS_REPO
+    ORCH-->SM
+    ORCH-->TRANSFER_REPO
+    ORCH-->LOGGER
+    WATCHER-->HORIZON
+    WATCHER-->ORCH
+    PIX_SVC-->ETHER_API
+    STELLAR_SVC-->HORIZON
+    QUOTE_SVC-->HORIZON
+    PAYOUT_SVC-->CIRCLE
+    PAYOUT_SVC-->BRIDGE
+    PAYOUT_SVC-->ETHERFUSE
+    PAYOUT_SVC-->MOCK
+    CIRCLE-->CIRCLE_API
+    BRIDGE-->BRIDGE
+    TRANSFER_REPO-->PG
+    OPS_REPO-->PG
+    MIGRATIONS-->PG
