@@ -1,40 +1,17 @@
 graph LR
-    subgraph Users["Entry points"]
-        WhatsApp
-        Telegram
-        Web
-        Dashboard
-    end
-
-    subgraph Core["Core"]
-        Agent["AI Agent<br/>GPT-4o"]
-        Orchestrator["TransferOrchestrator<br/>13-state FSM"]
-        StateMachine["State Machine<br/>enforces transitions"]
-    end
-
-    subgraph Services["Services"]
-        PIX["Etherfuse<br/>PIX sandbox"]
-        Stellar["Stellar<br/>Horizon testnet"]
-        Payout["Circle/Bridge<br/>USD wire"]
-    end
-
-    subgraph Data["Data"]
-        DB["PostgreSQL<br/>RPC + events + triggers"]
-    end
-
     WhatsApp --> Agent
     Telegram --> Agent
     Web --> Agent
-    Dashboard --> DB
 
-    Agent --> Orchestrator
-    Orchestrator --> StateMachine
-    Orchestrator --> DB
-
-    Orchestrator --> PIX
+    Agent["AI Agent"] --> Orchestrator
+    Orchestrator["TransferOrchestrator"] --> PIX
     Orchestrator --> Stellar
     Orchestrator --> Payout
+    Orchestrator --> DB
 
-    PIX --> DB
-    Stellar --> DB
-    Payout --> DB
+    PIX["Etherfuse PIX"] --> DB
+    Stellar["Stellar Horizon"] --> DB
+    Payout["Circle Wire"] --> DB
+
+    Dashboard["/ops Dashboard"] --> DB
+    DB["PostgreSQL"]
