@@ -1,62 +1,40 @@
-graph TD
-    subgraph Surfaces["Surfaces"]
-        WA["WhatsApp Bot"]
-        TG["Telegram Bot"]
-        WEB["Web Frontend"]
-        OPS["/ops Dashboard"]
+graph LR
+    subgraph Users["Entry points"]
+        WhatsApp
+        Telegram
+        Web
+        Dashboard
     end
-    subgraph API["API Layer — Express.js"]
-        AGENT["/api/agent — LangChain + GPT-4o"]
-        XFERS["/api/transfers"]
-        OPS_HISTORY["/api/ops/history — Unified Ledger"]
-        QUOTES["/api/quotes — BRL/USDC"]
-        WH["/api/webhooks — Etherfuse, Bridge"]
+
+    subgraph Core["Core"]
+        Agent["AI Agent<br/>GPT-4o"]
+        Orchestrator["TransferOrchestrator<br/>13-state FSM"]
+        StateMachine["State Machine<br/>enforces transitions"]
     end
-    subgraph Orchestration["Orchestration — D1 Core"]
-        ORCH["TransferOrchestrator — 13-state FSM"]
-        WATCH["StellarSettlementWatcher — Horizon poller"]
-        STATE["TransferStateMachine"]
-        LOG["orchestrationLogger — JSONL audit"]
-    end
+
     subgraph Services["Services"]
-        ANCHOR["AnchorService — Etherfuse PIX"]
-        STELLAR["StellarService — Pathfinding, XDR"]
-        QUOTE_SVC["QuoteService — BRL/USDC DEX"]
-        FEE["FeeService — 30bps platform spread"]
-        PAYOUT["PayoutService — Circle/Bridge/Mock adapters"]
-        RECEIPT["ReceiptService — SVG receipts"]
+        PIX["Etherfuse<br/>PIX sandbox"]
+        Stellar["Stellar<br/>Horizon testnet"]
+        Payout["Circle/Bridge<br/>USD wire"]
     end
-    subgraph Persistence["Persistence"]
-        DB["(Supabase PostgreSQL)"]
-        TRANSFER_REPO["transfer.repository.ts — RPC + optimistic locking"]
-        OPS_REPO["ops-history.repository.ts — Unified read model"]
+
+    subgraph Data["Data"]
+        DB["PostgreSQL<br/>RPC + events + triggers"]
     end
-    subgraph External["External Integrations"]
-        ETHER["Etherfuse — PIX sandbox"]
-        HORIZON["Stellar Horizon — Testnet"]
-        OPENAI["OpenAI GPT-4o"]
-        CIRCLE["Circle Mint — Sandbox"]
-        BRIDGE["Bridge.xyz — Compatibility"]
-    end
-    WA --> AGENT
-    TG --> AGENT
-    WEB --> AGENT
-    WEB --> XFERS
-    OPS --> OPS_HISTORY
-    AGENT --> XFERS
-    AGENT --> QUOTES
-    XFERS --> ORCH
-    OPS_HISTORY --> OPS_REPO
-    ORCH --> TRANSFER_REPO
-    ORCH --> STATE
-    ORCH --> LOG
-    WATCH --> HORIZON
-    WATCH --> ORCH
-    ANCHOR --> ETHER
-    STELLAR --> HORIZON
-    QUOTE_SVC --> HORIZON
-    PAYOUT --> CIRCLE
-    PAYOUT --> BRIDGE
-    PAYOUT --> ETHER
-    TRANSFER_REPO --> DB
-    OPS_REPO --> DB
+
+    WhatsApp --> Agent
+    Telegram --> Agent
+    Web --> Agent
+    Dashboard --> DB
+
+    Agent --> Orchestrator
+    Orchestrator --> StateMachine
+    Orchestrator --> DB
+
+    Orchestrator --> PIX
+    Orchestrator --> Stellar
+    Orchestrator --> Payout
+
+    PIX --> DB
+    Stellar --> DB
+    Payout --> DB
