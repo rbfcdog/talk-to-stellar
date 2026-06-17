@@ -102,12 +102,20 @@ CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→
 {
   "asset": "USDC",
   "network": "testnet",
-  "tx_hash": "mock-stellar-7b5f2d4d9633a9a39f7b82ffaedffeb7",
-  "ledger": 0,
+  "tx_hash": "e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094",
+  "ledger": 2488252,
   "settled_at": "2026-05-23T00:40:16.307Z",
   "source_account_masked": "stellar:masked",
   "path_used": ["BRL", "USDC"]
 }
+```
+
+Real Stellar settlement (from production DB record `TTS-2026-STELLAR-000002`, payment_logs.id=2):
+```
+tx_hash: e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
+ledger: 2488252
+status: successful
+explorer: https://stellar.expert/explorer/testnet/tx/e0309ddfdfb0a3514b8c8f58a13a3442650485c2691c8b271fadcbd27305d094
 ```
 
 **Payout Routing** (event 7):
