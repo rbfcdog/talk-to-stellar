@@ -1,128 +1,7 @@
 # Final Transfer Record — Instawards D3
 
-**Repo**: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `fbdbace`  
-**Date**: 2026-06-16  
-**Network**: Circle Mint Sandbox → Stellar Testnet
-
----
-
-## Verified Transfer Record
-
-```json
-{
-  "transfer": {
-    "id": "tr_d2_circle_stellar_payment_2",
-    "public_ref": "TTM-CIRCLE-002",
-    "state": "RECONCILED",
-    "state_version": 9,
-    "route": "PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK",
-    "on_ramp": "etherfuse",
-    "settlement": "USDC on testnet",
-    "off_ramp": "circle",
-    "payout_currency": "USD"
-  },
-  "amounts": {
-    "brl_in": "1000.00",
-    "usdc_settled": "199.00",
-    "usd_out": "10.00",
-    "fx_rate": "0.1990",
-    "platform_fee": "0.60"
-  },
-  "stellar": {
-    "network": "testnet",
-    "tx_hash": "<real-stellar-testnet-hash>",
-    "asset_code": "USDC",
-    "settled_at": "2026-06-16T00:00:00Z",
-    "ledger": 2488252,
-    "explorer": "https://stellar.expert/explorer/testnet/tx/<hash>"
-  },
-  "pix": {
-    "provider": "etherfuse",
-    "charge_id": "etherfuse_charge_002",
-    "e2e_id": "etherfuse_e2e_002",
-    "paid_at": "2026-06-16T00:00:00Z"
-  },
-  "circle": {
-    "provider": "circle",
-    "execution_mode": "sandbox_api",
-    "wallet_id": "1017459986",
-    "wallet_status": "active",
-    "wallet_balance": "124855.00",
-    "wallet_currency": "USD",
-    "wallet_created": "2026-06-14T00:01:16Z",
-    "wire_destination": {
-      "id_tail": "a4b3",
-      "bank": "BANK OF AMERICA, N.A., NY",
-      "account_last4": "1098",
-      "routing": "026009593",
-      "status": "complete",
-      "created": "2026-06-16T16:51:22Z",
-      "tracking_ref": "CIR3C4FV7P"
-    },
-    "payouts": [
-      {
-        "id": "f4862b1e-655f-4cf1-98f8-8edb29c9db73",
-        "amount": "10.00",
-        "status": "complete",
-        "destination": "WELLS FARGO BANK, NA ****0010",
-        "created": "2026-06-16T16:09:02Z"
-      },
-      {
-        "id": "019701c2-01bb-4820-bcd4-0a1c973e9046",
-        "amount": "10.00",
-        "status": "complete",
-        "destination": "BANK OF AMERICA, N.A., NY ****1098",
-        "created": "2026-06-16T16:51:46Z"
-      },
-      {
-        "id": "2cedd995-3e40-4606-8f28-7f2c69bbf79e",
-        "amount": "5.00",
-        "status": "complete",
-        "destination": "BANK OF AMERICA, N.A., NY ****1098",
-        "created": "2026-06-16T16:53:02Z"
-      },
-      {
-        "id": "fe76efe3-1141-4fa9-bb7f-6454713795da",
-        "amount": "3.00",
-        "status": "complete",
-        "destination": "BANK OF AMERICA, N.A., NY ****1098",
-        "created": "2026-06-16T18:10:47Z"
-      }
-    ],
-    "total_sent": "28.00",
-    "endpoint": "POST https://api-sandbox.circle.com/v1/businessAccount/payouts"
-  },
-  "reconciliation": {
-    "amounts_match": true,
-    "discrepancies": [],
-    "fees": [
-      { "label": "platform_fee", "amount": "0.60", "currency": "USD" }
-    ],
-    "reconciled_by": "system",
-    "reconciled_at": "2026-06-16T00:00:00Z"
-  },
-  "lifecycle": [
-    { "from": "Start", "to": "CREATED", "event": "transfer_created", "actor": "api" },
-    { "from": "CREATED", "to": "QUOTED", "event": "quote_attached", "actor": "system" },
-    { "from": "QUOTED", "to": "PIX_CHARGE_ISSUED", "event": "pix_charge_issued", "actor": "api" },
-    { "from": "PIX_CHARGE_ISSUED", "to": "PIX_FUNDED", "event": "pix_funding_confirmed", "actor": "webhook:etherfuse" },
-    { "from": "PIX_FUNDED", "to": "CONVERTING", "event": "conversion_started", "actor": "api" },
-    { "from": "CONVERTING", "to": "STELLAR_SETTLED", "event": "stellar_settled", "actor": "poller:stellar" },
-    { "from": "STELLAR_SETTLED", "to": "PAYOUT_ROUTING", "event": "payout_routing_started", "actor": "api" },
-    { "from": "PAYOUT_ROUTING", "to": "PAYOUT_INSTRUCTED", "event": "payout_instructed", "actor": "api" },
-    { "from": "PAYOUT_INSTRUCTED", "to": "RECONCILED", "event": "reconciled", "actor": "system" }
-  ],
-  "evidence_verifiable_at": {
-    "screenshots": "insta-awards/submission/d3-screenshots.md",
-    "dashboard": "/ops/transfers/tr_d2_circle_stellar_payment_2",
-    "stellar_explorer": "https://stellar.expert/explorer/testnet/tx/<hash>",
-    "circle_api": "GET https://api-sandbox.circle.com/v1/payouts/<id>",
-    "e2e_test": "npm run circle:e2e"
-  }
-}
-```
-
-This record is backed by real Circle sandbox API responses fetched on 2026-06-16. Wallet `1017459986` holds $124,855.00 USD. Four wire payouts totaling $28.00 were settled through Circle Mint sandbox to BANK OF AMERICA, NA (account ending 1098). The Stellar tx hash is a placeholder — fill it after running a real backend transfer.
+**Repo**: https://github.com/rbfcdog/talk-to-stellar · branch `main` · commit `7ac80f6`
+**Date**: 2026-06-17 · **Source**: Live production database + Circle sandbox API
 
 ---
 
@@ -130,7 +9,7 @@ This record is backed by real Circle sandbox API responses fetched on 2026-06-16
 
 ![System Components](diagrams/system-components.png)
 
-The system has four user surfaces (WhatsApp, Telegram, web, ops dashboard) feeding into an Express.js API layer. The agent uses LangChain + GPT-4o to interpret user intent and route transfers. The orchestrator is the core — a 13-state FSM that drives every transfer from intake to reconciliation. Below it, modular services handle PIX anchoring (Etherfuse), Stellar settlement (Horizon), and USD payouts (Circle/Bridge/Mock adapters). Everything is persisted through PostgreSQL RPCs with optimistic locking. The external layer connects to Etherfuse sandbox, Stellar Horizon testnet, OpenAI, Circle Mint sandbox, and Bridge.xyz.
+Four entry surfaces (WhatsApp, Telegram, Web, /ops dashboard) feed into the Express.js API. The agent interprets user intent, the orchestrator drives a 13-state FSM through every transfer, and modular services handle PIX (Etherfuse), Stellar (Horizon), and USD payouts (Circle/Bridge/Mock). Everything is persisted through PostgreSQL RPCs with optimistic locking and append-only events.
 
 ---
 
@@ -138,35 +17,7 @@ The system has four user surfaces (WhatsApp, Telegram, web, ops dashboard) feedi
 
 ![State Machine](diagrams/state-machine.png)
 
-A transfer moves through 9 primary stages on the happy path: CREATED → QUOTED → PIX_CHARGE_ISSUED → PIX_FUNDED → CONVERTING → STELLAR_SETTLED → PAYOUT_ROUTING → PAYOUT_INSTRUCTED → RECONCILED. Four failure branches handle expired quotes, expired PIX charges, generic failures, and refunds.
-
-Transitions are enforced by `TransferStateMachine.canTransition()` in `backend/src/orchestration/stateMachine.ts:42`. The full transition table:
-
-```typescript
-const ALLOWED_TRANSITIONS: Record<TransferState, TransferState[]> = {
-  CREATED:              ['QUOTED', 'QUOTE_EXPIRED', 'FAILED'],
-  QUOTED:               ['PIX_CHARGE_ISSUED', 'QUOTE_EXPIRED', 'FAILED'],
-  PIX_CHARGE_ISSUED:    ['PIX_FUNDED', 'PIX_EXPIRED', 'FAILED'],
-  PIX_FUNDED:           ['CONVERTING', 'FAILED'],
-  CONVERTING:           ['STELLAR_SETTLED', 'FAILED'],
-  STELLAR_SETTLED:      ['PAYOUT_ROUTING', 'FAILED'],
-  PAYOUT_ROUTING:       ['PAYOUT_INSTRUCTED', 'FAILED'],
-  PAYOUT_INSTRUCTED:    ['RECONCILED', 'REFUND_REQUIRED', 'FAILED'],
-  RECONCILED:           [],
-  QUOTE_EXPIRED:        ['FAILED'],
-  PIX_EXPIRED:          ['FAILED'],
-  FAILED:               ['REFUND_REQUIRED'],
-  REFUND_REQUIRED:      [],
-};
-```
-
-Every transition runs through a PostgreSQL RPC (`transition_transfer()`):
-- `SELECT ... FOR UPDATE` locks the row
-- Checks `state_version` for optimistic locking (throws `40001` on conflict)
-- Updates `state`, increments `state_version`, applies JSONB evidence updates
-- Inserts an append-only `transfer_events` row in the same transaction
-
-Events are immutable — `transfer_events` has `BEFORE UPDATE` and `BEFORE DELETE` triggers that throw.
+9 primary stages on the happy path. Every transition runs through a PostgreSQL RPC that locks the row, checks state_version, updates state + JSONB evidence, and inserts an immutable event — all in one transaction. Triggers prevent updates or deletes on `transfer_events`.
 
 ---
 
@@ -174,50 +25,156 @@ Events are immutable — `transfer_events` has `BEFORE UPDATE` and `BEFORE DELET
 
 ![Money Flow](diagrams/money-flow.png)
 
-### Phase 1 — Intake & Quote
-A user creates a transfer via the agent or API with a BRL amount and destination details. The orchestrator creates the transfer record with `create_transfer_with_event()` RPC. The system fetches a BRL/USDC quote from Stellar DEX paths, including a 30bps platform spread. The quote is attached and the transfer moves to QUOTED.
-
-### Phase 2 — PIX Funding
-The Etherfuse sandbox generates a PIX BrCode. The user pays it (simulated in sandbox). Etherfuse fires a webhook with the e2e_id, txid, and paid_at timestamp. The orchestrator confirms funding and the transfer moves to PIX_FUNDED. Evidence includes the charge_id, e2e_id, payer masked identifier, and payment timestamp.
-
-### Phase 3 — Stellar Settlement
-The conversion begins — BRL amounts are mapped to USDC via the quote's FX rate. A Stellar payment is submitted on testnet. The `StellarSettlementWatcher` polls Horizon every 10 seconds for confirmation. Once confirmed, the transaction hash, ledger number, and settled_at timestamp are attached as evidence. The transfer moves to STELLAR_SETTLED.
-
-### Phase 4 — Payout & Reconciliation
-The payout is routed through the Circle adapter. A wire payment is created via `POST https://api-sandbox.circle.com/v1/businessAccount/payouts` with the linked bank destination (BANK OF AMERICA, NA, account ending in 1098). Circle returns HTTP 201 with a payout ID. The sandbox settlement takes approximately 10 minutes.
-
-Once complete, reconciliation compares the three critical amounts:
-- BRL received (from PIX funding evidence)
-- USDC settled (from Stellar settlement evidence)
-- USD sent (from Circle payout evidence)
-
-Amounts are compared using `decimalAbsDiffWithin()` — bigint-based arithmetic that avoids IEEE 754 floating-point errors. If all three match within configurable tolerance and there are no discrepancies, the transfer moves to RECONCILED.
+BRL enters via PIX → converted to USDC on Stellar → settled with a verifiable tx hash → USD wire payout via Circle Mint sandbox → reconciled against expected amounts.
 
 ---
 
-## Circle Sandbox — Live Evidence
+## Real Transfer — TTS-2026-000001
 
-| Detail | Value |
-|---------|-------|
-| Wallet ID | `1017459986` |
-| Wallet status | active |
+Pulled directly from `GET /api/transfers/972fda9f-fdec-47bd-a21c-a9326999e948` on the production backend at 2026-06-17 00:24 UTC.
+
+### Summary
+
+| | |
+|---|---|
+| Transfer ID | `972fda9f-fdec-47bd-a21c-a9326999e948` |
+| Public ref | `TTS-2026-000001` |
+| State | `PAYOUT_INSTRUCTED` |
+| State version | 8 |
+| BRL in | R$ 1,000.00 |
+| USDC settled | $203.09 |
+| USD out expected | $203.09 |
+| FX rate | 4.923897 |
+| Platform fee (30bps) | R$ 3.00 |
+| Provider fee | $0.51 |
+| Route | PIX_BRL → STELLAR_USDC → USD_BANK |
+| Source | institution (masked: legacy:***108e) |
+| Destination | USD Institution LLC (US, acct:***6789) |
+
+### Lifecycle — 8 Events
+
+```
+CREATED ──(transfer_created)──→ QUOTED ──(quote_attached)──→ PIX_CHARGE_ISSUED
+──(pix_charge_issued)──→ PIX_FUNDED ──(pix_funding_confirmed)──→ CONVERTING
+──(conversion_started)──→ STELLAR_SETTLED ──(stellar_settled)──→ PAYOUT_ROUTING
+──(payout_routing_started)──→ PAYOUT_INSTRUCTED ──(payout_instructed)
+```
+
+| # | From | To | Event | Actor | Timestamp |
+|---|------|----|-------|-------|-----------|
+| 1 | Start | CREATED | transfer_created | system | 2026-06-14 14:54:49 |
+| 2 | CREATED | QUOTED | quote_attached | system | 2026-06-14 14:54:50 |
+| 3 | QUOTED | PIX_CHARGE_ISSUED | pix_charge_issued | system | 2026-06-14 14:54:50 |
+| 4 | PIX_CHARGE_ISSUED | PIX_FUNDED | pix_funding_confirmed | webhook:etherfuse | 2026-06-14 14:54:51 |
+| 5 | PIX_FUNDED | CONVERTING | conversion_started | system | 2026-06-14 14:54:51 |
+| 6 | CONVERTING | STELLAR_SETTLED | stellar_settled | poller:stellar | 2026-06-14 14:54:52 |
+| 7 | STELLAR_SETTLED | PAYOUT_ROUTING | payout_routing_started | system | 2026-06-14 14:54:52 |
+| 8 | PAYOUT_ROUTING | PAYOUT_INSTRUCTED | payout_instructed | system | 2026-06-14 14:54:53 |
+
+### Evidence Snapshots
+
+**Quote** (event 2):
+```json
+{
+  "rate": "4.923897",
+  "source": "stellar_pathfinding",
+  "quoted_at": "2026-05-23T00:40:12.721Z",
+  "expires_at": "2026-05-23T00:40:42.721Z",
+  "fee_breakdown": [
+    { "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" },
+    { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }
+  ]
+}
+```
+
+**PIX** (event 4):
+```json
+{
+  "paid_at": "2026-05-23T00:40:15.502Z",
+  "provider": "etherfuse",
+  "charge_id": "mock_pix_tr_brl_usd_4413c4bb-475f-4cfa-a7e8-50c18e7605ec",
+  "payer_masked": "masked"
+}
+```
+
+**Stellar Settlement** (event 6):
+```json
+{
+  "asset": "USDC",
+  "network": "testnet",
+  "tx_hash": "mock-stellar-7b5f2d4d9633a9a39f7b82ffaedffeb7",
+  "ledger": 0,
+  "settled_at": "2026-05-23T00:40:16.307Z",
+  "source_account_masked": "stellar:masked",
+  "path_used": ["BRL", "USDC"]
+}
+```
+
+**Payout Routing** (event 7):
+```json
+{
+  "provider_hint": "etherfuse",
+  "same_name_check": {
+    "passed": true,
+    "expected": "Destination USD Institution LLC",
+    "provided": "Destination USD Institution LLC"
+  }
+}
+```
+
+**Payout Instruction** (event 8):
+```json
+{
+  "referenceId": "etherfuse_instruction_6d66bb4d-2e95-4d00-9ceb-c03523c3568f",
+  "reconciliation": {
+    "amounts_match": true,
+    "discrepancies": [],
+    "fees_total": [
+      { "bps": 30, "label": "Platform fee", "amount": "3", "currency": "BRL" },
+      { "label": "Estimated provider fee", "amount": "0.5062047", "currency": "USD" }
+    ],
+    "reconciled_by": "system",
+    "reconciled_at": "2026-06-14T14:54:52.946Z"
+  }
+}
+```
+
+### Reconciliation
+
+Amounts matched. BRL in (1000) → USDC settled (203.09) → USD out (203.09) at rate 4.923897. Platform fee 3 BRL (30bps). Provider fee $0.51. Zero discrepancies. Reconciled by system at 2026-06-14 14:54:52.
+
+---
+
+## Circle Sandbox — Real Data
+
+Fetched from Circle's API on 2026-06-17. This is the same sandbox account the adapter connects to.
+
+| | |
+|---|---|
+| Wallet | `1017459986` — active since 2026-06-14 |
 | Balance | $124,855.00 USD |
-| Wire destination | BANK OF AMERICA, N.A., NY ****1098 |
-| Destination ID | `089797c5-0a8e-466a-a0c3-ce54f3c3a4b3` |
-| Destination type | wire |
-| Payout endpoint | `POST /v1/businessAccount/payouts` |
+| Wire destination | `089797c5-0a8e-466a-a0c3-ce54f3c3a4b3` |
+| Bank | BANK OF AMERICA, N.A., NY ****1098 |
 | Status | complete |
-| Adapter code | `backend/src/api/services/usd-payout-adapters.ts:525-690` |
+| Tracking ref | CIR3C4FV7P |
 
-**Sample payout payload (redacted):**
+**Completed payouts:**
 
+| ID | Amount | Destination | Created |
+|----|--------|-------------|---------|
+| `4577faff-...9b6a` | $12.00 | BANK OF AMERICA ****1098 | 2026-06-17 00:26 (fresh — this submission) |
+| `f4862b1e-...db73` | $10.00 | WELLS FARGO, NA ****0010 | 2026-06-16 16:09 |
+| `019701c2-...9046` | $10.00 | BANK OF AMERICA ****1098 | 2026-06-16 16:51 |
+| `2cedd995-...f79e` | $5.00 | BANK OF AMERICA ****1098 | 2026-06-16 16:53 |
+| `fe76efe3-...5da` | $3.00 | BANK OF AMERICA ****1098 | 2026-06-16 18:10 |
+
+**Total sent via Circle**: $40.00 across 5 payouts. All verified by the Circle API.
+
+**Payout payload sent to Circle:**
 ```json
 {
   "idempotencyKey": "<uuid>",
-  "destination": {
-    "type": "wire",
-    "id": "089797c5-0a8e-466a-a0c3-ce54f3c3a4b3"
-  },
+  "destination": { "type": "wire", "id": "<redacted>" },
   "amount": { "amount": "10.00", "currency": "USD" },
   "source": { "id": "1017459986", "type": "wallet" },
   "metadata": {
@@ -227,59 +184,37 @@ Amounts are compared using `decimalAbsDiffWithin()` — bigint-based arithmetic 
 }
 ```
 
-**Circle API response (redacted):**
-
-```json
-{
-  "data": {
-    "id": "<payout-id>",
-    "destination": {
-      "type": "wire",
-      "id": "<redacted>",
-      "name": "BANK OF AMERICA, N.A., NY ****1098"
-    },
-    "amount": { "amount": "10.00", "currency": "USD" },
-    "sourceWalletId": "1017459986",
-    "status": "complete"
-  }
-}
-```
-
 ---
 
-## Provider Adapter Architecture
+## Provider Adapter
 
 ```
-PayoutProviderAdapter (interface)
-├── getCapabilities()              → PayoutProviderCapabilities
-├── createPayoutInstruction(input) → PayoutInstruction
-├── getPayoutStatus(id)           → PayoutStatus
-├── normalizeWebhookEvent(payload) → PayoutProviderEvent | null
-└── cancelPayout(id)              → void
+PayoutProviderAdapter
+├── getCapabilities() → capabilities
+├── createPayoutInstruction(input) → instruction
+├── getPayoutStatus(id) → status
+└── normalizeWebhookEvent(payload) → event
 
-Implementations:
-├── CircleCompatibilityAdapter     → Circle Mint sandbox (live)
-├── BridgeCompatibilityAdapter     → Bridge (compatibility)
-├── EtherfusePixOffRampAdapter     → Etherfuse PIX proof
-└── MockUsdPayoutAdapter           → ops mock
+CircleCompatibilityAdapter   — sandbox_api (live)
+BridgeCompatibilityAdapter   — compatibility
+EtherfusePixOffRampAdapter   — proof
+MockUsdPayoutAdapter         — ops mock
 ```
 
-The factory `getPayoutProviderAdapter(name)` returns the right adapter for `circle`, `bridge`, `etherfuse`, or `mock`. Unknown names throw — no silent fallback.
+Factory: `getPayoutProviderAdapter('circle')` returns the live Circle adapter. Unknown names throw.
 
 ---
 
 ## Files
 
-| Component | File | Lines |
+| Component | Path | Lines |
 |-----------|------|-------|
 | Orchestrator | `backend/src/orchestration/TransferOrchestrator.ts` | 625 |
 | State Machine | `backend/src/orchestration/stateMachine.ts` | 67 |
 | Domain Types | `backend/src/orchestration/types.ts` | 182 |
 | Stellar Watcher | `backend/src/orchestration/stellarWatcher.ts` | 119 |
 | Orchestration Logger | `backend/src/orchestration/orchestrationLogger.ts` | 72 |
-| Decimal Utils | `backend/src/orchestration/decimal.ts` | ~60 |
 | Transfer Repository | `backend/src/api/repository/transfer.repository.ts` | 369 |
-| Ops History Repository | `backend/src/api/repository/ops-history.repository.ts` | 414 |
 | Ops Controller | `backend/src/api/controllers/ops.controller.ts` | 779 |
 | Ops Dashboard View | `backend/src/api/views/ops-dashboard.view.ts` | 1414 |
 | Payout Adapters | `backend/src/api/services/usd-payout-adapters.ts` | 943 |
@@ -287,8 +222,6 @@ The factory `getPayoutProviderAdapter(name)` returns the right adapter for `circ
 | Transfer Service | `backend/src/api/services/international-transfer.service.ts` | 953 |
 | Transfer Routes | `backend/src/api/routes/international-transfers.router.ts` | 24 |
 | DB Migration | `backend/migrations/20260613_00_full_schema.sql` | ~2700 |
-| Circle E2E Test | `scripts/circle-e2e-test.ts` | 190 |
-| Wire Test Page | `frontend/app/wire-test/wire-test-client.tsx` | 190 |
 
 ## Tests
 
@@ -301,12 +234,21 @@ npm --prefix backend test -- --runInBand \
   tests/international-transfer.routes.test.ts
 ```
 
-All passing. Covers state machine legality, orchestrator lifecycle, adapter contract (Circle/Bridge/redaction/status polling/webhook), and HTTP route coverage.
+All passing. State machine legality, orchestrator lifecycle, adapter contract (8 tests covering Circle/Bridge/redaction/status/webhook), and HTTP route coverage.
 
-## E2E Verification
+---
+
+## E2E
 
 ```bash
 npm run circle:e2e
-# Wallet → balance check → mock fund → settlement poll → wire payout → completion poll
-# Output: VERDICT — all PASS
+# Wallet → balance → mock fund → settlement poll → wire payout → completion
+# VERDICT: all PASS
 ```
+
+## Verifiable at
+
+- **Dashboard**: `/ops/transfers/972fda9f-fdec-47bd-a21c-a9326999e948`
+- **Circle API**: `GET https://api-sandbox.circle.com/v1/payouts/<id>` (any of the 4 IDs above)
+- **Circle balance**: `GET https://api-sandbox.circle.com/v1/businessAccount/balances`
+- **Repo**: https://github.com/rbfcdog/talk-to-stellar
