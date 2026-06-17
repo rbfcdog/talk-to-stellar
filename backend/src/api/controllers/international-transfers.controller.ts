@@ -435,14 +435,10 @@ export class InternationalTransfersController {
       const baseUrl = readText(process.env.CIRCLE_API_BASE_URL).replace(/\/+$/, '') || 'https://api-sandbox.circle.com';
       const amount = readText(req.body?.amount || req.body?.amount_usd || '10');
       const destinationTail = bankLast4(req.body?.destination_tail || req.body?.destinationTail || process.env.CIRCLE_PAYOUT_DESTINATION_LAST4);
-      const stellarTxHash = readText(req.body?.stellar_transaction_hash || req.body?.stellarTxHash);
-      const stellarNetworkRaw = readText(req.body?.stellar_network || req.body?.stellarNetwork || process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
-      const stellarNetwork = stellarNetworkRaw === 'mainnet' || stellarNetworkRaw === 'public' ? 'mainnet' : 'testnet';
 
       const missing = [
         ...(!apiKey ? ['CIRCLE_API_KEY'] : []),
         ...(!destinationId ? ['CIRCLE_PAYOUT_DESTINATION_ID'] : []),
-        ...(!stellarTxHash ? ['stellar_transaction_hash'] : []),
       ];
       if (missing.length) {
         res.status(400).json({
@@ -455,22 +451,6 @@ export class InternationalTransfersController {
         return;
       }
 
-      if (!isStellarTxHash(stellarTxHash)) {
-        res.status(400).json({
-          success: false,
-          ...responseContext(context),
-          code: 'invalid_stellar_transaction_hash',
-          message: 'Wire payout test requires a 64-character Stellar transaction hash.',
-        });
-        return;
-      }
-
-      const stellarEvidence = {
-        transaction_hash: stellarTxHash,
-        network: stellarNetwork,
-        explorer: stellarExplorerUrl(stellarTxHash, stellarNetwork),
-      };
-
       const idempotencyKey = crypto.randomUUID();
       const payload = {
         idempotencyKey,
@@ -480,14 +460,6 @@ export class InternationalTransfersController {
         metadata: {
           beneficiaryEmail: 'team.talktostellar@gmail.com',
           platform: 'TalkToStellar',
-          route: 'PIX_BRL_TO_STELLAR_USDC_TO_USD_BANK',
-          settlement_asset_code: 'USDC',
-          settlement_network: stellarEvidence.network,
-          off_ramp_provider: 'circle',
-          off_ramp_source_asset_code: 'USDC',
-          payout_currency: 'USD',
-          stellar_tx_hash: stellarEvidence.transaction_hash,
-          stellar_explorer_url: stellarEvidence.explorer,
           test: true,
         },
       };
@@ -521,7 +493,6 @@ export class InternationalTransfersController {
           source_wallet_id: sourceWalletId ? shortHash(sourceWalletId) : null,
           idempotency_key: idempotencyKey,
         },
-        stellar_evidence: stellarEvidence,
         circle_raw: circleData,
       });
     } catch (error: any) {
