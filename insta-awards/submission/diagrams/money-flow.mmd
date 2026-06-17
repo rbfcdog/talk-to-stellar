@@ -1,67 +1,27 @@
 sequenceDiagram
     actor User
-    participant Agent as Agent/API
-    participant Orchestrator as TransferOrchestrator
-    participant PIX as Etherfuse sandbox
-    participant Stellar as Stellar testnet
-    participant Payout as Circle Mint sandbox
-    participant DB as PostgreSQL
+    participant Orchestrator
+    participant PIX as Etherfuse
+    participant Stellar
+    participant Circle
 
-    Note over User,DB: Phase 1 — Intake & Quote
+    User->>Orchestrator: Create transfer
+    Orchestrator->>Orchestrator: BRL/USDC quote
+    Note right of Orchestrator: CREATED → QUOTED
 
-    User->>Agent: Create transfer (BRL amount, destination)
-    Agent->>Orchestrator: createTransfer(intent)
-    Orchestrator->>DB: create_transfer_with_event() RPC
-    DB-->>Orchestrator: Transfer { state: CREATED }
+    Orchestrator->>PIX: Generate PIX charge
+    PIX-->>User: BrCode
+    User->>PIX: Pay (simulated)
+    PIX-->>Orchestrator: Webhook (e2e_id)
+    Note right of Orchestrator: PIX_FUNDED
 
-    Agent->>Agent: Get BRL/USDC quote from DEX
-    Agent->>Orchestrator: attachQuote(transferId, quote)
-    Orchestrator->>DB: transition_transfer() → QUOTED
+    Orchestrator->>Stellar: Submit USDC payment
+    Stellar-->>Orchestrator: Tx hash
+    Note right of Orchestrator: STELLAR_SETTLED
 
-    Note over User,DB: Phase 2 — PIX Funding
+    Orchestrator->>Circle: Wire payout $10
+    Circle-->>Orchestrator: Payout ID + status
+    Note right of Orchestrator: PAYOUT_INSTRUCTED
 
-    Agent->>PIX: Create PIX charge
-    PIX-->>Agent: BrCode + charge_id
-    Agent->>Orchestrator: issuePixCharge(transferId, chargeId)
-    Orchestrator->>DB: transition_transfer() → PIX_CHARGE_ISSUED
-
-    User->>PIX: Pay PIX (sandbox simulated)
-    PIX->>Agent: Webhook: payment confirmed (e2e_id, paid_at)
-    Agent->>Orchestrator: confirmPixFunding(transferId, evidence)
-    Orchestrator->>DB: transition_transfer() → PIX_FUNDED
-
-    Note over User,DB: Phase 3 — Stellar Settlement
-
-    Agent->>Orchestrator: beginConversion(transferId)
-    Orchestrator->>DB: transition_transfer() → CONVERTING
-
-    Agent->>Stellar: Submit USDC payment (XDR)
-    Stellar-->>Agent: Transaction hash
-
-    loop Every 10s
-        StellarSettlementWatcher->>Stellar: GET /transactions/:hash
-        Stellar-->>StellarSettlementWatcher: successful: true, ledger: N
-    end
-
-    StellarSettlementWatcher->>Orchestrator: confirmStellarSettlement(id, evidence)
-    Orchestrator->>DB: transition_transfer() → STELLAR_SETTLED
-
-    Note over User,DB: Phase 4 — Payout & Reconciliation
-
-    Agent->>Orchestrator: routePayout(transferId, provider=circle)
-    Orchestrator->>DB: transition_transfer() → PAYOUT_ROUTING
-
-    Agent->>Payout: POST /v1/businessAccount/payouts (wire, $10.00)
-    Payout-->>Agent: HTTP 201, payout ID, status: pending
-
-    Agent->>Orchestrator: instructPayout(transferId, payoutId)
-    Orchestrator->>DB: transition_transfer() → PAYOUT_INSTRUCTED
-
-    Note over Payout: ~10 min sandbox settlement
-
-    Agent->>Payout: GET /v1/payouts/:id
-    Payout-->>Agent: status: complete
-
-    Agent->>Orchestrator: markReconciled(transferId)
-    Orchestrator->>Orchestrator: computeReconciliation() — BRL in vs USDC settled vs USD out
-    Orchestrator->>DB: transition_transfer() → RECONCILED
+    Orchestrator->>Orchestrator: Reconcile amounts
+    Note right of Orchestrator: RECONCILED
