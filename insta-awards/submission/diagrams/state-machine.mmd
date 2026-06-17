@@ -1,0 +1,29 @@
+stateDiagram-v2
+    [*] --> CREATED
+    CREATED --> QUOTED: quote_attached
+    CREATED --> QUOTE_EXPIRED: quote_expired
+    CREATED --> FAILED: failed
+    QUOTED --> PIX_CHARGE_ISSUED: pix_charge_issued
+    QUOTED --> QUOTE_EXPIRED: quote_expired
+    QUOTED --> FAILED: failed
+    PIX_CHARGE_ISSUED --> PIX_FUNDED: pix_funding_confirmed
+    PIX_CHARGE_ISSUED --> PIX_EXPIRED: pix_expired
+    PIX_CHARGE_ISSUED --> FAILED: failed
+    PIX_FUNDED --> CONVERTING: conversion_started
+    PIX_FUNDED --> FAILED: failed
+    CONVERTING --> STELLAR_SETTLED: stellar_settled
+    CONVERTING --> FAILED: failed
+    STELLAR_SETTLED --> PAYOUT_ROUTING: payout_routing_started
+    STELLAR_SETTLED --> FAILED: failed
+    PAYOUT_ROUTING --> PAYOUT_INSTRUCTED: payout_instructed
+    PAYOUT_ROUTING --> FAILED: failed
+    PAYOUT_INSTRUCTED --> RECONCILED: reconciled
+    PAYOUT_INSTRUCTED --> REFUND_REQUIRED: refund_required
+    PAYOUT_INSTRUCTED --> FAILED: failed
+    QUOTE_EXPIRED --> FAILED
+    PIX_EXPIRED --> FAILED
+    FAILED --> REFUND_REQUIRED
+    RECONCILED --> [*]
+    REFUND_REQUIRED --> [*]
+    note right of RECONCILED: Terminal success
+    note right of REFUND_REQUIRED: Terminal failure
