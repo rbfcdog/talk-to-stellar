@@ -300,25 +300,41 @@ export default function BridgeTestClient() {
       ) : null}
       {copied ? <div className="rounded-md border border-tts-confirm/25 bg-tts-confirm/10 p-2 text-sm font-semibold text-tts-confirm">Copied: {copied}</div> : null}
 
-      {/* 1. Customer Creation */}
+      {/* 1. Customer */}
       <OperationalCard>
         <div className="mb-4">
           <p className="text-xs font-bold uppercase text-tts-gold">Step 1</p>
-          <h2 className="text-lg font-bold text-tts-deep">Create Customer</h2>
+          <h2 className="text-lg font-bold text-tts-deep">Customer</h2>
         </div>
+
+        {/* Find existing */}
+        <div className="mb-4 rounded-md border border-tts-border bg-tts-bg/30 p-3">
+          <p className="mb-2 text-xs font-bold uppercase text-tts-muted">Find existing</p>
+          <div className="flex gap-2">
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email to find"
+              type="email"
+              className="flex-1"
+            />
+            <Button onClick={lookupByEmail} disabled={!!busy || !email} size="sm">
+              {busy?.includes("by-email") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+              Find
+            </Button>
+          </div>
+        </div>
+
+        {/* Or create new */}
+        <p className="mb-2 text-xs font-bold uppercase text-tts-muted">Or create new</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
           <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button onClick={createCustomer} disabled={!!busy || !firstName} size="sm">
             {busy?.startsWith("POST /customers") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
             Create
-          </Button>
-          <Button variant="outline" size="sm" onClick={lookupByEmail} disabled={!!busy || !email}>
-            {busy?.startsWith("GET /customers/by-email") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-            Find by email
           </Button>
           <Button variant="outline" size="sm" onClick={syncCustomer} disabled={!!busy || !customerId}>
             <RefreshCw className="mr-2 h-4 w-4" /> Sync
