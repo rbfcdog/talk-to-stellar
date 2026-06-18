@@ -64,7 +64,7 @@ export function loadBridgeConfig(): BridgeConfig {
     // Mainnet safety — ALL default to off/safe
     enableMainnetMoneyMovement: boolEnv('BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT', false),
     requireManualConfirmation: boolEnv('BRIDGE_REQUIRE_MANUAL_CONFIRMATION', true),
-    defaultSourceChain: env('BRIDGE_DEFAULT_SOURCE_CHAIN', 'base'),
+    defaultSourceChain: env('BRIDGE_DEFAULT_SOURCE_CHAIN', 'stellar'),
     defaultSourceCurrency: env('BRIDGE_DEFAULT_SOURCE_CURRENCY', 'usdc'),
     defaultDestinationCurrency: env('BRIDGE_DEFAULT_DESTINATION_CURRENCY', 'brl'),
     defaultDestinationRail: env('BRIDGE_DEFAULT_DESTINATION_RAIL', 'pix'),

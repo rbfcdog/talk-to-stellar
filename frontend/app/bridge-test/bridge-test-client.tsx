@@ -249,6 +249,7 @@ export default function BridgeTestClient() {
   // On-ramp
   const [onRampCurrency, setOnRampCurrency] = useState("brl");
   const [onRampChain, setOnRampChain] = useState("stellar");
+  const [onRampMemo, setOnRampMemo] = useState("");
   const [virtualAccounts, setVirtualAccounts] = useState<VirtualAccountData[]>([]);
   const [newVA, setNewVA] = useState<VirtualAccountData | null>(null);
 
@@ -475,12 +476,13 @@ export default function BridgeTestClient() {
   // ── On-ramp: virtual accounts ─────────────────────────────────
 
   async function createVirtualAccount() {
-    const destWallet = walletKey;
-    const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/${onRampCurrency}`, {
-      destination_wallet: destWallet,
+    const body: Record<string, unknown> = {
+      destination_wallet: walletKey,
       destination_chain: onRampChain,
       confirm_mainnet: true,
-    });
+    };
+    if (onRampMemo.trim()) body.blockchain_memo = onRampMemo.trim();
+    const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/${onRampCurrency}`, body);
     setNewVA(p.virtual_account as VirtualAccountData);
     setVirtualAccounts((prev) => [p.virtual_account, ...prev].filter(Boolean));
   }
@@ -955,12 +957,24 @@ export default function BridgeTestClient() {
 
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
           <div>
-            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar)</p>
-            <Input value={walletKey} readOnly className="font-mono text-xs" />
+            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar address)</p>
+            <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
           </div>
           <div>
             <p className="mb-1 text-xs text-tts-muted">Destination chain</p>
             <Input value={onRampChain} onChange={(e) => setOnRampChain(e.target.value)} placeholder="stellar" />
+          </div>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-xs text-tts-muted">
+              Blockchain memo{" "}
+              <span className="text-tts-muted/60">(optional — only needed if your Stellar address is an exchange hot-wallet that requires a memo)</span>
+            </p>
+            <Input
+              value={onRampMemo}
+              onChange={(e) => setOnRampMemo(e.target.value)}
+              placeholder="Leave blank for personal wallets (e.g. Lobstr, Freighter)"
+              className="font-mono text-xs"
+            />
           </div>
         </div>
 
