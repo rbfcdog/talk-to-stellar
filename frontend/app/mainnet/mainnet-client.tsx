@@ -220,6 +220,8 @@ export default function MainnetClient() {
   const [yieldBalance, setYieldBalance] = useState<any | null>(null);
   const [yieldResult, setYieldResult] = useState<any | null>(null);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, message: "", error: "" });
+  const [generating, setGenerating] = useState(false);
+  const [generatedWallet, setGeneratedWallet] = useState<{ public_key: string; secret: string; note: string } | null>(null);
 
   const balances: BalanceLine[] = useMemo(() => {
     if (Array.isArray(balance?.balances)) return balance.balances;
@@ -341,6 +343,26 @@ export default function MainnetClient() {
         message: "",
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  async function generateWallet() {
+    setGenerating(true);
+    setGeneratedWallet(null);
+    try {
+      const response = await fetch("/api/stellar-wallets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ user_id: session.sessionId || "anonymous", label: walletLabel.trim() || undefined }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!data.success) throw new Error(data.message || "Generation failed");
+      setGeneratedWallet({ public_key: data.wallet.public_key, secret: data.secret, note: data.sponsor_note });
+      setPublicKey(data.wallet.public_key);
+    } catch (error) {
+      setApiState({ loading: false, message: "", error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -624,19 +646,74 @@ export default function MainnetClient() {
                     onChange={(event) => setWalletLabel(event.target.value)}
                     className="min-h-12 w-full border border-tts-border bg-tts-bg/60 px-3 text-sm text-tts-deep outline-none focus:border-tts-gold"
                   />
-                  <button
-                    type="button"
-                    onClick={attachWallet}
-                    disabled={!canAttach || apiState.loading}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-deep/40"
-                  >
-                    {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    Attach read-only wallet
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={attachWallet}
+                      disabled={!canAttach || apiState.loading}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 bg-tts-gold px-4 py-2 text-sm font-black text-tts-deep disabled:cursor-not-allowed disabled:bg-tts-surface disabled:text-tts-deep/40"
+                    >
+                      {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      Attach
+                    </button>
+                    <button
+                      type="button"
+                      onClick={generateWallet}
+                      disabled={generating}
+                      title="Generate a new Stellar keypair"
+                      className="inline-flex min-h-11 items-center justify-center gap-2 border border-tts-border bg-tts-surface px-4 py-2 text-sm font-black text-tts-deep hover:border-tts-gold disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet2 className="h-4 w-4" />}
+                      Generate
+                    </button>
+                  </div>
                   {!canAttach && publicKey ? (
                     <p className="text-xs font-semibold text-tts-gold">
                       The key must be a Stellar public key beginning with G and 56 characters long.
                     </p>
+                  ) : null}
+
+                  {/* Generated wallet — secret shown once */}
+                  {generatedWallet ? (
+                    <div className="border border-tts-error/40 bg-tts-error/5 p-4 space-y-3">
+                      <p className="text-xs font-black uppercase tracking-normal text-tts-error">
+                        Save your secret key — it will not be shown again
+                      </p>
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-normal text-tts-muted mb-1">Public key</p>
+                        <div className="flex items-center gap-2">
+                          <p className="break-all font-mono text-xs text-tts-deep flex-1">{generatedWallet.public_key}</p>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(generatedWallet.public_key)}
+                            className="shrink-0 border border-tts-border px-2 py-1 text-xs font-black text-tts-muted hover:text-tts-deep"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-normal text-tts-error mb-1">Secret key (save now)</p>
+                        <div className="flex items-center gap-2">
+                          <p className="break-all font-mono text-xs font-bold text-tts-error flex-1">{generatedWallet.secret}</p>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(generatedWallet.secret)}
+                            className="shrink-0 border border-tts-error/40 px-2 py-1 text-xs font-black text-tts-error hover:bg-tts-error/10"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-tts-muted">{generatedWallet.note}</p>
+                      <button
+                        type="button"
+                        onClick={() => setGeneratedWallet(null)}
+                        className="text-xs font-black text-tts-muted underline"
+                      >
+                        I saved it — dismiss
+                      </button>
+                    </div>
                   ) : null}
                 </div>
 

@@ -20,6 +20,7 @@ import earlyAccessRouter from './api/routes/early-access.router';
 import internationalTransfersRouter from './api/routes/international-transfers.router';
 import webhooksRouter from './api/routes/webhooks.router';
 import { opsRouter } from './api/routes/ops.router';
+import stellarWalletsRouter from './api/routes/stellar-wallets.router';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import { FxRateAlertService } from './api/services/fx-rate-alert.service';
@@ -97,6 +98,7 @@ app.use('/api/evolution', evolutionRouter);
 app.use('/webhook/evolution', evolutionRouter);
 app.use('/webhook/bridge', bridgeWebhookRouter);
 app.use('/api/bridge', bridgeRouter);
+app.use('/api/stellar', stellarWalletsRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 

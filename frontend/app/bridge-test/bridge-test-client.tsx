@@ -226,6 +226,14 @@ export default function BridgeTestClient() {
   const [walletBalances, setWalletBalances] = useState<StellarBalance[]>([]);
   const [walletBusy, setWalletBusy] = useState(false);
 
+  // Saved wallets (from DB, per user)
+  type SavedWallet = { id: number; public_key: string; label?: string; is_funded: boolean; has_usdc_trustline: boolean; created_at: string };
+  const [savedWallets, setSavedWallets] = useState<SavedWallet[]>([]);
+  const [savedWalletsBusy, setSavedWalletsBusy] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [newWalletSecret, setNewWalletSecret] = useState<{ public_key: string; secret: string; note: string } | null>(null);
+  const [newWalletLabel, setNewWalletLabel] = useState("");
+
   // External accounts
   const [extTab, setExtTab] = useState<"pix" | "us_bank" | "iban" | "clabe">("pix");
   const [externalAccounts, setExternalAccounts] = useState<ExternalAccountData[]>([]);
@@ -332,6 +340,12 @@ export default function BridgeTestClient() {
     }
   }, [sessionEmail, runApi]);
 
+  // Auto-fetch saved wallets on login
+  useEffect(() => {
+    if (sessionEmail) fetchSavedWallets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEmail]);
+
   // Auto-fetch KYC link when customer loads
   useEffect(() => {
     if (customerId && customerId !== kycFetchedForId.current) {
@@ -372,6 +386,8 @@ export default function BridgeTestClient() {
     setLiqAddresses([]);
     setTransfers([]);
     setBridgeWallets([]);
+    setSavedWallets([]);
+    setNewWalletSecret(null);
     setError("");
     setLog([]);
     didAutoLookup.current = false;
@@ -428,6 +444,56 @@ export default function BridgeTestClient() {
     } finally {
       setWalletBusy(false);
     }
+  }
+
+  // ── Saved wallets (DB) ───────────────────────────────────────
+
+  async function fetchSavedWallets() {
+    if (!sessionEmail) return;
+    setSavedWalletsBusy(true);
+    try {
+      const r = await fetch(`/api/stellar-wallets?user_id=${encodeURIComponent(sessionEmail)}`);
+      const d = await r.json();
+      if (d.success) setSavedWallets(d.wallets || []);
+    } finally {
+      setSavedWalletsBusy(false);
+    }
+  }
+
+  async function createNewWallet() {
+    setCreatingWallet(true);
+    setNewWalletSecret(null);
+    try {
+      const r = await fetch("/api/stellar-wallets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: sessionEmail, label: newWalletLabel.trim() || undefined }),
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.message);
+      setNewWalletSecret({ public_key: d.wallet.public_key, secret: d.secret, note: d.sponsor_note });
+      setSavedWallets((prev) => [{ ...d.wallet, created_at: new Date().toISOString() }, ...prev]);
+      setNewWalletLabel("");
+      addLog(`New Stellar wallet created: ${d.wallet.public_key.slice(0, 8)}… funded=${d.wallet.is_funded}`);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setCreatingWallet(false);
+    }
+  }
+
+  async function deleteSavedWallet(id: number) {
+    const r = await fetch(`/api/stellar-wallets/${id}?user_id=${encodeURIComponent(sessionEmail)}`, { method: "DELETE" });
+    const d = await r.json();
+    if (d.success) setSavedWallets((prev) => prev.filter((w) => w.id !== id));
+  }
+
+  function selectSavedWallet(pk: string) {
+    localStorage.setItem("tts-bridge-wallet", pk);
+    setWalletKey(pk);
+    setWalletBalances([]);
+    fetchBalance(pk);
+    addLog(`Selected wallet: ${pk.slice(0, 8)}…`);
   }
 
   // ── External accounts ─────────────────────────────────────────
@@ -737,21 +803,24 @@ export default function BridgeTestClient() {
       <OperationalCard>
         <div className="mb-4">
           <p className="text-xs font-bold uppercase text-tts-gold">Step 2</p>
-          <h2 className="text-lg font-bold text-tts-deep">Stellar Wallet</h2>
-          <p className="mt-0.5 text-sm text-tts-muted">Used as destination for on-ramp and source for off-ramp.</p>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-tts-deep">
+            <Wallet className="h-5 w-5 text-tts-gold" /> Stellar Wallet
+          </h2>
+          <p className="mt-0.5 text-sm text-tts-muted">Select or create a Stellar wallet. Used as on-ramp destination and off-ramp source.</p>
         </div>
 
+        {/* Active wallet */}
         {walletKey ? (
           <div className="mb-4 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-xs text-tts-muted">Public key</p>
-                <p className="break-all font-mono text-xs font-semibold text-tts-deep">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-tts-confirm">Active wallet</p>
+                <p className="mt-0.5 break-all font-mono text-xs font-semibold text-tts-deep">
                   {walletKey}
                   <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(walletKey)} />
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => { localStorage.removeItem("tts-bridge-wallet"); setWalletKey(""); setWalletBalances([]); }}>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { localStorage.removeItem("tts-bridge-wallet"); setWalletKey(""); setWalletBalances([]); }}>
                 Clear
               </Button>
             </div>
@@ -765,26 +834,131 @@ export default function BridgeTestClient() {
                 ))}
               </div>
             ) : null}
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => fetchBalance()} disabled={walletBusy}>
+              {walletBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Refresh balance
+            </Button>
           </div>
-        ) : null}
+        ) : (
+          <div className="mb-4 rounded-md border border-tts-gold/25 bg-tts-gold/5 p-3 text-sm text-tts-gold">
+            No wallet selected. Create one below or enter a public key.
+          </div>
+        )}
 
-        <div className="flex gap-2">
-          <Input
-            value={walletInput}
-            onChange={(e) => setWalletInput(e.target.value)}
-            placeholder={walletKey ? "Enter a different public key…" : "G… Stellar public key"}
-            className="flex-1 font-mono text-xs"
-          />
-          <Button onClick={saveWallet} disabled={!walletInput.trim()} size="sm">
-            <Star className="mr-2 h-4 w-4" /> Save
+        {/* Create new wallet */}
+        <div className="mb-4 rounded-md border border-tts-border bg-tts-bg/30 p-3">
+          <p className="mb-2 text-xs font-bold uppercase text-tts-muted">Create new Stellar wallet</p>
+          <p className="mb-3 text-xs text-tts-muted">
+            Generates a fresh keypair. If <code className="rounded bg-tts-bg px-1">STELLAR_WALLET_SPONSOR_SECRET</code> is configured on the backend,
+            the wallet is automatically funded with XLM and a USDC trustline is added — making it immediately usable with Bridge wire on-ramp.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={newWalletLabel}
+              onChange={(e) => setNewWalletLabel(e.target.value)}
+              placeholder="Label (optional, e.g. My Wire Wallet)"
+              className="flex-1 text-xs"
+            />
+            <Button onClick={createNewWallet} disabled={creatingWallet} size="sm">
+              {creatingWallet ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Create
+            </Button>
+          </div>
+
+          {/* Secret reveal — shown ONCE */}
+          {newWalletSecret ? (
+            <div className="mt-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3">
+              <p className="mb-2 text-xs font-bold text-tts-error">Save your secret key now — it will not be shown again</p>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-xs text-tts-muted">Public key</span>
+                <span className="break-all font-mono text-xs font-semibold text-tts-deep">
+                  {newWalletSecret.public_key}
+                  <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(newWalletSecret.public_key)} />
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-tts-muted">Secret key</span>
+                <span className="break-all font-mono text-xs font-bold text-tts-error">
+                  {newWalletSecret.secret}
+                  <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(newWalletSecret.secret)} />
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-tts-muted">{newWalletSecret.note}</p>
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={() => { selectSavedWallet(newWalletSecret.public_key); setNewWalletSecret(null); }}
+              >
+                <Star className="mr-2 h-4 w-4" /> Use this wallet
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Saved wallets list */}
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs font-bold uppercase text-tts-muted">Your wallets ({savedWallets.length})</p>
+          <Button variant="outline" size="sm" onClick={fetchSavedWallets} disabled={savedWalletsBusy}>
+            {savedWalletsBusy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+            Refresh
           </Button>
         </div>
-        {walletKey ? (
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => fetchBalance()} disabled={walletBusy}>
-            {walletBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Refresh balance
-          </Button>
-        ) : null}
+        {savedWallets.length > 0 ? (
+          <div className="grid gap-2">
+            {savedWallets.map((w) => (
+              <div
+                key={w.id}
+                className={`flex items-center justify-between rounded-md border p-2 text-xs ${
+                  walletKey === w.public_key
+                    ? "border-tts-confirm/40 bg-tts-confirm/5"
+                    : "border-tts-border bg-tts-bg/50"
+                }`}
+              >
+                <div className="min-w-0">
+                  {w.label ? <p className="font-semibold text-tts-deep">{w.label}</p> : null}
+                  <p className="truncate font-mono text-tts-muted">{w.public_key.slice(0, 20)}…{w.public_key.slice(-6)}</p>
+                  <div className="mt-0.5 flex gap-1">
+                    <StatusPill tone={w.is_funded ? "confirm" : "gold"}>XLM {w.is_funded ? "funded" : "unfunded"}</StatusPill>
+                    <StatusPill tone={w.has_usdc_trustline ? "confirm" : "gold"}>USDC {w.has_usdc_trustline ? "ready" : "no trustline"}</StatusPill>
+                  </div>
+                </div>
+                <div className="ml-2 flex shrink-0 gap-1">
+                  <button
+                    className="rounded border border-tts-gold/40 px-2 py-0.5 text-xs text-tts-gold hover:bg-tts-gold/10"
+                    onClick={() => selectSavedWallet(w.public_key)}
+                    disabled={walletKey === w.public_key}
+                  >
+                    {walletKey === w.public_key ? "Active" : "Select"}
+                  </button>
+                  <button
+                    className="rounded border border-tts-error/30 px-2 py-0.5 text-xs text-tts-error hover:bg-tts-error/10"
+                    onClick={() => deleteSavedWallet(w.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-tts-muted">No saved wallets yet. Create one above.</p>
+        )}
+
+        {/* Manual entry */}
+        <div className="mt-4 border-t border-tts-border pt-4">
+          <p className="mb-2 text-xs font-bold uppercase text-tts-muted">Or enter an existing public key</p>
+          <div className="flex gap-2">
+            <Input
+              value={walletInput}
+              onChange={(e) => setWalletInput(e.target.value)}
+              placeholder="G… Stellar public key"
+              className="flex-1 font-mono text-xs"
+            />
+            <Button onClick={saveWallet} disabled={!walletInput.trim()} size="sm">
+              <Star className="mr-2 h-4 w-4" /> Use
+            </Button>
+          </div>
+        </div>
       </OperationalCard>
 
       {/* ── Step 3: External Accounts ─────────────────────────── */}
@@ -963,7 +1137,7 @@ export default function BridgeTestClient() {
 
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar mainnet address — must be funded with USDC trust line)</p>
+            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar mainnet address)</p>
             <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
           </div>
           <div>
@@ -984,9 +1158,9 @@ export default function BridgeTestClient() {
           </div>
         </div>
         {onRampChain === "stellar" && (
-          <p className="mb-3 rounded-md border border-tts-gold/25 bg-tts-gold/5 px-3 py-2 text-xs text-tts-gold">
-            Bridge validates your Stellar address on mainnet. The address must be funded (min 1 XLM) and have a USDC trust line.
-            Bridge will auto-attach the memo when sending USDC to your wallet.
+          <p className="mb-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 px-3 py-2 text-xs text-tts-confirm">
+            Wallets created in Step 2 are auto-funded with XLM and have the USDC trustline set — ready for Bridge immediately.
+            If you entered an external wallet, Bridge requires it to be funded (≥1 XLM) with a USDC trustline on mainnet.
           </p>
         )}
 
