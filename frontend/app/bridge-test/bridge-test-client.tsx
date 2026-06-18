@@ -204,6 +204,7 @@ export default function BridgeTestClient() {
   const [customerId, setCustomerId] = useState("");
   const [readiness, setReadiness] = useState<ReadinessData | null>(null);
   const [kycData, setKycData] = useState<Record<string, unknown> | null>(null);
+  const [pixKycData, setPixKycData] = useState<Record<string, unknown> | null>(null);
 
   // Stellar wallet
   const [walletKey, setWalletKey] = useState<string>(() => {
@@ -335,13 +336,16 @@ export default function BridgeTestClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionEmail]);
 
-  // Auto-fetch KYC link when customer loads
+  // Auto-fetch KYC link + readiness when customer loads
   useEffect(() => {
     if (customerId && customerId !== kycFetchedForId.current) {
       kycFetchedForId.current = customerId;
       runApi("POST", `/customers/${encodeURIComponent(customerId)}/kyc-link`)
         .then((p) => setKycData(p.kyc_link as Record<string, unknown>))
         .catch(() => setError(""));
+      runApi("GET", `/customers/${encodeURIComponent(customerId)}/readiness`)
+        .then((p) => setReadiness(p.readiness as ReadinessData))
+        .catch(() => {});
     }
   }, [customerId, runApi]);
 
@@ -404,6 +408,11 @@ export default function BridgeTestClient() {
   async function checkReadiness() {
     const p = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/readiness`);
     setReadiness(p.readiness as ReadinessData);
+  }
+
+  async function requestPixEndorsement() {
+    const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/pix-kyc-link`);
+    setPixKycData(p.kyc_link as Record<string, unknown>);
   }
 
   // ── Stellar wallet ────────────────────────────────────────────
@@ -782,6 +791,34 @@ export default function BridgeTestClient() {
                   <StatusPill tone={kycData.tos_status === "approved" ? "confirm" : "gold"}>{String(kycData.tos_status || "-")}</StatusPill>
                 </div>
               </div>
+              {/* PIX endorsement */}
+              <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+                <p className="text-xs font-bold uppercase text-tts-muted">PIX / BRL Endorsement</p>
+                <p className="mt-1 text-xs text-tts-muted">Required to create BRL virtual accounts. Separate from base KYC.</p>
+                {readiness?.pix_ready ? (
+                  <div className="mt-2">
+                    <StatusPill tone="confirm">PIX approved</StatusPill>
+                  </div>
+                ) : (
+                  <>
+                    <Button onClick={requestPixEndorsement} disabled={!!busy} size="sm" variant="outline" className="mt-2 w-full justify-start">
+                      {busy?.includes("pix-kyc-link") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+                      Get PIX endorsement link
+                    </Button>
+                    {pixKycData ? (
+                      <div className="mt-2">
+                        <Button asChild variant="outline" size="sm" className="w-full justify-start">
+                          <a href={String(pixKycData.kyc_link || pixKycData.url || "#")} target="_blank" rel="noreferrer">
+                            <ExternalLink className="mr-2 h-4 w-4" /> Complete PIX verification
+                          </a>
+                        </Button>
+                        <StatusPill tone="gold" className="mt-1">{String(pixKycData.status || pixKycData.kyc_status || "pending")}</StatusPill>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+
               <p className="text-xs text-tts-muted">ID: {String(kycData.id || "-")} · Created: {String(kycData.created_at || "-").slice(0, 19)}</p>
             </div>
           ) : (
@@ -1163,10 +1200,18 @@ export default function BridgeTestClient() {
           </p>
         )}
 
+        {onRampCurrency === "brl" && readiness && !readiness.pix_ready ? (
+          <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
+            <p className="font-bold">PIX endorsement required for BRL</p>
+            <p className="mt-1">This customer does not have the PIX endorsement. Go to the KYC section above, click "Get PIX endorsement link", complete the verification, then sync the customer and check readiness again.</p>
+            <p className="mt-1 text-tts-muted">USD, EUR, MXN, GBP, COP virtual accounts only need base KYC — try those first.</p>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2">
           <Button
             onClick={createVirtualAccount}
-            disabled={!!busy || !customerId || !walletKey || (onRampChain === "stellar" && walletOnChain === false)}
+            disabled={!!busy || !customerId || !walletKey || (onRampChain === "stellar" && walletOnChain === false) || (onRampCurrency === "brl" && readiness != null && !readiness.pix_ready)}
             size="sm"
           >
             {busy?.includes("virtual-accounts") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}

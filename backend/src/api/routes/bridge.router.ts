@@ -16,6 +16,7 @@ router.get("/customers/by-email", BridgeController.findCustomerByEmail);
 router.get("/customers/:id", BridgeController.getCustomer);
 router.post("/customers/:id/sync", BridgeController.syncCustomer);
 router.post("/customers/:id/kyc-link", BridgeController.getKycLink);
+router.post("/customers/:id/pix-kyc-link", BridgeController.getPixKycLink);
 router.get(
   "/customers/:id/readiness",
   BridgeController.getCustomerReadiness,

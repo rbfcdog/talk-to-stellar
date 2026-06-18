@@ -98,16 +98,17 @@ export class BridgeService {
     );
   }
 
-  async createStandaloneKycLink(email: string, type: string): Promise<BridgeKycLink> {
+  async createStandaloneKycLink(email: string, type: string, endorsement?: string): Promise<BridgeKycLink> {
+    const body: Record<string, string> = { email, type };
+    if (endorsement) body.endorsement = endorsement;
     try {
-      return await this.client.post('/kyc_links', { email, type }, BridgeClient.idempotencyKey('kyc'));
+      return await this.client.post('/kyc_links', body, BridgeClient.idempotencyKey(`kyc-${endorsement || 'base'}`));
     } catch (error: any) {
       // Bridge returns 409 with existing_kyc_link when one already exists
       const existing = error?.response?.existing_kyc_link || error?.existing_kyc_link;
       if (existing) return existing as BridgeKycLink;
       if (String(error?.message || '').includes('already been created')) {
-        // Retry without idempotency key to get the existing link
-        return this.client.post('/kyc_links', { email, type }) as Promise<BridgeKycLink>;
+        return this.client.post('/kyc_links', body) as Promise<BridgeKycLink>;
       }
       throw error;
     }
