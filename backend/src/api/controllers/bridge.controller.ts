@@ -292,6 +292,7 @@ export class BridgeController {
       const address = await service.createLiquidationAddress(customerId, {
         payment_rail: "pix",
         currency: "brl",
+        chain: "base",
         external_account_id: externalAccountId || undefined,
         custom_developer_fee_percent: feePercent || undefined,
       });
