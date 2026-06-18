@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
 import { getBridgeService } from "../../integrations/bridge";
 import { logger } from "../../utils/logger";
-import { publicErrorMessage } from "../../utils/public-error";
 import { assertBridgeAmountInRange } from "../middlewares/bridge-mainnet.middleware";
 
 function readText(value: unknown, fallback = ""): string {
@@ -46,7 +45,7 @@ export class BridgeController {
       logger.error(`[bridge] createCustomer failed: ${error.message}`);
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Failed to create Bridge customer."),
+        message: (error?.message || "Failed to create Bridge customer."),
       });
     }
   }
@@ -60,7 +59,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Customer not found."),
+        message: (error?.message || "Customer not found."),
       });
     }
   }
@@ -74,7 +73,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Failed to sync customer."),
+        message: (error?.message || "Failed to sync customer."),
       });
     }
   }
@@ -88,7 +87,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Failed to create KYC link."),
+        message: (error?.message || "Failed to create KYC link."),
       });
     }
   }
@@ -138,10 +137,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to check customer readiness.",
-        ),
+        message: error?.message || "Failed to check customer readiness.",
       });
     }
   }
@@ -175,10 +171,7 @@ export class BridgeController {
       );
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to create Pix external account.",
-        ),
+        message: error?.message || "Failed to create Pix external account.",
       });
     }
   }
@@ -196,10 +189,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to list external accounts.",
-        ),
+        message: error?.message || "Failed to list external accounts.",
       });
     }
   }
@@ -216,10 +206,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "External account not found.",
-        ),
+        message: error?.message || "External account not found.",
       });
     }
   }
@@ -236,10 +223,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to delete external account.",
-        ),
+        message: error?.message || "Failed to delete external account.",
       });
     }
   }
@@ -281,10 +265,7 @@ export class BridgeController {
       );
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to create liquidation address.",
-        ),
+        message: error?.message || "Failed to create liquidation address.",
       });
     }
   }
@@ -301,10 +282,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to list liquidation addresses.",
-        ),
+        message: error?.message || "Failed to list liquidation addresses.",
       });
     }
   }
@@ -322,10 +300,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Liquidation address not found.",
-        ),
+        message: error?.message || "Liquidation address not found.",
       });
     }
   }
@@ -395,7 +370,7 @@ export class BridgeController {
       );
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Failed to create transfer."),
+        message: (error?.message || "Failed to create transfer."),
       });
     }
   }
@@ -409,7 +384,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Transfer not found."),
+        message: (error?.message || "Transfer not found."),
       });
     }
   }
@@ -423,7 +398,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(error, "Failed to sync transfer."),
+        message: (error?.message || "Failed to sync transfer."),
       });
     }
   }
@@ -442,10 +417,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to get exchange rate.",
-        ),
+        message: error?.message || "Failed to get exchange rate.",
       });
     }
   }
@@ -483,10 +455,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to estimate payout.",
-        ),
+        message: error?.message || "Failed to estimate payout.",
       });
     }
   }
@@ -528,10 +497,7 @@ export class BridgeController {
       );
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to create virtual account.",
-        ),
+        message: error?.message || "Failed to create virtual account.",
       });
     }
   }
@@ -548,10 +514,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Failed to list virtual accounts.",
-        ),
+        message: error?.message || "Failed to list virtual accounts.",
       });
     }
   }
@@ -568,10 +531,7 @@ export class BridgeController {
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
-        message: publicErrorMessage(
-          error,
-          "Virtual account not found.",
-        ),
+        message: error?.message || "Virtual account not found.",
       });
     }
   }
