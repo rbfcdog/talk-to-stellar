@@ -21,6 +21,8 @@ import type {
   BridgeWebhook,
   BridgeWebhookEvent,
   BridgeWebhookEventType,
+  BridgeWallet,
+  BridgeWalletChain,
   BusinessCustomerCreateInput,
   CustomerCreateInput,
   CustomerUpdateInput,
@@ -695,6 +697,31 @@ export class BridgeService {
 
   async deleteStaticMemo(memoId: string): Promise<void> {
     await this.client.delete(`/static_memos/${encodeURIComponent(memoId)}`);
+  }
+
+  // ── Bridge Wallets ────────────────────────────────────────────
+  // Custodial wallets on base, ethereum, solana, tempo, or tron.
+  // Stellar is NOT a supported chain for Bridge Wallets.
+
+  async createWallet(customerId: string, chain: BridgeWalletChain): Promise<BridgeWallet> {
+    return this.client.post(
+      `/customers/${encodeURIComponent(customerId)}/wallets`,
+      { chain },
+      BridgeClient.idempotencyKey(`wallet-${customerId}-${chain}`),
+    );
+  }
+
+  async listWallets(customerId: string): Promise<BridgeWallet[]> {
+    const res = await this.client.get<{ wallets: BridgeWallet[] }>(
+      `/customers/${encodeURIComponent(customerId)}/wallets`,
+    );
+    return (res as any).wallets ?? (res as any) ?? [];
+  }
+
+  async getWallet(customerId: string, walletId: string): Promise<BridgeWallet> {
+    return this.client.get(
+      `/customers/${encodeURIComponent(customerId)}/wallets/${encodeURIComponent(walletId)}`,
+    );
   }
 }
 

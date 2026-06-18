@@ -381,3 +381,20 @@ export interface TransferListParams {
   limit?: number;
   state?: TransferState;
 }
+
+// ── Bridge Wallets ────────────────────────────────────────────────────
+// Bridge-hosted custodial wallets on supported EVM/non-EVM chains.
+// NOTE: Stellar is NOT a supported chain — chains are base, ethereum, solana, tempo, tron.
+// Bridge Wallet is the destination for USDC on those chains, separate from Stellar.
+
+export type BridgeWalletChain = 'base' | 'ethereum' | 'solana' | 'tempo' | 'tron';
+
+export interface BridgeWallet {
+  id: string;
+  chain: BridgeWalletChain;
+  address: string;
+  /** When true, transfers sourced from this wallet must include an initiation object */
+  initiation_required?: boolean;
+  created_at: string;
+  updated_at: string;
+}

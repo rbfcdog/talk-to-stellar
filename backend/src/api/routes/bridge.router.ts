@@ -198,4 +198,9 @@ router.post(
 router.get("/static-memos/:memoId", BridgeController.getStaticMemo);
 router.delete("/static-memos/:memoId", BridgeController.deleteStaticMemo);
 
+// Bridge Wallets (custodial wallets on base/ethereum/solana/tempo/tron — NOT Stellar)
+router.post("/customers/:id/wallets", BridgeController.createWallet);
+router.get("/customers/:id/wallets", BridgeController.listWallets);
+router.get("/customers/:id/wallets/:walletId", BridgeController.getWallet);
+
 export default router;

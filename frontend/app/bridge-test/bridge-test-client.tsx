@@ -268,6 +268,11 @@ export default function BridgeTestClient() {
   // Transfer history
   const [transfers, setTransfers] = useState<TransferData[]>([]);
 
+  // Bridge Wallets (custodial: base, ethereum, solana, tempo, tron — NOT Stellar)
+  type BridgeWalletData = { id?: string; chain?: string; address?: string; initiation_required?: boolean; created_at?: string };
+  const [bridgeWallets, setBridgeWallets] = useState<BridgeWalletData[]>([]);
+  const [bridgeWalletChain, setBridgeWalletChain] = useState("base");
+
   // Exchange rates
   const [rateFrom, setRateFrom] = useState("usd");
   const [rateTo, setRateTo] = useState("brl");
@@ -359,6 +364,7 @@ export default function BridgeTestClient() {
     setVirtualAccounts([]);
     setLiqAddresses([]);
     setTransfers([]);
+    setBridgeWallets([]);
     setError("");
     setLog([]);
     didAutoLookup.current = false;
@@ -528,6 +534,18 @@ export default function BridgeTestClient() {
   async function listCustomerTransfers() {
     const p = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/transfers`);
     setTransfers((p.transfers as TransferData[]) || []);
+  }
+
+  // ── Bridge Wallets ─────────────────────────────────────────────
+
+  async function createBridgeWallet() {
+    const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/wallets`, { chain: bridgeWalletChain });
+    setBridgeWallets((prev) => [p.wallet, ...prev].filter(Boolean));
+  }
+
+  async function listBridgeWallets() {
+    const p = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets`);
+    setBridgeWallets((p.wallets as BridgeWalletData[]) || []);
   }
 
   // ── Exchange rates ─────────────────────────────────────────────
@@ -1086,6 +1104,66 @@ export default function BridgeTestClient() {
         {offTransfer ? (
           <div className="mt-4">
             <TransferCard t={offTransfer} onRefresh={() => refreshTransfer(offTransfer.id!)} />
+          </div>
+        ) : null}
+      </OperationalCard>
+
+      {/* ── Bridge Wallets (custodial: base/ethereum/solana/tempo/tron) ── */}
+      <OperationalCard>
+        <div className="mb-4">
+          <p className="text-xs font-bold uppercase text-tts-muted">Bridge.xyz</p>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-tts-deep">
+            <Wallet className="h-5 w-5 text-tts-gold" /> Bridge Custodial Wallets
+          </h2>
+          <p className="mt-0.5 text-sm text-tts-muted">
+            Bridge creates hosted wallets on <strong>Base, Ethereum, Solana, Tempo, or Tron</strong> — not Stellar. Use these as on-ramp destinations when sending stablecoins on those chains.
+          </p>
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          {(["base", "ethereum", "solana", "tempo", "tron"] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setBridgeWalletChain(c)}
+              className={`rounded-md border px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                bridgeWalletChain === c
+                  ? "border-tts-gold bg-tts-gold/10 text-tts-gold"
+                  : "border-tts-border bg-tts-bg/40 text-tts-muted hover:border-tts-gold/50"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={createBridgeWallet} disabled={!!busy || !customerId} size="sm">
+            {busy?.includes("/wallets") && !busy.includes("liquidation") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Create {bridgeWalletChain} wallet
+          </Button>
+          <Button variant="outline" size="sm" onClick={listBridgeWallets} disabled={!!busy || !customerId}>
+            <Search className="mr-2 h-4 w-4" /> List wallets
+          </Button>
+        </div>
+
+        {bridgeWallets.length > 0 ? (
+          <div className="mt-4 grid gap-2">
+            {bridgeWallets.map((w, i) => (
+              <div key={w.id || i} className="rounded-md border border-tts-border bg-tts-bg/50 p-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{w.chain}</span>
+                  <span className="font-mono text-tts-muted">{w.id?.slice(0, 20)}…</span>
+                </div>
+                <div className="mt-2 break-all font-mono text-tts-deep">
+                  {w.address}
+                  {w.address ? <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(w.address!)} /> : null}
+                </div>
+                {w.initiation_required ? (
+                  <p className="mt-1 text-tts-error">⚠ Transfers from this wallet require an initiation object</p>
+                ) : null}
+              </div>
+            ))}
           </div>
         ) : null}
       </OperationalCard>
