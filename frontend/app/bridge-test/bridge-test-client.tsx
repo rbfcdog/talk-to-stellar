@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -95,7 +95,16 @@ export default function BridgeTestClient() {
   // Customer form
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("tts-bridge-email") || "a@gmail.com";
+    return "a@gmail.com";
+  });
+  const [kycData, setKycData] = useState<Record<string, unknown> | null>(null);
+
+  const saveEmail = (v: string) => {
+    setEmail(v);
+    if (typeof window !== "undefined") localStorage.setItem("tts-bridge-email", v);
+  };
   // Created customer
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [customerId, setCustomerId] = useState("");
@@ -190,8 +199,8 @@ export default function BridgeTestClient() {
 
   async function getKycLink() {
     const payload = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/kyc-link`);
-    setCustomer(payload.customer as CustomerData);
-    addLog(`KYC link: ${JSON.stringify(payload.kyc_link)}`);
+    const link = payload.kyc_link;
+    setKycData(link as Record<string, unknown>);
   }
 
   // ── PIX External Account ────────────────────────
@@ -303,7 +312,7 @@ export default function BridgeTestClient() {
           <div className="flex gap-2">
             <Input
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => saveEmail(e.target.value)}
               placeholder="Email to find"
               type="email"
               className="flex-1"
@@ -361,6 +370,40 @@ export default function BridgeTestClient() {
           </div>
         ) : null}
       </OperationalCard>
+
+      {/* KYC Links */}
+      {kycData ? (
+        <OperationalCard>
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase text-tts-muted">KYC & ToS Links</p>
+            <h2 className="text-lg font-bold text-tts-deep">Complete verification</h2>
+          </div>
+          <div className="grid gap-3">
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Persona KYC</p>
+              <a href={String(kycData.kyc_link || "#")} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-xs text-tts-gold hover:underline">
+                {String(kycData.kyc_link || "-").slice(0, 100)}...
+              </a>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <StatusPill tone="gold">{String(kycData.kyc_status || "-")}</StatusPill>
+                <StatusPill tone="default">{String(kycData.persona_inquiry_type || "-")}</StatusPill>
+              </div>
+            </div>
+            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+              <p className="text-xs font-bold uppercase text-tts-muted">Terms of Service</p>
+              <a href={String(kycData.tos_link || "#")} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-xs text-tts-gold hover:underline">
+                {String(kycData.tos_link || "-").slice(0, 100)}...
+              </a>
+              <div className="mt-2">
+                <StatusPill tone="gold">{String(kycData.tos_status || "-")}</StatusPill>
+              </div>
+            </div>
+            <div className="text-xs text-tts-muted">
+              ID: {String(kycData.id || "-")} · Created: {String(kycData.created_at || "-").slice(0, 19)}
+            </div>
+          </div>
+        </OperationalCard>
+      ) : null}
 
       {/* 2. PIX External Account */}
       <OperationalCard>
