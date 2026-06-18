@@ -305,6 +305,7 @@ export class BridgeService {
     customerId: string,
     destinationWallet: string,
     destinationChain: string,
+    blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
     return this.createVirtualAccount(customerId, {
       source: { currency: 'brl' },
@@ -312,6 +313,7 @@ export class BridgeService {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
+        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -447,6 +449,7 @@ export class BridgeService {
     customerId: string,
     destinationWallet: string,
     destinationChain: string,
+    blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
     return this.createVirtualAccount(customerId, {
       source: { currency: 'usd' },
@@ -454,6 +457,7 @@ export class BridgeService {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
+        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -465,6 +469,7 @@ export class BridgeService {
     customerId: string,
     destinationWallet: string,
     destinationChain: string,
+    blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
     return this.createVirtualAccount(customerId, {
       source: { currency: 'eur' },
@@ -472,6 +477,7 @@ export class BridgeService {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
+        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -483,6 +489,7 @@ export class BridgeService {
     customerId: string,
     destinationWallet: string,
     destinationChain: string,
+    blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
     return this.createVirtualAccount(customerId, {
       source: { currency: 'mxn' },
@@ -490,6 +497,7 @@ export class BridgeService {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
+        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });

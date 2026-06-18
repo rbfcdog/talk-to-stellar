@@ -522,11 +522,13 @@ export class BridgeController {
         req.body?.destination_chain || req.body?.destinationChain,
         service.config.defaultSourceChain,
       );
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
 
       const virtualAccount = await service.createBrlVirtualAccount(
         customerId,
         destinationWallet,
         destinationChain,
+        blockchainMemo,
       );
 
       logger.info(
@@ -606,7 +608,8 @@ export class BridgeController {
       const customerId = String(req.params.id);
       const destinationWallet = readText(req.body?.destination_wallet || req.body?.destinationWallet);
       const destinationChain = readText(req.body?.destination_chain || req.body?.destinationChain, service.config.defaultSourceChain);
-      const account = await service.createUsdVirtualAccount(customerId, destinationWallet, destinationChain);
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
+      const account = await service.createUsdVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] USD virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
@@ -621,7 +624,8 @@ export class BridgeController {
       const customerId = String(req.params.id);
       const destinationWallet = readText(req.body?.destination_wallet || req.body?.destinationWallet);
       const destinationChain = readText(req.body?.destination_chain || req.body?.destinationChain, service.config.defaultSourceChain);
-      const account = await service.createEurVirtualAccount(customerId, destinationWallet, destinationChain);
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
+      const account = await service.createEurVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] EUR virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
@@ -636,7 +640,8 @@ export class BridgeController {
       const customerId = String(req.params.id);
       const destinationWallet = readText(req.body?.destination_wallet || req.body?.destinationWallet);
       const destinationChain = readText(req.body?.destination_chain || req.body?.destinationChain, service.config.defaultSourceChain);
-      const account = await service.createMxnVirtualAccount(customerId, destinationWallet, destinationChain);
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
+      const account = await service.createMxnVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] MXN virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
