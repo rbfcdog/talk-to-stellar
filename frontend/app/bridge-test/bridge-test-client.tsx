@@ -147,16 +147,18 @@ export default function BridgeTestClient() {
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
       });
-      const payload: ApiResponse = await r.json().catch(() => ({}));
-      addLog(`${method} ${path} → ${r.status} ${payload.success ? "OK" : payload.message || "FAIL"}`);
+      const payload: any = await r.json().catch(() => ({}));
+      addLog(`${method} ${path} → ${r.status} ${payload.success ? "OK" : JSON.stringify(payload).slice(0, 120)}`);
       if (!r.ok || payload.success === false) {
-        throw new Error(payload.message || `${method} ${path} failed with HTTP ${r.status}`);
+        const details = [];
+        if (payload.bridge_code) details.push(`code=${payload.bridge_code}`);
+        if (payload.bridge_source?.key) details.push(`field=${payload.bridge_source.key}`);
+        throw new Error(payload.message || (details.length ? details.join(", ") : `${method} ${path} failed with HTTP ${r.status}`));
       }
       return payload;
     } catch (e: any) {
-      const msg = e?.message || String(e);
-      setError(msg);
-      addLog(`ERROR: ${msg}`);
+      setError(e?.message || String(e));
+      addLog(`ERROR: ${e?.message || String(e)}`);
       throw e;
     } finally {
       setBusy("");
