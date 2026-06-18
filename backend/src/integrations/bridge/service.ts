@@ -22,7 +22,9 @@ import type {
   BridgeWebhookEvent,
   BridgeWebhookEventType,
   BridgeWallet,
+  BridgeWalletBalance,
   BridgeWalletChain,
+  BridgeWalletTransaction,
   BusinessCustomerCreateInput,
   CustomerCreateInput,
   CustomerUpdateInput,
@@ -783,6 +785,26 @@ export class BridgeService {
     return this.client.get(
       `/customers/${encodeURIComponent(customerId)}/wallets/${encodeURIComponent(walletId)}`,
     );
+  }
+
+  async getWalletTransactions(walletId: string, params?: { limit?: number; starting_after?: string }): Promise<BridgeWalletTransaction[]> {
+    const q: Record<string, string> = {};
+    if (params?.limit) q.limit = String(params.limit);
+    if (params?.starting_after) q.starting_after = params.starting_after;
+    const res = await this.client.get<{ data: BridgeWalletTransaction[] }>(
+      `/wallets/${encodeURIComponent(walletId)}/transactions`,
+      q,
+    );
+    return (res as any).data ?? (res as any) ?? [];
+  }
+
+  async getWalletBalances(): Promise<BridgeWalletBalance[]> {
+    const res = await this.client.get<{ data: BridgeWalletBalance[] }>('/wallets/balances');
+    return (res as any).data ?? (res as any) ?? [];
+  }
+
+  async getGlobalWallet(walletId: string): Promise<BridgeWallet> {
+    return this.client.get(`/wallets/${encodeURIComponent(walletId)}`);
   }
 }
 

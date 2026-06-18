@@ -399,3 +399,24 @@ export interface BridgeWallet {
   created_at: string;
   updated_at: string;
 }
+
+export interface BridgeWalletBalance {
+  chain: BridgeWalletChain;
+  currency: string;
+  amount: string;
+  wallet_id: string;
+}
+
+export interface BridgeWalletTransaction {
+  id: string;
+  wallet_id: string;
+  amount: string;
+  currency: string;
+  type: 'deposit' | 'withdrawal';
+  status: 'completed' | 'pending' | 'failed';
+  hash?: string;
+  from_address?: string;
+  to_address?: string;
+  created_at: string;
+  updated_at: string;
+}

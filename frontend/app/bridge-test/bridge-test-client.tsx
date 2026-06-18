@@ -286,9 +286,13 @@ export default function BridgeTestClient() {
   const [transfers, setTransfers] = useState<TransferData[]>([]);
 
   // Bridge Wallets (custodial: base, ethereum, solana, tempo, tron — NOT Stellar)
-  type BridgeWalletData = { id?: string; chain?: string; address?: string; initiation_required?: boolean; created_at?: string };
+  type BridgeWalletData = { id?: string; chain?: string; address?: string; initiation_required?: boolean; created_at?: string; updated_at?: string };
+  type BridgeWalletTx = { id?: string; amount?: string; currency?: string; type?: string; status?: string; hash?: string; created_at?: string };
   const [bridgeWallets, setBridgeWallets] = useState<BridgeWalletData[]>([]);
   const [bridgeWalletChain, setBridgeWalletChain] = useState("base");
+  const [selectedBridgeWallet, setSelectedBridgeWallet] = useState<BridgeWalletData | null>(null);
+  const [walletTxs, setWalletTxs] = useState<{ walletId: string; txs: BridgeWalletTx[] } | null>(null);
+  const [txLoading, setTxLoading] = useState(false);
 
   // Exchange rates
   const [rateFrom, setRateFrom] = useState("usd");
@@ -562,10 +566,15 @@ export default function BridgeTestClient() {
   // ── On-ramp: virtual accounts ─────────────────────────────────
 
   async function createVirtualAccount() {
-    const destAddress = onRampChain === "stellar" ? walletKey : evmWallet;
+    const destAddress = onRampChain === "stellar"
+      ? walletKey
+      : (selectedBridgeWallet?.address || evmWallet);
+    const destChain = onRampChain === "stellar"
+      ? "stellar"
+      : (selectedBridgeWallet?.chain || onRampChain);
     const body: Record<string, unknown> = {
       destination_wallet: destAddress,
-      destination_chain: onRampChain,
+      destination_chain: destChain,
       confirm_mainnet: true,
     };
     if (onRampMemo.trim()) body.blockchain_memo = onRampMemo.trim();
@@ -629,12 +638,38 @@ export default function BridgeTestClient() {
 
   async function createBridgeWallet() {
     const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/wallets`, { chain: bridgeWalletChain });
-    setBridgeWallets((prev) => [p.wallet, ...prev].filter(Boolean));
+    const w = p.wallet as BridgeWalletData;
+    setBridgeWallets((prev) => [w, ...prev].filter(Boolean));
+    // Auto-select the newly created wallet
+    if (w?.address) { setSelectedBridgeWallet(w); setEvmWallet(w.address); setOnRampChain(w.chain || "base"); }
   }
 
   async function listBridgeWallets() {
     const p = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets`);
     setBridgeWallets((p.wallets as BridgeWalletData[]) || []);
+  }
+
+  function selectBridgeWallet(w: BridgeWalletData) {
+    setSelectedBridgeWallet(w);
+    setEvmWallet(w.address || "");
+    setOnRampChain(w.chain || "base");
+    setWalletTxs(null);
+  }
+
+  function clearBridgeWalletSelection() {
+    setSelectedBridgeWallet(null);
+    setEvmWallet("");
+  }
+
+  async function loadWalletTransactions(walletId: string) {
+    setTxLoading(true);
+    setWalletTxs(null);
+    try {
+      const p = await runApi("GET", `/wallets/${encodeURIComponent(walletId)}/transactions`);
+      setWalletTxs({ walletId, txs: (p.transactions as BridgeWalletTx[]) || [] });
+    } finally {
+      setTxLoading(false);
+    }
   }
 
   // ── Exchange rates ─────────────────────────────────────────────
@@ -1010,6 +1045,25 @@ export default function BridgeTestClient() {
             Bridge creates and hosts wallets on Base, Ethereum, Solana, Tempo, or Tron.
             No funding required — Bridge manages the keys. Select one as the on-ramp destination in Step 4.
           </p>
+
+          {/* Selected wallet banner */}
+          {selectedBridgeWallet && (
+            <div className="mb-3 flex items-start justify-between rounded-md border border-tts-confirm/30 bg-tts-confirm/5 p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-tts-confirm">On-ramp destination set</p>
+                <span className="mt-0.5 inline-block rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{selectedBridgeWallet.chain}</span>
+                <p className="mt-1 break-all font-mono text-xs text-tts-deep">
+                  {selectedBridgeWallet.address}
+                  <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(selectedBridgeWallet.address!)} />
+                </p>
+                {selectedBridgeWallet.initiation_required && (
+                  <p className="mt-1 text-xs text-tts-error">⚠ Transfers from this wallet require initiation data</p>
+                )}
+              </div>
+              <button className="ml-2 shrink-0 text-xs text-tts-muted hover:text-tts-error" onClick={clearBridgeWalletSelection}>Clear</button>
+            </div>
+          )}
+
           <div className="mb-3 flex items-end gap-2">
             <div className="flex-1">
               <p className="mb-1 text-xs text-tts-muted">Chain</p>
@@ -1035,33 +1089,73 @@ export default function BridgeTestClient() {
           {bridgeWallets.length > 0 ? (
             <div className="grid gap-2">
               {bridgeWallets.map((w, i) => {
-                const isActive = evmWallet === w.address && onRampChain === w.chain;
+                const isActive = selectedBridgeWallet?.id === w.id;
+                const showingTxs = walletTxs?.walletId === w.id;
                 return (
                   <div
                     key={w.id || i}
-                    className={`flex items-center justify-between rounded-md border p-2 text-xs ${
+                    className={`rounded-md border p-3 text-xs ${
                       isActive ? "border-tts-confirm/40 bg-tts-confirm/5" : "border-tts-border bg-tts-bg/50"
                     }`}
                   >
-                    <div className="min-w-0">
-                      <span className="rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{w.chain}</span>
-                      <p className="mt-1 break-all font-mono text-tts-deep">
-                        {w.address}
-                        {w.address ? <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(w.address!)} /> : null}
-                      </p>
-                      {w.initiation_required ? <p className="mt-0.5 text-tts-error">⚠ initiation required</p> : null}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{w.chain}</span>
+                          {w.id && <span className="font-mono text-tts-muted">{w.id.slice(0, 18)}…</span>}
+                        </div>
+                        <p className="mt-1.5 break-all font-mono font-semibold text-tts-deep">
+                          {w.address}
+                          {w.address ? <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(w.address!)} /> : null}
+                        </p>
+                        {w.initiation_required ? <p className="mt-1 text-tts-error">⚠ initiation required for transfers</p> : null}
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <button
+                          className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+                            isActive
+                              ? "border-tts-confirm/40 text-tts-confirm"
+                              : "border-tts-gold/40 text-tts-gold hover:bg-tts-gold/10"
+                          }`}
+                          onClick={() => selectBridgeWallet(w)}
+                          disabled={isActive}
+                        >
+                          {isActive ? "Active" : "Use"}
+                        </button>
+                        {w.id && (
+                          <button
+                            className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
+                            onClick={() => showingTxs ? setWalletTxs(null) : loadWalletTransactions(w.id!)}
+                          >
+                            {txLoading && showingTxs ? "…" : showingTxs ? "Hide" : "Txns"}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      className={`ml-3 shrink-0 rounded border px-2 py-0.5 text-xs transition-colors ${
-                        isActive
-                          ? "border-tts-confirm/40 text-tts-confirm"
-                          : "border-tts-gold/40 text-tts-gold hover:bg-tts-gold/10"
-                      }`}
-                      onClick={() => { setEvmWallet(w.address || ""); setOnRampChain(w.chain || "base"); }}
-                      disabled={isActive}
-                    >
-                      {isActive ? "Active" : "Use as destination"}
-                    </button>
+
+                    {/* Inline transactions */}
+                    {showingTxs && (
+                      <div className="mt-3 border-t border-tts-border pt-2">
+                        {walletTxs!.txs.length === 0 ? (
+                          <p className="text-tts-muted">No transactions yet.</p>
+                        ) : (
+                          <div className="grid gap-1">
+                            {walletTxs!.txs.map((tx, ti) => (
+                              <div key={tx.id || ti} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1">
+                                <div className="flex items-center gap-2">
+                                  <StatusPill tone={tx.type === "deposit" ? "confirm" : "gold"}>{tx.type}</StatusPill>
+                                  <span className="font-mono font-semibold text-tts-deep">{tx.amount} {tx.currency?.toUpperCase()}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-tts-muted">
+                                  <StatusPill tone={tx.status === "completed" ? "confirm" : tx.status === "failed" ? "error" : "gold"}>{tx.status}</StatusPill>
+                                  {tx.hash && <span className="font-mono">{tx.hash.slice(0, 10)}…</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1237,12 +1331,12 @@ export default function BridgeTestClient() {
             </select>
           </div>
 
-          {/* Chain dropdown */}
+          {/* Chain dropdown — locked to Bridge wallet chain when one is selected */}
           <div>
             <p className="mb-1 text-xs text-tts-muted">Destination chain</p>
             <select
               value={onRampChain}
-              onChange={(e) => { setOnRampChain(e.target.value); setOnRampMemo(""); }}
+              onChange={(e) => { setOnRampChain(e.target.value); setOnRampMemo(""); if (selectedBridgeWallet) clearBridgeWalletSelection(); }}
               className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
             >
               {ONRAMP_CHAINS.map((c) => (
@@ -1258,16 +1352,30 @@ export default function BridgeTestClient() {
                 <p className="mb-1 text-xs text-tts-muted">Destination address (Stellar — from Step 2)</p>
                 <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
               </>
+            ) : selectedBridgeWallet ? (
+              <div className="rounded-md border border-tts-confirm/30 bg-tts-confirm/5 p-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-tts-confirm">Bridge Custodial Wallet</p>
+                  <button className="text-xs text-tts-muted hover:text-tts-error" onClick={clearBridgeWalletSelection}>Change</button>
+                </div>
+                <span className="mt-0.5 inline-block rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{selectedBridgeWallet.chain}</span>
+                <p className="mt-1 break-all font-mono text-xs text-tts-deep">
+                  {selectedBridgeWallet.address}
+                  <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(selectedBridgeWallet.address!)} />
+                </p>
+              </div>
             ) : (
               <>
-                <p className="mb-1 text-xs text-tts-muted">Destination address (0x… EVM address)</p>
+                <p className="mb-1 text-xs text-tts-muted">Destination address</p>
                 <Input
                   value={evmWallet}
                   onChange={(e) => setEvmWallet(e.target.value)}
-                  placeholder="0x…"
+                  placeholder="0x… or select a Bridge wallet from Step 2"
                   className="font-mono text-xs"
                 />
-                <p className="mt-1 text-xs text-tts-muted/70">Any EVM address works — no funding needed.</p>
+                <p className="mt-1 text-xs text-tts-muted/70">
+                  Tip: select a Bridge custodial wallet in Step 2 to auto-fill this.
+                </p>
               </>
             )}
           </div>
@@ -1291,8 +1399,7 @@ export default function BridgeTestClient() {
         {onRampChain === "stellar" && walletKey && walletOnChain === false && (
           <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
             <p className="font-bold">Wallet not found on Stellar mainnet</p>
-            <p className="mt-1">Bridge validates the destination address exists on-chain before creating a virtual account. This address either hasn't been funded yet or doesn't exist.</p>
-            <p className="mt-2 font-semibold">To fix: set <code className="rounded bg-tts-bg px-1">STELLAR_WALLET_SPONSOR_SECRET</code> on Railway and generate a new wallet from Step 2. Or switch chain to <strong>Base</strong> above and use any 0x address instead.</p>
+            <p className="mt-1">Bridge validates the destination address exists on-chain before creating a virtual account. Switch to Base and use a Bridge custodial wallet from Step 2 for easiest setup.</p>
           </div>
         )}
         {onRampChain === "stellar" && walletKey && walletOnChain === true && (
@@ -1315,7 +1422,7 @@ export default function BridgeTestClient() {
             disabled={
               !!busy || !customerId ||
               (onRampChain === "stellar" && (!walletKey || walletOnChain === false)) ||
-              (onRampChain !== "stellar" && !evmWallet.trim()) ||
+              (onRampChain !== "stellar" && !selectedBridgeWallet && !evmWallet.trim()) ||
               (onRampCurrency === "brl" && readiness != null && !readiness.pix_ready)
             }
             size="sm"
