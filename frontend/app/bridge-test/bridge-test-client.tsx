@@ -171,11 +171,6 @@ export default function BridgeTestClient() {
     if ((payload.customer as CustomerData)?.id) setCustomerId((payload.customer as CustomerData).id!);
   }
 
-  async function loadCustomer() {
-    const payload = await runApi("GET", `/customers/${encodeURIComponent(customerId)}`);
-    setCustomer(payload.customer as CustomerData);
-  }
-
   async function lookupByEmail() {
     const payload = await runApi("GET", `/customers/by-email?email=${encodeURIComponent(email)}`);
     const c = payload.customer as CustomerData;
