@@ -84,16 +84,56 @@ By default **all money movement is disabled** as a safety guard. Set these to en
 
 ---
 
-## Minimum Railway Config (to unblock everything)
+## Complete `.env` file (copy this)
 
-```
-BRIDGE_API_KEY=sk_live_...
+Paste into your Railway backend → Variables tab, or save as `backend/.env`:
+
+```env
+# ── Bridge.xyz ─────────────────────────────────────────────────────────
+BRIDGE_API_KEY=<your_bridge_api_key_from_dashboard>
+
+# Core flags
 BRIDGE_ENABLED=true
+BRIDGE_SANDBOX=false
 BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT=true
 BRIDGE_REQUIRE_MANUAL_CONFIRMATION=false
-BRIDGE_DEFAULT_SOURCE_CHAIN=stellar
-BRIDGE_SANDBOX=false
+
+# API
+BRIDGE_API_URL=https://api.bridge.xyz/v0
 BRIDGE_DEVELOPER_FEE=0.30
+
+# Defaults (Stellar USDC on-ramp)
+BRIDGE_DEFAULT_SOURCE_CHAIN=stellar
+BRIDGE_DEFAULT_SOURCE_CURRENCY=usdc
+BRIDGE_DEFAULT_DESTINATION_CURRENCY=brl
+BRIDGE_DEFAULT_DESTINATION_RAIL=pix
+
+# Transaction limits
+BRIDGE_MIN_BRL_AMOUNT=10
+BRIDGE_MAX_BRL_AMOUNT=50000
+BRIDGE_MIN_USD_AMOUNT=5
+BRIDGE_MAX_USD_AMOUNT=50000
+BRIDGE_MIN_EUR_AMOUNT=5
+BRIDGE_MAX_EUR_AMOUNT=50000
+BRIDGE_MIN_MXN_AMOUNT=100
+BRIDGE_MAX_MXN_AMOUNT=1000000
+BRIDGE_MIN_USDC_AMOUNT=5
+BRIDGE_MAX_USDC_AMOUNT=10000
+
+# Webhooks (fill in after registering in Bridge dashboard)
+# BRIDGE_WEBHOOK_SECRET=whsec_...
+# BRIDGE_WEBHOOK_PUBLIC_KEY=...
+# BRIDGE_WEBHOOK_ID=...
+# APP_PUBLIC_WEBHOOK_URL=https://your-backend.up.railway.app/api/bridge/webhooks/incoming
+```
+
+### Minimum (just to unblock everything)
+
+```env
+BRIDGE_API_KEY=<your_bridge_api_key>
+BRIDGE_ENABLED=true
+BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT=true
+BRIDGE_DEFAULT_SOURCE_CHAIN=stellar
 ```
 
 ---
@@ -115,4 +155,4 @@ Once access is granted, customers also need the **PIX endorsement** (separate fr
 - **Stellar is a valid destination chain** for virtual accounts (on-ramp) — `payment_rail: "stellar"`, `currency: "usdc"`, `address: "G..."`
 - **Off-ramp** (USDC → fiat): when the user sends USDC from Stellar to Bridge, they MUST include the memo provided in `source_deposit_instructions.blockchain_memo`
 - Bridge also provides a **muxed address (M-address)** as `memoless_address` — senders who can't include a memo can use that instead
-- The `blockchain_memo` on the virtual account destination is **optional** — only needed if your Stellar address is an exchange hot-wallet that requires memos
+- The `blockchain_memo` on the virtual account destination is **required by Bridge** when `payment_rail` is `stellar` — the backend auto-generates a 7-digit numeric memo if you don't supply one
