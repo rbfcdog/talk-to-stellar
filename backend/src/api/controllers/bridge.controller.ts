@@ -36,9 +36,7 @@ export class BridgeController {
         first_name: readText(req.body?.first_name || req.body?.firstName),
         last_name: readText(req.body?.last_name || req.body?.lastName),
         email: readText(req.body?.email),
-        phone: readText(req.body?.phone),
-        type: readText(req.body?.type || req.body?.customer_type || "individual") as "individual" | "business",
-        country: readText(req.body?.country || "BR"),
+        type: "individual",
       });
       res.status(201).json({ success: true, customer });
     } catch (error: any) {
@@ -46,6 +44,8 @@ export class BridgeController {
       res.status(statusFromError(error)).json({
         success: false,
         message: (error?.message || "Failed to create Bridge customer."),
+        bridge_code: error?.code || null,
+        bridge_source: error?.source || null,
       });
     }
   }

@@ -285,7 +285,9 @@ export interface BridgeListResponse<T> {
 
 export interface BridgeApiError {
   status: number;
+  code?: string;
   error: string;
   message?: string;
+  source?: Record<string, unknown>;
   response?: unknown;
 }

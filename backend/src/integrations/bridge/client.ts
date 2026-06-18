@@ -103,8 +103,10 @@ export class BridgeClient {
     const b = body as Record<string, unknown> | null;
     return {
       status,
+      code: String(b?.code ?? ''),
       error: String(b?.error ?? b?.message ?? `HTTP ${status}`),
       message: String(b?.message ?? ''),
+      source: (b?.source as Record<string, unknown>) ?? undefined,
       response: body ?? undefined,
     };
   }
