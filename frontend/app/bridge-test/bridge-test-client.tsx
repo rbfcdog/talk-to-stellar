@@ -181,6 +181,13 @@ export default function BridgeTestClient() {
     setCustomer(payload.customer as CustomerData);
   }
 
+  async function lookupByEmail() {
+    const payload = await runApi("GET", `/customers/by-email?email=${encodeURIComponent(email)}`);
+    const c = payload.customer as CustomerData;
+    setCustomer(c);
+    if (c?.id) setCustomerId(c.id);
+  }
+
   async function syncCustomer() {
     const payload = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/sync`);
     setCustomer(payload.customer as CustomerData);
@@ -192,7 +199,8 @@ export default function BridgeTestClient() {
   }
 
   async function getKycLink() {
-    const payload = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/kyc-link`);
+    const payload = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/kyc-link`);
+    setCustomer(payload.customer as CustomerData);
     addLog(`KYC link: ${JSON.stringify(payload.kyc_link)}`);
   }
 
@@ -308,9 +316,9 @@ export default function BridgeTestClient() {
             {busy?.startsWith("POST /customers") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
             Create
           </Button>
-          <Button variant="outline" size="sm" onClick={loadCustomer} disabled={!!busy || !customerId}>
-            {busy?.startsWith("GET /customers") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-            Load
+          <Button variant="outline" size="sm" onClick={lookupByEmail} disabled={!!busy || !email}>
+            {busy?.startsWith("GET /customers/by-email") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+            Find by email
           </Button>
           <Button variant="outline" size="sm" onClick={syncCustomer} disabled={!!busy || !customerId}>
             <RefreshCw className="mr-2 h-4 w-4" /> Sync

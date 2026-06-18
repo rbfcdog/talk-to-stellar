@@ -64,6 +64,34 @@ export class BridgeController {
     }
   }
 
+  static async findCustomerByEmail(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const email = String(req.query.email || req.body?.email || "").trim().toLowerCase();
+      if (!email) {
+        res.status(400).json({ success: false, message: "Email is required." });
+        return;
+      }
+      const customers = await service.listCustomers();
+      const found = customers.find(
+        (c: any) => (c.email || "").toLowerCase() === email,
+      );
+      if (!found) {
+        res.status(404).json({ success: false, message: "No customer found with that email." });
+        return;
+      }
+      res.json({ success: true, customer: found });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({
+        success: false,
+        message: (error?.message || "Failed to search customers."),
+      });
+    }
+  }
+
   static async syncCustomer(req: Request, res: Response): Promise<void> {
     try {
       const customer = await getBridgeService().getCustomer(
