@@ -32,6 +32,12 @@ import type {
   VirtualAccountCreateInput,
 } from './types';
 
+/** Bridge requires blockchain_memo for Stellar destinations. Auto-generate if not supplied. */
+function resolveStellarMemo(chain: string, provided?: string): string | undefined {
+  if (chain !== 'stellar') return provided || undefined;
+  return provided?.trim() || String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
+}
+
 export class BridgeService {
   private client: BridgeClient;
   config: BridgeConfig;
@@ -307,13 +313,14 @@ export class BridgeService {
     destinationChain: string,
     blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
+    const memo = resolveStellarMemo(destinationChain, blockchainMemo);
     return this.createVirtualAccount(customerId, {
       source: { currency: 'brl' },
       destination: {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
-        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+        ...(memo ? { blockchain_memo: memo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -451,13 +458,14 @@ export class BridgeService {
     destinationChain: string,
     blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
+    const memo = resolveStellarMemo(destinationChain, blockchainMemo);
     return this.createVirtualAccount(customerId, {
       source: { currency: 'usd' },
       destination: {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
-        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+        ...(memo ? { blockchain_memo: memo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -471,13 +479,14 @@ export class BridgeService {
     destinationChain: string,
     blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
+    const memo = resolveStellarMemo(destinationChain, blockchainMemo);
     return this.createVirtualAccount(customerId, {
       source: { currency: 'eur' },
       destination: {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
-        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+        ...(memo ? { blockchain_memo: memo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -491,13 +500,14 @@ export class BridgeService {
     destinationChain: string,
     blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
+    const memo = resolveStellarMemo(destinationChain, blockchainMemo);
     return this.createVirtualAccount(customerId, {
       source: { currency: 'mxn' },
       destination: {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
-        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+        ...(memo ? { blockchain_memo: memo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -511,13 +521,14 @@ export class BridgeService {
     destinationChain: string,
     blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
+    const memo = resolveStellarMemo(destinationChain, blockchainMemo);
     return this.createVirtualAccount(customerId, {
       source: { currency: 'gbp' },
       destination: {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
-        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+        ...(memo ? { blockchain_memo: memo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
@@ -531,13 +542,14 @@ export class BridgeService {
     destinationChain: string,
     blockchainMemo?: string,
   ): Promise<BridgeVirtualAccount> {
+    const memo = resolveStellarMemo(destinationChain, blockchainMemo);
     return this.createVirtualAccount(customerId, {
       source: { currency: 'cop' },
       destination: {
         payment_rail: destinationChain as any,
         currency: 'usdc',
         address: destinationWallet,
-        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+        ...(memo ? { blockchain_memo: memo } : {}),
       },
       developer_fee_percent: this.config.developerFeePercent,
     });
