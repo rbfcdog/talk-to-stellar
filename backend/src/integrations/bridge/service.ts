@@ -204,6 +204,7 @@ export class BridgeService {
     input: {
       payment_rail: string;
       currency: string;
+      chain?: string;
       external_account_id?: string;
       custom_developer_fee_percent?: string;
     },
