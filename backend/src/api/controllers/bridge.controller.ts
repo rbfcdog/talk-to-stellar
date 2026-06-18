@@ -8,22 +8,25 @@ function readText(value: unknown, fallback = ""): string {
 }
 
 function statusFromError(error: unknown): number {
-  const message = String(
-    (error as Record<string, unknown>)?.message || error || "",
-  ).toLowerCase();
+  const e = error as Record<string, unknown>;
+  if (e?.status && typeof e.status === 'number') return e.status >= 400 && e.status < 600 ? e.status : 500;
+  const message = String(e?.message || error || "").toLowerCase();
   if (message.includes("not found")) return 404;
-  if (message.includes("unauthorized") || message.includes("auth"))
-    return 401;
-  if (
-    message.includes("invalid") ||
-    message.includes("required") ||
-    message.includes("missing") ||
-    message.includes("below") ||
-    message.includes("exceeds")
-  )
-    return 400;
+  if (message.includes("unauthorized") || message.includes("auth")) return 401;
+  if (message.includes("invalid") || message.includes("required") || message.includes("missing") || message.includes("below") || message.includes("exceeds")) return 400;
   if (message.includes("kyc") || message.includes("endorsement")) return 403;
   return 500;
+}
+
+function bridgeError(error: unknown, fallback: string) {
+  const e = error as Record<string, unknown>;
+  return {
+    success: false,
+    message: String(e?.message || e?.error || fallback),
+    bridge_code: e?.code || null,
+    bridge_source: e?.source || null,
+    bridge_details: e?.response || null,
+  };
 }
 
 export class BridgeController {
@@ -506,48 +509,6 @@ export class BridgeController {
 
   // ── Virtual Accounts ──────────────────────────────────────────
 
-  static async createBrlVirtualAccount(
-    req: Request,
-    res: Response,
-  ): Promise<void> {
-    try {
-      const customerId = String(req.params.id);
-      const service = getBridgeService();
-      const destinationWallet = readText(
-        req.body?.destination_wallet ||
-          req.body?.destinationWallet ||
-          "",
-      );
-      const destinationChain = readText(
-        req.body?.destination_chain || req.body?.destinationChain,
-        service.config.defaultSourceChain,
-      );
-      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
-
-      const virtualAccount = await service.createBrlVirtualAccount(
-        customerId,
-        destinationWallet,
-        destinationChain,
-        blockchainMemo,
-      );
-
-      logger.info(
-        `[bridge] BRL virtual account created for customer ${customerId}`,
-      );
-      res
-        .status(201)
-        .json({ success: true, virtual_account: virtualAccount });
-    } catch (error: any) {
-      logger.error(
-        `[bridge] createBrlVirtualAccount failed: ${error.message}`,
-      );
-      res.status(statusFromError(error)).json({
-        success: false,
-        message: error?.message || "Failed to create virtual account.",
-      });
-    }
-  }
-
   static async listVirtualAccounts(
     req: Request,
     res: Response,
@@ -613,8 +574,8 @@ export class BridgeController {
       logger.info(`[bridge] USD virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
-      logger.error(`[bridge] createUsdVirtualAccount failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create USD virtual account." });
+      logger.error(`[bridge] createUsdVirtualAccount failed: ${error.message} ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create USD virtual account."));
     }
   }
 
@@ -629,8 +590,8 @@ export class BridgeController {
       logger.info(`[bridge] EUR virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
-      logger.error(`[bridge] createEurVirtualAccount failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create EUR virtual account." });
+      logger.error(`[bridge] createEurVirtualAccount failed: ${error.message} ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create EUR virtual account."));
     }
   }
 
@@ -645,8 +606,24 @@ export class BridgeController {
       logger.info(`[bridge] MXN virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
-      logger.error(`[bridge] createMxnVirtualAccount failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create MXN virtual account." });
+      logger.error(`[bridge] createMxnVirtualAccount failed: ${error.message} ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create MXN virtual account."));
+    }
+  }
+
+  static async createBrlVirtualAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const customerId = String(req.params.id);
+      const service = getBridgeService();
+      const destinationWallet = readText(req.body?.destination_wallet || req.body?.destinationWallet);
+      const destinationChain = readText(req.body?.destination_chain || req.body?.destinationChain, service.config.defaultSourceChain);
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
+      const virtualAccount = await service.createBrlVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
+      logger.info(`[bridge] BRL virtual account created for customer ${customerId}`);
+      res.status(201).json({ success: true, virtual_account: virtualAccount });
+    } catch (error: any) {
+      logger.error(`[bridge] createBrlVirtualAccount failed: ${error.message} ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create virtual account."));
     }
   }
 
@@ -661,8 +638,8 @@ export class BridgeController {
       logger.info(`[bridge] GBP virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
-      logger.error(`[bridge] createGbpVirtualAccount failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create GBP virtual account." });
+      logger.error(`[bridge] createGbpVirtualAccount failed: ${error.message} ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create GBP virtual account."));
     }
   }
 
@@ -677,8 +654,8 @@ export class BridgeController {
       logger.info(`[bridge] COP virtual account created for customer ${customerId}`);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
-      logger.error(`[bridge] createCopVirtualAccount failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create COP virtual account." });
+      logger.error(`[bridge] createCopVirtualAccount failed: ${error.message} ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create COP virtual account."));
     }
   }
 
