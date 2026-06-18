@@ -650,6 +650,38 @@ export class BridgeController {
     }
   }
 
+  static async createGbpVirtualAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const customerId = String(req.params.id);
+      const destinationWallet = readText(req.body?.destination_wallet || req.body?.destinationWallet);
+      const destinationChain = readText(req.body?.destination_chain || req.body?.destinationChain, service.config.defaultSourceChain);
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
+      const account = await service.createGbpVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
+      logger.info(`[bridge] GBP virtual account created for customer ${customerId}`);
+      res.status(201).json({ success: true, virtual_account: account });
+    } catch (error: any) {
+      logger.error(`[bridge] createGbpVirtualAccount failed: ${error.message}`);
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create GBP virtual account." });
+    }
+  }
+
+  static async createCopVirtualAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const customerId = String(req.params.id);
+      const destinationWallet = readText(req.body?.destination_wallet || req.body?.destinationWallet);
+      const destinationChain = readText(req.body?.destination_chain || req.body?.destinationChain, service.config.defaultSourceChain);
+      const blockchainMemo = readText(req.body?.blockchain_memo || req.body?.blockchainMemo) || undefined;
+      const account = await service.createCopVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
+      logger.info(`[bridge] COP virtual account created for customer ${customerId}`);
+      res.status(201).json({ success: true, virtual_account: account });
+    } catch (error: any) {
+      logger.error(`[bridge] createCopVirtualAccount failed: ${error.message}`);
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create COP virtual account." });
+    }
+  }
+
   // ── Additional External Account Types ─────────────────────────
 
   static async createUsBankExternalAccount(req: Request, res: Response): Promise<void> {
