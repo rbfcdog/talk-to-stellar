@@ -42,6 +42,17 @@ const ONRAMP_RAILS = [
   { id: "cop", label: "Bre-B", sublabel: "COP (Beta)", flag: "🇨🇴", endpoint: "cop" },
 ] as const;
 
+const ONRAMP_CHAINS = [
+  { id: "base", label: "Base (EVM — no funding needed)" },
+  { id: "ethereum", label: "Ethereum (EVM — no funding needed)" },
+  { id: "stellar", label: "Stellar (needs funded account + USDC trustline)" },
+  { id: "solana", label: "Solana" },
+  { id: "polygon", label: "Polygon" },
+  { id: "avalanche_c_chain", label: "Avalanche C-Chain" },
+  { id: "arbitrum", label: "Arbitrum" },
+  { id: "optimism", label: "Optimism" },
+] as const;
+
 const OFFRAMP_RAILS = [
   { id: "pix", label: "PIX", sublabel: "BRL", flag: "🇧🇷", path: "crypto-to-pix" },
   { id: "ach", label: "ACH", sublabel: "USD", flag: "🇺🇸", path: "crypto-to-ach" },
@@ -251,8 +262,9 @@ export default function BridgeTestClient() {
   const [clabeValue, setClabeValue] = useState("");
 
   // On-ramp
-  const [onRampCurrency, setOnRampCurrency] = useState("brl");
-  const [onRampChain, setOnRampChain] = useState("stellar");
+  const [onRampCurrency, setOnRampCurrency] = useState("usd");
+  const [onRampChain, setOnRampChain] = useState("base");
+  const [evmWallet, setEvmWallet] = useState("");
   const [onRampMemo, setOnRampMemo] = useState("");
   const [virtualAccounts, setVirtualAccounts] = useState<VirtualAccountData[]>([]);
   const [newVA, setNewVA] = useState<VirtualAccountData | null>(null);
@@ -550,8 +562,9 @@ export default function BridgeTestClient() {
   // ── On-ramp: virtual accounts ─────────────────────────────────
 
   async function createVirtualAccount() {
+    const destAddress = onRampChain === "stellar" ? walletKey : evmWallet;
     const body: Record<string, unknown> = {
-      destination_wallet: walletKey,
+      destination_wallet: destAddress,
       destination_chain: onRampChain,
       confirm_mainnet: true,
     };
@@ -1138,60 +1151,80 @@ export default function BridgeTestClient() {
           <h2 className="flex items-center gap-2 text-lg font-bold text-tts-deep">
             <ArrowDown className="h-5 w-5 text-tts-confirm" /> On-Ramp — Fiat → USDC
           </h2>
-          <p className="mt-0.5 text-sm text-tts-muted">Virtual accounts receive fiat and auto-convert to USDC at your Stellar wallet.</p>
-        </div>
-
-        {!walletKey ? (
-          <div className="mb-4 rounded-md border border-tts-gold/25 bg-tts-gold/5 p-3 text-sm text-tts-gold">
-            Set your Stellar wallet in Step 2 first.
-          </div>
-        ) : null}
-
-        {/* Rail selector */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {ONRAMP_RAILS.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => setOnRampCurrency(r.id)}
-              className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                onRampCurrency === r.id
-                  ? "border-tts-confirm bg-tts-confirm/10 text-tts-confirm"
-                  : "border-tts-border bg-tts-bg/40 text-tts-muted hover:border-tts-confirm/50"
-              }`}
-            >
-              {r.flag} {r.label} <span className="opacity-60">{r.sublabel}</span>
-            </button>
-          ))}
+          <p className="mt-0.5 text-sm text-tts-muted">Virtual accounts receive fiat and auto-convert to USDC at your destination address.</p>
         </div>
 
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar mainnet address)</p>
-            <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
+          {/* Currency dropdown */}
+          <div>
+            <p className="mb-1 text-xs text-tts-muted">Currency / rail</p>
+            <select
+              value={onRampCurrency}
+              onChange={(e) => setOnRampCurrency(e.target.value)}
+              className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+            >
+              {ONRAMP_RAILS.map((r) => (
+                <option key={r.id} value={r.id}>{r.flag} {r.label} ({r.sublabel})</option>
+              ))}
+            </select>
           </div>
+
+          {/* Chain dropdown */}
           <div>
             <p className="mb-1 text-xs text-tts-muted">Destination chain</p>
-            <Input value={onRampChain} onChange={(e) => setOnRampChain(e.target.value)} placeholder="stellar" />
+            <select
+              value={onRampChain}
+              onChange={(e) => { setOnRampChain(e.target.value); setOnRampMemo(""); }}
+              className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+            >
+              {ONRAMP_CHAINS.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
           </div>
-          <div>
-            <p className="mb-1 text-xs text-tts-muted">
-              Blockchain memo{" "}
-              <span className="text-tts-muted/60">(required by Bridge for Stellar — leave blank to auto-generate)</span>
-            </p>
-            <Input
-              value={onRampMemo}
-              onChange={(e) => setOnRampMemo(e.target.value)}
-              placeholder="Auto-generated if blank (e.g. 1234567)"
-              className="font-mono text-xs"
-            />
+
+          {/* Destination address */}
+          <div className="sm:col-span-2">
+            {onRampChain === "stellar" ? (
+              <>
+                <p className="mb-1 text-xs text-tts-muted">Destination address (Stellar — from Step 2)</p>
+                <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
+              </>
+            ) : (
+              <>
+                <p className="mb-1 text-xs text-tts-muted">Destination address (0x… EVM address)</p>
+                <Input
+                  value={evmWallet}
+                  onChange={(e) => setEvmWallet(e.target.value)}
+                  placeholder="0x…"
+                  className="font-mono text-xs"
+                />
+                <p className="mt-1 text-xs text-tts-muted/70">Any EVM address works — no funding needed.</p>
+              </>
+            )}
           </div>
+
+          {/* Memo — only for Stellar */}
+          {onRampChain === "stellar" && (
+            <div className="sm:col-span-2">
+              <p className="mb-1 text-xs text-tts-muted">
+                Blockchain memo <span className="text-tts-muted/60">(leave blank to auto-generate)</span>
+              </p>
+              <Input
+                value={onRampMemo}
+                onChange={(e) => setOnRampMemo(e.target.value)}
+                placeholder="Auto-generated if blank (e.g. 1234567)"
+                className="font-mono text-xs"
+              />
+            </div>
+          )}
         </div>
+
         {onRampChain === "stellar" && walletKey && walletOnChain === false && (
           <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
             <p className="font-bold">Wallet not found on Stellar mainnet</p>
             <p className="mt-1">Bridge validates the destination address exists on-chain before creating a virtual account. This address either hasn't been funded yet or doesn't exist.</p>
-            <p className="mt-2 font-semibold">To fix: set <code className="rounded bg-tts-bg px-1">STELLAR_WALLET_SPONSOR_SECRET</code> on Railway and generate a new wallet from Step 2 — it will be auto-funded and Bridge-ready. Or send ≥2 XLM to this address and add a USDC trustline manually, then refresh balance.</p>
+            <p className="mt-2 font-semibold">To fix: set <code className="rounded bg-tts-bg px-1">STELLAR_WALLET_SPONSOR_SECRET</code> on Railway and generate a new wallet from Step 2. Or switch chain to <strong>Base</strong> above and use any 0x address instead.</p>
           </div>
         )}
         {onRampChain === "stellar" && walletKey && walletOnChain === true && (
@@ -1211,7 +1244,12 @@ export default function BridgeTestClient() {
         <div className="flex flex-wrap gap-2">
           <Button
             onClick={createVirtualAccount}
-            disabled={!!busy || !customerId || !walletKey || (onRampChain === "stellar" && walletOnChain === false) || (onRampCurrency === "brl" && readiness != null && !readiness.pix_ready)}
+            disabled={
+              !!busy || !customerId ||
+              (onRampChain === "stellar" && (!walletKey || walletOnChain === false)) ||
+              (onRampChain !== "stellar" && !evmWallet.trim()) ||
+              (onRampCurrency === "brl" && readiness != null && !readiness.pix_ready)
+            }
             size="sm"
           >
             {busy?.includes("virtual-accounts") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
