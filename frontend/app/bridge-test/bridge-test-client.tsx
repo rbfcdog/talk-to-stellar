@@ -381,9 +381,11 @@ export default function BridgeTestClient() {
           <div className="grid gap-3">
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
               <p className="text-xs font-bold uppercase text-tts-muted">Persona KYC</p>
-              <a href={String(kycData.kyc_link || "#")} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-xs text-tts-gold hover:underline">
-                {String(kycData.kyc_link || "-").slice(0, 100)}...
-              </a>
+              <Button asChild variant="outline" size="sm" className="mt-2 w-full justify-start">
+                <a href={String(kycData.kyc_link || "#")} target="_blank" rel="noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" /> Open KYC verification
+                </a>
+              </Button>
               <div className="mt-2 flex flex-wrap gap-2">
                 <StatusPill tone="gold">{String(kycData.kyc_status || "-")}</StatusPill>
                 <StatusPill tone="default">{String(kycData.persona_inquiry_type || "-")}</StatusPill>
@@ -391,9 +393,11 @@ export default function BridgeTestClient() {
             </div>
             <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
               <p className="text-xs font-bold uppercase text-tts-muted">Terms of Service</p>
-              <a href={String(kycData.tos_link || "#")} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-xs text-tts-gold hover:underline">
-                {String(kycData.tos_link || "-").slice(0, 100)}...
-              </a>
+              <Button asChild variant="outline" size="sm" className="mt-2 w-full justify-start">
+                <a href={String(kycData.tos_link || "#")} target="_blank" rel="noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" /> Accept Terms of Service
+                </a>
+              </Button>
               <div className="mt-2">
                 <StatusPill tone="gold">{String(kycData.tos_status || "-")}</StatusPill>
               </div>
