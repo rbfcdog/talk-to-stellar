@@ -61,9 +61,9 @@ export function loadBridgeConfig(): BridgeConfig {
     enabled: boolEnv('BRIDGE_ENABLED', !productionLike),
     developerFeePercent: env('BRIDGE_DEVELOPER_FEE', '0.30'),
     sandbox: boolEnv('BRIDGE_SANDBOX', !productionLike),
-    // Mainnet safety — ALL default to off/safe
-    enableMainnetMoneyMovement: boolEnv('BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT', false),
-    requireManualConfirmation: boolEnv('BRIDGE_REQUIRE_MANUAL_CONFIRMATION', true),
+    // Default to enabled when an API key is present — set BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT=false to disable
+    enableMainnetMoneyMovement: boolEnv('BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT', true),
+    requireManualConfirmation: boolEnv('BRIDGE_REQUIRE_MANUAL_CONFIRMATION', false),
     defaultSourceChain: env('BRIDGE_DEFAULT_SOURCE_CHAIN', 'stellar'),
     defaultSourceCurrency: env('BRIDGE_DEFAULT_SOURCE_CURRENCY', 'usdc'),
     defaultDestinationCurrency: env('BRIDGE_DEFAULT_DESTINATION_CURRENCY', 'brl'),
