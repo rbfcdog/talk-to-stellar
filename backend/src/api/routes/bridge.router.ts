@@ -12,10 +12,10 @@ router.use(requireBridgeEnabled);
 
 // ── Customers ───────────────────────────────────────────
 router.post("/customers", BridgeController.createCustomer);
+router.get("/customers/by-email", BridgeController.findCustomerByEmail);
 router.get("/customers/:id", BridgeController.getCustomer);
 router.post("/customers/:id/sync", BridgeController.syncCustomer);
 router.post("/customers/:id/kyc-link", BridgeController.getKycLink);
-router.get("/customers/by-email", BridgeController.findCustomerByEmail);
 router.get(
   "/customers/:id/readiness",
   BridgeController.getCustomerReadiness,
