@@ -105,24 +105,22 @@ export class BridgeController {
       if (customer.endorsements?.length) {
         endorsements.push(
           ...customer.endorsements.map(
-            (e) => `${e.type || "unknown"}:${e.status || "unknown"}`,
+            (e) => `${e.name || "unknown"}:${e.status || "unknown"}`,
           ),
         );
       }
 
-      const hasPixEndorsement = endorsements.some((e) =>
-        e.startsWith("pix:"),
+      const kycStatus = customer.kyc_status || customer.status || "not_started";
+      const hasPixEndorsement = endorsements.some(
+        (e) => e.startsWith("pix:") || e.startsWith("base:"),
       );
 
       let readiness = "ready";
-      if (
-        customer.kyc_status === "not_started" ||
-        customer.kyc_status === "update_required"
-      ) {
+      if (kycStatus === "not_started" || kycStatus === "update_required") {
         readiness = "needs_kyc";
-      } else if (customer.kyc_status === "pending") {
+      } else if (kycStatus === "pending") {
         readiness = "under_review";
-      } else if (customer.kyc_status === "rejected") {
+      } else if (kycStatus === "rejected") {
         readiness = "rejected";
       } else if (!hasPixEndorsement) {
         readiness = "needs_pix_endorsement";
@@ -132,7 +130,7 @@ export class BridgeController {
         success: true,
         readiness: {
           status: readiness,
-          kyc_status: customer.kyc_status,
+          kyc_status: kycStatus,
           endorsements,
           pix_ready: hasPixEndorsement,
         },

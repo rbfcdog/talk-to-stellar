@@ -267,7 +267,7 @@ export class BridgeService {
     to: string,
   ): Promise<Record<string, unknown>> {
     return this.client.get(
-      `/exchange_rate?from_currency=${encodeURIComponent(from)}&to_currency=${encodeURIComponent(to)}`,
+      `/exchange_rates?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
   }
 
@@ -331,10 +331,10 @@ export class BridgeService {
   ): Promise<BridgeExternalAccount> {
     return this.createExternalAccount(customerId, {
       currency: 'brl',
-      account_type: 'pix_key',
-      pix_key: pixKey.toLowerCase(),
-      account_owner_type: 'individual',
+      account_type: 'pix',
       account_owner_name: ownerName,
+      pix_key: { pix_key: pixKey.toLowerCase() } as any,
+      account_owner_type: 'individual',
     });
   }
 
