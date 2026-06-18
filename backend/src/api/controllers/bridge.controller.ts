@@ -1053,4 +1053,47 @@ export class BridgeController {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to delete static memo." });
     }
   }
+
+  // ── Bridge Wallets ────────────────────────────────────────────
+  // Custodial wallets on base, ethereum, solana, tempo, or tron.
+  // Bridge does NOT support Stellar as a wallet chain.
+
+  static async createWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const customerId = readText(req.params.id);
+      const chain = readText(req.body?.chain);
+      const allowed = ["base", "ethereum", "solana", "tempo", "tron"];
+      if (!chain || !allowed.includes(chain)) {
+        res.status(400).json({
+          success: false,
+          message: `chain is required and must be one of: ${allowed.join(", ")}. Note: Stellar is not a Bridge Wallet chain.`,
+        });
+        return;
+      }
+      const wallet = await getBridgeService().createWallet(customerId, chain as any);
+      res.status(201).json({ success: true, wallet });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create Bridge Wallet." });
+    }
+  }
+
+  static async listWallets(req: Request, res: Response): Promise<void> {
+    try {
+      const customerId = readText(req.params.id);
+      const wallets = await getBridgeService().listWallets(customerId);
+      res.json({ success: true, wallets });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to list Bridge Wallets." });
+    }
+  }
+
+  static async getWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const { id, walletId } = req.params;
+      const wallet = await getBridgeService().getWallet(readText(id), readText(walletId));
+      res.json({ success: true, wallet });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Bridge Wallet not found." });
+    }
+  }
 }

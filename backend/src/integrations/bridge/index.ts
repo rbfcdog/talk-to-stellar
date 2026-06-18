@@ -33,6 +33,8 @@ export type {
   BridgeStaticMemo,
   BridgeTransfer,
   BridgeVirtualAccount,
+  BridgeWallet,
+  BridgeWalletChain,
   BridgeWebhook,
   BridgeWebhookEvent,
   BridgeWebhookEventType,
