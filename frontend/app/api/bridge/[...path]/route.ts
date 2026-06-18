@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL =
-  process.env.BACKEND_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "https://talk-to-stellar-production-e284.up.railway.app";
+const BACKEND = process.env.BACKEND_URL || "https://talk-to-stellar-production-e284.up.railway.app";
 
 export async function GET(request: NextRequest) {
   return proxy(request);
@@ -13,17 +10,14 @@ export async function POST(request: NextRequest) {
   return proxy(request);
 }
 
-export async function PUT(request: NextRequest) {
-  return proxy(request);
-}
-
 export async function DELETE(request: NextRequest) {
   return proxy(request);
 }
 
 async function proxy(request: NextRequest) {
-  const path = request.nextUrl.pathname.replace("/api/bridge", "");
-  const target = `${BACKEND_URL}/api/bridge${path}${request.nextUrl.search}`;
+  const url = new URL(request.url);
+  const bridgePath = url.pathname.replace(/^\/api\/bridge/, "") || "/";
+  const target = `${BACKEND}/api/bridge${bridgePath}${url.search}`;
 
   try {
     const response = await fetch(target, {
