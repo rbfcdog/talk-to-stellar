@@ -107,6 +107,7 @@ export default function BridgeTestClient() {
   });
   const [loginInput, setLoginInput] = useState("");
   const didAutoLookup = useRef(false);
+  const kycFetchedForId = useRef("");
 
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -205,6 +206,16 @@ export default function BridgeTestClient() {
     }
   }, [sessionEmail, runApi]);
 
+  // Auto-fetch KYC link whenever a new customer is loaded
+  useEffect(() => {
+    if (customerId && customerId !== kycFetchedForId.current) {
+      kycFetchedForId.current = customerId;
+      runApi("POST", `/customers/${encodeURIComponent(customerId)}/kyc-link`)
+        .then((p) => setKycData(p.kyc_link as Record<string, unknown>))
+        .catch(() => setError(""));
+    }
+  }, [customerId, runApi]);
+
   // ── Session handlers ─────────────────────────────────────────
 
   function handleLogin(e: React.FormEvent) {
@@ -233,6 +244,7 @@ export default function BridgeTestClient() {
     setError("");
     setLog([]);
     didAutoLookup.current = false;
+    kycFetchedForId.current = "";
   }
 
   // ── Customer actions ──────────────────────────────────────────
@@ -551,46 +563,52 @@ export default function BridgeTestClient() {
         ) : null}
       </OperationalCard>
 
-      {/* KYC Links */}
-      {kycData ? (
+      {/* KYC Links — always shown when a customer is loaded */}
+      {customerId ? (
         <OperationalCard>
           <div className="mb-4">
             <p className="text-xs font-bold uppercase text-tts-muted">KYC & ToS Links</p>
             <h2 className="text-lg font-bold text-tts-deep">Complete verification</h2>
           </div>
-          <div className="grid gap-3">
-            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
-              <p className="text-xs font-bold uppercase text-tts-muted">Persona KYC</p>
-              <Button asChild variant="outline" size="sm" className="mt-2 w-full justify-start">
-                <a href={String(kycData.kyc_link || "#")} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" /> Open KYC verification
-                </a>
-              </Button>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <StatusPill tone="gold">{String(kycData.kyc_status || "-")}</StatusPill>
-                <StatusPill tone="default">
-                  {String(kycData.persona_inquiry_type || "-")}
-                </StatusPill>
+          {kycData ? (
+            <div className="grid gap-3">
+              <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+                <p className="text-xs font-bold uppercase text-tts-muted">Persona KYC</p>
+                <Button asChild variant="outline" size="sm" className="mt-2 w-full justify-start">
+                  <a href={String(kycData.kyc_link || "#")} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" /> Open KYC verification
+                  </a>
+                </Button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <StatusPill tone="gold">{String(kycData.kyc_status || "-")}</StatusPill>
+                  <StatusPill tone="default">
+                    {String(kycData.persona_inquiry_type || "-")}
+                  </StatusPill>
+                </div>
+              </div>
+              <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+                <p className="text-xs font-bold uppercase text-tts-muted">Terms of Service</p>
+                <Button asChild variant="outline" size="sm" className="mt-2 w-full justify-start">
+                  <a href={String(kycData.tos_link || "#")} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" /> Accept Terms of Service
+                  </a>
+                </Button>
+                <div className="mt-2">
+                  <StatusPill tone={kycData.tos_status === "approved" ? "confirm" : "gold"}>
+                    {String(kycData.tos_status || "-")}
+                  </StatusPill>
+                </div>
+              </div>
+              <div className="text-xs text-tts-muted">
+                ID: {String(kycData.id || "-")} · Created:{" "}
+                {String(kycData.created_at || "-").slice(0, 19)}
               </div>
             </div>
-            <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
-              <p className="text-xs font-bold uppercase text-tts-muted">Terms of Service</p>
-              <Button asChild variant="outline" size="sm" className="mt-2 w-full justify-start">
-                <a href={String(kycData.tos_link || "#")} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" /> Accept Terms of Service
-                </a>
-              </Button>
-              <div className="mt-2">
-                <StatusPill tone={kycData.tos_status === "approved" ? "confirm" : "gold"}>
-                  {String(kycData.tos_status || "-")}
-                </StatusPill>
-              </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-tts-muted">
+              <Loader2 className="h-4 w-4 animate-spin" /> Generating KYC link…
             </div>
-            <div className="text-xs text-tts-muted">
-              ID: {String(kycData.id || "-")} · Created:{" "}
-              {String(kycData.created_at || "-").slice(0, 19)}
-            </div>
-          </div>
+          )}
         </OperationalCard>
       ) : null}
 
