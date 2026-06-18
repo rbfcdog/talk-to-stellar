@@ -34,6 +34,7 @@ export type PaymentRail =
   | 'spei'
   | 'pix'
   | 'faster_payments'
+  | 'bre_b'
   | 'stellar'
   | 'ethereum'
   | 'solana'

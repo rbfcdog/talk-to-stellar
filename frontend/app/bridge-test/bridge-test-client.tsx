@@ -39,6 +39,8 @@ const ONRAMP_RAILS = [
   { id: "usd", label: "ACH / Wire", sublabel: "USD", flag: "🇺🇸", endpoint: "usd" },
   { id: "eur", label: "SEPA", sublabel: "EUR", flag: "🇪🇺", endpoint: "eur" },
   { id: "mxn", label: "SPEI", sublabel: "MXN", flag: "🇲🇽", endpoint: "mxn" },
+  { id: "gbp", label: "Faster Payments", sublabel: "GBP (Beta)", flag: "🇬🇧", endpoint: "gbp" },
+  { id: "cop", label: "Bre-B", sublabel: "COP (Beta)", flag: "🇨🇴", endpoint: "cop" },
 ] as const;
 
 const OFFRAMP_RAILS = [
@@ -134,16 +136,20 @@ function DepositInstructions({ instr }: { instr: Record<string, unknown> }) {
   const fields: Array<[string, string]> = [];
   const add = (k: string, v: unknown) => { if (v) fields.push([k, String(v)]); };
   add("PIX key", instr.pix_key);
+  add("BR code (PIX)", instr.br_code ? "(scan QR or copy code)" : undefined);
   add("Bank name", instr.bank_name);
   add("Routing number", instr.bank_routing_number);
-  add("Account number", instr.bank_account_number);
-  add("Beneficiary", instr.bank_beneficiary_name);
+  add("Account number", instr.bank_account_number || instr.account_number);
+  add("Sort code", instr.sort_code);
+  add("Beneficiary", instr.bank_beneficiary_name || instr.account_holder_name);
+  add("Beneficiary address", instr.bank_beneficiary_address);
   add("IBAN", instr.iban);
   add("BIC / SWIFT", instr.bic);
   add("CLABE", instr.clabe);
+  add("Bre-B key (COP)", instr.bre_b_key);
   add("Reference / memo", instr.deposit_message || instr.wire_reference);
   add("Amount", instr.amount ? `${instr.amount} ${instr.currency || ""}` : undefined);
-  add("Payment rail", instr.payment_rail);
+  add("Payment rail(s)", Array.isArray(instr.payment_rails) ? (instr.payment_rails as string[]).join(", ") : instr.payment_rail);
   if (!fields.length) return null;
   return (
     <div className="mt-3 grid gap-1 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">

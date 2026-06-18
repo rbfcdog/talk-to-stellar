@@ -503,6 +503,46 @@ export class BridgeService {
     });
   }
 
+  // ── GBP Virtual Account (Faster Payments On-Ramp) ────────────
+
+  async createGbpVirtualAccount(
+    customerId: string,
+    destinationWallet: string,
+    destinationChain: string,
+    blockchainMemo?: string,
+  ): Promise<BridgeVirtualAccount> {
+    return this.createVirtualAccount(customerId, {
+      source: { currency: 'gbp' },
+      destination: {
+        payment_rail: destinationChain as any,
+        currency: 'usdc',
+        address: destinationWallet,
+        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+      },
+      developer_fee_percent: this.config.developerFeePercent,
+    });
+  }
+
+  // ── COP Virtual Account (Bre-B On-Ramp) ──────────────────────
+
+  async createCopVirtualAccount(
+    customerId: string,
+    destinationWallet: string,
+    destinationChain: string,
+    blockchainMemo?: string,
+  ): Promise<BridgeVirtualAccount> {
+    return this.createVirtualAccount(customerId, {
+      source: { currency: 'cop' },
+      destination: {
+        payment_rail: destinationChain as any,
+        currency: 'usdc',
+        address: destinationWallet,
+        ...(blockchainMemo ? { blockchain_memo: blockchainMemo } : {}),
+      },
+      developer_fee_percent: this.config.developerFeePercent,
+    });
+  }
+
   // ── Wire Off-Ramp ─────────────────────────────────────────────
 
   async createWireOffRamp(

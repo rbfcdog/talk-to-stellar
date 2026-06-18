@@ -96,7 +96,7 @@ router.post(
   BridgeController.reactivateVirtualAccount,
 );
 
-// USD / EUR / MXN on-ramps
+// USD / EUR / MXN / GBP / COP on-ramps
 router.post(
   "/customers/:id/virtual-accounts/usd",
   requireBridgeMainnetEnabled,
@@ -111,6 +111,16 @@ router.post(
   "/customers/:id/virtual-accounts/mxn",
   requireBridgeMainnetEnabled,
   BridgeController.createMxnVirtualAccount,
+);
+router.post(
+  "/customers/:id/virtual-accounts/gbp",
+  requireBridgeMainnetEnabled,
+  BridgeController.createGbpVirtualAccount,
+);
+router.post(
+  "/customers/:id/virtual-accounts/cop",
+  requireBridgeMainnetEnabled,
+  BridgeController.createCopVirtualAccount,
 );
 
 // External account additional types
