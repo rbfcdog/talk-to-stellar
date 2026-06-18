@@ -71,7 +71,8 @@ export class BridgeService {
     starting_after?: string;
     limit?: number;
   }): Promise<BridgeCustomer[]> {
-    return this.client.get('/customers', params as Record<string, string>);
+    const res = await this.client.get<{ count: number; data: BridgeCustomer[] }>('/customers', params as Record<string, string>);
+    return (res as any).data ?? (res as any) ?? [];
   }
 
   // ── KYC ───────────────────────────────────────────────────────
@@ -106,10 +107,11 @@ export class BridgeService {
     customerId: string,
     params?: { starting_after?: string; limit?: number },
   ): Promise<BridgeTransfer[]> {
-    return this.client.get(
+    const res = await this.client.get<{ data: BridgeTransfer[] }>(
       `/customers/${encodeURIComponent(customerId)}/transfers`,
       params as Record<string, string>,
     );
+    return (res as any).data ?? (res as any) ?? [];
   }
 
   async cancelTransfer(transferId: string): Promise<void> {
@@ -130,9 +132,10 @@ export class BridgeService {
   }
 
   async listVirtualAccounts(customerId: string): Promise<BridgeVirtualAccount[]> {
-    return this.client.get(
+    const res = await this.client.get<{ data: BridgeVirtualAccount[] }>(
       `/customers/${encodeURIComponent(customerId)}/virtual_accounts`,
     );
+    return (res as any).data ?? (res as any) ?? [];
   }
 
   async getVirtualAccount(accountId: string): Promise<BridgeVirtualAccount> {
@@ -161,9 +164,10 @@ export class BridgeService {
   }
 
   async listExternalAccounts(customerId: string): Promise<BridgeExternalAccount[]> {
-    return this.client.get(
+    const res = await this.client.get<{ data: BridgeExternalAccount[] }>(
       `/customers/${encodeURIComponent(customerId)}/external_accounts`,
     );
+    return (res as any).data ?? (res as any) ?? [];
   }
 
   async getExternalAccount(accountId: string): Promise<BridgeExternalAccount> {
@@ -199,9 +203,10 @@ export class BridgeService {
   async listLiquidationAddresses(
     customerId: string,
   ): Promise<BridgeLiquidationAddress[]> {
-    return this.client.get(
+    const res = await this.client.get<{ data: BridgeLiquidationAddress[] }>(
       `/customers/${encodeURIComponent(customerId)}/liquidation_addresses`,
     );
+    return (res as any).data ?? (res as any) ?? [];
   }
 
   async getLiquidationAddress(
