@@ -27,8 +27,10 @@ export type PaymentRail =
   | 'ach_push'
   | 'ach_same_day'
   | 'wire'
+  | 'rtp'
   | 'fednow'
   | 'sepa'
+  | 'sepa_instant'
   | 'spei'
   | 'pix'
   | 'faster_payments'
@@ -150,6 +152,16 @@ export interface DepositInstructions {
   pix_key?: string;
   /** PIX QR code (base64 or URL) */
   pix_qr_code?: string;
+  /** IBAN for SEPA deposits */
+  iban?: string;
+  /** BIC/SWIFT code */
+  bic?: string;
+  /** CLABE for SPEI (Mexico) deposits */
+  clabe?: string;
+  /** Sort code for UK Faster Payments */
+  sort_code?: string;
+  /** Wire memo / reference */
+  wire_reference?: string;
 }
 
 // ── Virtual Accounts ────────────────────────────────────────────────
@@ -191,20 +203,27 @@ export interface BridgeExternalAccount {
     checking_or_savings?: 'checking' | 'savings';
   };
   pix_key?: { pix_key?: string; document_number?: string; account_preview?: string };
+  iban?: { iban?: string; bic?: string; last_4?: string };
+  clabe?: { clabe?: string; last_4?: string };
   created_at: string;
   updated_at: string;
 }
 
 export interface ExternalAccountCreateInput {
   currency: Currency;
-  account_type: 'us' | 'pix';
+  account_type: 'us' | 'pix' | 'iban' | 'clabe';
   /** PIX key object { pix_key, document_number } */
   pix_key?: { pix_key: string; document_number?: string };
+  /** IBAN details for SEPA */
+  iban?: { iban: string; bic?: string };
+  /** CLABE details for SPEI (Mexico) */
+  clabe?: { clabe: string };
   /** US bank details */
   account_owner_type?: 'individual' | 'business';
   account_owner_name?: string;
   first_name?: string;
   last_name?: string;
+  business_name?: string;
   bank_name?: string;
   account_name?: string;
   account?: {
@@ -216,7 +235,7 @@ export interface ExternalAccountCreateInput {
     street_line_1: string;
     street_line_2?: string;
     country: string;
-    state: string;
+    state?: string;
     city: string;
     postal_code: string;
   };
@@ -261,12 +280,20 @@ export interface BridgeExchangeRate {
 export type BridgeWebhookEventType =
   | 'transfer.completed'
   | 'transfer.failed'
+  | 'transfer.pending'
+  | 'transfer.cancelled'
   | 'transfer.awaiting_funds'
   | 'virtual_account.deposit_received'
   | 'virtual_account.activated'
   | 'virtual_account.deactivated'
+  | 'liquidation_address.deposit_received'
+  | 'liquidation_address.drain_completed'
+  | 'static_memo.deposit_received'
   | 'customer.kyc_approved'
-  | 'customer.kyc_rejected';
+  | 'customer.kyc_rejected'
+  | 'customer.tos_approved'
+  | 'customer.created'
+  | 'external_account.created';
 
 export interface BridgeWebhookEvent {
   id: string;
@@ -290,4 +317,67 @@ export interface BridgeApiError {
   message?: string;
   source?: Record<string, unknown>;
   response?: unknown;
+}
+
+// ── Business Customer ────────────────────────────────────────────────
+
+export interface BusinessCustomerCreateInput {
+  type: 'business';
+  business_name: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  description?: string;
+  ein?: string;
+  address?: {
+    street_line_1: string;
+    street_line_2?: string;
+    city: string;
+    state?: string;
+    postal_code?: string;
+    country: string;
+  };
+}
+
+// ── Webhooks ─────────────────────────────────────────────────────────
+
+export interface BridgeWebhook {
+  id: string;
+  url: string;
+  secret?: string;
+  event_types?: BridgeWebhookEventType[];
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookCreateInput {
+  url: string;
+  event_types?: BridgeWebhookEventType[];
+}
+
+// ── Static Memos ──────────────────────────────────────────────────────
+
+export interface BridgeStaticMemo {
+  id: string;
+  customer_id: string;
+  memo: string;
+  destination: TransferEndpoint;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StaticMemoCreateInput {
+  on_behalf_of: string;
+  memo?: string;
+  developer_fee_percent?: string;
+  destination: TransferEndpoint;
+}
+
+// ── Transfer Params ───────────────────────────────────────────────────
+
+export interface TransferListParams {
+  starting_after?: string;
+  limit?: number;
+  state?: TransferState;
 }

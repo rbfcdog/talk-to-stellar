@@ -87,5 +87,115 @@ router.get(
   "/virtual-accounts/:virtualAccountId",
   BridgeController.getVirtualAccount,
 );
+router.post(
+  "/virtual-accounts/:virtualAccountId/deactivate",
+  BridgeController.deactivateVirtualAccount,
+);
+router.post(
+  "/virtual-accounts/:virtualAccountId/reactivate",
+  BridgeController.reactivateVirtualAccount,
+);
+
+// USD / EUR / MXN on-ramps
+router.post(
+  "/customers/:id/virtual-accounts/usd",
+  requireBridgeMainnetEnabled,
+  BridgeController.createUsdVirtualAccount,
+);
+router.post(
+  "/customers/:id/virtual-accounts/eur",
+  requireBridgeMainnetEnabled,
+  BridgeController.createEurVirtualAccount,
+);
+router.post(
+  "/customers/:id/virtual-accounts/mxn",
+  requireBridgeMainnetEnabled,
+  BridgeController.createMxnVirtualAccount,
+);
+
+// External account additional types
+router.post(
+  "/customers/:id/external-accounts/us-bank",
+  BridgeController.createUsBankExternalAccount,
+);
+router.post(
+  "/customers/:id/external-accounts/iban",
+  BridgeController.createIbanExternalAccount,
+);
+router.post(
+  "/customers/:id/external-accounts/clabe",
+  BridgeController.createClabeExternalAccount,
+);
+router.post(
+  "/external-accounts/:externalAccountId/deactivate",
+  BridgeController.deactivateExternalAccount,
+);
+
+// Liquidation addresses (generic — any rail)
+router.post(
+  "/customers/:id/liquidation-addresses",
+  requireBridgeMainnetEnabled,
+  BridgeController.createLiquidationAddress,
+);
+
+// Transfers — additional rails (must be before /transfers/:transferId)
+router.post(
+  "/transfers/crypto-to-ach",
+  requireBridgeMainnetEnabled,
+  BridgeController.createCryptoToAchTransfer,
+);
+router.post(
+  "/transfers/crypto-to-wire",
+  requireBridgeMainnetEnabled,
+  BridgeController.createCryptoToWireTransfer,
+);
+router.post(
+  "/transfers/crypto-to-rtp",
+  requireBridgeMainnetEnabled,
+  BridgeController.createCryptoToRtpTransfer,
+);
+router.post(
+  "/transfers/crypto-to-sepa",
+  requireBridgeMainnetEnabled,
+  BridgeController.createCryptoToSepaTransfer,
+);
+router.post(
+  "/transfers/crypto-to-spei",
+  requireBridgeMainnetEnabled,
+  BridgeController.createCryptoToSpeiTransfer,
+);
+router.post(
+  "/transfers",
+  requireBridgeMainnetEnabled,
+  BridgeController.createTransfer,
+);
+router.get("/transfers", BridgeController.listTransfers);
+router.delete(
+  "/transfers/:transferId",
+  requireBridgeMainnetEnabled,
+  BridgeController.cancelTransfer,
+);
+router.get("/customers/:id/transfers", BridgeController.listCustomerTransfers);
+
+// Customer management (extended)
+router.put("/customers/:id", BridgeController.updateCustomer);
+router.post("/customers/business", BridgeController.createBusinessCustomer);
+
+// Webhooks
+router.get("/webhooks", BridgeController.listWebhooks);
+router.post("/webhooks", BridgeController.createWebhook);
+router.get("/webhooks/:webhookId", BridgeController.getWebhook);
+router.put("/webhooks/:webhookId", BridgeController.updateWebhook);
+router.delete("/webhooks/:webhookId", BridgeController.deleteWebhook);
+
+// Static memos
+router.get("/static-memos", BridgeController.listStaticMemos);
+router.post(
+  "/static-memos",
+  requireBridgeMainnetEnabled,
+  BridgeController.createStaticMemo,
+);
+router.get("/static-memos/:memoId", BridgeController.getStaticMemo);
+router.delete("/static-memos/:memoId", BridgeController.deleteStaticMemo);
 
 export default router;

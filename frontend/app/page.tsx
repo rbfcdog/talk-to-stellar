@@ -1,5 +1,6 @@
 import Navbar from "@/components/landing-reluca/Navbar"
 import Hero from "@/components/landing-reluca/Hero"
+import EarlyAccessSignup from "@/components/landing-reluca/EarlyAccessSignup"
 import ProblemSection from "@/components/landing-reluca/ProblemSection"
 import SolutionSection from "@/components/landing-reluca/SolutionSection"
 import Pathfinding from "@/components/landing-reluca/Pathfinding"
@@ -17,6 +18,7 @@ export default function HomePage() {
       <Navbar />
       <main className="relative z-10 flex flex-col items-center w-full">
         <Hero />
+        <EarlyAccessSignup />
         <ProblemSection />
         <SolutionSection />
         <Pathfinding />
