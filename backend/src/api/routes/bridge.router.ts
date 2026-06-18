@@ -1,15 +1,13 @@
 import { Router } from "express";
 import { BridgeController } from "../controllers/bridge.controller";
 import {
-  requireBridgeAuth,
   requireBridgeEnabled,
   requireBridgeMainnetEnabled,
 } from "../middlewares/bridge-mainnet.middleware";
 
 const router = Router();
 
-// All bridge routes require auth + bridge enabled
-router.use(requireBridgeAuth);
+// All bridge routes require bridge enabled
 router.use(requireBridgeEnabled);
 
 // ── Customers ───────────────────────────────────────────
