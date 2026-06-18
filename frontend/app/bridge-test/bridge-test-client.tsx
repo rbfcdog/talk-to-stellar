@@ -962,27 +962,33 @@ export default function BridgeTestClient() {
         </div>
 
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
-          <div>
-            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar address)</p>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-xs text-tts-muted">Destination wallet (Stellar mainnet address — must be funded with USDC trust line)</p>
             <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
           </div>
           <div>
             <p className="mb-1 text-xs text-tts-muted">Destination chain</p>
             <Input value={onRampChain} onChange={(e) => setOnRampChain(e.target.value)} placeholder="stellar" />
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <p className="mb-1 text-xs text-tts-muted">
               Blockchain memo{" "}
-              <span className="text-tts-muted/60">(optional — only needed if your Stellar address is an exchange hot-wallet that requires a memo)</span>
+              <span className="text-tts-muted/60">(required by Bridge for Stellar — leave blank to auto-generate)</span>
             </p>
             <Input
               value={onRampMemo}
               onChange={(e) => setOnRampMemo(e.target.value)}
-              placeholder="Leave blank for personal wallets (e.g. Lobstr, Freighter)"
+              placeholder="Auto-generated if blank (e.g. 1234567)"
               className="font-mono text-xs"
             />
           </div>
         </div>
+        {onRampChain === "stellar" && (
+          <p className="mb-3 rounded-md border border-tts-gold/25 bg-tts-gold/5 px-3 py-2 text-xs text-tts-gold">
+            Bridge validates your Stellar address on mainnet. The address must be funded (min 1 XLM) and have a USDC trust line.
+            Bridge will auto-attach the memo when sending USDC to your wallet.
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <Button onClick={createVirtualAccount} disabled={!!busy || !customerId || !walletKey} size="sm">
@@ -997,13 +1003,24 @@ export default function BridgeTestClient() {
         {/* New virtual account result */}
         {newVA ? (
           <div className="mt-4 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">
-            <div className="flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between">
               <span className="font-mono text-xs text-tts-muted">{newVA.id}</span>
               <StatusPill tone={newVA.status === "activated" ? "confirm" : "gold"}>{newVA.status}</StatusPill>
             </div>
-            {newVA.source_deposit_instructions ? (
-              <DepositInstructions instr={newVA.source_deposit_instructions} />
-            ) : null}
+            {newVA.source_deposit_instructions && (
+              <>
+                {(newVA.source_deposit_instructions as any).payment_rails?.includes("wire") && (
+                  <div className="mb-2 rounded border border-tts-confirm/30 bg-tts-confirm/10 p-2 text-xs">
+                    <p className="mb-1 font-semibold text-tts-confirm">Wire these details to Lead Bank to trigger on-ramp:</p>
+                    <p className="font-mono">Routing: <strong>{(newVA.source_deposit_instructions as any).bank_routing_number}</strong></p>
+                    <p className="font-mono">Account: <strong>{(newVA.source_deposit_instructions as any).bank_account_number}</strong></p>
+                    <p className="font-mono">Beneficiary: <strong>{(newVA.source_deposit_instructions as any).bank_beneficiary_name}</strong></p>
+                    <p className="mt-1 text-tts-muted">No memo/reference needed. Bridge matches by account number.</p>
+                  </div>
+                )}
+                <DepositInstructions instr={newVA.source_deposit_instructions} />
+              </>
+            )}
           </div>
         ) : null}
 
