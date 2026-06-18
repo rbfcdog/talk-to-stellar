@@ -101,8 +101,6 @@ export default function BridgeTestClient() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [country, setCountry] = useState("BR");
-
   // Created customer
   const [customer, setCustomer] = useState<CustomerData | null>(null);
   const [customerId, setCustomerId] = useState("");
@@ -172,7 +170,6 @@ export default function BridgeTestClient() {
       first_name: firstName,
       last_name: lastName,
       email,
-      country,
       type: "individual",
     });
     setCustomer(payload.customer as CustomerData);
@@ -305,7 +302,6 @@ export default function BridgeTestClient() {
           <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
           <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
           <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" />
-          <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Country (BR)" />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button onClick={createCustomer} disabled={!!busy || !firstName} size="sm">
@@ -332,7 +328,7 @@ export default function BridgeTestClient() {
               <span className="font-mono-financial text-xs text-tts-muted">{customer.id} <Copy className="inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(customer.id!)} /></span>
               <StatusPill tone={customer.status === "verified" ? "confirm" : "gold"}>{customer.status || customer.kyc_status || "unknown"}</StatusPill>
             </div>
-            <div className="mt-2 text-sm text-tts-deep">{customer.first_name} {customer.last_name} · {customer.email} · {customer.country}</div>
+            <div className="mt-2 text-sm text-tts-deep">{customer.first_name} {customer.last_name} · {customer.email}</div>
             {customer.endorsements?.length ? (
               <div className="mt-2 flex flex-wrap gap-1">
                 {customer.endorsements.map((e) => (
