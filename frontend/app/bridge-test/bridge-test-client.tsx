@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
-  KeyRound,
   Loader2,
   Plus,
   RefreshCw,
@@ -26,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const OPS_SECRET_STORAGE_KEY = "tts-bridge-test-ops-secret";
 const BRIDGE_BASE = "/api/bridge";
 
 type JsonRecord = Record<string, unknown>;
@@ -95,7 +93,6 @@ type ReadinessData = {
 };
 
 export default function BridgeTestClient() {
-  const [opsSecret, setOpsSecret] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -136,48 +133,33 @@ export default function BridgeTestClient() {
   const [virtualAccount, setVirtualAccount] = useState<VirtualAccountData | null>(null);
   const [virtualAccounts, setVirtualAccounts] = useState<VirtualAccountData[]>([]);
 
-  const updateOpsSecret = (v: string) => {
-    setOpsSecret(v);
-    if (v.trim()) sessionStorage.setItem(OPS_SECRET_STORAGE_KEY, v);
-    else sessionStorage.removeItem(OPS_SECRET_STORAGE_KEY);
-  };
-
   const addLog = (msg: string) => setLog((prev) => [...prev.slice(-49), `${new Date().toISOString().slice(11, 19)} ${msg}`]);
 
-  const runApi = useCallback(
-    async (method: string, path: string, body?: Record<string, unknown>) => {
-      setBusy(`${method} ${path}`);
-      setError("");
-      const secret = opsSecret.trim();
-      try {
-        const r = await fetch(`${BRIDGE_BASE}${path}`, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            "x-international-transfer-ops-secret": secret,
-            "x-ops-token": secret,
-            authorization: `Bearer ${secret}`,
-          },
-          body: body ? JSON.stringify(body) : undefined,
-          cache: "no-store",
-        });
-        const payload: ApiResponse = await r.json().catch(() => ({}));
-        addLog(`${method} ${path} → ${r.status} ${payload.success ? "OK" : payload.message || "FAIL"}`);
-        if (!r.ok || payload.success === false) {
-          throw new Error(payload.message || `${method} ${path} failed with HTTP ${r.status}`);
-        }
-        return payload;
-      } catch (e: any) {
-        const msg = e?.message || String(e);
-        setError(msg);
-        addLog(`ERROR: ${msg}`);
-        throw e;
-      } finally {
-        setBusy("");
+  const runApi = useCallback(async (method: string, path: string, body?: Record<string, unknown>) => {
+    setBusy(`${method} ${path}`);
+    setError("");
+    try {
+      const r = await fetch(`${BRIDGE_BASE}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+      });
+      const payload: ApiResponse = await r.json().catch(() => ({}));
+      addLog(`${method} ${path} → ${r.status} ${payload.success ? "OK" : payload.message || "FAIL"}`);
+      if (!r.ok || payload.success === false) {
+        throw new Error(payload.message || `${method} ${path} failed with HTTP ${r.status}`);
       }
-    },
-    [opsSecret],
-  );
+      return payload;
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setError(msg);
+      addLog(`ERROR: ${msg}`);
+      throw e;
+    } finally {
+      setBusy("");
+    }
+  }, []);
 
   // ── Customer ──────────────────────────────────────
 
@@ -299,22 +281,15 @@ export default function BridgeTestClient() {
         <OperationalStat label="Rate USD→BRL" value={exchangeRate?.buy_rate || "-"} detail={exchangeRate ? "Live" : "Not fetched"} tone={exchangeRate ? "confirm" : "default"} />
       </div>
 
-      {/* Ops Secret */}
-      <OperationalCard>
-        <label className="grid gap-2">
-          <span className="flex items-center gap-2 text-xs font-bold uppercase text-tts-muted">
-            <KeyRound className="h-4 w-4" /> Ops secret
-          </span>
-          <Input type="password" value={opsSecret} onChange={(e) => updateOpsSecret(e.target.value)} placeholder="Paste ops token" spellCheck={false} />
-        </label>
-        {error ? (
-          <div className="mt-4 flex items-start gap-3 rounded-md border border-tts-error/25 bg-tts-error/10 p-4 text-tts-error">
+      {error ? (
+        <OperationalCard>
+          <div className="flex items-start gap-3 rounded-md border border-tts-error/25 bg-tts-error/10 p-4 text-tts-error">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <p className="text-sm font-semibold">{error}</p>
           </div>
-        ) : null}
-        {copied ? <div className="mt-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/10 p-2 text-sm font-semibold text-tts-confirm">Copied: {copied}</div> : null}
-      </OperationalCard>
+        </OperationalCard>
+      ) : null}
+      {copied ? <div className="rounded-md border border-tts-confirm/25 bg-tts-confirm/10 p-2 text-sm font-semibold text-tts-confirm">Copied: {copied}</div> : null}
 
       {/* 1. Customer Creation */}
       <OperationalCard>
@@ -329,7 +304,7 @@ export default function BridgeTestClient() {
           <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Country (BR)" />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button onClick={createCustomer} disabled={!!busy || !opsSecret || !firstName} size="sm">
+          <Button onClick={createCustomer} disabled={!!busy || !firstName} size="sm">
             {busy?.startsWith("POST /customers") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
             Create
           </Button>
