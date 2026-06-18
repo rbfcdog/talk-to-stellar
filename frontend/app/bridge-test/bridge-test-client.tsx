@@ -1002,6 +1002,74 @@ export default function BridgeTestClient() {
             </Button>
           </div>
         </div>
+
+        {/* ── Bridge Custodial Wallets ──────────────────────────── */}
+        <div className="mt-6 border-t border-tts-border pt-5">
+          <p className="mb-1 text-xs font-bold uppercase text-tts-muted">Bridge Custodial Wallet</p>
+          <p className="mb-3 text-xs text-tts-muted">
+            Bridge creates and hosts wallets on Base, Ethereum, Solana, Tempo, or Tron.
+            No funding required — Bridge manages the keys. Select one as the on-ramp destination in Step 4.
+          </p>
+          <div className="mb-3 flex items-end gap-2">
+            <div className="flex-1">
+              <p className="mb-1 text-xs text-tts-muted">Chain</p>
+              <select
+                value={bridgeWalletChain}
+                onChange={(e) => setBridgeWalletChain(e.target.value)}
+                className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+              >
+                {(["base", "ethereum", "solana", "tempo", "tron"] as const).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={createBridgeWallet} disabled={!!busy || !customerId} size="sm">
+              {busy?.includes("/wallets") && !busy.includes("liquidation") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Create
+            </Button>
+            <Button variant="outline" size="sm" onClick={listBridgeWallets} disabled={!!busy || !customerId}>
+              <Search className="mr-2 h-4 w-4" /> List
+            </Button>
+          </div>
+
+          {bridgeWallets.length > 0 ? (
+            <div className="grid gap-2">
+              {bridgeWallets.map((w, i) => {
+                const isActive = evmWallet === w.address && onRampChain === w.chain;
+                return (
+                  <div
+                    key={w.id || i}
+                    className={`flex items-center justify-between rounded-md border p-2 text-xs ${
+                      isActive ? "border-tts-confirm/40 bg-tts-confirm/5" : "border-tts-border bg-tts-bg/50"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <span className="rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{w.chain}</span>
+                      <p className="mt-1 break-all font-mono text-tts-deep">
+                        {w.address}
+                        {w.address ? <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(w.address!)} /> : null}
+                      </p>
+                      {w.initiation_required ? <p className="mt-0.5 text-tts-error">⚠ initiation required</p> : null}
+                    </div>
+                    <button
+                      className={`ml-3 shrink-0 rounded border px-2 py-0.5 text-xs transition-colors ${
+                        isActive
+                          ? "border-tts-confirm/40 text-tts-confirm"
+                          : "border-tts-gold/40 text-tts-gold hover:bg-tts-gold/10"
+                      }`}
+                      onClick={() => { setEvmWallet(w.address || ""); setOnRampChain(w.chain || "base"); }}
+                      disabled={isActive}
+                    >
+                      {isActive ? "Active" : "Use as destination"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-tts-muted">No Bridge wallets listed. Click List or Create above.</p>
+          )}
+        </div>
       </OperationalCard>
 
       {/* ── Step 3: External Accounts ─────────────────────────── */}
@@ -1401,66 +1469,6 @@ export default function BridgeTestClient() {
         {offTransfer ? (
           <div className="mt-4">
             <TransferCard t={offTransfer} onRefresh={() => refreshTransfer(offTransfer.id!)} />
-          </div>
-        ) : null}
-      </OperationalCard>
-
-      {/* ── Bridge Wallets (custodial: base/ethereum/solana/tempo/tron) ── */}
-      <OperationalCard>
-        <div className="mb-4">
-          <p className="text-xs font-bold uppercase text-tts-muted">Bridge.xyz</p>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-tts-deep">
-            <Wallet className="h-5 w-5 text-tts-gold" /> Bridge Custodial Wallets
-          </h2>
-          <p className="mt-0.5 text-sm text-tts-muted">
-            Bridge creates hosted wallets on <strong>Base, Ethereum, Solana, Tempo, or Tron</strong> — not Stellar. Use these as on-ramp destinations when sending stablecoins on those chains.
-          </p>
-        </div>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          {(["base", "ethereum", "solana", "tempo", "tron"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setBridgeWalletChain(c)}
-              className={`rounded-md border px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                bridgeWalletChain === c
-                  ? "border-tts-gold bg-tts-gold/10 text-tts-gold"
-                  : "border-tts-border bg-tts-bg/40 text-tts-muted hover:border-tts-gold/50"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <Button onClick={createBridgeWallet} disabled={!!busy || !customerId} size="sm">
-            {busy?.includes("/wallets") && !busy.includes("liquidation") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Create {bridgeWalletChain} wallet
-          </Button>
-          <Button variant="outline" size="sm" onClick={listBridgeWallets} disabled={!!busy || !customerId}>
-            <Search className="mr-2 h-4 w-4" /> List wallets
-          </Button>
-        </div>
-
-        {bridgeWallets.length > 0 ? (
-          <div className="mt-4 grid gap-2">
-            {bridgeWallets.map((w, i) => (
-              <div key={w.id || i} className="rounded-md border border-tts-border bg-tts-bg/50 p-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{w.chain}</span>
-                  <span className="font-mono text-tts-muted">{w.id?.slice(0, 20)}…</span>
-                </div>
-                <div className="mt-2 break-all font-mono text-tts-deep">
-                  {w.address}
-                  {w.address ? <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(w.address!)} /> : null}
-                </div>
-                {w.initiation_required ? (
-                  <p className="mt-1 text-tts-error">⚠ Transfers from this wallet require an initiation object</p>
-                ) : null}
-              </div>
-            ))}
           </div>
         ) : null}
       </OperationalCard>
