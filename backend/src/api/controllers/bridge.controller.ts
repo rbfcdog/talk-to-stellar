@@ -1183,4 +1183,35 @@ export class BridgeController {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Bridge Wallet not found." });
     }
   }
+
+  static async getWalletTransactions(req: Request, res: Response): Promise<void> {
+    try {
+      const walletId = readText(req.params.walletId);
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      const startingAfter = readText(req.query.starting_after as string) || undefined;
+      const transactions = await getBridgeService().getWalletTransactions(walletId, { limit, starting_after: startingAfter });
+      res.json({ success: true, transactions });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to get wallet transactions." });
+    }
+  }
+
+  static async getWalletBalances(_req: Request, res: Response): Promise<void> {
+    try {
+      const balances = await getBridgeService().getWalletBalances();
+      res.json({ success: true, balances });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to get wallet balances." });
+    }
+  }
+
+  static async getGlobalWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const walletId = readText(req.params.walletId);
+      const wallet = await getBridgeService().getGlobalWallet(walletId);
+      res.json({ success: true, wallet });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Bridge Wallet not found." });
+    }
+  }
 }

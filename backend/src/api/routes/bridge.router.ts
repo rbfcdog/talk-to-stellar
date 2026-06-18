@@ -214,4 +214,9 @@ router.post("/customers/:id/wallets", BridgeController.createWallet);
 router.get("/customers/:id/wallets", BridgeController.listWallets);
 router.get("/customers/:id/wallets/:walletId", BridgeController.getWallet);
 
+// Global wallet endpoints (not scoped to customer)
+router.get("/wallets/balances", BridgeController.getWalletBalances);
+router.get("/wallets/:walletId", BridgeController.getGlobalWallet);
+router.get("/wallets/:walletId/transactions", BridgeController.getWalletTransactions);
+
 export default router;
