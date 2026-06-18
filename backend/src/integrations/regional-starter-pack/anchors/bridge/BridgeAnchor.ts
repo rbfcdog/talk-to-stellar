@@ -130,7 +130,7 @@ export class BridgeAnchor implements Anchor {
     return {
       id: created.id,
       email: created.email || input.email,
-      kycStatus: mapBridgeKycToAnchorStatus(created.kyc_status),
+        kycStatus: mapBridgeKycToAnchorStatus(created.kyc_status || created.status || 'not_started'),
       country: created.country || input.country,
       createdAt: created.created_at,
       updatedAt: created.updated_at,
@@ -144,7 +144,7 @@ export class BridgeAnchor implements Anchor {
       return {
         id: c.id,
         email: c.email || '',
-        kycStatus: mapBridgeKycToAnchorStatus(c.kyc_status),
+        kycStatus: mapBridgeKycToAnchorStatus(c.kyc_status || c.status || 'not_started'),
         country: c.country,
         createdAt: c.created_at,
         updatedAt: c.updated_at,
@@ -164,7 +164,7 @@ export class BridgeAnchor implements Anchor {
 
   async getKycStatus(customerId: string): Promise<KycStatus> {
     const c = await this.bridge.getCustomer(customerId);
-    return mapBridgeKycToAnchorStatus(c.kyc_status);
+    return mapBridgeKycToAnchorStatus(c.kyc_status || c.status || 'not_started');
   }
 
   async getKycRequirements(country?: string): Promise<KycRequirements> {
@@ -200,7 +200,7 @@ export class BridgeAnchor implements Anchor {
 
     return {
       customerId: updated.id,
-      kycStatus: mapBridgeKycToAnchorStatus(updated.kyc_status),
+      kycStatus: mapBridgeKycToAnchorStatus(updated.kyc_status || updated.status || 'not_started'),
     };
   }
 

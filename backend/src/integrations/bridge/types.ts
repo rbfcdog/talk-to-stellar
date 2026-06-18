@@ -52,9 +52,10 @@ export interface BridgeCustomer {
   email?: string;
   phone?: string;
   type: CustomerType;
-  kyc_status: KycStatus;
+  status?: string;
+  kyc_status?: KycStatus;
   country?: string;
-  endorsements?: Array<{ type?: string; status?: string }>;
+  endorsements?: Array<{ name?: string; status?: string; requirements?: Record<string, unknown> }>;
   created_at: string;
   updated_at: string;
 }
@@ -177,7 +178,7 @@ export interface BridgeExternalAccount {
   customer_id: string;
   active: boolean;
   currency: Currency;
-  account_type: 'us' | 'pix_key' | 'iban' | 'clabe';
+  account_type: 'us' | 'pix' | 'iban' | 'clabe';
   account_owner_type?: 'individual' | 'business';
   account_owner_name?: string;
   first_name?: string;
@@ -189,16 +190,16 @@ export interface BridgeExternalAccount {
     routing_number: string;
     checking_or_savings?: 'checking' | 'savings';
   };
-  pix_key?: string;
+  pix_key?: { pix_key?: string; document_number?: string; account_preview?: string };
   created_at: string;
   updated_at: string;
 }
 
 export interface ExternalAccountCreateInput {
   currency: Currency;
-  account_type: 'us' | 'pix_key';
-  /** PIX key (email, CPF, phone, or random) */
-  pix_key?: string;
+  account_type: 'us' | 'pix';
+  /** PIX key object { pix_key, document_number } */
+  pix_key?: { pix_key: string; document_number?: string };
   /** US bank details */
   account_owner_type?: 'individual' | 'business';
   account_owner_name?: string;
