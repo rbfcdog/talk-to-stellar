@@ -9,7 +9,6 @@ import {
   Banknote,
   CheckCircle2,
   Copy,
-  Database,
   ExternalLink,
   Loader2,
   LogOut,
@@ -58,17 +57,6 @@ const EXT_TABS = [
   { id: "iban", label: "IBAN" },
   { id: "clabe", label: "CLABE" },
 ] as const;
-
-const MIGRATION_TABLES = [
-  { table: "bridge_pix_ach_orders", purpose: "PIX → ACH atomic flow", exists: true },
-  { table: "bridge_customers", purpose: "User → Bridge customer map", exists: false },
-  { table: "bridge_external_accounts", purpose: "PIX/US/IBAN/CLABE accounts", exists: false },
-  { table: "bridge_liquidation_addresses", purpose: "Reusable crypto→fiat addresses", exists: false },
-  { table: "bridge_virtual_accounts", purpose: "Fiat→USDC on-ramp accounts", exists: false },
-  { table: "bridge_transfers", purpose: "One-time transfer records", exists: false },
-  { table: "bridge_webhook_events", purpose: "Webhook event log + idempotency", exists: false },
-  { table: "bridge_exchange_rate_estimates", purpose: "Exchange rate cache", exists: false },
-];
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -225,6 +213,7 @@ export default function BridgeTestClient() {
   const [walletInput, setWalletInput] = useState("");
   const [walletBalances, setWalletBalances] = useState<StellarBalance[]>([]);
   const [walletBusy, setWalletBusy] = useState(false);
+  const [walletOnChain, setWalletOnChain] = useState<boolean | null>(null); // null = not checked yet
 
   // Saved wallets (from DB, per user)
   type SavedWallet = { id: number; public_key: string; label?: string; is_funded: boolean; has_usdc_trustline: boolean; created_at: string };
@@ -432,15 +421,18 @@ export default function BridgeTestClient() {
     const pk = key || walletKey;
     if (!pk) return;
     setWalletBusy(true);
+    setWalletOnChain(null);
     try {
       const r = await fetch(`${HORIZON}/accounts/${encodeURIComponent(pk)}`);
       if (!r.ok) throw new Error("Account not found on Stellar network");
       const d = await r.json();
       setWalletBalances(d.balances || []);
+      setWalletOnChain(true);
       addLog(`Stellar balance fetched for ${pk.slice(0, 8)}…`);
     } catch (e: any) {
       addLog(`Stellar: ${e.message}`);
       setWalletBalances([]);
+      setWalletOnChain(false);
     } finally {
       setWalletBusy(false);
     }
@@ -492,6 +484,7 @@ export default function BridgeTestClient() {
     localStorage.setItem("tts-bridge-wallet", pk);
     setWalletKey(pk);
     setWalletBalances([]);
+    setWalletOnChain(null);
     fetchBalance(pk);
     addLog(`Selected wallet: ${pk.slice(0, 8)}…`);
   }
@@ -820,7 +813,7 @@ export default function BridgeTestClient() {
                   <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(walletKey)} />
                 </p>
               </div>
-              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { localStorage.removeItem("tts-bridge-wallet"); setWalletKey(""); setWalletBalances([]); }}>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { localStorage.removeItem("tts-bridge-wallet"); setWalletKey(""); setWalletBalances([]); setWalletOnChain(null); }}>
                 Clear
               </Button>
             </div>
@@ -1157,15 +1150,25 @@ export default function BridgeTestClient() {
             />
           </div>
         </div>
-        {onRampChain === "stellar" && (
+        {onRampChain === "stellar" && walletKey && walletOnChain === false && (
+          <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
+            <p className="font-bold">Wallet not found on Stellar mainnet</p>
+            <p className="mt-1">Bridge validates the destination address exists on-chain before creating a virtual account. This address either hasn't been funded yet or doesn't exist.</p>
+            <p className="mt-2 font-semibold">To fix: set <code className="rounded bg-tts-bg px-1">STELLAR_WALLET_SPONSOR_SECRET</code> on Railway and generate a new wallet from Step 2 — it will be auto-funded and Bridge-ready. Or send ≥2 XLM to this address and add a USDC trustline manually, then refresh balance.</p>
+          </div>
+        )}
+        {onRampChain === "stellar" && walletKey && walletOnChain === true && (
           <p className="mb-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 px-3 py-2 text-xs text-tts-confirm">
-            Wallets created in Step 2 are auto-funded with XLM and have the USDC trustline set — ready for Bridge immediately.
-            If you entered an external wallet, Bridge requires it to be funded (≥1 XLM) with a USDC trustline on mainnet.
+            Wallet exists on mainnet — Bridge can accept this address.
           </p>
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={createVirtualAccount} disabled={!!busy || !customerId || !walletKey} size="sm">
+          <Button
+            onClick={createVirtualAccount}
+            disabled={!!busy || !customerId || !walletKey || (onRampChain === "stellar" && walletOnChain === false)}
+            size="sm"
+          >
             {busy?.includes("virtual-accounts") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
             Create {onRampCurrency.toUpperCase()} virtual account
           </Button>
@@ -1440,34 +1443,6 @@ export default function BridgeTestClient() {
             <p className="mt-1 text-xs text-tts-muted">Estimated — not a locked quote</p>
           </div>
         ) : null}
-      </OperationalCard>
-
-      {/* ── Migrations ────────────────────────────────────────── */}
-      <OperationalCard>
-        <div className="mb-4 flex items-start gap-3">
-          <Database className="mt-0.5 h-5 w-5 shrink-0 text-tts-gold" />
-          <div>
-            <p className="text-xs font-bold uppercase text-tts-gold">Infrastructure</p>
-            <h2 className="text-lg font-bold text-tts-deep">Database Migrations</h2>
-            <p className="mt-1 text-sm text-tts-muted">
-              Run <code className="rounded bg-tts-bg px-1 font-mono text-xs">backend/migrations/20260618_00_bridge_tables.sql</code> to enable persistence and webhook processing.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-2">
-          {MIGRATION_TABLES.map((m) => (
-            <div key={m.table} className="flex items-center justify-between rounded-md border border-tts-border bg-tts-bg/50 px-3 py-2">
-              <div className="flex items-center gap-3">
-                <StatusPill tone={m.exists ? "confirm" : "gold"}>{m.exists ? "Exists" : "Pending"}</StatusPill>
-                <code className="font-mono text-xs text-tts-deep">{m.table}</code>
-              </div>
-              <span className="hidden text-xs text-tts-muted sm:block">{m.purpose}</span>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 text-xs text-tts-muted">
-          <code className="rounded bg-tts-bg px-1 font-mono">psql $DATABASE_URL -f backend/migrations/20260618_00_bridge_tables.sql</code>
-        </p>
       </OperationalCard>
 
       {/* ── Activity log ─────────────────────────────────────── */}
