@@ -85,6 +85,21 @@ export class BridgeService {
     );
   }
 
+  async createStandaloneKycLink(email: string, type: string): Promise<BridgeKycLink> {
+    try {
+      return await this.client.post('/kyc_links', { email, type }, BridgeClient.idempotencyKey('kyc'));
+    } catch (error: any) {
+      // Bridge returns 409 with existing_kyc_link when one already exists
+      const existing = error?.response?.existing_kyc_link || error?.existing_kyc_link;
+      if (existing) return existing as BridgeKycLink;
+      if (String(error?.message || '').includes('already been created')) {
+        // Retry without idempotency key to get the existing link
+        return this.client.post('/kyc_links', { email, type }) as Promise<BridgeKycLink>;
+      }
+      throw error;
+    }
+  }
+
   async getKycStatus(kycLinkId: string): Promise<BridgeKycLink> {
     return this.client.get(`/kyc_links/${encodeURIComponent(kycLinkId)}`);
   }
