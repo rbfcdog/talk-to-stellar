@@ -196,6 +196,23 @@ export class BridgeService {
     );
   }
 
+  async listLiquidationAddresses(
+    customerId: string,
+  ): Promise<BridgeLiquidationAddress[]> {
+    return this.client.get(
+      `/customers/${encodeURIComponent(customerId)}/liquidation_addresses`,
+    );
+  }
+
+  async getLiquidationAddress(
+    customerId: string,
+    addressId: string,
+  ): Promise<BridgeLiquidationAddress> {
+    return this.client.get(
+      `/customers/${encodeURIComponent(customerId)}/liquidation_addresses/${encodeURIComponent(addressId)}`,
+    );
+  }
+
   // ── Convenience: PIX On-Ramp ──────────────────────────────────
 
   /**
@@ -240,6 +257,35 @@ export class BridgeService {
         currency: 'brl',
         external_account_id: externalAccountId,
       },
+    });
+  }
+
+  // ── Exchange Rates ────────────────────────────────────────────
+
+  async getExchangeRate(
+    from: string,
+    to: string,
+  ): Promise<Record<string, unknown>> {
+    return this.client.get(
+      `/exchange_rate?from_currency=${encodeURIComponent(from)}&to_currency=${encodeURIComponent(to)}`,
+    );
+  }
+
+  // ── Convenience: BRL Virtual Account (PIX On-Ramp) ────────────
+
+  async createBrlVirtualAccount(
+    customerId: string,
+    destinationWallet: string,
+    destinationChain: string,
+  ): Promise<BridgeVirtualAccount> {
+    return this.createVirtualAccount(customerId, {
+      source: { currency: 'brl' },
+      destination: {
+        payment_rail: destinationChain as any,
+        currency: 'usdc',
+        address: destinationWallet,
+      },
+      developer_fee_percent: this.config.developerFeePercent,
     });
   }
 
