@@ -25,7 +25,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const BRIDGE_BASE = "/api/bridge";
+const BRIDGE_BASE = (typeof window !== "undefined"
+  ? (process.env.NEXT_PUBLIC_BACKEND_URL || "https://talk-to-stellar-production-e284.up.railway.app")
+  : "http://localhost:3001") + "/api/bridge";
 
 type JsonRecord = Record<string, unknown>;
 
