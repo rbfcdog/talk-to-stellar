@@ -14,6 +14,7 @@ import financialRouter from './api/routes/financial.router';
 import rampRouter from './api/routes/ramp.router';
 import evolutionRouter from './api/routes/evolution.router';
 import bridgeWebhookRouter from './api/routes/bridge-webhook.router';
+import bridgeRouter from './api/routes/bridge.router';
 import quotesRouter from './api/routes/quotes.router';
 import earlyAccessRouter from './api/routes/early-access.router';
 import internationalTransfersRouter from './api/routes/international-transfers.router';
@@ -95,6 +96,7 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/evolution', evolutionRouter);
 app.use('/webhook/evolution', evolutionRouter);
 app.use('/webhook/bridge', bridgeWebhookRouter);
+app.use('/api/bridge', bridgeRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 
