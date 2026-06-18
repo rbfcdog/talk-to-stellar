@@ -15,12 +15,17 @@ import type {
   BridgeExternalAccount,
   BridgeKycLink,
   BridgeLiquidationAddress,
+  BridgeStaticMemo,
   BridgeTransfer,
   BridgeVirtualAccount,
+  BridgeWebhook,
   BridgeWebhookEvent,
+  BridgeWebhookEventType,
+  BusinessCustomerCreateInput,
   CustomerCreateInput,
   CustomerUpdateInput,
   ExternalAccountCreateInput,
+  StaticMemoCreateInput,
   TransferCreateInput,
   VirtualAccountCreateInput,
 } from './types';
@@ -432,6 +437,264 @@ export class BridgeService {
     } catch {
       return null;
     }
+  }
+
+  // ── USD Virtual Account (ACH / Wire On-Ramp) ─────────────────
+
+  async createUsdVirtualAccount(
+    customerId: string,
+    destinationWallet: string,
+    destinationChain: string,
+  ): Promise<BridgeVirtualAccount> {
+    return this.createVirtualAccount(customerId, {
+      source: { currency: 'usd' },
+      destination: {
+        payment_rail: destinationChain as any,
+        currency: 'usdc',
+        address: destinationWallet,
+      },
+      developer_fee_percent: this.config.developerFeePercent,
+    });
+  }
+
+  // ── EUR Virtual Account (SEPA On-Ramp) ───────────────────────
+
+  async createEurVirtualAccount(
+    customerId: string,
+    destinationWallet: string,
+    destinationChain: string,
+  ): Promise<BridgeVirtualAccount> {
+    return this.createVirtualAccount(customerId, {
+      source: { currency: 'eur' },
+      destination: {
+        payment_rail: destinationChain as any,
+        currency: 'usdc',
+        address: destinationWallet,
+      },
+      developer_fee_percent: this.config.developerFeePercent,
+    });
+  }
+
+  // ── MXN Virtual Account (SPEI On-Ramp) ───────────────────────
+
+  async createMxnVirtualAccount(
+    customerId: string,
+    destinationWallet: string,
+    destinationChain: string,
+  ): Promise<BridgeVirtualAccount> {
+    return this.createVirtualAccount(customerId, {
+      source: { currency: 'mxn' },
+      destination: {
+        payment_rail: destinationChain as any,
+        currency: 'usdc',
+        address: destinationWallet,
+      },
+      developer_fee_percent: this.config.developerFeePercent,
+    });
+  }
+
+  // ── Wire Off-Ramp ─────────────────────────────────────────────
+
+  async createWireOffRamp(
+    customerId: string,
+    stellarAddress: string,
+    amountUsd: string,
+    externalAccountId: string,
+    wireMessage?: string,
+  ): Promise<BridgeTransfer> {
+    return this.createTransfer({
+      on_behalf_of: customerId,
+      developer_fee_percent: this.config.developerFeePercent,
+      source: {
+        payment_rail: 'stellar',
+        currency: 'usdc',
+        from_address: stellarAddress,
+      },
+      destination: {
+        amount: amountUsd,
+        payment_rail: 'wire',
+        currency: 'usd',
+        external_account_id: externalAccountId,
+        ...(wireMessage ? { wire_message: wireMessage.slice(0, 140) } : {}),
+      },
+    });
+  }
+
+  // ── RTP Off-Ramp ──────────────────────────────────────────────
+
+  async createRtpOffRamp(
+    customerId: string,
+    stellarAddress: string,
+    amountUsd: string,
+    externalAccountId: string,
+  ): Promise<BridgeTransfer> {
+    return this.createTransfer({
+      on_behalf_of: customerId,
+      developer_fee_percent: this.config.developerFeePercent,
+      source: { payment_rail: 'stellar', currency: 'usdc', from_address: stellarAddress },
+      destination: { amount: amountUsd, payment_rail: 'rtp', currency: 'usd', external_account_id: externalAccountId },
+    });
+  }
+
+  // ── FedNow Off-Ramp ───────────────────────────────────────────
+
+  async createFedNowOffRamp(
+    customerId: string,
+    stellarAddress: string,
+    amountUsd: string,
+    externalAccountId: string,
+  ): Promise<BridgeTransfer> {
+    return this.createTransfer({
+      on_behalf_of: customerId,
+      developer_fee_percent: this.config.developerFeePercent,
+      source: { payment_rail: 'stellar', currency: 'usdc', from_address: stellarAddress },
+      destination: { amount: amountUsd, payment_rail: 'fednow', currency: 'usd', external_account_id: externalAccountId },
+    });
+  }
+
+  // ── SEPA Off-Ramp ─────────────────────────────────────────────
+
+  async createSepaOffRamp(
+    customerId: string,
+    stellarAddress: string,
+    amountEur: string,
+    externalAccountId: string,
+  ): Promise<BridgeTransfer> {
+    return this.createTransfer({
+      on_behalf_of: customerId,
+      developer_fee_percent: this.config.developerFeePercent,
+      source: { payment_rail: 'stellar', currency: 'usdc', from_address: stellarAddress },
+      destination: { amount: amountEur, payment_rail: 'sepa', currency: 'eur', external_account_id: externalAccountId },
+    });
+  }
+
+  // ── SPEI Off-Ramp ─────────────────────────────────────────────
+
+  async createSpeiOffRamp(
+    customerId: string,
+    stellarAddress: string,
+    amountMxn: string,
+    externalAccountId: string,
+  ): Promise<BridgeTransfer> {
+    return this.createTransfer({
+      on_behalf_of: customerId,
+      developer_fee_percent: this.config.developerFeePercent,
+      source: { payment_rail: 'stellar', currency: 'usdc', from_address: stellarAddress },
+      destination: { amount: amountMxn, payment_rail: 'spei', currency: 'mxn', external_account_id: externalAccountId },
+    });
+  }
+
+  // ── IBAN External Account (SEPA) ──────────────────────────────
+
+  async addIbanAccount(
+    customerId: string,
+    input: {
+      firstName: string;
+      lastName: string;
+      iban: string;
+      bic?: string;
+      bankName?: string;
+      currency?: string;
+    },
+  ): Promise<BridgeExternalAccount> {
+    return this.createExternalAccount(customerId, {
+      currency: (input.currency || 'eur') as any,
+      account_type: 'iban',
+      account_owner_type: 'individual',
+      account_owner_name: `${input.firstName} ${input.lastName}`,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      bank_name: input.bankName,
+      iban: { iban: input.iban, bic: input.bic },
+    });
+  }
+
+  // ── CLABE External Account (SPEI) ─────────────────────────────
+
+  async addClabeAccount(
+    customerId: string,
+    input: {
+      firstName: string;
+      lastName: string;
+      clabe: string;
+      bankName?: string;
+    },
+  ): Promise<BridgeExternalAccount> {
+    return this.createExternalAccount(customerId, {
+      currency: 'mxn',
+      account_type: 'clabe',
+      account_owner_type: 'individual',
+      account_owner_name: `${input.firstName} ${input.lastName}`,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      bank_name: input.bankName,
+      clabe: { clabe: input.clabe },
+    });
+  }
+
+  // ── Business Customer ─────────────────────────────────────────
+
+  async createBusinessCustomer(input: BusinessCustomerCreateInput): Promise<BridgeCustomer> {
+    return this.client.post('/customers', input, BridgeClient.idempotencyKey('biz'));
+  }
+
+  // ── List All Transfers ────────────────────────────────────────
+
+  async listAllTransfers(params?: { starting_after?: string; limit?: number }): Promise<BridgeTransfer[]> {
+    const res = await this.client.get<{ data: BridgeTransfer[] }>(
+      '/transfers',
+      params as Record<string, string>,
+    );
+    return (res as any).data ?? (res as any) ?? [];
+  }
+
+  // ── Webhook Management ────────────────────────────────────────
+
+  async listWebhooks(): Promise<BridgeWebhook[]> {
+    const res = await this.client.get<{ data: BridgeWebhook[] }>('/webhooks');
+    return (res as any).data ?? (res as any) ?? [];
+  }
+
+  async createWebhook(url: string, eventTypes?: BridgeWebhookEventType[]): Promise<BridgeWebhook> {
+    return this.client.post(
+      '/webhooks',
+      { url, event_types: eventTypes },
+      BridgeClient.idempotencyKey('wh'),
+    );
+  }
+
+  async getWebhook(webhookId: string): Promise<BridgeWebhook> {
+    return this.client.get(`/webhooks/${encodeURIComponent(webhookId)}`);
+  }
+
+  async updateWebhook(webhookId: string, url: string, eventTypes?: BridgeWebhookEventType[]): Promise<BridgeWebhook> {
+    return this.client.put(`/webhooks/${encodeURIComponent(webhookId)}`, {
+      url,
+      event_types: eventTypes,
+    });
+  }
+
+  async deleteWebhook(webhookId: string): Promise<void> {
+    await this.client.delete(`/webhooks/${encodeURIComponent(webhookId)}`);
+  }
+
+  // ── Static Memo Management ────────────────────────────────────
+
+  async listStaticMemos(): Promise<BridgeStaticMemo[]> {
+    const res = await this.client.get<{ data: BridgeStaticMemo[] }>('/static_memos');
+    return (res as any).data ?? (res as any) ?? [];
+  }
+
+  async createStaticMemo(input: StaticMemoCreateInput): Promise<BridgeStaticMemo> {
+    return this.client.post('/static_memos', input, BridgeClient.idempotencyKey('memo'));
+  }
+
+  async getStaticMemo(memoId: string): Promise<BridgeStaticMemo> {
+    return this.client.get(`/static_memos/${encodeURIComponent(memoId)}`);
+  }
+
+  async deleteStaticMemo(memoId: string): Promise<void> {
+    await this.client.delete(`/static_memos/${encodeURIComponent(memoId)}`);
   }
 }
 

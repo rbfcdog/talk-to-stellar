@@ -30,6 +30,12 @@ export interface BridgeConfig {
   maxBrlAmount: string;
   minUsdcAmount: string;
   maxUsdcAmount: string;
+  minUsdAmount: string;
+  maxUsdAmount: string;
+  minEurAmount: string;
+  maxEurAmount: string;
+  minMxnAmount: string;
+  maxMxnAmount: string;
   webhookPublicKey: string;
   webhookId: string;
   appPublicWebhookUrl: string;
@@ -66,6 +72,12 @@ export function loadBridgeConfig(): BridgeConfig {
     maxBrlAmount: env('BRIDGE_MAX_BRL_AMOUNT', '50000'),
     minUsdcAmount: env('BRIDGE_MIN_USDC_AMOUNT', '5'),
     maxUsdcAmount: env('BRIDGE_MAX_USDC_AMOUNT', '10000'),
+    minUsdAmount: env('BRIDGE_MIN_USD_AMOUNT', '5'),
+    maxUsdAmount: env('BRIDGE_MAX_USD_AMOUNT', '50000'),
+    minEurAmount: env('BRIDGE_MIN_EUR_AMOUNT', '5'),
+    maxEurAmount: env('BRIDGE_MAX_EUR_AMOUNT', '50000'),
+    minMxnAmount: env('BRIDGE_MIN_MXN_AMOUNT', '100'),
+    maxMxnAmount: env('BRIDGE_MAX_MXN_AMOUNT', '1000000'),
     webhookPublicKey: env('BRIDGE_WEBHOOK_PUBLIC_KEY'),
     webhookId: env('BRIDGE_WEBHOOK_ID'),
     appPublicWebhookUrl: env('APP_PUBLIC_WEBHOOK_URL'),
