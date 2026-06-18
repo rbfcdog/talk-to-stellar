@@ -108,9 +108,24 @@ export class BridgeController {
 
   static async getKycLink(req: Request, res: Response): Promise<void> {
     try {
-      const kycLink = await getBridgeService().createKycLink(
-        String(req.params.id),
-      );
+      const service = getBridgeService();
+      const customerId = String(req.params.id);
+
+      let kycLink: any;
+      try {
+        kycLink = await service.createKycLink(customerId);
+      } catch (firstError: any) {
+        if (String(firstError?.message || '').includes('Unauthorized')) {
+          const customer = await service.getCustomer(customerId);
+          kycLink = await service.createStandaloneKycLink(
+            customer.email || '',
+            customer.type || 'individual',
+          );
+        } else {
+          throw firstError;
+        }
+      }
+
       res.json({ success: true, kyc_link: kycLink });
     } catch (error: any) {
       res.status(statusFromError(error)).json({
