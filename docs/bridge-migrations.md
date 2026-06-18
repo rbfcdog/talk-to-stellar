@@ -103,6 +103,7 @@ CREATE TABLE public.bridge_transfers (
 | Table | Exists | Needed Now | Notes |
 |-------|--------|-----------|-------|
 | `bridge_pix_ach_orders` | Yes | n/a | Pre-existing PIX→ACH flow |
+| `user_stellar_wallets` | **No** | **Run now** | See migration below |
 | `bridge_customers` | No | Recommended | Map local users to Bridge customers |
 | `bridge_webhook_events` | No | Recommended | Audit trail + idempotency |
 | `bridge_transfers` | No | Recommended | Cache transfer state |
@@ -110,4 +111,44 @@ CREATE TABLE public.bridge_transfers (
 | `bridge_liquidation_addresses` | No | Optional | Cache deposit addresses |
 | `bridge_virtual_accounts` | No | Optional | Cache on-ramp accounts |
 
-**No migration is needed right now.** The integration works via API pass-through. Add persistence when you need webhook processing or offline customer lookup.
+---
+
+## `user_stellar_wallets` — Run this migration now
+
+**File:** `backend/migrations/20260618_01_user_stellar_wallets.sql`
+
+Allows a user to own multiple Stellar wallet addresses and select one for Bridge on-ramp/off-ramp. Unlike the existing `wallets` table (1-to-1 with a session), this table supports several wallets per email/user_id.
+
+```sql
+CREATE TABLE IF NOT EXISTS user_stellar_wallets (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    label       TEXT,
+    public_key  TEXT UNIQUE NOT NULL,
+    is_funded   BOOLEAN NOT NULL DEFAULT false,
+    has_usdc_trustline BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_stellar_wallets_user_id     ON user_stellar_wallets(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_stellar_wallets_public_key  ON user_stellar_wallets(public_key);
+```
+
+**Secret keys are never stored.** The backend generates the keypair, shows the secret once, then discards it.
+
+### Optional: auto-funding (for Bridge-ready wallets from zero)
+
+Set on Railway:
+
+```env
+STELLAR_WALLET_SPONSOR_SECRET=S...   # Funded mainnet account — needs ~2 XLM per new wallet
+```
+
+When this is set, creating a wallet via the bridge-test UI will:
+1. Fund the new account with 2 XLM (covers base reserve + USDC trustline reserve + fees)
+2. Add the USDC trustline automatically
+
+The wallet can then be used with Bridge wire on-ramp immediately without any manual funding step.
+
+Without `STELLAR_WALLET_SPONSOR_SECRET`, wallets are generated unfunded — the user must fund manually before Bridge will accept the address.

@@ -32,6 +32,25 @@ psql <database_url> -f backend/migrations/20260618_00_bridge_tables.sql
 - `bridge_virtual_accounts`, `bridge_transfers`, `bridge_webhook_events`
 - `bridge_exchange_rate_estimates`
 
+## 4. User Stellar Wallets (required for wallet generation feature)
+
+```bash
+psql <database_url> -f backend/migrations/20260618_01_user_stellar_wallets.sql
+```
+
+- `user_stellar_wallets` table — multiple Stellar addresses per user email
+- RLS enabled, service_role only
+- Needed for the "Generate Stellar wallet" button on `/mainnet` and Step 2 on `/bridge-test`
+- Secret keys are never stored; public keys + funded/trustline status are
+
+**Required env var (Railway):**
+
+```
+STELLAR_WALLET_SPONSOR_SECRET=S...   # funded mainnet Stellar account, ~2 XLM per wallet
+```
+
+Without it wallets are generated unfunded. With it they are auto-funded and Bridge-ready.
+
 ## Quick apply via Supabase
 
 Open Supabase SQL Editor and paste the contents of each migration file in order.
