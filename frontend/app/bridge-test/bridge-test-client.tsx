@@ -138,9 +138,12 @@ export default function BridgeTestClient() {
     setBusy(`${method} ${path}`);
     setError("");
     try {
-      const r = await fetch(`${BRIDGE_BASE}${path}`, {
+      const r = await fetch(BRIDGE_BASE, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-bridge-path": path,
+        },
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
       });
