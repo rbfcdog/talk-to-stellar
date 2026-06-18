@@ -28,11 +28,6 @@ import { Input } from "@/components/ui/input";
 const BRIDGE_BASE = "/api/bridge";
 type JsonRecord = Record<string, unknown>;
 
-type ApiResponse = JsonRecord & {
-  success?: boolean;
-  message?: string;
-};
-
 type CustomerData = {
   id?: string;
   first_name?: string;
