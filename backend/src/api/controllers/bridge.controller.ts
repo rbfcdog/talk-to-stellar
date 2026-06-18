@@ -138,6 +138,22 @@ export class BridgeController {
     }
   }
 
+  static async getPixKycLink(req: Request, res: Response): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const customerId = String(req.params.id);
+      const customer = await service.getCustomer(customerId);
+      const link = await service.createStandaloneKycLink(
+        customer.email || '',
+        customer.type || 'individual',
+        'pix',
+      );
+      res.json({ success: true, kyc_link: link });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || 'Failed to create PIX KYC link.' });
+    }
+  }
+
   static async getCustomerReadiness(
     req: Request,
     res: Response,
@@ -157,7 +173,7 @@ export class BridgeController {
 
       const kycStatus = customer.kyc_status || customer.status || "not_started";
       const hasPixEndorsement = endorsements.some(
-        (e) => e.startsWith("pix:") || e.startsWith("base:"),
+        (e) => e.startsWith("pix:") && (e.endsWith(":approved") || e.endsWith(":complete")),
       );
 
       let readiness = "ready";
