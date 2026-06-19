@@ -5,6 +5,7 @@ import { assertBridgeAmountInRange } from "../middlewares/bridge-mainnet.middlew
 import { server as horizonServer, stellarConfig } from "../../config/stellar";
 import { PUBLIC_USDC_ISSUER, TESTNET_USDC_ISSUER } from "../../config/assets";
 import { Networks } from "@stellar/stellar-sdk";
+import { supabase } from "../../config/supabase";
 
 function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
@@ -1172,6 +1173,17 @@ export class BridgeController {
         return;
       }
       const wallet = await getBridgeService().createWallet(customerId, chain as any);
+      // Persist to DB
+      await supabase.from('bridge_custodial_wallets').upsert({
+        id: wallet.id,
+        customer_id: customerId,
+        chain: wallet.chain,
+        address: wallet.address,
+        initiation_required: wallet.initiation_required ?? false,
+        created_at: wallet.created_at,
+        updated_at: wallet.updated_at,
+        synced_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
       res.status(201).json({ success: true, wallet });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create Bridge Wallet." });
@@ -1181,10 +1193,53 @@ export class BridgeController {
   static async listWallets(req: Request, res: Response): Promise<void> {
     try {
       const customerId = readText(req.params.id);
-      const wallets = await getBridgeService().listWallets(customerId);
+      // Try Bridge API first, fall back to DB on failure
+      let wallets: any[];
+      try {
+        wallets = await getBridgeService().listWallets(customerId);
+        // Sync all to DB
+        if (wallets.length > 0) {
+          await supabase.from('bridge_custodial_wallets').upsert(
+            wallets.map((w) => ({
+              id: w.id,
+              customer_id: customerId,
+              chain: w.chain,
+              address: w.address,
+              initiation_required: w.initiation_required ?? false,
+              created_at: w.created_at,
+              updated_at: w.updated_at,
+              synced_at: new Date().toISOString(),
+            })),
+            { onConflict: 'id' },
+          );
+        }
+      } catch (bridgeErr: any) {
+        logger.warn(`[bridge] listWallets Bridge API failed, serving from DB: ${bridgeErr.message}`);
+        const { data } = await supabase
+          .from('bridge_custodial_wallets')
+          .select('*')
+          .eq('customer_id', customerId)
+          .order('created_at', { ascending: false });
+        wallets = data || [];
+      }
       res.json({ success: true, wallets });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to list Bridge Wallets." });
+    }
+  }
+
+  static async listWalletsFromDb(req: Request, res: Response): Promise<void> {
+    try {
+      const customerId = readText(req.params.id);
+      const { data, error } = await supabase
+        .from('bridge_custodial_wallets')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      res.json({ success: true, wallets: data || [] });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to load wallets from DB." });
     }
   }
 
