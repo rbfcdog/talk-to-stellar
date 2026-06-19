@@ -337,9 +337,10 @@ export class BridgeController {
       );
 
       const address = await service.createLiquidationAddress(customerId, {
-        payment_rail: "pix",
-        currency: "brl",
+        currency: "usdc",
         chain: "base",
+        destination_payment_rail: "pix",
+        destination_currency: "brl",
         external_account_id: externalAccountId || undefined,
         custom_developer_fee_percent: feePercent || undefined,
       });
@@ -553,20 +554,58 @@ export class BridgeController {
 
   // ── Virtual Accounts ──────────────────────────────────────────
 
+  private static async upsertVirtualAccount(va: any, customerId: string): Promise<void> {
+    try {
+      const dest = va.destination ?? {};
+      await supabase.from('bridge_va_cache').upsert({
+        id: va.id,
+        customer_id: customerId,
+        status: va.status,
+        source_currency: va.source_currency,
+        destination_chain: dest.payment_rail ?? dest.chain ?? null,
+        destination_address: dest.to_address ?? null,
+        source_deposit_instructions: va.source_deposit_instructions ?? null,
+        destination: dest ?? null,
+        developer_fee_percent: va.developer_fee_percent ?? null,
+        created_at: va.created_at ?? null,
+        updated_at: va.updated_at ?? null,
+        synced_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch (dbErr: any) {
+      logger.warn(`[bridge] VA upsert failed: ${dbErr.message}`);
+    }
+  }
+
   static async listVirtualAccounts(
     req: Request,
     res: Response,
   ): Promise<void> {
     try {
-      const accounts = await getBridgeService().listVirtualAccounts(
-        String(req.params.id),
-      );
+      const customerId = String(req.params.id);
+      const accounts = await getBridgeService().listVirtualAccounts(customerId);
+      // Sync to DB
+      await Promise.all(accounts.map((va) => BridgeController.upsertVirtualAccount(va, customerId)));
       res.json({ success: true, virtual_accounts: accounts });
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,
         message: error?.message || "Failed to list virtual accounts.",
       });
+    }
+  }
+
+  static async listVirtualAccountsFromDb(req: Request, res: Response): Promise<void> {
+    try {
+      const customerId = String(req.params.id);
+      const { data, error } = await supabase
+        .from('bridge_va_cache')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      res.json({ success: true, virtual_accounts: data || [] });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to load virtual accounts from DB." });
     }
   }
 
@@ -635,6 +674,7 @@ export class BridgeController {
       logger.info(`[bridge] Creating USD VA for customer ${customerId} → ${destinationChain}:${destinationWallet}`);
       const account = await service.createUsdVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] USD virtual account created for customer ${customerId}`);
+      await BridgeController.upsertVirtualAccount(account, customerId);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
       logger.error(`[bridge] createUsdVirtualAccount failed: ${error.message} | bridge_response: ${JSON.stringify(error?.response)}`);
@@ -656,6 +696,7 @@ export class BridgeController {
       logger.info(`[bridge] Creating EUR VA for customer ${customerId} → ${destinationChain}:${destinationWallet}`);
       const account = await service.createEurVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] EUR virtual account created for customer ${customerId}`);
+      await BridgeController.upsertVirtualAccount(account, customerId);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
       logger.error(`[bridge] createEurVirtualAccount failed: ${error.message} | bridge_response: ${JSON.stringify(error?.response)}`);
@@ -677,6 +718,7 @@ export class BridgeController {
       logger.info(`[bridge] Creating MXN VA for customer ${customerId} → ${destinationChain}:${destinationWallet}`);
       const account = await service.createMxnVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] MXN virtual account created for customer ${customerId}`);
+      await BridgeController.upsertVirtualAccount(account, customerId);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
       logger.error(`[bridge] createMxnVirtualAccount failed: ${error.message} | bridge_response: ${JSON.stringify(error?.response)}`);
@@ -698,6 +740,7 @@ export class BridgeController {
       logger.info(`[bridge] Creating BRL VA for customer ${customerId} → ${destinationChain}:${destinationWallet}`);
       const virtualAccount = await service.createBrlVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] BRL virtual account created for customer ${customerId}`);
+      await BridgeController.upsertVirtualAccount(virtualAccount, customerId);
       res.status(201).json({ success: true, virtual_account: virtualAccount });
     } catch (error: any) {
       logger.error(`[bridge] createBrlVirtualAccount failed: ${error.message} | bridge_response: ${JSON.stringify(error?.response)}`);
@@ -719,6 +762,7 @@ export class BridgeController {
       logger.info(`[bridge] Creating GBP VA for customer ${customerId} → ${destinationChain}:${destinationWallet}`);
       const account = await service.createGbpVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] GBP virtual account created for customer ${customerId}`);
+      await BridgeController.upsertVirtualAccount(account, customerId);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
       logger.error(`[bridge] createGbpVirtualAccount failed: ${error.message} | bridge_response: ${JSON.stringify(error?.response)}`);
@@ -740,6 +784,7 @@ export class BridgeController {
       logger.info(`[bridge] Creating COP VA for customer ${customerId} → ${destinationChain}:${destinationWallet}`);
       const account = await service.createCopVirtualAccount(customerId, destinationWallet, destinationChain, blockchainMemo);
       logger.info(`[bridge] COP virtual account created for customer ${customerId}`);
+      await BridgeController.upsertVirtualAccount(account, customerId);
       res.status(201).json({ success: true, virtual_account: account });
     } catch (error: any) {
       logger.error(`[bridge] createCopVirtualAccount failed: ${error.message} | bridge_response: ${JSON.stringify(error?.response)}`);
@@ -825,25 +870,37 @@ export class BridgeController {
     try {
       const service = getBridgeService();
       const customerId = String(req.params.id);
-      const paymentRail = readText(req.body?.payment_rail || req.body?.paymentRail, "pix");
-      const currency = readText(req.body?.currency, "brl");
+      // destination_payment_rail: pix | ach | wire | sepa | spei | faster_payments | bre_b
+      const destinationRail = readText(req.body?.destination_payment_rail || req.body?.payment_rail, "ach");
+      // currency = source crypto (usdc, usdt, etc.) — NOT the fiat
+      const sourceCrypto = readText(req.body?.currency || req.body?.source_currency, "usdc");
       const chain = readText(req.body?.chain || req.body?.source_chain, service.config.defaultSourceChain);
       const externalAccountId = readText(req.body?.external_account_id || req.body?.externalAccountId) || undefined;
       const feePercent = readText(req.body?.developer_fee_percent || req.body?.developerFeePercent, service.config.developerFeePercent);
 
-      const address = await service.createLiquidationAddress(customerId, {
-        payment_rail: paymentRail,
-        currency,
+      // Derive destination fiat currency from rail if not explicitly provided
+      const RAIL_TO_FIAT: Record<string, string> = {
+        pix: "brl", ach: "usd", wire: "usd", sepa: "eur",
+        spei: "mxn", faster_payments: "gbp", bre_b: "cop",
+      };
+      const destinationCurrency = readText(req.body?.destination_currency) || RAIL_TO_FIAT[destinationRail] || "usd";
+
+      const payload = {
+        currency: sourceCrypto,
         chain,
+        destination_payment_rail: destinationRail,
+        destination_currency: destinationCurrency,
         external_account_id: externalAccountId,
         custom_developer_fee_percent: feePercent || undefined,
-      });
+      };
+      logger.info(`[bridge] createLiquidationAddress payload: ${JSON.stringify(payload)}`);
+      const address = await service.createLiquidationAddress(customerId, payload);
 
-      logger.info(`[bridge] liquidation address (${paymentRail}) created for customer ${customerId}`);
+      logger.info(`[bridge] liquidation address (${destinationRail}) created for customer ${customerId}`);
       res.status(201).json({ success: true, liquidation_address: address });
     } catch (error: any) {
-      logger.error(`[bridge] createLiquidationAddress failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create liquidation address." });
+      logger.error(`[bridge] createLiquidationAddress failed: ${error.message} | bridge_response: ${JSON.stringify((error as any)?.response)}`);
+      res.status(statusFromError(error)).json(bridgeError(error, "Failed to create liquidation address."));
     }
   }
 

@@ -219,9 +219,10 @@ export class BridgeService {
   async createLiquidationAddress(
     customerId: string,
     input: {
-      payment_rail: string;
-      currency: string;
-      chain?: string;
+      currency: string;                  // source crypto: usdc | usdt | usdb | pyusd | eurc
+      chain: string;                     // source chain: stellar | base | ethereum | solana | ...
+      destination_payment_rail?: string; // pix | ach | wire | sepa | spei | faster_payments | bre_b
+      destination_currency?: string;     // brl | usd | eur | mxn | gbp | cop
       external_account_id?: string;
       custom_developer_fee_percent?: string;
     },

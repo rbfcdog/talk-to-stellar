@@ -90,6 +90,9 @@ type ExternalAccountData = {
 type VirtualAccountData = {
   id?: string;
   status?: string;
+  source_currency?: string;
+  destination_chain?: string;
+  destination_address?: string;
   source_deposit_instructions?: Record<string, unknown>;
   destination?: Record<string, unknown>;
   created_at?: string;
@@ -97,11 +100,13 @@ type VirtualAccountData = {
 
 type LiquidationAddressData = {
   id?: string;
-  payment_rail?: string;
-  currency?: string;
-  chain?: string;
-  address?: string;
+  currency?: string;                  // source crypto (usdc)
+  chain?: string;                     // source chain
+  address?: string;                   // blockchain deposit address
+  destination_payment_rail?: string;  // pix | ach | wire | sepa | ...
+  destination_currency?: string;      // brl | usd | eur | ...
   external_account_id?: string;
+  state?: string;
   created_at?: string;
 };
 
@@ -393,6 +398,10 @@ export default function BridgeTestClient() {
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets/cached`)
         .then((p) => setBridgeWallets((p.wallets as BridgeWalletData[]) || []))
         .catch(() => {});
+      // Auto-load virtual accounts from DB
+      runApi("GET", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/cached`)
+        .then((p) => setVirtualAccounts((p.virtual_accounts as VirtualAccountData[]) || []))
+        .catch(() => {});
     }
   }, [customerId, runApi]);
 
@@ -621,13 +630,18 @@ export default function BridgeTestClient() {
 
   // ── Liquidation addresses (reusable USDC → fiat) ──────────────
 
+  const LIQ_RAIL_TO_FIAT: Record<string, string> = {
+    pix: "brl", ach: "usd", wire: "usd", sepa: "eur",
+    spei: "mxn", faster_payments: "gbp", bre_b: "cop",
+  };
+
   async function createLiquidationAddress() {
     const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/liquidation-addresses`, {
-      payment_rail: liqRail,
-      currency: liqRail === "pix" ? "brl" : liqRail === "sepa" ? "eur" : liqRail === "spei" ? "mxn" : "usd",
-      chain: liqChain,
+      currency: "usdc",                                  // source crypto — always usdc
+      chain: liqChain,                                   // source blockchain
+      destination_payment_rail: liqRail,                 // where to send fiat
+      destination_currency: LIQ_RAIL_TO_FIAT[liqRail] || "usd",
       external_account_id: liqExtAccountId || undefined,
-      confirm_mainnet: true,
     });
     setNewLiq(p.liquidation_address as LiquidationAddressData);
     setLiqAddresses((prev) => [p.liquidation_address, ...prev].filter(Boolean));
@@ -1613,12 +1627,40 @@ export default function BridgeTestClient() {
                 </Button>
               </div>
               {newLiq && (
-                <div className="mt-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3 text-xs">
-                  <p className="text-tts-muted">Deposit address</p>
-                  <p className="break-all font-mono font-semibold text-tts-deep">
-                    {newLiq.address} <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(newLiq.address!)} />
+                <div className="mt-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3 text-xs space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-tts-deep uppercase tracking-wide text-[10px]">Liquidation Address Created</span>
+                    <span className="rounded bg-tts-confirm/20 px-1.5 py-0.5 text-tts-confirm font-mono">{newLiq.state ?? "active"}</span>
+                  </div>
+                  {/* The USDC deposit address — this is the key value */}
+                  <div className="rounded border border-tts-border bg-tts-bg p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-tts-muted mb-1">
+                      Send USDC to this address ({newLiq.chain})
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <p className="break-all font-mono font-semibold text-tts-deep flex-1">{newLiq.address}</p>
+                      <button onClick={() => handleCopy(newLiq.address!)} className="shrink-0 text-tts-muted hover:text-tts-deep">
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[10px] text-tts-muted">
+                      Every USDC deposit here is auto-converted → {newLiq.destination_currency?.toUpperCase()} via {newLiq.destination_payment_rail?.toUpperCase()}
+                    </p>
+                  </div>
+                  {/* Mercury context tip */}
+                  {(newLiq.destination_payment_rail === "ach" || newLiq.destination_payment_rail === "wire") && (
+                    <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-[10px] text-amber-700 dark:text-amber-400">
+                      <p className="font-semibold mb-0.5">How to use with Mercury (off-ramp)</p>
+                      <p>1. Copy the address above — this is your Bridge {newLiq.chain} USDC deposit address.</p>
+                      <p>2. Send USDC from your wallet to this address.</p>
+                      <p>3. Bridge auto-converts to USD and sends via {newLiq.destination_payment_rail?.toUpperCase()} to the linked external account (Mercury).</p>
+                      {!newLiq.external_account_id && <p className="mt-1 text-amber-600 font-medium">No external account linked — create one first so Bridge knows where to send USD.</p>}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-tts-muted">
+                    Source: {newLiq.currency?.toUpperCase()} on {newLiq.chain} · Destination: {newLiq.destination_currency?.toUpperCase()} via {newLiq.destination_payment_rail}
+                    {newLiq.external_account_id && <> · Ext acct: <span className="font-mono">{newLiq.external_account_id}</span></>}
                   </p>
-                  <p className="mt-1 text-tts-muted">{newLiq.payment_rail} · {newLiq.currency} · chain: {newLiq.chain}</p>
                 </div>
               )}
               {liqAddresses.filter((l) => l.id !== newLiq?.id).length > 0 && (
@@ -1627,9 +1669,16 @@ export default function BridgeTestClient() {
                     <div key={la.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-2 text-xs">
                       <div className="flex items-center justify-between">
                         <span className="font-mono text-tts-muted">{la.id?.slice(0, 20)}…</span>
-                        <span className="text-tts-muted">{la.payment_rail} · {la.currency}</span>
+                        <span className="text-tts-muted">{la.destination_payment_rail ?? la.chain} · {la.currency?.toUpperCase()} → {la.destination_currency?.toUpperCase()}</span>
                       </div>
-                      {la.address && <p className="mt-0.5 break-all font-mono text-tts-deep">{la.address}</p>}
+                      {la.address && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <p className="break-all font-mono text-tts-deep flex-1">{la.address}</p>
+                          <button onClick={() => handleCopy(la.address!)} className="shrink-0 text-tts-muted hover:text-tts-deep">
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -62,6 +62,18 @@ psql <database_url> -f backend/migrations/20260618_02_bridge_custodial_wallets.s
 - Populated automatically when wallets are created or listed via `/bridge-test`
 - On page load, wallets are fetched from this table instantly (no Bridge API roundtrip)
 
+## 6. Bridge Virtual Account Cache (required for VA persistence)
+
+```bash
+psql <database_url> -f backend/migrations/20260618_03_bridge_va_cache.sql
+```
+
+- `bridge_va_cache` table — stores Bridge virtual account IDs, deposit instructions, destination per customer
+- No FK constraints (unlike `bridge_virtual_accounts` in migration #3) — safe to populate without a linked `bridge_customers` row
+- RLS enabled, service_role only
+- Populated automatically when VAs are created or listed via `/bridge-test`
+- On page load, VAs are fetched from this table instantly (no Bridge API roundtrip)
+
 ## Quick apply via Supabase
 
 Open Supabase SQL Editor and paste the contents of each migration file in order.

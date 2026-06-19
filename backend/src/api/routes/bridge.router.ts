@@ -84,6 +84,11 @@ router.get(
   "/customers/:id/virtual-accounts",
   BridgeController.listVirtualAccounts,
 );
+// cached must come before /:virtualAccountId
+router.get(
+  "/customers/:id/virtual-accounts/cached",
+  BridgeController.listVirtualAccountsFromDb,
+);
 router.get(
   "/virtual-accounts/:virtualAccountId",
   BridgeController.getVirtualAccount,
