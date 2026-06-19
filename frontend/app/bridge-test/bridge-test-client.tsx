@@ -349,9 +349,15 @@ export default function BridgeTestClient() {
         cache: "no-store",
       });
       const payload: any = await r.json().catch(() => ({}));
-      addLog(`${method} ${path} → ${r.status} ${payload.success ? "OK" : JSON.stringify(payload).slice(0, 100)}`);
+      addLog(`${method} ${path} → ${r.status} ${payload.success ? "OK" : JSON.stringify(payload).slice(0, 120)}`);
       if (!r.ok || payload.success === false) {
-        throw new Error(payload.message || `HTTP ${r.status}`);
+        // Surface specific Bridge field errors (bridge_source.key or bridge_details.name/source.key)
+        const bridgeField =
+          payload.bridge_source?.key ||
+          payload.bridge_details?.name ||
+          payload.bridge_details?.source?.key;
+        const msg = payload.message || `HTTP ${r.status}`;
+        throw new Error(bridgeField ? `${msg} [field: ${bridgeField}]` : msg);
       }
       return payload;
     } catch (e: any) {
@@ -401,6 +407,10 @@ export default function BridgeTestClient() {
       // Auto-load virtual accounts from DB
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/cached`)
         .then((p) => setVirtualAccounts((p.virtual_accounts as VirtualAccountData[]) || []))
+        .catch(() => {});
+      // Auto-load external accounts (needed for liquidation address dropdown)
+      runApi("GET", `/customers/${encodeURIComponent(customerId)}/external-accounts`)
+        .then((p) => setExternalAccounts((p.external_accounts as ExternalAccountData[]) || []))
         .catch(() => {});
     }
   }, [customerId, runApi]);
@@ -1577,13 +1587,13 @@ export default function BridgeTestClient() {
             {/* Liquidation Addresses */}
             <div className="mt-6 border-t border-tts-border pt-4">
               <p className="mb-1 text-xs font-bold uppercase text-tts-muted">Liquidation Addresses</p>
-              <p className="mb-3 text-xs text-tts-muted">Permanent addresses — send USDC to them and Bridge auto-converts to fiat on every deposit.</p>
+              <p className="mb-3 text-xs text-tts-muted">Permanent deposit addresses — send USDC here and Bridge auto-converts to fiat on every deposit.</p>
               <div className="mb-3 grid gap-2 sm:grid-cols-3">
                 <div>
-                  <p className="mb-1 text-xs text-tts-muted">Fiat rail</p>
+                  <p className="mb-1 text-xs text-tts-muted">Fiat rail (destination)</p>
                   <select
                     value={liqRail}
-                    onChange={(e) => setLiqRail(e.target.value)}
+                    onChange={(e) => { setLiqRail(e.target.value); setLiqExtAccountId(""); }}
                     className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
                   >
                     <option value="pix">PIX (BRL)</option>
@@ -1596,7 +1606,7 @@ export default function BridgeTestClient() {
                   </select>
                 </div>
                 <div>
-                  <p className="mb-1 text-xs text-tts-muted">Source chain</p>
+                  <p className="mb-1 text-xs text-tts-muted">Source chain (send USDC from)</p>
                   <select
                     value={liqChain}
                     onChange={(e) => setLiqChain(e.target.value)}
@@ -1613,12 +1623,52 @@ export default function BridgeTestClient() {
                   </select>
                 </div>
                 <div>
-                  <p className="mb-1 text-xs text-tts-muted">External account ID</p>
-                  <Input value={liqExtAccountId} onChange={(e) => setLiqExtAccountId(e.target.value)} placeholder="Optional" className="text-xs" />
+                  <p className="mb-1 text-xs text-tts-muted">
+                    External account
+                    {liqRail !== "pix" && <span className="ml-1 text-red-500">*required</span>}
+                  </p>
+                  {/* Dropdown from loaded external accounts, or manual input */}
+                  {externalAccounts.length > 0 ? (
+                    <select
+                      value={liqExtAccountId}
+                      onChange={(e) => setLiqExtAccountId(e.target.value)}
+                      className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                    >
+                      <option value="">— none —</option>
+                      {externalAccounts.map((ea) => {
+                        const label = ea.pix_key?.pix_key
+                          ? `PIX: ${ea.pix_key.pix_key.slice(0, 20)}`
+                          : ea.account?.last_4
+                          ? `Bank ···${ea.account.last_4} (${ea.currency?.toUpperCase()})`
+                          : ea.iban?.iban
+                          ? `IBAN ···${ea.iban.last_4}`
+                          : ea.clabe?.clabe
+                          ? `CLABE ···${ea.clabe.last_4}`
+                          : ea.id?.slice(0, 16);
+                        return <option key={ea.id} value={ea.id}>{label}</option>;
+                      })}
+                    </select>
+                  ) : (
+                    <Input
+                      value={liqExtAccountId}
+                      onChange={(e) => setLiqExtAccountId(e.target.value)}
+                      placeholder={liqRail === "pix" ? "Optional" : "Required — paste ID"}
+                      className="text-xs"
+                    />
+                  )}
+                  {liqRail !== "pix" && !liqExtAccountId && (
+                    <p className="mt-1 text-[10px] text-amber-500">
+                      Bridge needs a bank account to send {LIQ_RAIL_TO_FIAT[liqRail]?.toUpperCase()} to. Create an external account first.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={createLiquidationAddress} disabled={!!busy || !customerId} size="sm">
+                <Button
+                  onClick={createLiquidationAddress}
+                  disabled={!!busy || !customerId || (liqRail !== "pix" && !liqExtAccountId)}
+                  size="sm"
+                >
                   {busy?.includes('liquidation') ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
                   Create liquidation address
                 </Button>
