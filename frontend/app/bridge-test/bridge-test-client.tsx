@@ -33,14 +33,6 @@ import { Input } from "@/components/ui/input";
 const BRIDGE_BASE = "/api/bridge";
 const HORIZON = "https://horizon.stellar.org";
 
-const ONRAMP_RAILS = [
-  { id: "brl", label: "PIX", sublabel: "BRL", flag: "🇧🇷", endpoint: "brl" },
-  { id: "usd", label: "ACH / Wire", sublabel: "USD", flag: "🇺🇸", endpoint: "usd" },
-  { id: "eur", label: "SEPA", sublabel: "EUR", flag: "🇪🇺", endpoint: "eur" },
-  { id: "mxn", label: "SPEI", sublabel: "MXN", flag: "🇲🇽", endpoint: "mxn" },
-  { id: "gbp", label: "Faster Payments", sublabel: "GBP (Beta)", flag: "🇬🇧", endpoint: "gbp" },
-  { id: "cop", label: "Bre-B", sublabel: "COP (Beta)", flag: "🇨🇴", endpoint: "cop" },
-] as const;
 
 const ONRAMP_CHAINS = [
   { id: "base", label: "Base (EVM — no funding needed)" },
@@ -131,34 +123,57 @@ type EstimateData = { source_amount?: string; source_currency?: string; destinat
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function DepositInstructions({ instr }: { instr: Record<string, unknown> }) {
+function DepositInstructions({ instr, onCopy }: { instr: Record<string, unknown>; onCopy: (v: string) => void }) {
   const fields: Array<[string, string]> = [];
   const add = (k: string, v: unknown) => { if (v) fields.push([k, String(v)]); };
-  add("PIX key", instr.pix_key);
-  add("BR code (PIX)", instr.br_code ? "(scan QR or copy code)" : undefined);
+  const isWire = !!(instr.bank_routing_number);
+  const isSepa = !!(instr.iban);
+  const isGbp = !!(instr.sort_code);
+  const isSpei = !!(instr.clabe);
+  const isPix = !!(instr.pix_key || instr.br_code);
   add("Bank name", instr.bank_name);
+  add("Bank address", instr.bank_address);
   add("Routing number", instr.bank_routing_number);
   add("Account number", instr.bank_account_number || instr.account_number);
   add("Sort code", instr.sort_code);
-  add("Beneficiary", instr.bank_beneficiary_name || instr.account_holder_name);
+  add("Account number", instr.account_number);
+  add("Beneficiary name", instr.bank_beneficiary_name || instr.account_holder_name);
   add("Beneficiary address", instr.bank_beneficiary_address);
   add("IBAN", instr.iban);
   add("BIC / SWIFT", instr.bic);
   add("CLABE", instr.clabe);
-  add("Bre-B key (COP)", instr.bre_b_key);
-  add("Reference / memo", instr.deposit_message || instr.wire_reference);
-  add("Amount", instr.amount ? `${instr.amount} ${instr.currency || ""}` : undefined);
+  add("PIX key", instr.pix_key);
+  add("Bre-B key", instr.bre_b_key);
   add("Payment rail(s)", Array.isArray(instr.payment_rails) ? (instr.payment_rails as string[]).join(", ") : instr.payment_rail);
+  add("Reference", instr.deposit_message || instr.wire_reference);
   if (!fields.length) return null;
+
+  const title = isWire ? "Wire Instructions (use in Mercury)"
+    : isSepa ? "SEPA Instructions"
+    : isGbp ? "Faster Payments Instructions"
+    : isSpei ? "SPEI / CLABE Instructions"
+    : isPix ? "PIX Instructions"
+    : "Deposit Instructions";
+
   return (
-    <div className="mt-3 grid gap-1 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">
-      <p className="mb-1 text-xs font-bold uppercase text-tts-confirm">Deposit instructions</p>
-      {fields.map(([k, v]) => (
-        <div key={k} className="flex items-baseline justify-between gap-4 text-xs">
-          <span className="shrink-0 text-tts-muted">{k}</span>
-          <span className="break-all text-right font-mono font-semibold text-tts-deep">{v}</span>
-        </div>
-      ))}
+    <div className="mt-3 rounded-md border border-tts-confirm/30 bg-tts-confirm/5 p-3">
+      <p className="mb-2 text-xs font-bold uppercase text-tts-confirm">{title}</p>
+      <div className="grid gap-1.5">
+        {fields.map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between gap-4 rounded bg-tts-bg/60 px-2 py-1 text-xs">
+            <span className="shrink-0 text-tts-muted">{k}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="break-all text-right font-mono font-semibold text-tts-deep">{v}</span>
+              <button onClick={() => onCopy(v)} className="shrink-0 text-tts-muted hover:text-tts-confirm" title="Copy">
+                <Copy className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {isWire && (
+        <p className="mt-2 text-xs text-tts-muted">In Mercury: Wire → International or Domestic → paste routing + account above. No memo needed.</p>
+      )}
     </div>
   );
 }
@@ -181,7 +196,7 @@ function TransferCard({ t, onRefresh }: { t: TransferData; onRefresh: () => void
         {t.destination?.amount ? <span className="ml-auto font-semibold text-tts-deep">{t.destination.amount} {t.destination.currency}</span> : null}
       </div>
       {t.source_deposit_instructions && Object.keys(t.source_deposit_instructions).length > 0 ? (
-        <DepositInstructions instr={t.source_deposit_instructions} />
+        <DepositInstructions instr={t.source_deposit_instructions} onCopy={(v) => navigator.clipboard.writeText(v)} />
       ) : null}
       {t.receipt?.final_amount ? (
         <div className="mt-1 text-tts-confirm">Final: {t.receipt.final_amount} · Fee: {t.receipt.developer_fee}</div>
@@ -293,6 +308,18 @@ export default function BridgeTestClient() {
   const [selectedBridgeWallet, setSelectedBridgeWallet] = useState<BridgeWalletData | null>(null);
   const [walletTxs, setWalletTxs] = useState<{ walletId: string; txs: BridgeWalletTx[] } | null>(null);
   const [txLoading, setTxLoading] = useState(false);
+
+  // On-ramp tabs and static memos
+  const [onRampTab, setOnRampTab] = useState<'virtual_account' | 'static_memo'>('virtual_account');
+  type StaticMemoData = { id?: string; memo?: string; destination?: Record<string, unknown>; customer_id?: string; created_at?: string };
+  const [staticMemos, setStaticMemos] = useState<StaticMemoData[]>([]);
+  const [newMemo, setNewMemo] = useState<StaticMemoData | null>(null);
+  const [memoChain, setMemoChain] = useState('stellar');
+  const [memoCurrency, setMemoCurrency] = useState('usdc');
+  // Virtual account activity
+  type VAEvent = { id?: string; type?: string; amount?: string; currency?: string; source?: Record<string, unknown>; destination_tx_hash?: string; created_at?: string };
+  const [vaActivity, setVaActivity] = useState<{ vaId: string; events: VAEvent[] } | null>(null);
+  const [vaActivityLoading, setVaActivityLoading] = useState(false);
 
   // Exchange rates
   const [rateFrom, setRateFrom] = useState("usd");
@@ -669,6 +696,33 @@ export default function BridgeTestClient() {
       setWalletTxs({ walletId, txs: (p.transactions as BridgeWalletTx[]) || [] });
     } finally {
       setTxLoading(false);
+    }
+  }
+
+  async function createStaticMemo() {
+    const destAddress = onRampChain === 'stellar' ? walletKey : (selectedBridgeWallet?.address || evmWallet);
+    const destChain = onRampChain === 'stellar' ? 'stellar' : (selectedBridgeWallet?.chain || onRampChain);
+    const p = await runApi('POST', '/static-memos', {
+      on_behalf_of: customerId,
+      destination: { payment_rail: destChain, currency: memoCurrency, address: destAddress },
+    });
+    setNewMemo(p.static_memo as StaticMemoData);
+    setStaticMemos((prev) => [p.static_memo, ...prev].filter(Boolean));
+  }
+
+  async function listStaticMemos() {
+    const p = await runApi('GET', '/static-memos');
+    setStaticMemos((p.static_memos as StaticMemoData[]) || []);
+  }
+
+  async function loadVAActivity(vaId: string) {
+    setVaActivityLoading(true);
+    setVaActivity(null);
+    try {
+      const p = await runApi('GET', `/customers/${encodeURIComponent(customerId)}/virtual-accounts/${encodeURIComponent(vaId)}/activity`);
+      setVaActivity({ vaId, events: (p.events as VAEvent[]) || [] });
+    } finally {
+      setVaActivityLoading(false);
     }
   }
 
@@ -1313,216 +1367,351 @@ export default function BridgeTestClient() {
           <h2 className="flex items-center gap-2 text-lg font-bold text-tts-deep">
             <ArrowDown className="h-5 w-5 text-tts-confirm" /> On-Ramp — Fiat → USDC
           </h2>
-          <p className="mt-0.5 text-sm text-tts-muted">Virtual accounts receive fiat and auto-convert to USDC at your destination address.</p>
+          <p className="mt-0.5 text-sm text-tts-muted">Create a permanent deposit account — wire from Mercury and USDC lands in your wallet.</p>
         </div>
 
-        <div className="mb-3 grid gap-2 sm:grid-cols-2">
-          {/* Currency dropdown */}
-          <div>
-            <p className="mb-1 text-xs text-tts-muted">Currency / rail</p>
-            <select
-              value={onRampCurrency}
-              onChange={(e) => setOnRampCurrency(e.target.value)}
-              className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+        {/* Tabs */}
+        <div className="mb-4 flex gap-1 rounded-md border border-tts-border bg-tts-bg/50 p-1">
+          {([['virtual_account', 'Virtual Account'], ['static_memo', 'Static Memo (Stellar)']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setOnRampTab(id)}
+              className={`flex-1 rounded px-3 py-1.5 text-xs font-semibold transition-colors ${onRampTab === id ? 'bg-tts-confirm/15 text-tts-confirm' : 'text-tts-muted hover:text-tts-deep'}`}
             >
-              {ONRAMP_RAILS.map((r) => (
-                <option key={r.id} value={r.id}>{r.flag} {r.label} ({r.sublabel})</option>
-              ))}
-            </select>
-          </div>
+              {label}
+            </button>
+          ))}
+        </div>
 
-          {/* Chain dropdown — locked to Bridge wallet chain when one is selected */}
-          <div>
-            <p className="mb-1 text-xs text-tts-muted">Destination chain</p>
-            <select
-              value={onRampChain}
-              onChange={(e) => { setOnRampChain(e.target.value); setOnRampMemo(""); if (selectedBridgeWallet) clearBridgeWalletSelection(); }}
-              className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
-            >
-              {ONRAMP_CHAINS.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Destination address */}
-          <div className="sm:col-span-2">
-            {onRampChain === "stellar" ? (
-              <>
-                <p className="mb-1 text-xs text-tts-muted">Destination address (Stellar — from Step 2)</p>
-                <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
-              </>
-            ) : selectedBridgeWallet ? (
-              <div className="rounded-md border border-tts-confirm/30 bg-tts-confirm/5 p-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-tts-confirm">Bridge Custodial Wallet</p>
-                  <button className="text-xs text-tts-muted hover:text-tts-error" onClick={clearBridgeWalletSelection}>Change</button>
-                </div>
-                <span className="mt-0.5 inline-block rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{selectedBridgeWallet.chain}</span>
-                <p className="mt-1 break-all font-mono text-xs text-tts-deep">
-                  {selectedBridgeWallet.address}
-                  <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(selectedBridgeWallet.address!)} />
-                </p>
+        {onRampTab === 'virtual_account' && (
+          <>
+            <div className="mb-3 grid gap-2 sm:grid-cols-2">
+              {/* Currency dropdown */}
+              <div>
+                <p className="mb-1 text-xs text-tts-muted">Currency / payment rail</p>
+                <select
+                  value={onRampCurrency}
+                  onChange={(e) => setOnRampCurrency(e.target.value)}
+                  className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                >
+                  <option value="usd">🇺🇸 USD — Wire / ACH (Lead Bank)</option>
+                  <option value="eur">🇪🇺 EUR — SEPA</option>
+                  <option value="gbp">🇬🇧 GBP — Faster Payments (beta)</option>
+                  <option value="mxn">🇲🇽 MXN — SPEI</option>
+                  <option value="brl">🇧🇷 BRL — PIX (requires PIX endorsement)</option>
+                  <option value="cop">🇨🇴 COP — Bre-B (beta)</option>
+                </select>
               </div>
-            ) : (
-              <>
+
+              {/* Chain dropdown */}
+              <div>
+                <p className="mb-1 text-xs text-tts-muted">Destination chain</p>
+                <select
+                  value={onRampChain}
+                  onChange={(e) => { setOnRampChain(e.target.value); setOnRampMemo(''); if (selectedBridgeWallet) clearBridgeWalletSelection(); }}
+                  className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                >
+                  {ONRAMP_CHAINS.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Destination address */}
+              <div className="sm:col-span-2">
+                {onRampChain === 'stellar' ? (
+                  <>
+                    <p className="mb-1 text-xs text-tts-muted">Destination address (Stellar — from Step 2)</p>
+                    <Input value={walletKey} readOnly className="font-mono text-xs" placeholder="Set Stellar wallet in Step 2" />
+                  </>
+                ) : selectedBridgeWallet ? (
+                  <div className="rounded-md border border-tts-confirm/30 bg-tts-confirm/5 p-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-tts-confirm">Bridge Custodial Wallet</p>
+                      <button className="text-xs text-tts-muted hover:text-tts-error" onClick={clearBridgeWalletSelection}>Change</button>
+                    </div>
+                    <span className="mt-0.5 inline-block rounded border border-tts-gold/30 px-1.5 py-0.5 text-xs font-bold uppercase text-tts-gold">{selectedBridgeWallet.chain}</span>
+                    <p className="mt-1 break-all font-mono text-xs text-tts-deep">
+                      {selectedBridgeWallet.address}
+                      <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(selectedBridgeWallet.address!)} />
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-1 text-xs text-tts-muted">Destination address</p>
+                    <Input
+                      value={evmWallet}
+                      onChange={(e) => setEvmWallet(e.target.value)}
+                      placeholder="0x… or select a Bridge wallet from Step 2"
+                      className="font-mono text-xs"
+                    />
+                    <p className="mt-1 text-xs text-tts-muted/70">Tip: select a Bridge custodial wallet in Step 2 to auto-fill this.</p>
+                  </>
+                )}
+              </div>
+
+              {/* Memo — only for Stellar */}
+              {onRampChain === 'stellar' && (
+                <div className="sm:col-span-2">
+                  <p className="mb-1 text-xs text-tts-muted">Blockchain memo <span className="text-tts-muted/60">(leave blank to auto-generate)</span></p>
+                  <Input value={onRampMemo} onChange={(e) => setOnRampMemo(e.target.value)} placeholder="Auto-generated if blank" className="font-mono text-xs" />
+                </div>
+              )}
+            </div>
+
+            {onRampChain === 'stellar' && walletKey && walletOnChain === false && (
+              <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
+                <p className="font-bold">Wallet not found on Stellar mainnet</p>
+                <p className="mt-1">Switch to Base + Bridge wallet (Step 2) for easiest setup.</p>
+              </div>
+            )}
+            {onRampChain === 'stellar' && walletKey && walletOnChain === true && (
+              <p className="mb-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 px-3 py-2 text-xs text-tts-confirm">
+                Wallet exists on mainnet — Bridge can accept this address.
+              </p>
+            )}
+            {onRampCurrency === 'brl' && readiness && !readiness.pix_ready ? (
+              <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
+                <p className="font-bold">PIX endorsement required</p>
+                <p className="mt-1">Go to the KYC section, click "Get PIX endorsement link", complete verification, then sync and check readiness.</p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={createVirtualAccount}
+                disabled={
+                  !!busy || !customerId ||
+                  (onRampChain === 'stellar' && (!walletKey || walletOnChain === false)) ||
+                  (onRampChain !== 'stellar' && !selectedBridgeWallet && !evmWallet.trim()) ||
+                  (onRampCurrency === 'brl' && readiness != null && !readiness.pix_ready)
+                }
+                size="sm"
+              >
+                {busy?.includes('virtual-accounts') ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Create {onRampCurrency.toUpperCase()} virtual account
+              </Button>
+              <Button variant="outline" size="sm" onClick={listVirtualAccounts} disabled={!!busy || !customerId}>
+                <Search className="mr-2 h-4 w-4" /> List existing
+              </Button>
+            </div>
+
+            {/* New VA result */}
+            {newVA && (
+              <div className="mt-4 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-mono text-xs text-tts-muted">{newVA.id}</span>
+                  <StatusPill tone={newVA.status === 'activated' ? 'confirm' : 'gold'}>{newVA.status}</StatusPill>
+                </div>
+                {newVA.source_deposit_instructions && (
+                  <DepositInstructions instr={newVA.source_deposit_instructions} onCopy={handleCopy} />
+                )}
+              </div>
+            )}
+
+            {/* Existing VAs */}
+            {virtualAccounts.filter((v) => v.id !== newVA?.id).length > 0 && (
+              <div className="mt-3 grid gap-2">
+                {virtualAccounts.filter((v) => v.id !== newVA?.id).map((va) => {
+                  const showActivity = vaActivity?.vaId === va.id;
+                  return (
+                    <div key={va.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-3 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-tts-muted">{va.id?.slice(0, 24)}…</span>
+                        <div className="flex items-center gap-2">
+                          <StatusPill tone={va.status === 'activated' ? 'confirm' : 'gold'}>{va.status}</StatusPill>
+                          <button
+                            className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
+                            onClick={() => showActivity ? setVaActivity(null) : loadVAActivity(va.id!)}
+                          >
+                            {vaActivityLoading && showActivity ? '…' : showActivity ? 'Hide' : 'Activity'}
+                          </button>
+                        </div>
+                      </div>
+                      {va.source_deposit_instructions && (
+                        <DepositInstructions instr={va.source_deposit_instructions} onCopy={handleCopy} />
+                      )}
+                      {showActivity && (
+                        <div className="mt-3 border-t border-tts-border pt-2">
+                          {vaActivity!.events.length === 0 ? (
+                            <p className="text-tts-muted">No activity yet.</p>
+                          ) : (
+                            <div className="grid gap-1">
+                              {vaActivity!.events.map((ev, ei) => (
+                                <div key={ev.id || ei} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1">
+                                  <div className="flex items-center gap-2">
+                                    <StatusPill tone="gold">{ev.type?.replace('_', ' ')}</StatusPill>
+                                    {ev.amount && <span className="font-mono font-semibold text-tts-deep">{ev.amount} {ev.currency?.toUpperCase()}</span>}
+                                  </div>
+                                  <span className="text-tts-muted">{ev.created_at?.slice(0, 10)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Liquidation Addresses */}
+            <div className="mt-6 border-t border-tts-border pt-4">
+              <p className="mb-1 text-xs font-bold uppercase text-tts-muted">Liquidation Addresses</p>
+              <p className="mb-3 text-xs text-tts-muted">Permanent addresses — send USDC to them and Bridge auto-converts to fiat on every deposit.</p>
+              <div className="mb-3 grid gap-2 sm:grid-cols-3">
+                <div>
+                  <p className="mb-1 text-xs text-tts-muted">Fiat rail</p>
+                  <select
+                    value={liqRail}
+                    onChange={(e) => setLiqRail(e.target.value)}
+                    className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                  >
+                    <option value="pix">PIX (BRL)</option>
+                    <option value="ach">ACH (USD)</option>
+                    <option value="wire">Wire (USD)</option>
+                    <option value="sepa">SEPA (EUR)</option>
+                    <option value="spei">SPEI (MXN)</option>
+                    <option value="faster_payments">Faster Payments (GBP)</option>
+                    <option value="bre_b">Bre-B (COP)</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-tts-muted">Source chain</p>
+                  <select
+                    value={liqChain}
+                    onChange={(e) => setLiqChain(e.target.value)}
+                    className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                  >
+                    <option value="stellar">Stellar</option>
+                    <option value="base">Base</option>
+                    <option value="ethereum">Ethereum</option>
+                    <option value="solana">Solana</option>
+                    <option value="polygon">Polygon</option>
+                    <option value="avalanche_c_chain">Avalanche C-Chain</option>
+                    <option value="arbitrum">Arbitrum</option>
+                    <option value="optimism">Optimism</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-tts-muted">External account ID</p>
+                  <Input value={liqExtAccountId} onChange={(e) => setLiqExtAccountId(e.target.value)} placeholder="Optional" className="text-xs" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={createLiquidationAddress} disabled={!!busy || !customerId} size="sm">
+                  {busy?.includes('liquidation') ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                  Create liquidation address
+                </Button>
+                <Button variant="outline" size="sm" onClick={listLiquidationAddresses} disabled={!!busy || !customerId}>
+                  <Search className="mr-2 h-4 w-4" /> List
+                </Button>
+              </div>
+              {newLiq && (
+                <div className="mt-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3 text-xs">
+                  <p className="text-tts-muted">Deposit address</p>
+                  <p className="break-all font-mono font-semibold text-tts-deep">
+                    {newLiq.address} <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(newLiq.address!)} />
+                  </p>
+                  <p className="mt-1 text-tts-muted">{newLiq.payment_rail} · {newLiq.currency} · chain: {newLiq.chain}</p>
+                </div>
+              )}
+              {liqAddresses.filter((l) => l.id !== newLiq?.id).length > 0 && (
+                <div className="mt-2 grid gap-2">
+                  {liqAddresses.filter((l) => l.id !== newLiq?.id).map((la) => (
+                    <div key={la.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-tts-muted">{la.id?.slice(0, 20)}…</span>
+                        <span className="text-tts-muted">{la.payment_rail} · {la.currency}</span>
+                      </div>
+                      {la.address && <p className="mt-0.5 break-all font-mono text-tts-deep">{la.address}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {onRampTab === 'static_memo' && (
+          <>
+            <p className="mb-3 text-xs text-tts-muted">
+              A static memo creates a permanent Stellar deposit address. Any USDC sent to that address with the generated memo lands in your destination wallet — no additional setup needed.
+            </p>
+            <div className="mb-3 grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-xs text-tts-muted">Source chain</p>
+                <select
+                  value={memoChain}
+                  onChange={(e) => setMemoChain(e.target.value)}
+                  className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                >
+                  <option value="stellar">Stellar</option>
+                  <option value="base">Base</option>
+                  <option value="ethereum">Ethereum</option>
+                  <option value="solana">Solana</option>
+                </select>
+              </div>
+              <div>
+                <p className="mb-1 text-xs text-tts-muted">Currency</p>
+                <select
+                  value={memoCurrency}
+                  onChange={(e) => setMemoCurrency(e.target.value)}
+                  className="w-full rounded-md border border-tts-border bg-tts-bg px-3 py-2 text-sm text-tts-deep focus:outline-none focus:ring-1 focus:ring-tts-confirm"
+                >
+                  <option value="usdc">USDC</option>
+                  <option value="usdt">USDT</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
                 <p className="mb-1 text-xs text-tts-muted">Destination address</p>
                 <Input
-                  value={evmWallet}
-                  onChange={(e) => setEvmWallet(e.target.value)}
-                  placeholder="0x… or select a Bridge wallet from Step 2"
+                  value={memoChain === 'stellar' ? walletKey : (selectedBridgeWallet?.address || evmWallet)}
+                  readOnly
                   className="font-mono text-xs"
+                  placeholder={memoChain === 'stellar' ? 'Set Stellar wallet in Step 2' : 'Select Bridge wallet in Step 2'}
                 />
-                <p className="mt-1 text-xs text-tts-muted/70">
-                  Tip: select a Bridge custodial wallet in Step 2 to auto-fill this.
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Memo — only for Stellar */}
-          {onRampChain === "stellar" && (
-            <div className="sm:col-span-2">
-              <p className="mb-1 text-xs text-tts-muted">
-                Blockchain memo <span className="text-tts-muted/60">(leave blank to auto-generate)</span>
-              </p>
-              <Input
-                value={onRampMemo}
-                onChange={(e) => setOnRampMemo(e.target.value)}
-                placeholder="Auto-generated if blank (e.g. 1234567)"
-                className="font-mono text-xs"
-              />
-            </div>
-          )}
-        </div>
-
-        {onRampChain === "stellar" && walletKey && walletOnChain === false && (
-          <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
-            <p className="font-bold">Wallet not found on Stellar mainnet</p>
-            <p className="mt-1">Bridge validates the destination address exists on-chain before creating a virtual account. Switch to Base and use a Bridge custodial wallet from Step 2 for easiest setup.</p>
-          </div>
-        )}
-        {onRampChain === "stellar" && walletKey && walletOnChain === true && (
-          <p className="mb-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 px-3 py-2 text-xs text-tts-confirm">
-            Wallet exists on mainnet — Bridge can accept this address.
-          </p>
-        )}
-
-        {onRampCurrency === "brl" && readiness && !readiness.pix_ready ? (
-          <div className="mb-3 rounded-md border border-tts-error/30 bg-tts-error/5 p-3 text-xs text-tts-error">
-            <p className="font-bold">PIX endorsement required for BRL</p>
-            <p className="mt-1">This customer does not have the PIX endorsement. Go to the KYC section above, click "Get PIX endorsement link", complete the verification, then sync the customer and check readiness again.</p>
-            <p className="mt-1 text-tts-muted">USD, EUR, MXN, GBP, COP virtual accounts only need base KYC — try those first.</p>
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={createVirtualAccount}
-            disabled={
-              !!busy || !customerId ||
-              (onRampChain === "stellar" && (!walletKey || walletOnChain === false)) ||
-              (onRampChain !== "stellar" && !selectedBridgeWallet && !evmWallet.trim()) ||
-              (onRampCurrency === "brl" && readiness != null && !readiness.pix_ready)
-            }
-            size="sm"
-          >
-            {busy?.includes("virtual-accounts") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Create {onRampCurrency.toUpperCase()} virtual account
-          </Button>
-          <Button variant="outline" size="sm" onClick={listVirtualAccounts} disabled={!!busy || !customerId}>
-            <Search className="mr-2 h-4 w-4" /> List all
-          </Button>
-        </div>
-
-        {/* New virtual account result */}
-        {newVA ? (
-          <div className="mt-4 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-mono text-xs text-tts-muted">{newVA.id}</span>
-              <StatusPill tone={newVA.status === "activated" ? "confirm" : "gold"}>{newVA.status}</StatusPill>
-            </div>
-            {newVA.source_deposit_instructions && (
-              <>
-                {(newVA.source_deposit_instructions as any).payment_rails?.includes("wire") && (
-                  <div className="mb-2 rounded border border-tts-confirm/30 bg-tts-confirm/10 p-2 text-xs">
-                    <p className="mb-1 font-semibold text-tts-confirm">Wire these details to Lead Bank to trigger on-ramp:</p>
-                    <p className="font-mono">Routing: <strong>{(newVA.source_deposit_instructions as any).bank_routing_number}</strong></p>
-                    <p className="font-mono">Account: <strong>{(newVA.source_deposit_instructions as any).bank_account_number}</strong></p>
-                    <p className="font-mono">Beneficiary: <strong>{(newVA.source_deposit_instructions as any).bank_beneficiary_name}</strong></p>
-                    <p className="mt-1 text-tts-muted">No memo/reference needed. Bridge matches by account number.</p>
-                  </div>
-                )}
-                <DepositInstructions instr={newVA.source_deposit_instructions} />
-              </>
-            )}
-          </div>
-        ) : null}
-
-        {/* All virtual accounts */}
-        {virtualAccounts.filter((v) => v.id !== newVA?.id).length > 0 ? (
-          <div className="mt-3 grid gap-2">
-            {virtualAccounts.filter((v) => v.id !== newVA?.id).map((va) => (
-              <div key={va.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-tts-muted">{va.id?.slice(0, 24)}…</span>
-                  <StatusPill tone={va.status === "activated" ? "confirm" : "gold"}>{va.status}</StatusPill>
-                </div>
-                {va.source_deposit_instructions ? (
-                  <DepositInstructions instr={va.source_deposit_instructions} />
-                ) : null}
               </div>
-            ))}
-          </div>
-        ) : null}
-
-        {/* Liquidation addresses (reusable crypto → fiat) */}
-        <div className="mt-6 border-t border-tts-border pt-4">
-          <p className="mb-3 text-xs font-bold uppercase text-tts-muted">Liquidation Addresses — Reusable USDC → Fiat</p>
-          <p className="mb-3 text-xs text-tts-muted">Send USDC to a fixed address and Bridge auto-converts to fiat on every deposit.</p>
-          <div className="mb-3 grid gap-2 sm:grid-cols-3">
-            <div>
-              <p className="mb-1 text-xs text-tts-muted">Rail</p>
-              <Input value={liqRail} onChange={(e) => setLiqRail(e.target.value)} placeholder="pix / ach / sepa / spei" />
             </div>
-            <div>
-              <p className="mb-1 text-xs text-tts-muted">Source chain</p>
-              <Input value={liqChain} onChange={(e) => setLiqChain(e.target.value)} placeholder="stellar / base / ethereum" />
+            <div className="flex gap-2">
+              <Button
+                onClick={createStaticMemo}
+                disabled={!!busy || !customerId || !(memoChain === 'stellar' ? walletKey : (selectedBridgeWallet?.address || evmWallet))}
+                size="sm"
+              >
+                {busy?.includes('static-memo') ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Create static memo
+              </Button>
+              <Button variant="outline" size="sm" onClick={listStaticMemos} disabled={!!busy}>
+                <Search className="mr-2 h-4 w-4" /> List
+              </Button>
             </div>
-            <div>
-              <p className="mb-1 text-xs text-tts-muted">External account ID</p>
-              <Input value={liqExtAccountId} onChange={(e) => setLiqExtAccountId(e.target.value)} placeholder="Optional — auto-routes otherwise" className="text-xs" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={createLiquidationAddress} disabled={!!busy || !customerId} size="sm">
-              {busy?.includes("liquidation") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
-              Create liquidation address
-            </Button>
-            <Button variant="outline" size="sm" onClick={listLiquidationAddresses} disabled={!!busy || !customerId}>
-              <Search className="mr-2 h-4 w-4" /> List
-            </Button>
-          </div>
-          {newLiq ? (
-            <div className="mt-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3 text-xs">
-              <p className="text-tts-muted">Deposit address</p>
-              <p className="break-all font-mono font-semibold text-tts-deep">
-                {newLiq.address} <Copy className="ml-1 inline h-3 w-3 cursor-pointer" onClick={() => handleCopy(newLiq.address!)} />
-              </p>
-              <p className="mt-1 text-tts-muted">{newLiq.payment_rail} · {newLiq.currency} · chain: {newLiq.chain}</p>
-            </div>
-          ) : null}
-          {liqAddresses.filter((l) => l.id !== newLiq?.id).length > 0 ? (
-            <div className="mt-2 grid gap-2">
-              {liqAddresses.filter((l) => l.id !== newLiq?.id).map((la) => (
-                <div key={la.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-2 text-xs">
-                  <span className="font-mono text-tts-muted">{la.id?.slice(0, 20)}…</span> · {la.payment_rail} · {la.currency}
-                  {la.address ? <span className="ml-1 text-tts-deep">→ {la.address.slice(0, 16)}…</span> : null}
+            {newMemo && (
+              <div className="mt-3 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3 text-xs">
+                <p className="mb-1 text-xs font-bold text-tts-confirm">Static Memo Created</p>
+                <div className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1">
+                  <span className="text-tts-muted">Memo</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-semibold text-tts-deep">{newMemo.memo}</span>
+                    {newMemo.memo && <Copy className="h-3 w-3 cursor-pointer text-tts-muted hover:text-tts-confirm" onClick={() => handleCopy(newMemo.memo!)} />}
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+                <p className="mt-2 text-tts-muted">Send USDC to the Stellar anchor address with this memo to trigger delivery to your wallet.</p>
+              </div>
+            )}
+            {staticMemos.filter((m) => m.id !== newMemo?.id).length > 0 && (
+              <div className="mt-3 grid gap-2">
+                {staticMemos.filter((m) => m.id !== newMemo?.id).map((m, i) => (
+                  <div key={m.id || i} className="rounded-md border border-tts-border bg-tts-bg/50 p-2 text-xs">
+                    <span className="font-mono text-tts-muted">{m.id?.slice(0, 20)}…</span>
+                    {m.memo && <span className="ml-2 font-mono font-semibold text-tts-deep">memo: {m.memo}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </OperationalCard>
 
       {/* ── Step 5: Off-Ramp (USDC → fiat) ──────────────────── */}

@@ -383,6 +383,30 @@ export interface TransferListParams {
   state?: TransferState;
 }
 
+export interface BridgeVirtualAccountEvent {
+  id: string;
+  type: 'funds_received' | 'payment_processed' | 'payment_submitted' | 'payment_reversed' | string;
+  currency: string;
+  amount?: string;
+  developer_fee_amount?: string;
+  exchange_fee_amount?: string;
+  subtotal_amount?: string;
+  gas_fee?: string;
+  deposit_id?: string;
+  virtual_account_id: string;
+  customer_id: string;
+  source?: {
+    payment_rail?: string;
+    description?: string;
+    sender_name?: string;
+    sender_bank_routing_number?: string;
+    trace_number?: string;
+  };
+  destination_tx_hash?: string;
+  receipt?: { url?: string; final_amount?: string };
+  created_at: string;
+}
+
 // ── Bridge Wallets ────────────────────────────────────────────────────
 // Bridge-hosted custodial wallets on supported EVM/non-EVM chains.
 // NOTE: Stellar is NOT a supported chain — chains are base, ethereum, solana, tempo, tron.

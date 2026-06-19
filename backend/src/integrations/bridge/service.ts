@@ -21,6 +21,7 @@ import type {
   BridgeWebhook,
   BridgeWebhookEvent,
   BridgeWebhookEventType,
+  BridgeVirtualAccountEvent,
   BridgeWallet,
   BridgeWalletBalance,
   BridgeWalletChain,
@@ -760,6 +761,17 @@ export class BridgeService {
 
   async deleteStaticMemo(memoId: string): Promise<void> {
     await this.client.delete(`/static_memos/${encodeURIComponent(memoId)}`);
+  }
+
+  async getVirtualAccountActivity(customerId: string, virtualAccountId: string, params?: { limit?: number; starting_after?: string }): Promise<BridgeVirtualAccountEvent[]> {
+    const q: Record<string, string> = {};
+    if (params?.limit) q.limit = String(params.limit);
+    if (params?.starting_after) q.starting_after = params.starting_after;
+    const res = await this.client.get<{ data: BridgeVirtualAccountEvent[] }>(
+      `/customers/${encodeURIComponent(customerId)}/virtual_accounts/${encodeURIComponent(virtualAccountId)}/activity`,
+      q,
+    );
+    return (res as any).data ?? (res as any) ?? [];
   }
 
   // ── Bridge Wallets ────────────────────────────────────────────
