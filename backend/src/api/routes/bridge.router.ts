@@ -96,6 +96,10 @@ router.post(
   "/virtual-accounts/:virtualAccountId/reactivate",
   BridgeController.reactivateVirtualAccount,
 );
+router.get(
+  "/customers/:id/virtual-accounts/:virtualAccountId/activity",
+  BridgeController.getVirtualAccountActivity,
+);
 
 // USD / EUR / MXN / GBP / COP on-ramps
 router.post(

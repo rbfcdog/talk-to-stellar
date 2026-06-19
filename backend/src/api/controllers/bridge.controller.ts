@@ -604,6 +604,20 @@ export class BridgeController {
     }
   }
 
+  static async getVirtualAccountActivity(req: Request, res: Response): Promise<void> {
+    try {
+      const customerId = String(req.params.id);
+      const virtualAccountId = String(req.params.virtualAccountId);
+      const limit = req.query.limit ? Number(req.query.limit) : 20;
+      const startingAfter = req.query.starting_after as string | undefined;
+      const events = await getBridgeService().getVirtualAccountActivity(customerId, virtualAccountId, { limit, starting_after: startingAfter });
+      res.json({ success: true, events });
+    } catch (error: any) {
+      logger.error(`[bridge] getVirtualAccountActivity failed: ${error.message}`);
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || 'Failed to get activity.' });
+    }
+  }
+
   // ── Additional Virtual Account On-Ramps ───────────────────────
 
   static async createUsdVirtualAccount(req: Request, res: Response): Promise<void> {
