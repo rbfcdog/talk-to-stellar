@@ -389,6 +389,10 @@ export default function BridgeTestClient() {
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/readiness`)
         .then((p) => setReadiness(p.readiness as ReadinessData))
         .catch(() => {});
+      // Auto-load Bridge custodial wallets from DB (fast, no Bridge API call)
+      runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets/cached`)
+        .then((p) => setBridgeWallets((p.wallets as BridgeWalletData[]) || []))
+        .catch(() => {});
     }
   }, [customerId, runApi]);
 

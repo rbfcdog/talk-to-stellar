@@ -51,6 +51,17 @@ STELLAR_WALLET_SPONSOR_SECRET=S...   # funded mainnet Stellar account, ~2 XLM pe
 
 Without it wallets are generated unfunded. With it they are auto-funded and Bridge-ready.
 
+## 5. Bridge Custodial Wallets (required for Bridge wallet persistence)
+
+```bash
+psql <database_url> -f backend/migrations/20260618_02_bridge_custodial_wallets.sql
+```
+
+- `bridge_custodial_wallets` table — stores Bridge-managed wallet IDs, chains, addresses per customer
+- RLS enabled, service_role only
+- Populated automatically when wallets are created or listed via `/bridge-test`
+- On page load, wallets are fetched from this table instantly (no Bridge API roundtrip)
+
 ## Quick apply via Supabase
 
 Open Supabase SQL Editor and paste the contents of each migration file in order.
