@@ -21,6 +21,21 @@ import internationalTransfersRouter from './api/routes/international-transfers.r
 import webhooksRouter from './api/routes/webhooks.router';
 import { opsRouter } from './api/routes/ops.router';
 import stellarWalletsRouter from './api/routes/stellar-wallets.router';
+import sep24Router from './api/routes/sep24.router';
+import walletAuthRouter from './api/routes/wallet-auth.router';
+import paymentLinksRouter from './api/routes/payment-links.router';
+import fraudScreeningRouter from './api/routes/fraud-screening.router';
+import defindexRouter from './api/routes/defindex.router';
+import passkeyWalletsRouter from './api/routes/passkey-wallets.router';
+import paymentWatcherRouter from './api/routes/payment-watcher.router';
+import soroswapRouter from './api/routes/soroswap.router';
+import reflectorRouter from './api/routes/reflector.router';
+import cctpRouter from './api/routes/cctp.router';
+import aquariusRouter from './api/routes/aquarius.router';
+import stellarNetworkRouter from './api/routes/stellar-network.router';
+import ecosystemRouter from './api/routes/ecosystem.router';
+import abroadFinanceRouter from './api/routes/abroad-finance.router';
+import { paymentWatcher } from './integrations/payment-watcher/service';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import { FxRateAlertService } from './api/services/fx-rate-alert.service';
@@ -99,6 +114,20 @@ app.use('/webhook/evolution', evolutionRouter);
 app.use('/webhook/bridge', bridgeWebhookRouter);
 app.use('/api/bridge', bridgeRouter);
 app.use('/api/stellar', stellarWalletsRouter);
+app.use('/api/sep24', sep24Router);
+app.use('/api/wallet-auth', walletAuthRouter);
+app.use('/api/pay-links', paymentLinksRouter);
+app.use('/api/fraud-screen', fraudScreeningRouter);
+app.use('/api/defindex', defindexRouter);
+app.use('/api/passkey-wallets', passkeyWalletsRouter);
+app.use('/api/payment-watcher', paymentWatcherRouter);
+app.use('/api/swap', soroswapRouter);
+app.use('/api/oracle', reflectorRouter);
+app.use('/api/cctp', cctpRouter);
+app.use('/api/aquarius', aquariusRouter);
+app.use('/api/network', stellarNetworkRouter);
+app.use('/api/ecosystem', ecosystemRouter);
+app.use('/api/abroad', abroadFinanceRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 
@@ -111,6 +140,9 @@ EvolutionService.startWebhookAutoConfiguration();
 EvolutionService.startInboundWebhookWorker();
 EvolutionService.startOutboundDeliveryWorker();
 initBridgeService();
+paymentWatcher.start().catch((err: any) => {
+  logger.warn(`[payment-watcher] Could not start: ${err.message}`);
+});
 logger.info('[evolution-startup] Evolution services registered (auto-config, inbound worker, outbound worker)');
 
 // Start Stellar settlement watcher (lazy — won't crash if transfers table doesn't exist yet)

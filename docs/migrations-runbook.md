@@ -74,6 +74,29 @@ psql <database_url> -f backend/migrations/20260618_03_bridge_va_cache.sql
 - Populated automatically when VAs are created or listed via `/bridge-test`
 - On page load, VAs are fetched from this table instantly (no Bridge API roundtrip)
 
+## 7. SEP-24 Anchor + Wallet Auth (required for anchor/wallet integrations)
+
+```bash
+psql <database_url> -f backend/migrations/20260620_00_sep24_wallet_auth.sql
+```
+
+- `anchor_sessions` — SEP-10 JWTs per user per anchor domain (one row per user+anchor)
+- `anchor_transactions` — SEP-24 transaction state synced from anchor APIs (MoneyGram, Vibrant, etc.)
+- `wallet_auth_sessions` — SEP-10 session tokens for wallet-based auth (Freighter, Albedo, xBull, LOBSTR)
+- RLS enabled on all three tables, service_role only
+- Populated automatically by `/anchor-test` and `/wallet-connect-test` pages
+
+## 8. Integration Tables (payment links + passkey wallets)
+
+```bash
+psql <database_url> -f backend/migrations/20260620_01_integrations.sql
+```
+
+- `payment_links` — SEP-7 payment link records (id, stellar_address, uri, short_url, times_used)
+- `passkey_wallets` — Soroban smart wallet contract IDs registered via WebAuthn
+- `increment_payment_link_use()` SQL function for atomic counter updates
+- RLS enabled on both tables, service_role only
+
 ## Quick apply via Supabase
 
 Open Supabase SQL Editor and paste the contents of each migration file in order.

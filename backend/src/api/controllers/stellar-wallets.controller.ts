@@ -3,6 +3,7 @@ import { Keypair, Operation, Asset, TransactionBuilder, Networks } from '@stella
 import { server, stellarConfig } from '../../config/stellar';
 import { supabase } from '../../config/supabase';
 import { PUBLIC_USDC_ISSUER, TESTNET_USDC_ISSUER } from '../../config/assets';
+import { paymentWatcher } from '../../integrations/payment-watcher/service';
 
 const SPONSOR_SECRET = process.env.STELLAR_WALLET_SPONSOR_SECRET;
 const BASE_FEE = '100';
@@ -85,6 +86,9 @@ export const StellarWalletsController = {
     if (dbError) {
       return res.status(500).json({ success: false, message: dbError.message });
     }
+
+    // Auto-subscribe new wallet to payment watcher for WhatsApp notifications
+    paymentWatcher.subscribe(publicKey);
 
     return res.json({
       success: true,

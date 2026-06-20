@@ -1,0 +1,1 @@
+export { paymentWatcher } from './service';
