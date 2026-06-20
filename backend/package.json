@@ -73,6 +73,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "langchain": "^1.2.37",
+    "passkey-kit": "^0.12.0",
     "stellar-base": "^13.1.0",
     "toml": "^3.0.0",
     "uuid": "^9.0.1",

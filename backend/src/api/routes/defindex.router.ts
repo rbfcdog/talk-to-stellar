@@ -1,0 +1,13 @@
+import { Router } from 'express';
+import { DefindexController } from '../controllers/defindex.controller';
+const router = Router();
+router.get('/vaults', DefindexController.listVaults);
+router.get('/vault/info', (req, res) => { (req.params as any).vault = req.query.vault || ''; DefindexController.getVaultInfo(req, res); });
+router.get('/vault/balance', (req, res) => { (req.params as any).vault = req.query.vault || ''; DefindexController.getUserBalance(req, res); });
+router.post('/vault/deposit', (req, res) => { (req.params as any).vault = req.query.vault || ''; DefindexController.buildDeposit(req, res); });
+router.post('/vault/withdraw', (req, res) => { (req.params as any).vault = req.query.vault || ''; DefindexController.buildWithdraw(req, res); });
+router.get('/vaults/:vault/info', DefindexController.getVaultInfo);
+router.get('/vaults/:vault/balance', DefindexController.getUserBalance);
+router.post('/vaults/:vault/deposit', DefindexController.buildDeposit);
+router.post('/vaults/:vault/withdraw', DefindexController.buildWithdraw);
+export default router;

@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { PasskeyWalletsController } from '../controllers/passkey-wallets.controller';
+const router = Router();
+router.post('/register', PasskeyWalletsController.register);
+router.get('/contract', PasskeyWalletsController.getContractId);
+router.post('/relay', PasskeyWalletsController.relay);
+router.get('/', PasskeyWalletsController.list);
+router.get('/:contractId/balance', PasskeyWalletsController.getBalance);
+router.get('/:contractId/signers', PasskeyWalletsController.getSigners);
+export default router;
