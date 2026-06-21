@@ -10,28 +10,17 @@ function err(res: Response, e: unknown, status = 500) {
 }
 
 export const AllbridgeController = {
-  async getChains(_req: Request, res: Response) {
+  async getInfo(_req: Request, res: Response) {
     try {
-      const data = await AllbridgeService.getChainTokenMap();
-      const stellar = await AllbridgeService.getStellarTokens().catch(() => null);
-      ok(res, { chains: data, stellar_tokens: stellar });
+      const data = await AllbridgeService.getInfo();
+      ok(res, data);
     } catch (e) { err(res, e); }
   },
 
   async getStellarTokens(_req: Request, res: Response) {
     try {
-      const data = await AllbridgeService.getStellarTokens();
-      ok(res, { stellar: data });
-    } catch (e) { err(res, e); }
-  },
-
-  async getReceiveAmount(req: Request, res: Response) {
-    try {
-      const { amount, sourceChainId, sourceToken, destChainId, destToken } = req.body;
-      if (!amount || !sourceChainId || !sourceToken || !destChainId || !destToken)
-        return err(res, 'amount, sourceChainId, sourceToken, destChainId, destToken required', 400);
-      const data = await AllbridgeService.getReceiveAmount({ amount, sourceChainId, sourceToken, destChainId, destToken });
-      ok(res, data);
+      const tokens = await AllbridgeService.getStellarTokens();
+      ok(res, { tokens });
     } catch (e) { err(res, e); }
   },
 };
