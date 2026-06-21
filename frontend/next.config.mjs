@@ -22,6 +22,10 @@ const nextConfig = {
   async rewrites() {
     const backendBase = backendBaseUrl()
 
+    // Only rewrite /ops — all /api/* paths are handled by
+    // app/api/[...path]/route.ts (catch-all proxy). Keeping a blanket
+    // /api/:path* rewrite here conflicts with that route handler in
+    // Next.js 16 App Router and causes 404s on unmatched paths.
     return [
       {
         source: "/ops",
@@ -30,10 +34,6 @@ const nextConfig = {
       {
         source: "/ops/:path*",
         destination: `${backendBase}/ops/:path*`,
-      },
-      {
-        source: "/api/:path*",
-        destination: `${backendBase}/api/:path*`,
       },
     ]
   },
