@@ -18,6 +18,7 @@ async function proxy(req: NextRequest, path: string[]) {
         req.method !== "GET" && req.method !== "HEAD"
           ? await req.text()
           : undefined,
+      signal: AbortSignal.timeout(30_000),
     });
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
