@@ -106,10 +106,23 @@ export class BridgeController {
         res.status(400).json({ success: false, message: "Email is required." });
         return;
       }
-      const customers = await service.listCustomers();
-      const found = customers.find(
-        (c: any) => (c.email || "").toLowerCase() === email,
-      );
+      // Try email filter first (Bridge supports ?email= query param)
+      let found: any = null;
+      const filtered = await service.listCustomers({ email, limit: 10 });
+      found = filtered.find((c: any) => (c.email || "").toLowerCase() === email);
+
+      // Fallback: paginate through all customers (covers older accounts)
+      if (!found) {
+        let startingAfter: string | undefined;
+        for (let page = 0; page < 20 && !found; page++) {
+          const batch = await service.listCustomers({ starting_after: startingAfter, limit: 100 });
+          if (!batch.length) break;
+          found = batch.find((c: any) => (c.email || "").toLowerCase() === email);
+          startingAfter = batch[batch.length - 1]?.id;
+          if (batch.length < 100) break;
+        }
+      }
+
       if (!found) {
         res.status(404).json({ success: false, message: "No customer found with that email." });
         return;
