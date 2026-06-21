@@ -86,6 +86,7 @@ export class BridgeService {
   async listCustomers(params?: {
     starting_after?: string;
     limit?: number;
+    email?: string;
   }): Promise<BridgeCustomer[]> {
     const res = await this.client.get<{ count: number; data: BridgeCustomer[] }>('/customers', params as Record<string, string>);
     return (res as any).data ?? (res as any) ?? [];
