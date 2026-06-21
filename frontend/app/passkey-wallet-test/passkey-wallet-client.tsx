@@ -68,7 +68,6 @@ export default function PasskeyWalletClient() {
   const [registerError, setRegisterError] = useState<string | null>(null);
 
   const [keyCopied, setKeyCopied] = useState(false);
-  const [relayCopied, setRelayCopied] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {

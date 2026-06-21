@@ -35,6 +35,11 @@ import aquariusRouter from './api/routes/aquarius.router';
 import stellarNetworkRouter from './api/routes/stellar-network.router';
 import ecosystemRouter from './api/routes/ecosystem.router';
 import abroadFinanceRouter from './api/routes/abroad-finance.router';
+import blendRouter from './api/routes/blend.router';
+import stellarBrokerRouter from './api/routes/stellar-broker.router';
+import allbridgeRouter from './api/routes/allbridge.router';
+import axelarRouter from './api/routes/axelar.router';
+import nearIntentsRouter from './api/routes/near-intents.router';
 import { paymentWatcher } from './integrations/payment-watcher/service';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
@@ -128,6 +133,11 @@ app.use('/api/aquarius', aquariusRouter);
 app.use('/api/network', stellarNetworkRouter);
 app.use('/api/ecosystem', ecosystemRouter);
 app.use('/api/abroad', abroadFinanceRouter);
+app.use('/api/blend', blendRouter);
+app.use('/api/broker', stellarBrokerRouter);
+app.use('/api/allbridge', allbridgeRouter);
+app.use('/api/axelar', axelarRouter);
+app.use('/api/near-intents', nearIntentsRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 

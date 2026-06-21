@@ -637,6 +637,328 @@ function CctpSection() {
   );
 }
 
+// ── Section: Blend v2 Lending ───────────────────────────────────────────────
+
+function BlendSection() {
+  const [pools, setPools] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const d = await api("/api/blend/pools");
+      setPools(Array.isArray(d.pools) ? d.pools : []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+          <TrendingUp className="h-4 w-4 text-tts-gold" />
+          Blend v2 Lending
+        </h2>
+        <div className="flex items-center gap-2">
+          {pools.length > 0 && <StatusPill tone="confirm">{pools.length} pools</StatusPill>}
+          <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+      {loading && !pools.length && <Spin />}
+      {error && <Err msg={error} />}
+      <p className="mb-3 text-xs text-tts-muted">
+        Blend is Stellar&apos;s DeFi lending protocol — deposit USDC/XLM and earn variable APY.
+        Used by Meru, Beans, Freighter, and DeFindex vaults.
+      </p>
+      {pools.length > 0 && (
+        <div className="space-y-0">
+          {pools.slice(0, 5).map((p: any, i: number) => (
+            <div key={i} className="flex items-center justify-between border-b border-tts-border/40 py-1.5 last:border-0">
+              <span className="text-xs font-semibold text-tts-deep">{p.name ?? p.id?.slice(0, 10) ?? `Pool ${i + 1}`}</span>
+              <span className="text-xs text-tts-muted">
+                {p.tvl ? `$${Number(p.tvl).toLocaleString()}` : p.status ?? "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
+// ── Section: Stellar Broker ──────────────────────────────────────────────────
+
+function StellarBrokerSection() {
+  const [from, setFrom] = useState("XLM");
+  const [to, setTo] = useState("USDC");
+  const [amount, setAmount] = useState("100");
+  const [quote, setQuote] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const getQuote = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setQuote(null);
+    try {
+      const d = await api(`/api/broker/quote?from=${from}&to=${to}&amount=${amount}`);
+      setQuote(d);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to, amount]);
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+          <ArrowRightLeft className="h-4 w-4 text-tts-gold" />
+          Stellar Broker Router
+        </h2>
+        <StatusPill tone="default">Multi-DEX</StatusPill>
+      </div>
+      <p className="mb-3 text-xs text-tts-muted">
+        Routes swaps across Soroswap, Aquarius AMM, SDEX, and Classic AMMs for best execution price.
+      </p>
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <div>
+          <p className="mb-1 text-xs font-semibold text-tts-muted">From</p>
+          <select value={from} onChange={(e) => setFrom(e.target.value)}
+            className="w-full rounded border border-tts-border bg-tts-bg px-2 py-1.5 text-xs text-tts-deep">
+            <option>XLM</option><option>USDC</option><option>BRZ</option>
+          </select>
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold text-tts-muted">To</p>
+          <select value={to} onChange={(e) => setTo(e.target.value)}
+            className="w-full rounded border border-tts-border bg-tts-bg px-2 py-1.5 text-xs text-tts-deep">
+            <option>USDC</option><option>XLM</option><option>BRZ</option>
+          </select>
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold text-tts-muted">Amount</p>
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-xs" />
+        </div>
+      </div>
+      <Button size="sm" className="w-full" onClick={getQuote} disabled={loading}>
+        {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Routing…</> : "Get Best Quote"}
+      </Button>
+      {error && <div className="mt-2"><Err msg={error} /></div>}
+      {quote && (
+        <div className="mt-3 rounded border border-tts-border bg-tts-bg p-3 space-y-0">
+          {quote.outputAmount != null && <Row label="Output" value={`${quote.outputAmount} ${to}`} />}
+          {quote.price != null && <Row label="Price" value={String(quote.price)} />}
+          {quote.route && <Row label="Route" value={Array.isArray(quote.route) ? quote.route.join(" → ") : String(quote.route)} />}
+          {quote.fee != null && <Row label="Fee" value={String(quote.fee)} />}
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
+// ── Section: Allbridge ───────────────────────────────────────────────────────
+
+function AllbridgeSection() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api("/api/allbridge/stellar-tokens"));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const stellar = data?.stellar;
+  const tokens: any[] = stellar?.tokens ?? (Array.isArray(stellar) ? stellar : []);
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+          <Globe className="h-4 w-4 text-tts-gold" />
+          Allbridge Cross-Chain
+        </h2>
+        <div className="flex items-center gap-2">
+          {tokens.length > 0 && <StatusPill tone="confirm">{tokens.length} tokens</StatusPill>}
+          <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+      {loading && !data && <Spin />}
+      {error && <Err msg={error} />}
+      <p className="mb-3 text-xs text-tts-muted">
+        Native 1:1 stablecoin bridge — send USDC from Base/Ethereum/Solana directly to Stellar
+        with automatic account activation. No DEX slippage.
+      </p>
+      {tokens.length > 0 && (
+        <div className="space-y-0">
+          {tokens.map((t: any, i: number) => (
+            <div key={i} className="flex items-center justify-between border-b border-tts-border/40 py-1.5 last:border-0">
+              <span className="text-xs font-semibold text-tts-deep">{t.symbol ?? t.name}</span>
+              <span className="font-mono text-xs text-tts-muted">{String(t.tokenAddress ?? t.contract ?? "").slice(0, 12)}…</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {data && !tokens.length && (
+        <div className="rounded border border-tts-border bg-tts-bg p-3">
+          <pre className="text-[10px] text-tts-muted overflow-x-auto">{JSON.stringify(stellar, null, 2).slice(0, 300)}</pre>
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
+// ── Section: Axelar ──────────────────────────────────────────────────────────
+
+function AxelarSection() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api("/api/axelar/chains"));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const chains: any[] = data?.chains ?? [];
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+          <Zap className="h-4 w-4 text-tts-gold" />
+          Axelar Cross-Chain
+        </h2>
+        <div className="flex items-center gap-2">
+          {data && <StatusPill tone="default">{data.count ?? chains.length} chains</StatusPill>}
+          <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+      {loading && !data && <Spin />}
+      {error && <Err msg={error} />}
+      <p className="mb-3 text-xs text-tts-muted">
+        General-purpose cross-chain messaging and Interchain Token Service.
+        Stellar support via axelar-amplifier-stellar.
+      </p>
+      {chains.length > 0 && (
+        <div className="max-h-40 overflow-y-auto space-y-0">
+          {chains.slice(0, 10).map((c: any, i: number) => (
+            <div key={i} className="flex items-center justify-between border-b border-tts-border/40 py-1.5 last:border-0">
+              <span className="text-xs font-semibold text-tts-deep">{c.name ?? c.id ?? c.chain_id}</span>
+              <StatusPill tone={c.status === 'active' ? 'confirm' : 'default'}>{c.status ?? '—'}</StatusPill>
+            </div>
+          ))}
+          {chains.length > 10 && (
+            <p className="pt-1 text-xs text-tts-muted">+{chains.length - 10} more chains</p>
+          )}
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
+// ── Section: Near Intents ────────────────────────────────────────────────────
+
+function NearIntentsSection() {
+  const [assetIn, setAssetIn] = useState("nep141:eth.token.near");
+  const [assetOut, setAssetOut] = useState("nep141:ft.usdc.near");
+  const [amountIn, setAmountIn] = useState("1000000000000000000");
+  const [quote, setQuote] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const getQuote = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setQuote(null);
+    try {
+      const d = await api("/api/near-intents/quote", {
+        method: "POST",
+        body: JSON.stringify({ asset_in: assetIn, asset_out: assetOut, amount_in: amountIn }),
+      });
+      setQuote(d);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [assetIn, assetOut, amountIn]);
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+          <Activity className="h-4 w-4 text-tts-gold" />
+          Near Intents 1Click
+        </h2>
+        <StatusPill tone="default">Multi-chain</StatusPill>
+      </div>
+      <p className="mb-3 text-xs text-tts-muted">
+        Solver-based execution: express intent ("USDC on Stellar") and solvers compete to fill
+        it optimally across ETH, BTC, SOL, NEAR in one API call.
+      </p>
+      <div className="mb-3 space-y-2">
+        <div>
+          <p className="mb-1 text-xs font-semibold text-tts-muted">Asset In (NEP-141 identifier)</p>
+          <Input value={assetIn} onChange={(e) => setAssetIn(e.target.value)} className="font-mono text-xs" />
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold text-tts-muted">Asset Out</p>
+          <Input value={assetOut} onChange={(e) => setAssetOut(e.target.value)} className="font-mono text-xs" />
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold text-tts-muted">Amount In (wei/atomic)</p>
+          <Input value={amountIn} onChange={(e) => setAmountIn(e.target.value)} className="font-mono text-xs" />
+        </div>
+      </div>
+      <Button size="sm" className="w-full" onClick={getQuote} disabled={loading}>
+        {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Getting intent quote…</> : "Get Quote"}
+      </Button>
+      {error && <div className="mt-2"><Err msg={error} /></div>}
+      {quote && (
+        <div className="mt-3 rounded border border-tts-border bg-tts-bg p-3">
+          <pre className="text-[10px] text-tts-muted overflow-x-auto whitespace-pre-wrap">
+            {JSON.stringify(quote, null, 2).slice(0, 400)}
+          </pre>
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
 // ── Section: Fraud Screening ────────────────────────────────────────────────
 
 function FraudSection({ address }: { address: string }) {
@@ -850,7 +1172,7 @@ export default function EcosystemClient() {
         <OperationalStat label="Settlement" value="5s" detail="Stellar block time" tone="gold" />
         <OperationalStat label="Tx fee" value="$0.0001" detail="100 stroops" />
         <OperationalStat label="BRL volume" value="$318B" detail="Jul 24–Jun 25 in Brazil" />
-        <OperationalStat label="Integrations" value="9" detail="Active on Stellar" />
+        <OperationalStat label="Integrations" value="14" detail="Active on Stellar" />
       </div>
 
       {/* Address input — shared across ecosystem + fraud sections */}
@@ -877,6 +1199,11 @@ export default function EcosystemClient() {
         <AbroadSection />
         <SoroswapSection />
         <CctpSection />
+        <BlendSection />
+        <StellarBrokerSection />
+        <AllbridgeSection />
+        <AxelarSection />
+        <NearIntentsSection />
         <FraudSection address={stagedAddress} />
       </div>
 
@@ -902,6 +1229,16 @@ export default function EcosystemClient() {
             ["GET", "/api/swap/quote?assetIn=XLM&assetOut=USDC&amount=10&tradeType=EXACT_IN", "DEX swap quote"],
             ["GET", "/api/cctp/chains", "CCTP-supported EVM chains → Stellar"],
             ["GET", "/api/fraud-screen/address/:address", "TRM Labs fraud screening"],
+            ["GET", "/api/blend/pools", "Blend v2 lending pools — TVL, APY"],
+            ["GET", "/api/blend/user/:address", "User lending positions"],
+            ["GET", "/api/broker/quote?from=XLM&to=USDC&amount=100", "Best swap quote across all DEXs"],
+            ["GET", "/api/broker/assets", "All Stellar Broker supported assets"],
+            ["GET", "/api/allbridge/chains", "Allbridge chains + Stellar token list"],
+            ["POST", "/api/allbridge/receive-amount", "Cross-chain receive amount estimate"],
+            ["GET", "/api/axelar/chains", "Axelar supported chains (60+)"],
+            ["GET", "/api/axelar/transfer/:txHash", "Axelar cross-chain transfer status"],
+            ["GET", "/api/near-intents/tokens", "Near Intents supported tokens"],
+            ["POST", "/api/near-intents/quote", "1Click multi-chain swap quote"],
             ["GET", "/api/ecosystem/:address", "Full overview — all of the above in one call"],
             ["GET", "/api/ecosystem/:address/summary", "Portuguese WhatsApp summary text"],
           ].map(([method, path, desc]) => (
