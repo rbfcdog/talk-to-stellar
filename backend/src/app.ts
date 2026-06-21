@@ -40,6 +40,7 @@ import stellarBrokerRouter from './api/routes/stellar-broker.router';
 import allbridgeRouter from './api/routes/allbridge.router';
 import axelarRouter from './api/routes/axelar.router';
 import nearIntentsRouter from './api/routes/near-intents.router';
+import scfRouter from './api/routes/scf.router';
 import { paymentWatcher } from './integrations/payment-watcher/service';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
@@ -138,6 +139,7 @@ app.use('/api/broker', stellarBrokerRouter);
 app.use('/api/allbridge', allbridgeRouter);
 app.use('/api/axelar', axelarRouter);
 app.use('/api/near-intents', nearIntentsRouter);
+app.use('/api/scf', scfRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 
