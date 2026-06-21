@@ -13,25 +13,20 @@ export const BlendController = {
   async listPools(_req: Request, res: Response) {
     try {
       const pools = await BlendService.listPools();
-      ok(res, { pools, count: Array.isArray(pools) ? pools.length : 0 });
+      ok(res, { pools, count: pools.length });
     } catch (e) { err(res, e); }
   },
 
   async getPool(req: Request, res: Response) {
     try {
-      const { pool } = req.params;
-      if (!pool) return err(res, 'pool address required', 400);
-      const data = await BlendService.getPool(pool);
+      const poolId = req.params.pool ?? req.query.pool as string;
+      if (!poolId) return err(res, 'pool id or contract required', 400);
+      const data = await BlendService.getPool(poolId);
       ok(res, data);
     } catch (e) { err(res, e); }
   },
 
-  async getUserPositions(req: Request, res: Response) {
-    try {
-      const address = (req.params.address ?? req.query.address) as string;
-      if (!address) return err(res, 'address required', 400);
-      const data = await BlendService.getUserPositions(address);
-      ok(res, data);
-    } catch (e) { err(res, e); }
+  async getAddresses(_req: Request, res: Response) {
+    ok(res, { pools: BlendService.getPoolAddresses() });
   },
 };

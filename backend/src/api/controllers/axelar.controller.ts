@@ -12,31 +12,19 @@ function err(res: Response, e: unknown, status = 500) {
 export const AxelarController = {
   async getChains(_req: Request, res: Response) {
     try {
-      const data = await AxelarService.getChains();
-      const chains = Array.isArray(data) ? data : (data?.data ?? []);
-      ok(res, { chains, count: chains.length });
+      const chains = await AxelarService.getChains();
+      const stellar = chains.find((c: any) =>
+        c.chain_name?.toLowerCase() === 'stellar' || c.id?.toLowerCase() === 'stellar'
+      ) ?? null;
+      ok(res, { chains, count: chains.length, stellar_supported: stellar !== null, stellar });
     } catch (e) { err(res, e); }
   },
 
   async getTransferStatus(req: Request, res: Response) {
     try {
-      const txHash = req.params.txHash ?? req.query.txHash as string;
+      const txHash = (req.params.txHash ?? req.query.txHash) as string;
       if (!txHash) return err(res, 'txHash required', 400);
       const data = await AxelarService.getTransferStatus(txHash);
-      ok(res, data);
-    } catch (e) { err(res, e); }
-  },
-
-  async getAssets(_req: Request, res: Response) {
-    try {
-      const data = await AxelarService.getAssets();
-      ok(res, data);
-    } catch (e) { err(res, e); }
-  },
-
-  async getGMPStats(_req: Request, res: Response) {
-    try {
-      const data = await AxelarService.getGMPStats();
       ok(res, data);
     } catch (e) { err(res, e); }
   },

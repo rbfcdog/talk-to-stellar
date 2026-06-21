@@ -10,27 +10,18 @@ function err(res: Response, e: unknown, status = 500) {
 }
 
 export const StellarBrokerController = {
+  async getHealth(_req: Request, res: Response) {
+    try {
+      const data = await StellarBrokerService.getHealth();
+      ok(res, data);
+    } catch (e) { err(res, e); }
+  },
+
   async getQuote(req: Request, res: Response) {
     try {
-      const { from, to, amount, slippage } = req.query as Record<string, string>;
+      const { from, to, amount, direction } = req.query as Record<string, string>;
       if (!from || !to || !amount) return err(res, 'from, to, amount required', 400);
-      const data = await StellarBrokerService.getQuote(from, to, amount, slippage);
-      ok(res, data);
-    } catch (e) { err(res, e); }
-  },
-
-  async getRoutes(req: Request, res: Response) {
-    try {
-      const { from, to } = req.query as Record<string, string>;
-      if (!from || !to) return err(res, 'from, to required', 400);
-      const data = await StellarBrokerService.getRoutes(from, to);
-      ok(res, data);
-    } catch (e) { err(res, e); }
-  },
-
-  async getAssets(_req: Request, res: Response) {
-    try {
-      const data = await StellarBrokerService.getSupportedAssets();
+      const data = await StellarBrokerService.getQuote(from, to, amount, direction as 'send' | 'receive');
       ok(res, data);
     } catch (e) { err(res, e); }
   },

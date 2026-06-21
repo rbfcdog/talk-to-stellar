@@ -1,11 +1,10 @@
 /**
  * Stellar Broker — Multi-Source Liquidity Swap Router
  *
- * Stellar Broker routes swaps across SoroSwap, Aquarius AMM, Stellar SDEX,
- * and Classic AMMs to find the best execution price. It exposes a simple REST
- * quote API — no SDK needed.
+ * Routes swaps across Soroswap, Aquarius AMM, Stellar SDEX, and Classic AMMs
+ * to find the best execution price. No SDK — pure REST.
  *
- * Base URL: https://stellar.broker/api
+ * Base URL: https://api.stellar.broker
  * Docs: https://stellar.broker/docs
  *
  * TalkToStellar use: Best-rate XLM⇄USDC swaps for PIX off-ramp conversions.
@@ -13,60 +12,65 @@
 
 import { logger } from '../../utils/logger';
 
-const BROKER_API = 'https://stellar.broker/api';
+const BROKER_API = 'https://api.stellar.broker';
+
+const KNOWN_ASSETS: Record<string, string> = {
+  XLM: 'native',
+  USDC: 'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+  BRZ: 'BRZ-GDVKY2GU2DRXBERTI7QUMZY7BMMV35SPCYZYGOLRJN6PXSO57KXH7UUS',
+  BRLT: 'BRLT-GDVKY2GU2DRXBERTI7QUMZY7BMMV35SPCYZYGOLRJN6PXSO57KXH7UUS',
+  AQUA: 'AQUA-GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA',
+};
+
+function resolveAsset(code: string): string {
+  const upper = code.toUpperCase();
+  return KNOWN_ASSETS[upper] ?? code;
+}
 
 async function brokerFetch<T>(path: string): Promise<T> {
   const res = await fetch(`${BROKER_API}${path}`, {
     headers: { 'User-Agent': 'TalkToStellar/1.0', Accept: 'application/json' },
     signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw new Error(`Stellar Broker ${path} → ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Stellar Broker ${path} → ${res.status}: ${text.slice(0, 200)}`);
+  }
   return res.json() as Promise<T>;
 }
 
-const XLM_ASSET = 'XLM:native';
-const USDC_ASSET = 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-
-function assetId(code: string): string {
-  if (code.toUpperCase() === 'XLM') return XLM_ASSET;
-  if (code.toUpperCase() === 'USDC') return USDC_ASSET;
-  if (code.toUpperCase() === 'BRZ') return 'BRZ:GDVKY2GU2DRXBERTI7QUMZY7BMMV35SPCYZYGOLRJN6PXSO57KXH7UUS';
-  if (code.toUpperCase() === 'BRLT') return 'BRLT:GDVKY2GU2DRXBERTI7QUMZY7BMMV35SPCYZYGOLRJN6PXSO57KXH7UUS';
-  return code;
-}
-
 export const StellarBrokerService = {
-  async getQuote(from: string, to: string, amount: string, slippage = '0.5') {
-    const fromId = assetId(from);
-    const toId = assetId(to);
-    const params = new URLSearchParams({ from: fromId, to: toId, amount, slippage });
+  async getHealth() {
+    try {
+      return await brokerFetch<any>('/');
+    } catch (e: any) {
+      logger.warn(`[stellar-broker] health failed: ${e.message}`);
+      throw e;
+    }
+  },
+
+  async getQuote(from: string, to: string, amount: string, direction: 'send' | 'receive' = 'send') {
+    const sellingAsset = resolveAsset(from);
+    const buyingAsset = resolveAsset(to);
+
+    const params = direction === 'send'
+      ? new URLSearchParams({ sellingAsset, buyingAsset, sellingAmount: amount })
+      : new URLSearchParams({ sellingAsset, buyingAsset, buyingAmount: amount });
+
     try {
       const data = await brokerFetch<any>(`/quote?${params}`);
       logger.debug(`[stellar-broker] quote ${from}→${to} amount=${amount}`);
-      return data;
+      return {
+        from: data.sellingAsset ?? from,
+        to: data.buyingAsset?.split('-')[0] ?? to,
+        sellAmount: data.sellingAmount,
+        buyAmount: data.estimatedBuyingAmount,
+        directTrade: data.directTrade,
+        slippageTolerance: data.slippageTolerance,
+        direction: data.direction,
+      };
     } catch (e: any) {
       logger.warn(`[stellar-broker] getQuote failed: ${e.message}`);
-      throw e;
-    }
-  },
-
-  async getRoutes(from: string, to: string) {
-    const fromId = assetId(from);
-    const toId = assetId(to);
-    const params = new URLSearchParams({ from: fromId, to: toId });
-    try {
-      return await brokerFetch<any>(`/routes?${params}`);
-    } catch (e: any) {
-      logger.warn(`[stellar-broker] getRoutes failed: ${e.message}`);
-      throw e;
-    }
-  },
-
-  async getSupportedAssets() {
-    try {
-      return await brokerFetch<any>('/assets');
-    } catch (e: any) {
-      logger.warn(`[stellar-broker] getSupportedAssets failed: ${e.message}`);
       throw e;
     }
   },
