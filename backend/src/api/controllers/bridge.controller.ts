@@ -638,9 +638,10 @@ export class BridgeController {
     try {
       const customerId = String(req.params.id);
       const accounts = await getBridgeService().listVirtualAccounts(customerId);
-      // Sync to DB
-      await Promise.all(accounts.map((va) => BridgeController.upsertVirtualAccount(va, customerId)));
-      res.json({ success: true, virtual_accounts: accounts });
+      const safeAccounts = Array.isArray(accounts) ? accounts : [];
+      // Sync to DB (non-blocking, errors caught inside upsertVirtualAccount)
+      void Promise.all(safeAccounts.map((va) => BridgeController.upsertVirtualAccount(va, customerId)));
+      res.json({ success: true, virtual_accounts: safeAccounts });
     } catch (error: any) {
       res.status(statusFromError(error)).json({
         success: false,

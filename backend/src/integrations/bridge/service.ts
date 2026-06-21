@@ -89,7 +89,8 @@ export class BridgeService {
     email?: string;
   }): Promise<BridgeCustomer[]> {
     const res = await this.client.get<{ count: number; data: BridgeCustomer[] }>('/customers', params as Record<string, string>);
-    return (res as any).data ?? (res as any) ?? [];
+    const data = (res as any).data ?? res;
+    return Array.isArray(data) ? data : [];
   }
 
   // ── KYC ───────────────────────────────────────────────────────
@@ -168,7 +169,8 @@ export class BridgeService {
     const res = await this.client.get<{ data: BridgeVirtualAccount[] }>(
       `/customers/${encodeURIComponent(customerId)}/virtual_accounts`,
     );
-    return (res as any).data ?? (res as any) ?? [];
+    const data = (res as any).data ?? res;
+    return Array.isArray(data) ? data : [];
   }
 
   async getVirtualAccount(accountId: string): Promise<BridgeVirtualAccount> {

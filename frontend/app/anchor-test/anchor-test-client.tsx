@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle2,
   ExternalLink,
-  Globe,
-  Info,
   Loader2,
   LogIn,
   Plus,
@@ -16,7 +14,6 @@ import {
   OperationalCard,
   OperationalHeader,
   OperationalPage,
-  OperationalStat,
   StatusPill,
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
@@ -77,12 +74,12 @@ async function runApi(method: string, path: string, body?: unknown) {
   return payload;
 }
 
-function statusColor(status?: string): "success" | "warning" | "error" | "info" | "neutral" {
-  if (!status) return "neutral";
-  if (status === "completed") return "success";
+function statusTone(status?: string): "confirm" | "error" | "gold" | "default" {
+  if (!status) return "default";
+  if (status === "completed") return "confirm";
   if (status === "error" || status === "expired") return "error";
-  if (status === "pending_stellar" || status === "pending_anchor" || status === "pending_external") return "warning";
-  return "info";
+  if (status === "pending_stellar" || status === "pending_anchor" || status === "pending_external") return "gold";
+  return "default";
 }
 
 // ── Component ─────────────────────────────────────────────────────────
@@ -251,12 +248,13 @@ export default function AnchorTestClient() {
     <OperationalPage>
       <OperationalHeader
         title="SEP-24 Anchor test"
-        subtitle="MoneyGram, Vibrant, Anclap — interactive deposit/withdrawal"
+        description="MoneyGram, Vibrant, Anclap — interactive deposit/withdrawal"
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ── Step 1: Anchor selection ─────────────────────────────── */}
-        <OperationalCard title="1. Select anchor">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">1. Select anchor</h2>
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {anchors.map((a) => (
@@ -322,7 +320,7 @@ export default function AnchorTestClient() {
                 {Object.entries(info.deposit || {}).map(([code, d]) => (
                   <div key={code} className="flex items-center justify-between">
                     <span className="font-mono">{code}</span>
-                    <StatusPill status={d.enabled ? "success" : "error"} label={d.enabled ? "enabled" : "disabled"} />
+                    <StatusPill tone={d.enabled ? "confirm" : "error"}>{d.enabled ? "enabled" : "disabled"}</StatusPill>
                     {d.fee_fixed != null && <span className="text-tts-muted">${d.fee_fixed} fee</span>}
                     {d.min_amount != null && <span className="text-tts-muted">min ${d.min_amount}</span>}
                   </div>
@@ -331,7 +329,7 @@ export default function AnchorTestClient() {
                 {Object.entries(info.withdraw || {}).map(([code, d]) => (
                   <div key={code} className="flex items-center justify-between">
                     <span className="font-mono">{code}</span>
-                    <StatusPill status={d.enabled ? "success" : "error"} label={d.enabled ? "enabled" : "disabled"} />
+                    <StatusPill tone={d.enabled ? "confirm" : "error"}>{d.enabled ? "enabled" : "disabled"}</StatusPill>
                   </div>
                 ))}
               </div>
@@ -340,7 +338,8 @@ export default function AnchorTestClient() {
         </OperationalCard>
 
         {/* ── Step 2: SEP-10 Auth ──────────────────────────────────── */}
-        <OperationalCard title="2. SEP-10 Authentication">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">2. SEP-10 Authentication</h2>
           <div className="space-y-3">
             <p className="text-xs text-tts-muted">
               The anchor issues a challenge tx — we sign it with the user secret and get a JWT.
@@ -382,7 +381,8 @@ export default function AnchorTestClient() {
         </OperationalCard>
 
         {/* ── Step 3: Deposit / Withdraw ───────────────────────────── */}
-        <OperationalCard title="3. Deposit / Withdraw">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">3. Deposit / Withdraw</h2>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -459,7 +459,8 @@ export default function AnchorTestClient() {
         </OperationalCard>
 
         {/* ── Step 4: Transaction history ──────────────────────────── */}
-        <OperationalCard title="4. Transaction history">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">4. Transaction history</h2>
           <div className="space-y-3">
             <Button
               onClick={loadTransactions}
@@ -482,7 +483,7 @@ export default function AnchorTestClient() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-tts-deep">{tx.id?.slice(0, 12)}...</span>
-                      <StatusPill status={statusColor(tx.status)} label={tx.status || "unknown"} />
+                      <StatusPill tone={statusTone(tx.status)}>{tx.status || "unknown"}</StatusPill>
                     </div>
                     <div className="text-tts-muted mt-1 flex gap-3">
                       <span>{tx.kind}</span>
@@ -498,7 +499,7 @@ export default function AnchorTestClient() {
               <div className="rounded border border-tts-border bg-tts-bg p-3 text-xs space-y-1">
                 <div className="font-semibold text-tts-deep">Detail</div>
                 <div><span className="text-tts-muted">ID:</span> <span className="font-mono">{txDetail.id}</span></div>
-                <div><span className="text-tts-muted">Status:</span> <StatusPill status={statusColor(txDetail.status)} label={txDetail.status || "—"} /></div>
+                <div><span className="text-tts-muted">Status:</span> <StatusPill tone={statusTone(txDetail.status)}>{txDetail.status || "—"}</StatusPill></div>
                 <div><span className="text-tts-muted">Kind:</span> {txDetail.kind}</div>
                 {txDetail.amount_in && <div><span className="text-tts-muted">Amount in:</span> {txDetail.amount_in}</div>}
                 {txDetail.amount_out && <div><span className="text-tts-muted">Amount out:</span> {txDetail.amount_out}</div>}
