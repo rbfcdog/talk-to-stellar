@@ -63,12 +63,25 @@ export class BridgeController {
   static async createCustomer(req: Request, res: Response): Promise<void> {
     try {
       const service = getBridgeService();
+      const email = readText(req.body?.email).toLowerCase();
       const customer = await service.createCustomer({
         first_name: readText(req.body?.first_name || req.body?.firstName),
         last_name: readText(req.body?.last_name || req.body?.lastName),
-        email: readText(req.body?.email),
+        email,
         type: "individual",
       });
+      // Persist to local DB so by-email lookup is instant and doesn't depend on Bridge pagination
+      if (customer?.id && email) {
+        await supabase.from('bridge_customers').upsert({
+          bridge_customer_id: customer.id,
+          email,
+          status: customer.status ?? null,
+          kyc_status: customer.kyc_status ?? null,
+          has_accepted_tos: customer.has_accepted_tos ?? false,
+          raw_bridge_data: customer,
+          last_synced_at: new Date().toISOString(),
+        }, { onConflict: 'bridge_customer_id' }).throwOnError();
+      }
       res.status(201).json({ success: true, customer });
     } catch (error: any) {
       logger.error(`[bridge] createCustomer failed: ${error.message}`);
@@ -106,18 +119,47 @@ export class BridgeController {
         res.status(400).json({ success: false, message: "Email is required." });
         return;
       }
-      // Try email filter first (Bridge supports ?email= query param)
       let found: any = null;
-      const filtered = await service.listCustomers({ email, limit: 10 });
-      found = filtered.find((c: any) => (c.email || "").toLowerCase() === email);
 
-      // Fallback: paginate through all customers (covers older accounts)
+      // 1. Fast path: local Supabase cache (populated on createCustomer)
+      const { data: dbRow } = await supabase
+        .from('bridge_customers')
+        .select('bridge_customer_id, email, status, kyc_status, raw_bridge_data')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (dbRow?.bridge_customer_id) {
+        // Re-fetch from Bridge to get fresh data
+        try {
+          found = await service.getCustomer(dbRow.bridge_customer_id);
+        } catch {
+          // Bridge fetch failed — return cached data so UI still loads
+          found = dbRow.raw_bridge_data ?? { id: dbRow.bridge_customer_id, email: dbRow.email };
+        }
+      }
+
+      // 2. Slow path: paginate through Bridge API (covers accounts created before DB cache existed)
       if (!found) {
         let startingAfter: string | undefined;
         for (let page = 0; page < 20 && !found; page++) {
-          const batch = await service.listCustomers({ starting_after: startingAfter, limit: 100 });
+          let batch: any[] = [];
+          try {
+            batch = await service.listCustomers({ starting_after: startingAfter, limit: 100 });
+          } catch { break; }
           if (!batch.length) break;
           found = batch.find((c: any) => (c.email || "").toLowerCase() === email);
+          if (found) {
+            // Backfill into DB so next lookup is fast
+            await supabase.from('bridge_customers').upsert({
+              bridge_customer_id: found.id,
+              email: (found.email || "").toLowerCase(),
+              status: found.status ?? null,
+              kyc_status: found.kyc_status ?? null,
+              has_accepted_tos: found.has_accepted_tos ?? false,
+              raw_bridge_data: found,
+              last_synced_at: new Date().toISOString(),
+            }, { onConflict: 'bridge_customer_id' });
+          }
           startingAfter = batch[batch.length - 1]?.id;
           if (batch.length < 100) break;
         }

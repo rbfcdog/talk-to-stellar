@@ -59,6 +59,7 @@ export interface BridgeCustomer {
   kyc_status?: KycStatus;
   country?: string;
   endorsements?: Array<{ name?: string; status?: string; requirements?: Record<string, unknown> }>;
+  has_accepted_tos?: boolean;
   created_at: string;
   updated_at: string;
 }
