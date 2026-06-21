@@ -275,7 +275,7 @@ function ReflectorPanel() {
 
   const loadRates = useCallback(async () => {
     setLoadingRates(true); setErrRates(null);
-    try { setRates(await api("/api/reflector/rates")); }
+    try { setRates(await api("/api/oracle/rates")); }
     catch (e: any) { setErrRates(e.message); }
     finally { setLoadingRates(false); }
   }, []);
@@ -283,7 +283,7 @@ function ReflectorPanel() {
   const fetchSingle = useCallback(async (asset: string) => {
     if (!asset.trim()) return;
     setLoadingPrice(true); setErrPrice(null); setPrice(null);
-    try { setPrice(await api(`/api/reflector/price/${encodeURIComponent(asset.trim())}`)); }
+    try { setPrice(await api(`/api/oracle/price/${encodeURIComponent(asset.trim())}`)); }
     catch (e: any) { setErrPrice(e.message); }
     finally { setLoadingPrice(false); }
   }, []);
@@ -291,7 +291,7 @@ function ReflectorPanel() {
   const fetchMulti = useCallback(async () => {
     setLoadingMulti(true); setErrMulti(null); setMultiPrices(null);
     try {
-      const d = await api(`/api/reflector/prices?assets=${encodeURIComponent(multiAssets)}`);
+      const d = await api(`/api/oracle/prices?assets=${encodeURIComponent(multiAssets)}`);
       setMultiPrices(d);
     }
     catch (e: any) { setErrMulti(e.message); }
@@ -425,7 +425,7 @@ function FraudPanel() {
   const screen = useCallback(async (addr: string) => {
     if (!addr.trim()) return;
     setLoading(true); setErr(null); setResult(null);
-    try { setResult(await api(`/api/fraud-screening/address/${encodeURIComponent(addr.trim())}`)); }
+    try { setResult(await api(`/api/fraud-screen/address/${encodeURIComponent(addr.trim())}`)); }
     catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -433,7 +433,7 @@ function FraudPanel() {
   const screenDomain = useCallback(async () => {
     if (!domain.trim()) return;
     setLoadingDomain(true); setErrDomain(null); setDomainResult(null);
-    try { setDomainResult(await api(`/api/fraud-screening/domain/${encodeURIComponent(domain.trim())}`)); }
+    try { setDomainResult(await api(`/api/fraud-screen/domain/${encodeURIComponent(domain.trim())}`)); }
     catch (e: any) { setErrDomain(e.message); }
     finally { setLoadingDomain(false); }
   }, [domain]);
@@ -443,7 +443,7 @@ function FraudPanel() {
     if (!addresses.length) return;
     setLoadingBatch(true); setErrBatch(null); setBatchResult(null);
     try {
-      setBatchResult(await api("/api/fraud-screening/batch", {
+      setBatchResult(await api("/api/fraud-screen/batch", {
         method: "POST",
         body: JSON.stringify({ addresses }),
       }));
@@ -621,7 +621,7 @@ function SoroswapPanel() {
   const loadTokens = useCallback(async () => {
     setLoadingTokens(true); setErrTokens(null);
     try {
-      const d = await api("/api/soroswap/tokens");
+      const d = await api("/api/swap/tokens");
       if (d?.error) { setErrTokens(`Soroswap API temporarily unavailable: ${d.error}`); return; }
       setTokens(Array.isArray(d) ? d : d.tokens ?? []);
     }
@@ -633,7 +633,7 @@ function SoroswapPanel() {
     setLoadingQuote(true); setErrQuote(null); setQuote(null); setXdr(null);
     try {
       setQuote(await api(
-        `/api/soroswap/quote?assetIn=${encodeURIComponent(assetIn)}&assetOut=${encodeURIComponent(assetOut)}&amount=${encodeURIComponent(amount)}&tradeType=${tradeType}`
+        `/api/swap/quote?assetIn=${encodeURIComponent(assetIn)}&assetOut=${encodeURIComponent(assetOut)}&amount=${encodeURIComponent(amount)}&tradeType=${tradeType}`
       ));
     }
     catch (e: any) { setErrQuote(e.message); }
@@ -644,7 +644,7 @@ function SoroswapPanel() {
     if (!quote || !senderAddress.trim()) return;
     setLoadingXdr(true); setErrXdr(null); setXdr(null);
     try {
-      setXdr(await api("/api/soroswap/build", {
+      setXdr(await api("/api/swap/build", {
         method: "POST",
         body: JSON.stringify({ quote, senderAddress: senderAddress.trim() }),
       }));
