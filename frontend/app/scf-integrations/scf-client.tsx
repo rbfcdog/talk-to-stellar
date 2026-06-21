@@ -434,7 +434,7 @@ function DefindexSection() {
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
-    try { const d = await api("/api/defindex/vaults"); setVaults(Array.isArray(d) ? d : d.vaults ?? []); }
+    try { const d = await api("/api/defindex/vaults"); setVaults(Array.isArray(d) ? d : d.vaults ?? (d.default_vault ? [{ id: d.default_vault, name: "Default Vault", address: d.default_vault, health: d.health }] : [])); }
     catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -580,7 +580,12 @@ function SoroswapSection() {
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
-    try { const d = await api("/api/swap/tokens"); setTokens(d.tokens ?? d); }
+    try {
+      const d = await api("/api/swap/tokens");
+      // If Soroswap API is down, backend returns { error: "..." }
+      if (d?.error) { setErr(`Soroswap temporarily unavailable: ${d.error}`); return; }
+      setTokens(Array.isArray(d) ? d : d.tokens ?? []);
+    }
     catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -617,7 +622,7 @@ function SoroswapSection() {
       {quoteErr && <div className="mt-2"><Err msg={quoteErr} /></div>}
       {quote && (
         <div className="mt-3 rounded border border-tts-border bg-tts-bg p-3 space-y-0">
-          <Row label="Output" value={`${quote.outputAmount} ${to}`} />
+          <Row label="Output" value={`${quote.outputAmount ?? quote.buyAmount} ${to}`} />
           <Row label="Price impact" value={quote.priceImpact != null ? `${quote.priceImpact}%` : undefined} />
           <Row label="Route" value={quote.path?.join(" → ")} />
           {quote.xdr && <p className="mt-2 break-all font-mono text-[10px] text-tts-muted">{quote.xdr.slice(0, 60)}…</p>}
@@ -661,8 +666,8 @@ function AllbridgeSection() {
 
   useEffect(() => { load(); }, [load]);
 
-  const stellar = data?.stellar;
-  const tokens: any[] = stellar?.tokens ?? (Array.isArray(stellar) ? stellar : []);
+  // Response shape: { tokens: [...] } or { stellar: { tokens: [...] } }
+  const tokens: any[] = data?.tokens ?? data?.stellar?.tokens ?? (Array.isArray(data) ? data : []);
 
   return (
     <OperationalCard>
@@ -725,7 +730,7 @@ function AxelarSection() {
   useEffect(() => { load(); }, [load]);
 
   const chains: any[] = data?.chains ?? [];
-  const filtered = search ? chains.filter((c) => (c.name ?? c.id ?? "").toLowerCase().includes(search.toLowerCase())) : chains;
+  const filtered = search ? chains.filter((c) => (c.chain_name ?? c.name ?? c.id ?? "").toLowerCase().includes(search.toLowerCase())) : chains;
 
   return (
     <OperationalCard>
@@ -744,7 +749,7 @@ function AxelarSection() {
           <div className="mb-4 max-h-40 overflow-y-auto space-y-0">
             {filtered.slice(0, 20).map((c: any, i: number) => (
               <div key={i} className="flex justify-between border-b border-tts-border/40 py-1.5 last:border-0">
-                <span className="text-xs font-semibold text-tts-deep">{c.name ?? c.id}</span>
+                <span className="text-xs font-semibold text-tts-deep">{c.chain_name ?? c.name ?? c.id}</span>
                 <StatusPill tone={c.status === "active" ? "confirm" : "default"}>{c.status ?? "—"}</StatusPill>
               </div>
             ))}
@@ -1128,14 +1133,17 @@ function ReflectorSection() {
 
   useEffect(() => { load(); }, [load]);
 
-  const entries: any[] = prices?.prices ?? [];
+  // Response shape: { XLM: { asset, price, priceStr, timestamp, source }, BRL: {...}, ... }
+  const priceEntries: [string, any][] = prices
+    ? Object.entries(prices).filter(([, v]) => v && typeof v === "object" && "price" in v)
+    : [];
 
   return (
     <OperationalCard>
       <SectionHead
         icon={<Activity className="h-4 w-4" />}
         title="Reflector Oracle — On-Chain Prices"
-        badge={entries.length > 0 ? <StatusPill tone="confirm">Live</StatusPill> : undefined}
+        badge={priceEntries.length > 0 ? <StatusPill tone="confirm">Live</StatusPill> : undefined}
         loading={loading}
         onRefresh={load}
       />
@@ -1147,16 +1155,16 @@ function ReflectorSection() {
         <Button size="sm" onClick={load} disabled={loading}>Fetch</Button>
       </div>
 
-      {entries.length > 0 && (
+      {priceEntries.length > 0 && (
         <div className="mb-4 space-y-0">
-          {entries.map((p: any) => (
+          {priceEntries.map(([asset, p]) => (
             <Row
-              key={p.asset}
-              label={`${p.asset}/USD`}
-              value={`$${typeof p.price === "number" ? p.price.toFixed(p.asset === "BRL" ? 4 : 4) : p.price}`}
+              key={asset}
+              label={`${asset}/USD`}
+              value={`$${typeof p.price === "number" ? p.price.toFixed(6) : p.price}`}
             />
           ))}
-          {prices?.source && <Row label="Source" value={prices.source} />}
+          {priceEntries[0]?.[1]?.source && <Row label="Source" value={priceEntries[0][1].source} />}
         </div>
       )}
 
