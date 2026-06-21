@@ -15,7 +15,6 @@ import {
   OperationalCard,
   OperationalHeader,
   OperationalPage,
-  StatusPill,
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,12 +146,13 @@ export default function WalletConnectClient() {
     <OperationalPage>
       <OperationalHeader
         title="Stellar Wallets Kit — SEP-10 Auth"
-        subtitle="Challenge/verify flow for Freighter, Albedo, xBull, LOBSTR, WalletConnect"
+        description="Challenge/verify flow for Freighter, Albedo, xBull, LOBSTR, WalletConnect"
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ── Wallet selector ──────────────────────────────────────── */}
-        <OperationalCard title="Select wallet type">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">Select wallet type</h2>
           <div className="space-y-2">
             {WALLET_TYPES.map((w) => (
               <button
@@ -186,7 +186,8 @@ export default function WalletConnectClient() {
         </OperationalCard>
 
         {/* ── Step 1: Challenge ────────────────────────────────────── */}
-        <OperationalCard title="1. Get challenge">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">1. Get challenge</h2>
           <div className="space-y-3">
             <Input
               placeholder="Your Stellar address (G...)"
@@ -233,7 +234,8 @@ export default function WalletConnectClient() {
         </OperationalCard>
 
         {/* ── Step 2: Verify ───────────────────────────────────────── */}
-        <OperationalCard title="2. Verify signed transaction">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">2. Verify signed transaction</h2>
           <div className="space-y-3">
             <p className="text-xs text-tts-muted">Paste the XDR after you signed it with your wallet.</p>
             <textarea
@@ -256,7 +258,8 @@ export default function WalletConnectClient() {
         </OperationalCard>
 
         {/* ── Session / Token ──────────────────────────────────────── */}
-        <OperationalCard title="Session">
+        <OperationalCard>
+          <h2 className="mb-3 text-sm font-bold text-tts-deep">Session</h2>
           {token ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-tts-confirm text-sm font-semibold">
