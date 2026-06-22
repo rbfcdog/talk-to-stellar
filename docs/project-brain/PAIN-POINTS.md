@@ -501,6 +501,15 @@
 - **Status**: **Fixed by `2a48ab3`**. Stream opening now has its own serialized queue and cooldown (`PAYMENT_WATCHER_STREAM_OPEN_SPACING_MS`, default 1000ms; `PAYMENT_WATCHER_STREAM_RATE_LIMIT_RETRY_MS`, default 300000ms), and stream `429`/`Too Many Requests` errors produce one provider-level warning instead of per-wallet warning fan-out (`backend/src/integrations/payment-watcher/service.ts:29`, `backend/src/integrations/payment-watcher/service.ts:286`, `backend/src/integrations/payment-watcher/service.ts:361`).
 - **Lesson**: **Long-lived stream fan-out needs its own concurrency and 429 policy**. Preflight throttling is not enough if opening hundreds of SSE streams can independently rate-limit Horizon.
 
+### #60 — Soroswap Fallback Quote Could Not Place Orders
+> **Quote**: "fix so the soroswap api works and the orders can be placed now, right now they cant be placed"
+> **Gloss**: `/key-integrations` showed a USDC->XLM fallback quote, but build/sign/submit could not proceed because fallback quotes were hard-blocked.
+
+- **Where**: `backend/src/integrations/soroswap/service.ts`, `backend/tests/soroswap.service.test.ts`, `frontend/app/key-integrations/key-integrations-client.tsx`, `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md`.
+- **Root cause**: The live Soroswap TESTNET `/quote` endpoint was reachable and authenticated, but returned `400 No path found` for the USDC->XLM Soroban-contract route. The backend then returned `stellar-broker-fallback` pricing with `buildAvailable: false`, so the page had no executable XDR path even though Horizon had a classic TESTNET USDC->XLM strict-send path.
+- **Status**: **Fixed by `6cae190`**. `SoroswapService.getQuote()` now tries Soroswap first, then attempts a buildable `stellar-path-payment-fallback` for symbol pairs using Horizon strict-send/strict-receive quotes before falling back to display-only Stellar Broker pricing. `buildSwapXdr()` now builds the fallback with the existing Stellar path-payment XDR builders and gives an actionable TESTNET funding/trustline error when the Freighter account is not activated.
+- **Lesson**: **Fallbacks must declare whether they are executable**. If Soroswap has no liquidity route but Horizon can build a trusted path payment, the page should expose that signable XDR; if only display pricing is available, keep build disabled.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -541,7 +550,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 56 documented incidents:
+Ranked by frequency × severity across the 57 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -549,19 +558,19 @@ Ranked by frequency × severity across the 56 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 7 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility and provider-path drift |
-| 5 | **H — Reliability** | 16 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 17 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 31 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59)
+- **Confirmed fixed**: 32 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 31 of 56 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 32 of 57 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -600,3 +609,4 @@ Fixing commits verified in codebase:
 | #57 | `2a48ab3` | Serialize Horizon SSE stream opening, apply a stream-level 429 cooldown, and suppress per-wallet stream warning fan-out |
 | #58 | `b067970` | Show Bridge virtual-account wire balances from live VA balance fields, destination wallet id matches, and received-funds activity |
 | #59 | `3087e4c` | Use Bridge customer-scoped virtual-account lookup and `/history` activity endpoint for wire balance totals |
+| #60 | `6cae190` | Build executable Stellar path-payment XDRs for Soroswap symbol-pair fallback quotes when Horizon has a trusted path |

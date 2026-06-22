@@ -18,6 +18,7 @@ import { loadSoroswapConfig, MAINNET_TOKENS, SoroswapConfig } from './config';
 import { SwapToken, SwapQuoteInput, SwapQuoteResult, SwapBuildInput, SwapBuildResult, SwapSendResult } from './types';
 import { logger } from '../../utils/logger';
 import { StellarBrokerService } from '../stellar-broker/service';
+import { PUBLIC_USDC_ISSUER, TESTNET_USDC_ISSUER } from '../../config/assets';
 
 // 10-minute cache for token list
 let tokenCache: { tokens: SwapToken[]; fetchedAt: number } | null = null;
@@ -66,6 +67,18 @@ function displayAsset(symbolOrAddress: string, resolvedAddress: string, token?: 
 
 function canUseBrokerFallback(input: SwapQuoteInput): boolean {
   return !isContractAddress(input.assetIn) && !isContractAddress(input.assetOut);
+}
+
+function resolveClassicSwapAsset(symbolOrAddress: string, network: string): { code: string; issuer?: string } | null {
+  const code = symbolOrAddress.trim().toUpperCase();
+  if (code === 'XLM' || code === 'NATIVE') return { code: 'XLM' };
+  if (code === 'USDC' || code === 'USD') {
+    return {
+      code: 'USDC',
+      issuer: network === 'mainnet' ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER,
+    };
+  }
+  return null;
 }
 
 function soroswapHeaders(config: SoroswapConfig, json = false): Record<string, string> {
@@ -236,6 +249,19 @@ export const SoroswapService = {
       logger.warn(`[soroswap] getQuote failed: ${e.message}`);
       if (canUseBrokerFallback(input)) {
         try {
+          return await SoroswapService.getStellarPathPaymentFallbackQuote({
+            input,
+            tradeType,
+            assetIn,
+            assetOut,
+            amountInStroops,
+            failureMessage: e.message,
+          });
+        } catch (pathFallbackError: any) {
+          logger.warn(`[soroswap] Stellar path-payment fallback quote failed: ${pathFallbackError.message}`);
+        }
+
+        try {
           return await SoroswapService.getBrokerFallbackQuote({
             input,
             tradeType,
@@ -304,6 +330,103 @@ export const SoroswapService = {
     };
   },
 
+  async getStellarPathPaymentFallbackQuote({
+    input,
+    tradeType,
+    assetIn,
+    assetOut,
+    amountInStroops,
+    failureMessage,
+  }: {
+    input: SwapQuoteInput;
+    tradeType: 'EXACT_IN' | 'EXACT_OUT';
+    assetIn: string;
+    assetOut: string;
+    amountInStroops: string;
+    failureMessage: string;
+  }): Promise<SwapQuoteResult> {
+    const config = loadSoroswapConfig();
+    const sourceAsset = resolveClassicSwapAsset(assetIn, config.network);
+    const destAsset = resolveClassicSwapAsset(assetOut, config.network);
+
+    if (!sourceAsset || !destAsset) {
+      throw new Error(`No classic Stellar fallback asset mapping for ${assetIn}->${assetOut}`);
+    }
+
+    const { StellarService } = await import('../../api/services/stellar.service');
+
+    if (tradeType === 'EXACT_OUT') {
+      const quote = await StellarService.quotePathPayment({
+        sourcePublicKey: input.senderAddress || '',
+        destination: input.senderAddress || '',
+        sourceAsset,
+        destAsset,
+        destAmount: input.amount,
+      } as any);
+
+      const amountIn = String(quote.sourceAmount || quote.sourceMax || '0');
+      const amountOut = String(quote.destinationAmount || input.amount);
+
+      return {
+        assetIn,
+        assetOut,
+        amountIn,
+        amountOut,
+        amountInStroops: SoroswapService.humanToStroops(amountIn),
+        amountOutStroops: SoroswapService.humanToStroops(amountOut),
+        priceImpact: 0,
+        protocols: ['sdex'],
+        route: quote.path ?? [],
+        rawQuote: {
+          provider: 'stellar-path-payment',
+          fallback: true,
+          tradeType,
+          soroswapError: failureMessage,
+          quote,
+        },
+        source: 'stellar-path-payment-fallback',
+        buildAvailable: true,
+        warning: 'Soroswap has no route for this pair on the configured network; using an executable Stellar path-payment route instead.',
+        network: networkNameForFreighter(config.network),
+        networkPassphrase: networkPassphraseFor(config.network),
+      };
+    }
+
+    const quote = await StellarService.quoteStrictSendConversion({
+      sourcePublicKey: input.senderAddress || '',
+      destination: input.senderAddress || '',
+      sourceAsset,
+      destAsset,
+      sourceAmount: input.amount,
+    } as any);
+    const amountIn = String(quote.sourceAmount || input.amount);
+    const amountOut = String(quote.destinationAmount || '0');
+
+    return {
+      assetIn,
+      assetOut,
+      amountIn,
+      amountOut,
+      amountInStroops,
+      amountOutStroops: SoroswapService.humanToStroops(amountOut),
+      priceImpact: 0,
+      protocols: ['sdex'],
+      route: quote.path ?? [],
+      rawQuote: {
+        provider: 'stellar-path-payment',
+        fallback: true,
+        tradeType,
+        soroswapError: failureMessage,
+        quote,
+      },
+      source: 'stellar-path-payment-fallback',
+      buildAvailable: true,
+      warning: 'Soroswap has no route for this pair on the configured network; using an executable Stellar path-payment route instead.',
+      network: networkNameForFreighter(config.network),
+      networkPassphrase: networkPassphraseFor(config.network),
+    };
+  },
+
   async getBrokerFallbackQuote({
     input,
     tradeType,
@@ -357,6 +480,26 @@ export const SoroswapService = {
     const config = loadSoroswapConfig();
     const slippageBps = input.slippageBps ?? config.defaultSlippageBps;
 
+    if (input.quote.source === 'stellar-path-payment-fallback' && input.quote.rawQuote?.provider === 'stellar-path-payment') {
+      try {
+        const xdr = await SoroswapService.buildStellarPathPaymentFallbackXdr(input, config);
+        return {
+          xdr,
+          quote: input.quote,
+          network: networkNameForFreighter(config.network),
+          networkPassphrase: networkPassphraseFor(config.network),
+        };
+      } catch (e: any) {
+        const message = String(e?.message || e || '');
+        if (message.includes('Not Found')) {
+          throw new Error(
+            `Freighter account ${input.senderAddress} is not funded on ${networkNameForFreighter(config.network)}. Activate/fund the account first, then add the source asset trustline before building the swap XDR.`
+          );
+        }
+        throw e;
+      }
+    }
+
     if (input.quote.buildAvailable === false || input.quote.rawQuote?.fallback || input.quote.rawQuote?.unavailable || input.quote.source === 'stellar-broker-fallback') {
       throw new Error('Soroswap XDR build unavailable for fallback quotes. Soroswap quote API is currently unavailable; use the quote for pricing only.');
     }
@@ -396,6 +539,38 @@ export const SoroswapService = {
       logger.warn(`[soroswap] buildSwapXdr failed: ${e.message}`);
       throw e;
     }
+  },
+
+  async buildStellarPathPaymentFallbackXdr(input: SwapBuildInput, config: SoroswapConfig): Promise<string> {
+    const sourceAsset = resolveClassicSwapAsset(input.quote.assetIn, config.network);
+    const destAsset = resolveClassicSwapAsset(input.quote.assetOut, config.network);
+    if (!sourceAsset || !destAsset) {
+      throw new Error(`No classic Stellar fallback asset mapping for ${input.quote.assetIn}->${input.quote.assetOut}`);
+    }
+
+    const { StellarService } = await import('../../api/services/stellar.service');
+    const quote = input.quote.rawQuote?.quote;
+    const tradeType = input.quote.rawQuote?.tradeType || 'EXACT_IN';
+
+    if (tradeType === 'EXACT_OUT') {
+      return StellarService.buildPathPaymentXdr({
+        sourcePublicKey: input.senderAddress,
+        destination: input.senderAddress,
+        sourceAsset,
+        destAsset,
+        destAmount: input.quote.amountOut,
+        quote,
+      } as any);
+    }
+
+    return StellarService.buildStrictSendConversionXdr({
+      sourcePublicKey: input.senderAddress,
+      destination: input.senderAddress,
+      sourceAsset,
+      sourceAmount: input.quote.amountIn,
+      destAsset,
+      quote,
+    } as any);
   },
 
   /**

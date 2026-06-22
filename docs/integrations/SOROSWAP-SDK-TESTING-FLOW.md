@@ -28,7 +28,20 @@ Current public endpoints:
 | Sign XDR | Freighter / wallet / Stellar Lab | `/key-integrations` Freighter action or external wallet | Yes |
 | Submit signed XDR | `POST` | `/api/swap/send` | Signed XDR required |
 
-The current backend tries Soroswap first. If Soroswap quote/build infrastructure is unavailable, it can return a `stellar-broker-fallback` quote for pricing only:
+The current backend tries Soroswap first. If Soroswap is reachable but has no route for a supported symbol pair, the backend tries an executable Stellar Horizon path-payment fallback before falling back to display-only pricing.
+
+Buildable Horizon path-payment fallback:
+
+```json
+{
+  "protocols": ["sdex"],
+  "source": "stellar-path-payment-fallback",
+  "buildAvailable": true,
+  "warning": "Soroswap has no route for this pair on the configured network; using an executable Stellar path-payment route instead."
+}
+```
+
+Display-only Broker pricing fallback:
 
 ```json
 {
@@ -39,7 +52,7 @@ The current backend tries Soroswap first. If Soroswap quote/build infrastructure
 }
 ```
 
-If the panel shows `Protocols: stellar-broker` or `Source: stellar-broker-fallback`, treat it as quote-only. Do not expect `/api/swap/build` to produce a Soroswap XDR for that fallback quote.
+If the panel shows `Source: stellar-path-payment-fallback`, `/api/swap/build` can build a classic Stellar path-payment XDR for the connected wallet. If the panel shows `Protocols: stellar-broker` or `Source: stellar-broker-fallback`, treat it as quote-only and do not expect `/api/swap/build` to produce an XDR.
 
 If Soroswap receives raw Soroban contract IDs but cannot find a route, the backend returns `source: "soroswap-unavailable"` with `buildAvailable: false`. This is also quote/build disabled; pick a different pair or network.
 
@@ -128,7 +141,7 @@ Use one of these modes:
 | Testnet execution | Verify signing/submission mechanics | Testnet only |
 | Mainnet micro-swap | Verify production route with tiny amount | Real funds |
 
-The built-in token fallback in `backend/src/integrations/soroswap/config.ts` includes mainnet XLM/USDC/BRZ/BRLT and testnet XLM/USDC. If `STELLAR_NETWORK=testnet`, Soroswap still needs liquidity for the selected pair before a real build/send path exists.
+The built-in token fallback in `backend/src/integrations/soroswap/config.ts` includes mainnet XLM/USDC/BRZ/BRLT and testnet XLM/USDC. If `STELLAR_NETWORK=testnet`, Soroswap still needs liquidity for a Soroswap-native build path. For USDC/XLM symbol pairs, the backend can now use a Horizon path-payment fallback when Soroswap has no TESTNET route but Horizon does.
 
 ### 2. Start The App
 
@@ -157,15 +170,17 @@ Expected quote-only output:
 
 ```text
 Input: 10 USDC
-Output: 47.6089662 XLM
+Output: [route amount] XLM
 Price impact: 0.0000%
-Protocols: stellar-broker or soroswap/aqua/phoenix/sdex
+Protocols: sdex or soroswap/aqua/phoenix/sdex or stellar-broker
+Source: stellar-path-payment-fallback or soroswap or stellar-broker-fallback
 ```
 
 Interpretation:
 
-- `stellar-broker` means the backend showed a pricing fallback. This is useful for display, but not a Soroswap XDR build.
-- `soroswap`, `aqua`, `phoenix`, or `sdex` means Soroswap returned a route that may be buildable.
+- `source: stellar-path-payment-fallback` with `protocols: sdex` means Soroswap had no route, but the backend found a buildable Horizon path-payment route.
+- `stellar-broker` means the backend showed display-only pricing. This is useful for display, but not executable.
+- `soroswap`, `aqua`, `phoenix`, or `sdex` without fallback source means Soroswap returned a route that may be buildable through Soroswap.
 - If `buildAvailable` is `false`, stop at quote testing.
 
 Equivalent curl:
@@ -283,7 +298,15 @@ Common failure:
 Soroswap XDR build unavailable for fallback quotes.
 ```
 
-This means the quote came from `stellar-broker-fallback`; fix Soroswap API/key/provider availability or use the quote as display-only.
+This means the quote came from `stellar-broker-fallback`; use the quote as display-only or pick a pair/network with an executable route.
+
+Another common TESTNET failure:
+
+```text
+Freighter account G... is not funded on TESTNET.
+```
+
+This means the connected Freighter public key does not exist on TESTNET yet. Activate/fund it first, then add the source asset trustline before building the swap XDR.
 
 ### 8. Sign And Submit The XDR
 
@@ -292,7 +315,7 @@ You have three practical options.
 Option A: Use `/key-integrations` with Freighter:
 
 1. Open `http://localhost:3000/key-integrations`.
-2. In the Soroswap card, get a buildable non-fallback quote.
+2. In the Soroswap card, get a buildable quote. `stellar-path-payment-fallback` is buildable; `stellar-broker-fallback` is not.
 3. Connect Freighter.
 4. Confirm Freighter network matches the backend network shown in the card.
 5. Build XDR for the connected address.
@@ -392,7 +415,16 @@ Output 47.6089662 XLM
 Protocols stellar-broker
 ```
 
-That means price discovery works through fallback pricing. It does not prove Soroswap can build an executable XDR.
+That means price discovery works through display-only fallback pricing. It does not prove an executable XDR is available.
+
+When it shows:
+
+```text
+Protocols sdex
+Source stellar-path-payment-fallback
+```
+
+That means Soroswap had no route, but the backend found an executable Horizon path-payment route. The XDR builder can run after the wallet account exists and has the source asset balance/trustline.
 
 When it shows `Build Swap Transaction (XDR)`, the user must enter a real `G...` Stellar public key. The output is still unsigned. Nothing moves until the wallet signs and submits it.
 
@@ -404,8 +436,8 @@ The production-grade flow should be:
 User asks to swap
   -> Backend resolves source asset, destination asset, amount, and user wallet
   -> Backend gets Soroswap quote
-  -> Backend rejects fallback quotes for execution or shows them as estimate-only
-  -> Backend builds unsigned XDR for the user's wallet
+  -> Backend builds Soroswap XDR, or a trusted Stellar path-payment fallback XDR when Soroswap has no route
+  -> Backend rejects display-only pricing fallbacks for execution
   -> User signs with wallet/passkey/approved signing flow
   -> Signed XDR is submitted
   -> Backend records tx hash, quote, route, and status
@@ -418,7 +450,8 @@ Soroswap's role is only the quote/build/send rail for token swaps. Wallet creati
 
 - `/api/swap/tokens` returns tokens.
 - `/api/swap/quote` returns quote fields: input, output, price impact, protocols.
-- Fallback quote shows `buildAvailable: false`.
+- Display-only Broker fallback quote shows `buildAvailable: false`.
+- Executable path-payment fallback quote shows `source: "stellar-path-payment-fallback"` and `buildAvailable: true`.
 - Non-fallback Soroswap quote can build XDR with a real sender address.
 - The sender wallet exists on the selected network.
 - The sender wallet has enough input asset and XLM for fees/reserve.

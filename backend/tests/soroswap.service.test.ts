@@ -5,10 +5,23 @@ jest.mock('../src/utils/logger', () => ({
 }));
 
 const mockBrokerGetQuote = jest.fn();
+const mockQuotePathPayment = jest.fn();
+const mockQuoteStrictSendConversion = jest.fn();
+const mockBuildPathPaymentXdr = jest.fn();
+const mockBuildStrictSendConversionXdr = jest.fn();
 
 jest.mock('../src/integrations/stellar-broker/service', () => ({
   StellarBrokerService: {
     getQuote: mockBrokerGetQuote,
+  },
+}));
+
+jest.mock('../src/api/services/stellar.service', () => ({
+  StellarService: {
+    quotePathPayment: mockQuotePathPayment,
+    quoteStrictSendConversion: mockQuoteStrictSendConversion,
+    buildPathPaymentXdr: mockBuildPathPaymentXdr,
+    buildStrictSendConversionXdr: mockBuildStrictSendConversionXdr,
   },
 }));
 
@@ -36,6 +49,29 @@ describe('SoroswapService', () => {
       slippageTolerance: 0.02,
       direction: 'strict_send',
     });
+    mockQuoteStrictSendConversion.mockResolvedValue({
+      sourceAsset: { code: 'USDC', issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' },
+      destinationAsset: { code: 'XLM' },
+      sourceAmount: '1',
+      effectiveSourceAmount: '1',
+      destinationAmount: '4.65',
+      destinationMin: '4.557',
+      networkFeeXlm: '0.00001',
+      path: [],
+    });
+    mockQuotePathPayment.mockResolvedValue({
+      sourceAsset: { code: 'XLM' },
+      destinationAsset: { code: 'USDC', issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' },
+      destinationAmount: '10',
+      sourceAmount: '2.1',
+      sourceMax: '2.142',
+      pathSourceAmount: '2.1',
+      pathSourceMax: '2.142',
+      networkFeeXlm: '0.00001',
+      path: [{ code: 'AQUA', issuer: 'GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA', type: 'credit_alphanum4' }],
+    });
+    mockBuildStrictSendConversionXdr.mockResolvedValue('AAAA...STRICT_SEND_XDR...ZZZZ');
+    mockBuildPathPaymentXdr.mockResolvedValue('AAAA...STRICT_RECEIVE_XDR...ZZZZ');
     SoroswapService.clearTokenCache();
   });
 
@@ -166,7 +202,7 @@ describe('SoroswapService', () => {
       });
     });
 
-    it('returns a Stellar Broker fallback quote on non-ok Soroswap API response', async () => {
+    it('returns a buildable Stellar path-payment fallback quote on non-ok Soroswap API response', async () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 400,
@@ -180,24 +216,47 @@ describe('SoroswapService', () => {
         assetOut: 'XLM',
         amountIn: '1',
         amountOut: '4.65',
-        protocols: ['stellar-broker'],
-        source: 'stellar-broker-fallback',
-        buildAvailable: false,
+        protocols: ['sdex'],
+        source: 'stellar-path-payment-fallback',
+        buildAvailable: true,
       });
       expect(result.rawQuote).toMatchObject({
-        provider: 'stellar-broker',
+        provider: 'stellar-path-payment',
         fallback: true,
       });
-      expect(mockBrokerGetQuote).toHaveBeenCalledWith('USDC', 'XLM', '1', 'send');
+      expect(mockQuoteStrictSendConversion).toHaveBeenCalledWith(expect.objectContaining({
+        sourceAsset: expect.objectContaining({ code: 'USDC' }),
+        destAsset: { code: 'XLM' },
+        sourceAmount: '1',
+      }));
+      expect(mockBrokerGetQuote).not.toHaveBeenCalled();
     });
 
-    it('returns a Stellar Broker fallback quote on Soroswap network error', async () => {
+    it('returns a buildable Stellar path-payment fallback quote on Soroswap network error', async () => {
       fetchMock.mockRejectedValue(new Error('Network unreachable'));
 
       const result = await SoroswapService.getQuote({ assetIn: 'USDC', assetOut: 'XLM', amount: '1' });
 
-      expect(result.source).toBe('stellar-broker-fallback');
+      expect(result.source).toBe('stellar-path-payment-fallback');
       expect(result.rawQuote.soroswapError).toBe('Network unreachable');
+    });
+
+    it('falls back to non-buildable Stellar Broker pricing when Horizon path-payment quote fails', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => 'No path found',
+      } as any);
+      mockQuoteStrictSendConversion.mockRejectedValue(new Error('No Horizon path'));
+
+      const result = await SoroswapService.getQuote({ assetIn: 'USDC', assetOut: 'XLM', amount: '1' });
+
+      expect(result).toMatchObject({
+        source: 'stellar-broker-fallback',
+        buildAvailable: false,
+        protocols: ['stellar-broker'],
+      });
+      expect(mockBrokerGetQuote).toHaveBeenCalledWith('USDC', 'XLM', '1', 'send');
     });
 
     it('returns a non-buildable unavailable quote for raw contract pairs when Soroswap has no route', async () => {
@@ -236,12 +295,6 @@ describe('SoroswapService', () => {
         status: 400,
         text: async () => 'Bad request',
       } as any);
-      mockBrokerGetQuote.mockResolvedValue({
-        sellAmount: '2.1',
-        buyAmount: '10',
-        directTrade: { path: ['AQUA'] },
-      });
-
       const result = await SoroswapService.getQuote({
         assetIn: 'XLM',
         assetOut: 'USDC',
@@ -251,8 +304,12 @@ describe('SoroswapService', () => {
 
       expect(result.amountIn).toBe('2.1');
       expect(result.amountOut).toBe('10');
-      expect(result.route).toEqual(['AQUA']);
-      expect(mockBrokerGetQuote).toHaveBeenCalledWith('XLM', 'USDC', '10', 'receive');
+      expect(result.route).toEqual([{ code: 'AQUA', issuer: 'GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA', type: 'credit_alphanum4' }]);
+      expect(mockQuotePathPayment).toHaveBeenCalledWith(expect.objectContaining({
+        sourceAsset: { code: 'XLM' },
+        destAsset: expect.objectContaining({ code: 'USDC' }),
+        destAmount: '10',
+      }));
     });
   });
 
@@ -316,7 +373,72 @@ describe('SoroswapService', () => {
         .rejects.toThrow('missing xdr field');
     });
 
-    it('rejects XDR build for fallback quotes', async () => {
+    it('builds a strict-send XDR for executable Stellar path-payment fallback quotes', async () => {
+      const fallbackQuote = {
+        assetIn: 'USDC',
+        assetOut: 'XLM',
+        amountIn: '1',
+        amountOut: '4.65',
+        amountInStroops: '10000000',
+        amountOutStroops: '46500000',
+        priceImpact: 0,
+        protocols: ['sdex'],
+        route: [],
+        rawQuote: {
+          provider: 'stellar-path-payment',
+          fallback: true,
+          tradeType: 'EXACT_IN',
+          quote: { sourceAmount: '1', destinationAmount: '4.65', destinationMin: '4.557', path: [] },
+        },
+        source: 'stellar-path-payment-fallback',
+        buildAvailable: true,
+      };
+
+      const result = await SoroswapService.buildSwapXdr({
+        quote: fallbackQuote,
+        senderAddress: 'GABC',
+      });
+
+      expect(result.xdr).toBe('AAAA...STRICT_SEND_XDR...ZZZZ');
+      expect(mockBuildStrictSendConversionXdr).toHaveBeenCalledWith(expect.objectContaining({
+        sourcePublicKey: 'GABC',
+        destination: 'GABC',
+        sourceAsset: expect.objectContaining({ code: 'USDC' }),
+        destAsset: { code: 'XLM' },
+        sourceAmount: '1',
+      }));
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('maps unfunded fallback sender accounts to an actionable Freighter error', async () => {
+      mockBuildStrictSendConversionXdr.mockRejectedValueOnce(new Error('Failed to build conversion transaction: Not Found'));
+      const fallbackQuote = {
+        assetIn: 'USDC',
+        assetOut: 'XLM',
+        amountIn: '1',
+        amountOut: '4.65',
+        amountInStroops: '10000000',
+        amountOutStroops: '46500000',
+        priceImpact: 0,
+        protocols: ['sdex'],
+        route: [],
+        rawQuote: {
+          provider: 'stellar-path-payment',
+          fallback: true,
+          tradeType: 'EXACT_IN',
+          quote: { sourceAmount: '1', destinationAmount: '4.65', destinationMin: '4.557', path: [] },
+        },
+        source: 'stellar-path-payment-fallback',
+        buildAvailable: true,
+      };
+
+      await expect(SoroswapService.buildSwapXdr({
+        quote: fallbackQuote,
+        senderAddress: 'GUNFUNDED',
+      })).rejects.toThrow('Freighter account GUNFUNDED is not funded on PUBLIC');
+    });
+
+    it('rejects XDR build for non-buildable Broker fallback quotes', async () => {
       const fallbackQuote = {
         assetIn: 'USDC',
         assetOut: 'XLM',
