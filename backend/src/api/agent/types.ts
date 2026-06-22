@@ -112,6 +112,8 @@ export enum IntentType {
   PRICE_QUOTE = "price_quote",
   PIX = "pix",
   YIELD = "yield",
+  WIRE_ONRAMP = "wire_onramp",
+  SWAP = "swap",
   GENERAL = "general",
 }
 

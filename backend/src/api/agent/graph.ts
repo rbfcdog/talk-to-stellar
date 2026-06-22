@@ -146,6 +146,16 @@ const INTENT_ROUTING_SPECS: Array<{ intent: IntentType; toolName: string; descri
     description: 'Use when the user asks to create/register/cadastrar/open a new account or start onboarding.',
   },
   {
+    intent: IntentType.WIRE_ONRAMP,
+    toolName: 'route_wire_onramp_intent',
+    description: 'Use when the user wants to bring, receive, add, or deposit USD/dollars from a US bank account via wire transfer or ACH. Portuguese examples: "quero trazer dólares do meu banco americano", "depositar via wire", "trazer money dos EUA", "receber USD de fora", "wire 500 dolares", "trazer 500 USD via banco nos EUA", "quero depositar em dólar via transferência bancária". This is distinct from PIX (which is BRL via Brazilian banking). Never use for PIX on-ramp, PIX off-ramp, or BRL/USDC swap flows. Use only when the source is a foreign/US bank account and the user wants USD to arrive in their TalkToStellar balance.',
+  },
+  {
+    intent: IntentType.SWAP,
+    toolName: 'route_swap_intent',
+    description: 'Use when the user wants to swap/exchange tokens directly via DEX routes (Soroswap, Phoenix, Aqua, SDEX), especially non-BRL token pairs: XLM↔USDC, USDC↔BRZ, BRZ↔XLM, USDC↔XLM, XLM↔BRZ. Portuguese examples: "trocar XLM por USDC", "swap 100 USDC por BRZ", "quero fazer swap", "exchange XLM para USDC", "trocar tokens", "swap 50 XLM". For BRL↔USDC conversions that involve PIX, prefer route_conversion_intent. Use here only for direct DEX token swaps between crypto assets without PIX involvement. Fill amount, source_asset_code (from), and dest_asset_code (to) when present.',
+  },
+  {
     intent: IntentType.WALLET,
     toolName: 'route_wallet_intent',
     description: 'Use for wallet setup, wallet creation, account connection, wallet public key, public profile, or general wallet management that is not login/logout. Fill wallet_action=profile when the user asks for profile/perfil, wallet_action=public_key when the user asks for public crypto/Stellar key, wallet_action=receiving_key when the user asks for PIX/email receiving key, and wallet_action=manage for generic wallet management.',
@@ -6072,6 +6082,8 @@ Ela já está pronta para consultar saldo, salvar contatos e enviar dinheiro.`;
       [IntentType.PRICE_QUOTE]: ActionType.GET_PRICE_QUOTE,
       [IntentType.PIX]: ActionType.INITIATE_PIX,
       [IntentType.YIELD]: ActionType.MANAGE_YIELD,
+      [IntentType.WIRE_ONRAMP]: ActionType.NONE,
+      [IntentType.SWAP]: ActionType.NONE,
       [IntentType.GENERAL]: ActionType.NONE,
     };
 

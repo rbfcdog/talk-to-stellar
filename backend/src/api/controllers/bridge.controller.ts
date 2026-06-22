@@ -241,6 +241,58 @@ async function validateStellarDestination(address: string): Promise<{ ok: boolea
 }
 
 export class BridgeController {
+  // ── Session-based helpers ──────────────────────────────────────
+
+  static async getSessionUsdAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const sessionId = String(
+        req.query.session_id || req.headers['x-session-id'] || ''
+      ).trim();
+      if (!sessionId) {
+        res.status(400).json({ success: false, message: 'session_id required' });
+        return;
+      }
+      const { data: session } = await supabase
+        .from('agent_sessions')
+        .select('email, user_id')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+      const email = session?.email;
+      if (!email) {
+        res.status(404).json({ success: false, message: 'Session not found or has no email.' });
+        return;
+      }
+      const { data: bridgeRow } = await supabase
+        .from('bridge_customers')
+        .select('bridge_customer_id, kyc_status, status')
+        .eq('email', email)
+        .maybeSingle();
+      if (!bridgeRow?.bridge_customer_id) {
+        res.json({ success: true, has_account: false, kyc_status: null, virtual_accounts: [] });
+        return;
+      }
+      const service = getBridgeService();
+      let virtualAccounts: any[] = [];
+      try {
+        const accounts = await service.listVirtualAccounts(bridgeRow.bridge_customer_id);
+        virtualAccounts = (Array.isArray(accounts) ? accounts : []).filter(
+          (va: any) => va.currency === 'usd' || va.currency === 'USD'
+        );
+      } catch {
+        // non-fatal
+      }
+      res.json({
+        success: true,
+        has_account: true,
+        kyc_status: bridgeRow.kyc_status,
+        customer_status: bridgeRow.status,
+        virtual_accounts: virtualAccounts,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || 'Failed to load account.' });
+    }
+  }
+
   // ── Customers ─────────────────────────────────────────────────
 
   static async createCustomer(req: Request, res: Response): Promise<void> {
