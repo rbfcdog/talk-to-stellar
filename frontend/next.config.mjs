@@ -2,12 +2,13 @@ import { dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const appDir = dirname(fileURLToPath(import.meta.url))
+const productionBackendFallback = "https://talk-to-stellar-production-e284.up.railway.app"
 
 function backendBaseUrl() {
   return (
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "http://localhost:3001"
+    (process.env.NODE_ENV === "production" ? productionBackendFallback : "http://localhost:3001")
   ).replace(/\/+$/, "")
 }
 

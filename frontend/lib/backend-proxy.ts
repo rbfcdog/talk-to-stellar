@@ -8,6 +8,8 @@ import {
 } from "@/lib/server-session";
 import { publicErrorPayload } from "@/lib/public-errors";
 
+const PRODUCTION_BACKEND_FALLBACK = "https://talk-to-stellar-production-e284.up.railway.app";
+
 function getBackendBaseUrl() {
   const fromBackend = process.env.BACKEND_URL;
   if (fromBackend) return fromBackend.replace(/\/$/, "");
@@ -20,7 +22,11 @@ function getBackendBaseUrl() {
     process.env.NEXT_PUBLIC_AGENT_API_URL ||
     "";
 
-  if (!fromPublic) return "http://localhost:3001";
+  if (!fromPublic) {
+    return process.env.NODE_ENV === "production"
+      ? PRODUCTION_BACKEND_FALLBACK
+      : "http://localhost:3001";
+  }
   return fromPublic.replace(/\/api\/agent\/query$/, "").replace(/\/$/, "");
 }
 

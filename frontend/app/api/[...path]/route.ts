@@ -1,30 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-
-const BACKEND =
-  process.env.BACKEND_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:3001";
+import { NextRequest } from "next/server";
+import { proxyBackendApi } from "@/lib/backend-proxy";
 
 async function proxy(req: NextRequest, path: string[]) {
-  const sub = path.join("/");
-  const qs = req.nextUrl.searchParams.toString();
-  const target = `${BACKEND}/api/${sub}${qs ? `?${qs}` : ""}`;
-
-  try {
-    const res = await fetch(target, {
-      method: req.method,
-      headers: { "Content-Type": "application/json" },
-      body:
-        req.method !== "GET" && req.method !== "HEAD"
-          ? await req.text()
-          : undefined,
-      signal: AbortSignal.timeout(30_000),
-    });
-    const data = await res.json().catch(() => ({}));
-    return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json({ error: "Backend unreachable" }, { status: 502 });
-  }
+  return proxyBackendApi(req, "api", path, { injectSession: false });
 }
 
 export async function GET(
