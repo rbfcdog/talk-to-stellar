@@ -29,6 +29,7 @@ TalkToStellar is a conversational money platform. Users send money through Whats
 | Ops dashboard | `/ops/login` → DB-backed admin session → `/ops` complete DB transaction history; normalized rows link to TransferOrchestrator detail | ✅ Polished ledger with secure login; lifecycle detail screenshots pending seeded transfer |
 | Admin transactions dashboard | `/admin/transactions` → `/api/transfers` → TransferOrchestrator records/events | ✅ Frontend route; final evidence screenshots pending |
 | Wire payout test | `/wire-test` → `/api/transfers/:id/payout-evidence` + protected Circle payout action endpoints | ✅ Frontend route for Circle sandbox wire instruction and status polling |
+| Key integrations test panel | `/key-integrations` → same-origin `/api/abroad`, `/api/oracle`, `/api/fraud-screen`, `/api/swap` → backend integration routes | ✅ Frontend route; proxy/backend reachability hardened by `ef1f793` |
 | Admin fee wallet | Configurable treasury public key | ✅ Configured |
 | FAQ page | Standalone web page | ⚠️ Pending (pain point #38) |
 
