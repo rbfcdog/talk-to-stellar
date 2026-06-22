@@ -95,6 +95,10 @@ type VirtualAccountData = {
   destination_address?: string;
   source_deposit_instructions?: Record<string, unknown>;
   destination?: Record<string, unknown>;
+  balance?: string | { amount?: string; currency?: string };
+  balances?: Array<{ amount?: string; currency?: string }>;
+  available_balance?: string | { amount?: string; currency?: string };
+  current_balance?: string | { amount?: string; currency?: string };
   created_at?: string;
 };
 
@@ -122,11 +126,32 @@ type TransferData = {
 };
 
 type StellarBalance = { asset_type: string; asset_code?: string; balance: string };
+type VirtualAccountBalance = {
+  amount: string;
+  currency: string;
+  source?: "virtual_account" | "bridge_wallet" | "activity" | string;
+  label?: string;
+  wallet_id?: string;
+  event_count?: number;
+};
+type VABalanceState = {
+  balances: VirtualAccountBalance[];
+  activityTotals?: VirtualAccountBalance[];
+  loading: boolean;
+  error?: string;
+  warnings?: string[];
+  refreshedAt?: string;
+};
 type ReadinessData = { status?: string; kyc_status?: string; endorsements?: string[]; pix_ready?: boolean };
 type ExchangeRateData = { midmarket_rate?: string; buy_rate?: string; sell_rate?: string };
 type EstimateData = { source_amount?: string; source_currency?: string; destination_amount?: string; destination_currency?: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────
+
+function formatDecimal(value: string | number | undefined, decimals = 2): string {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toFixed(decimals) : String(value ?? "0");
+}
 
 function DepositInstructions({ instr, onCopy }: { instr: Record<string, unknown>; onCopy: (v: string) => void }) {
   const fields: Array<[string, string]> = [];
@@ -330,8 +355,8 @@ export default function BridgeTestClient() {
   const [vaActivity, setVaActivity] = useState<{ vaId: string; events: VAEvent[] } | null>(null);
   const [vaActivityLoading, setVaActivityLoading] = useState(false);
 
-  // VA destination on-chain balance
-  const [vaBalances, setVaBalances] = useState<Record<string, { balances: StellarBalance[]; loading: boolean; error?: string }>>({});
+  // VA live balance / received-funds activity
+  const [vaBalances, setVaBalances] = useState<Record<string, VABalanceState>>({});
 
   // Exchange rates
   const [rateFrom, setRateFrom] = useState("usd");
@@ -448,10 +473,8 @@ export default function BridgeTestClient() {
   useEffect(() => {
     for (const va of virtualAccounts) {
       if (!va.id) continue;
-      const addr = (va.destination_address || (va.destination as any)?.address || (va.destination as any)?.to_address) as string;
-      const chain = (va.destination_chain || (va.destination as any)?.payment_rail || (va.destination as any)?.chain) as string;
-      if (addr && !vaBalances[va.id]) {
-        fetchVaDestinationBalance(va.id, addr, chain);
+      if (!vaBalances[va.id]) {
+        fetchVaDestinationBalance(va.id);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -803,42 +826,38 @@ export default function BridgeTestClient() {
     }
   }
 
-  async function fetchVaDestinationBalance(vaId: string, address: string, _chain?: string) {
-    if (!address) return;
-    setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: true } }));
-    // Look up in Bridge wallet balances (covers base, ethereum, solana, etc.)
-    const match = bridgeBalances.filter((b) => b.wallet_id === address || b.wallet_id?.toLowerCase() === address.toLowerCase());
-    if (match.length > 0) {
-      setVaBalances((prev) => ({ ...prev, [vaId]: {
-        balances: match.map((b) => ({
-          asset_type: 'credit_alphanum4',
-          asset_code: b.currency?.toUpperCase(),
-          balance: b.amount || '0',
-        })),
-        loading: false,
-      }}));
-    } else {
-      // Refresh bridge balances and retry
-      try {
-        const p = await runApi('GET', '/wallets/balances');
-        const fresh = (p.balances as Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>) || [];
-        setBridgeBalances(fresh);
-        const freshMatch = fresh.filter((b) => b.wallet_id === address || b.wallet_id?.toLowerCase() === address.toLowerCase());
-        if (freshMatch.length > 0) {
-          setVaBalances((prev) => ({ ...prev, [vaId]: {
-            balances: freshMatch.map((b) => ({
-              asset_type: 'credit_alphanum4',
-              asset_code: b.currency?.toUpperCase(),
-              balance: b.amount || '0',
-            })),
-            loading: false,
-          }}));
-        } else {
-          setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: false, error: 'No balance found for this wallet — has it received funds?' } }));
-        }
-      } catch (e: any) {
-        setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: false, error: e.message || 'Failed to fetch Bridge balances' } }));
-      }
+  async function fetchVaDestinationBalance(vaId: string) {
+    if (!customerId || !vaId) return;
+    setVaBalances((prev) => ({
+      ...prev,
+      [vaId]: { balances: prev[vaId]?.balances ?? [], loading: true },
+    }));
+    try {
+      const p = await runApi(
+        "GET",
+        `/customers/${encodeURIComponent(customerId)}/virtual-accounts/${encodeURIComponent(vaId)}/balance`,
+      );
+      const balances = (p.balances as VirtualAccountBalance[]) || [];
+      setVaBalances((prev) => ({
+        ...prev,
+        [vaId]: {
+          balances,
+          activityTotals: (p.activity_totals as VirtualAccountBalance[]) || [],
+          loading: false,
+          warnings: (p.warnings as string[]) || [],
+          refreshedAt: p.refreshed_at as string | undefined,
+          error: balances.length ? undefined : "No live balance or received-funds activity returned yet.",
+        },
+      }));
+    } catch (e: any) {
+      setVaBalances((prev) => ({
+        ...prev,
+        [vaId]: {
+          balances: prev[vaId]?.balances ?? [],
+          loading: false,
+          error: e.message || "Failed to fetch virtual-account balance",
+        },
+      }));
     }
   }
 
@@ -1695,9 +1714,17 @@ export default function BridgeTestClient() {
                   const destAddr = (va.destination_address || (va.destination as any)?.address || (va.destination as any)?.to_address) as string;
                   const destChain = (va.destination_chain || (va.destination as any)?.payment_rail || (va.destination as any)?.chain) as string;
                   const bal = va.id ? vaBalances[va.id] : null;
+                  const positiveBalances = (bal?.balances || []).filter((b) => Number(b.amount || 0) > 0);
+                  const visibleBalances = positiveBalances.length ? positiveBalances : (bal?.balances || []);
                   // Total deposited from activity events for this VA
                   const activityTotal = showActivity && vaActivity?.events
-                    ? vaActivity.events.reduce((sum, ev) => sum + (parseFloat(ev.amount || '0') || 0), 0)
+                    ? vaActivity.events
+                        .filter((ev) => {
+                          const type = String(ev.type || '').toLowerCase();
+                          return /(funds_received|deposit|received|credit|wire|ach|sepa|pix)/.test(type) &&
+                            !/(failed|reversed|returned|cancelled|canceled|fee|debit|withdraw)/.test(type);
+                        })
+                        .reduce((sum, ev) => sum + (parseFloat(ev.amount || '0') || 0), 0)
                     : null;
                   return (
                     <div key={va.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-3 text-xs">
@@ -1719,31 +1746,49 @@ export default function BridgeTestClient() {
                       {destChain && (
                         <div className="mt-1.5 flex items-center gap-3 text-tts-muted">
                           <span>→ {destChain}{destAddr ? `: ${destAddr.slice(0, 12)}…${destAddr.slice(-6)}` : ''}</span>
-                          {destAddr && (
-                            <button
-                              className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
-                              onClick={() => fetchVaDestinationBalance(va.id!, destAddr, destChain)}
-                              disabled={bal?.loading}
-                            >
-                              {bal?.loading ? '…' : (bal?.balances?.length ?? 0) > 0 ? 'Refresh' : 'Balance'}
-                            </button>
-                          )}
+                          <button
+                            className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
+                            onClick={() => fetchVaDestinationBalance(va.id!)}
+                            disabled={bal?.loading}
+                          >
+                            {bal?.loading ? '…' : (bal?.balances?.length ?? 0) > 0 ? 'Refresh' : 'Balance'}
+                          </button>
                         </div>
                       )}
-                      {bal && (bal.balances?.length ?? 0) > 0 && (
+                      {!destChain && va.id && (
+                        <div className="mt-1.5">
+                          <button
+                            className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
+                            onClick={() => fetchVaDestinationBalance(va.id!)}
+                            disabled={bal?.loading}
+                          >
+                            {bal?.loading ? '…' : (bal?.balances?.length ?? 0) > 0 ? 'Refresh balance' : 'Balance'}
+                          </button>
+                        </div>
+                      )}
+                      {bal && visibleBalances.length > 0 && (
                         <div className="mt-2 border-t border-tts-border pt-2">
                           <div className="grid gap-0.5">
-                            {bal.balances.filter((b) => parseFloat(b.balance) > 0 || b.asset_type === 'native').map((b, i) => (
-                              <div key={i} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-0.5">
-                                <span className="text-tts-muted">{b.asset_code || 'XLM'}</span>
-                                <span className="font-mono font-semibold text-tts-deep">{parseFloat(b.balance).toFixed(b.asset_type === 'native' ? 7 : 2)}</span>
+                            {visibleBalances.map((b, i) => (
+                              <div key={i} className="flex items-center justify-between gap-3 rounded bg-tts-bg/60 px-2 py-0.5">
+                                <span className="min-w-0 text-tts-muted">
+                                  {b.currency?.toUpperCase()}
+                                  {b.label && <span className="ml-1 text-[10px] text-tts-muted/60">· {b.label}</span>}
+                                </span>
+                                <span className="shrink-0 font-mono font-semibold text-tts-deep">{formatDecimal(b.amount, 2)}</span>
                               </div>
                             ))}
                           </div>
+                          {bal.refreshedAt && (
+                            <p className="mt-1 text-[10px] text-tts-muted">Updated {bal.refreshedAt.slice(11, 19)} UTC</p>
+                          )}
                         </div>
                       )}
                       {bal?.error && (
                         <p className="mt-2 text-tts-error">{bal.error}</p>
+                      )}
+                      {bal?.warnings && bal.warnings.length > 0 && (
+                        <p className="mt-2 text-[10px] text-tts-muted">Partial Bridge response: {bal.warnings.join("; ")}</p>
                       )}
                       {va.source_deposit_instructions && (
                         <DepositInstructions instr={va.source_deposit_instructions} onCopy={handleCopy} />

@@ -102,6 +102,10 @@ router.post(
   BridgeController.reactivateVirtualAccount,
 );
 router.get(
+  "/customers/:id/virtual-accounts/:virtualAccountId/balance",
+  BridgeController.getVirtualAccountBalance,
+);
+router.get(
   "/customers/:id/virtual-accounts/:virtualAccountId/activity",
   BridgeController.getVirtualAccountActivity,
 );
