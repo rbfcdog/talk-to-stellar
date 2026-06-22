@@ -25,6 +25,9 @@ export interface SwapQuoteResult {
   protocols: string[];
   route: any;
   rawQuote: any; // full API response, passed to build step
+  source?: string;
+  buildAvailable?: boolean;
+  warning?: string;
 }
 
 export interface SwapBuildInput {
