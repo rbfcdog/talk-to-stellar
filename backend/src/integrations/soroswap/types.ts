@@ -28,6 +28,8 @@ export interface SwapQuoteResult {
   source?: string;
   buildAvailable?: boolean;
   warning?: string;
+  network?: string;
+  networkPassphrase?: string;
 }
 
 export interface SwapBuildInput {
@@ -39,4 +41,16 @@ export interface SwapBuildInput {
 export interface SwapBuildResult {
   xdr: string;
   quote: SwapQuoteResult;
+  network: string;
+  networkPassphrase: string;
+}
+
+export interface SwapSendResult {
+  hash: string;
+  ledger?: number;
+  successful: boolean;
+  network: string;
+  networkPassphrase: string;
+  envelopeXdr?: string;
+  resultXdr?: string;
 }

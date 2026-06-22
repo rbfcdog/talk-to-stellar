@@ -14,13 +14,18 @@ jest.mock('../src/integrations/stellar-broker/service', () => ({
 
 import { SoroswapService } from '../src/integrations/soroswap/service';
 
-const USDC = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNZT7WSEE9MCZGE6H4SXNVGXNWMSE';
+const USDC = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75';
 const XLM  = 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA';
+const TESTNET_USDC = 'CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F';
+const TESTNET_XLM = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 
 describe('SoroswapService', () => {
   let fetchMock: jest.SpyInstance;
 
   beforeEach(() => {
+    process.env.STELLAR_NETWORK = 'mainnet';
+    delete process.env.SOROSWAP_API_KEY;
+    delete process.env.SOROSWAP_API_URL;
     fetchMock = jest.spyOn(global, 'fetch');
     mockBrokerGetQuote.mockResolvedValue({
       from: 'USDC',
@@ -36,6 +41,8 @@ describe('SoroswapService', () => {
 
   afterEach(() => {
     SoroswapService.clearTokenCache();
+    delete process.env.SOROSWAP_API_KEY;
+    delete process.env.SOROSWAP_API_URL;
     jest.clearAllMocks();
   });
 
@@ -75,6 +82,8 @@ describe('SoroswapService', () => {
 
   describe('getQuote', () => {
     it('parses successful quote response', async () => {
+      process.env.SOROSWAP_API_KEY = 'sk_test_abc';
+      process.env.SOROSWAP_API_URL = 'https://api.soroswap.finance/api/v1/';
       fetchMock.mockResolvedValue({
         ok: true,
         status: 200,
@@ -97,6 +106,64 @@ describe('SoroswapService', () => {
       expect(result.amountOutStroops).toBe('20000000');
       expect(result.protocols).toEqual(['soroswap', 'phoenix']);
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.soroswap.finance/quote?network=mainnet');
+      const init = fetchMock.mock.calls[0][1] as any;
+      expect(init.method).toBe('POST');
+      expect(init.headers).toMatchObject({
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer sk_test_abc',
+      });
+      expect(JSON.parse(init.body)).toMatchObject({
+        assetIn: USDC,
+        assetOut: XLM,
+        amount: '10000000',
+        tradeType: 'EXACT_IN',
+        protocols: ['soroswap', 'phoenix', 'aqua', 'sdex'],
+        slippageBps: 50,
+      });
+    });
+
+    it('resolves testnet symbols from the Soroswap token list before quoting', async () => {
+      process.env.STELLAR_NETWORK = 'testnet';
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ([
+            {
+              network: 'testnet',
+              assets: [
+                { contract: TESTNET_USDC, code: 'USDC', name: 'USD Coin', decimals: 7 },
+                { contract: TESTNET_XLM, code: 'XLM', name: 'Stellar Lumens', decimals: 7 },
+              ],
+            },
+          ]),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            amountOut: '20000000',
+            protocols: ['soroswap'],
+            path: [TESTNET_USDC, TESTNET_XLM],
+          }),
+        } as any);
+
+      const result = await SoroswapService.getQuote({
+        assetIn: 'USDC',
+        assetOut: 'XLM',
+        amount: '1',
+      });
+
+      expect(result.network).toBe('TESTNET');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1][0]).toBe('https://api.soroswap.finance/quote?network=testnet');
+      const init = fetchMock.mock.calls[1][1] as any;
+      expect(JSON.parse(init.body)).toMatchObject({
+        assetIn: TESTNET_USDC,
+        assetOut: TESTNET_XLM,
+      });
     });
 
     it('returns a Stellar Broker fallback quote on non-ok Soroswap API response', async () => {
@@ -133,6 +200,36 @@ describe('SoroswapService', () => {
       expect(result.rawQuote.soroswapError).toBe('Network unreachable');
     });
 
+    it('returns a non-buildable unavailable quote for raw contract pairs when Soroswap has no route', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => 'No path found',
+      } as any);
+
+      const result = await SoroswapService.getQuote({
+        assetIn: USDC,
+        assetOut: XLM,
+        amount: '1',
+      });
+
+      expect(result).toMatchObject({
+        assetIn: USDC,
+        assetOut: XLM,
+        amountIn: '1',
+        amountOut: '0',
+        protocols: [],
+        source: 'soroswap-unavailable',
+        buildAvailable: false,
+      });
+      expect(result.rawQuote).toMatchObject({
+        provider: 'soroswap',
+        unavailable: true,
+        soroswapError: 'Soroswap /quote returned 400: No path found',
+      });
+      expect(mockBrokerGetQuote).not.toHaveBeenCalled();
+    });
+
     it('uses receive direction for exact-out fallback quotes', async () => {
       fetchMock.mockResolvedValue({
         ok: false,
@@ -161,6 +258,7 @@ describe('SoroswapService', () => {
 
   describe('buildSwapXdr', () => {
     it('returns xdr from successful build response', async () => {
+      process.env.SOROSWAP_API_KEY = 'sk_test_build';
       const mockQuote = {
         assetIn: USDC,
         assetOut: XLM,
@@ -187,6 +285,18 @@ describe('SoroswapService', () => {
 
       expect(result.xdr).toBe('AAAA...FAKE_XDR...ZZZZ');
       expect(result.quote).toBe(mockQuote);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.soroswap.finance/quote/build?network=mainnet');
+      const init = fetchMock.mock.calls[0][1] as any;
+      expect(init.headers).toMatchObject({
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer sk_test_build',
+      });
+      expect(JSON.parse(init.body)).toMatchObject({
+        quote: mockQuote.rawQuote,
+        from: 'GABC1234',
+        slippageBps: 50,
+      });
     });
 
     it('throws if xdr field missing from response', async () => {
@@ -229,6 +339,34 @@ describe('SoroswapService', () => {
   });
 
   describe('getTokenList', () => {
+    it('returns parsed token array from live network-grouped response and sends bearer auth', async () => {
+      process.env.SOROSWAP_API_KEY = 'sk_test_tokens';
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ([
+          { network: 'testnet', assets: [] },
+          {
+            network: 'mainnet',
+            assets: [
+              { contract: USDC, code: 'USDC', name: 'USD Coin', decimals: 7 },
+              { contract: XLM, code: 'XLM', name: 'Stellar Lumens', decimals: 7 },
+            ],
+          },
+        ]),
+      } as any);
+
+      const tokens = await SoroswapService.getTokenList();
+
+      expect(tokens).toHaveLength(2);
+      expect(tokens[0]).toMatchObject({ address: USDC, symbol: 'USDC', network: 'mainnet' });
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.soroswap.finance/api/tokens');
+      expect((fetchMock.mock.calls[0][1] as any).headers).toMatchObject({
+        Accept: 'application/json',
+        Authorization: 'Bearer sk_test_tokens',
+      });
+    });
+
     it('returns parsed token array from bare-array response', async () => {
       fetchMock.mockResolvedValue({
         ok: true,

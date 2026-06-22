@@ -5,11 +5,14 @@ import {
   Activity,
   ArrowRightLeft,
   CheckCircle2,
+  ExternalLink,
   Globe,
   Loader2,
   RefreshCw,
   Search,
   Shield,
+  Send,
+  Wallet,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -599,6 +602,32 @@ const COMMON_PAIRS = [
   { from: "XLM", to: "AQUA" },
 ];
 
+function freighterError(result: any): string | null {
+  const error = result?.error;
+  if (!error) return null;
+  return typeof error === "string" ? error : error.message || "Freighter request failed";
+}
+
+function normalizeFreighterNetwork(network?: string): "TESTNET" | "PUBLIC" {
+  const n = String(network || "").toUpperCase();
+  return n === "TESTNET" ? "TESTNET" : "PUBLIC";
+}
+
+function networkPassphrase(network?: string): string {
+  return normalizeFreighterNetwork(network) === "TESTNET"
+    ? "Test SDF Network ; September 2015"
+    : "Public Global Stellar Network ; September 2015";
+}
+
+function shortAddress(address?: string): string {
+  if (!address) return "";
+  return `${address.slice(0, 8)}…${address.slice(-4)}`;
+}
+
+function stellarLabSignUrl(xdr: string, passphrase: string): string {
+  return `https://lab.stellar.org/transaction/sign?xdr=${encodeURIComponent(xdr)}&networkPassphrase=${encodeURIComponent(passphrase)}`;
+}
+
 function SoroswapPanel() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [loadingTokens, setLoadingTokens] = useState(false);
@@ -617,12 +646,26 @@ function SoroswapPanel() {
   const [xdr, setXdr] = useState<any>(null);
   const [loadingXdr, setLoadingXdr] = useState(false);
   const [errXdr, setErrXdr] = useState<string | null>(null);
+  const [swapNetwork, setSwapNetwork] = useState<"TESTNET" | "PUBLIC">("TESTNET");
+
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletNetwork, setWalletNetwork] = useState("");
+  const [connectingWallet, setConnectingWallet] = useState(false);
+  const [errWallet, setErrWallet] = useState<string | null>(null);
+
+  const [signedXdr, setSignedXdr] = useState("");
+  const [signerAddress, setSignerAddress] = useState("");
+  const [signingXdr, setSigningXdr] = useState(false);
+  const [submittingSwap, setSubmittingSwap] = useState(false);
+  const [submitResult, setSubmitResult] = useState<any>(null);
+  const [errSubmit, setErrSubmit] = useState<string | null>(null);
 
   const loadTokens = useCallback(async () => {
     setLoadingTokens(true); setErrTokens(null);
     try {
       const d = await api("/api/swap/tokens");
       if (d?.error) { setErrTokens(`Soroswap API temporarily unavailable: ${d.error}`); return; }
+      if (d?.network) setSwapNetwork(normalizeFreighterNetwork(d.network));
       setTokens(Array.isArray(d) ? d : d.tokens ?? []);
     }
     catch (e: any) { setErrTokens(e.message); }
@@ -630,11 +673,13 @@ function SoroswapPanel() {
   }, []);
 
   const getQuote = useCallback(async () => {
-    setLoadingQuote(true); setErrQuote(null); setQuote(null); setXdr(null);
+    setLoadingQuote(true); setErrQuote(null); setQuote(null); setXdr(null); setSignedXdr(""); setSubmitResult(null); setErrSubmit(null);
     try {
-      setQuote(await api(
+      const result = await api(
         `/api/swap/quote?assetIn=${encodeURIComponent(assetIn)}&assetOut=${encodeURIComponent(assetOut)}&amount=${encodeURIComponent(amount)}&tradeType=${tradeType}`
-      ));
+      );
+      if (result?.network) setSwapNetwork(normalizeFreighterNetwork(result.network));
+      setQuote(result);
     }
     catch (e: any) { setErrQuote(e.message); }
     finally { setLoadingQuote(false); }
@@ -642,16 +687,85 @@ function SoroswapPanel() {
 
   const buildXdr = useCallback(async () => {
     if (!quote || !senderAddress.trim()) return;
-    setLoadingXdr(true); setErrXdr(null); setXdr(null);
+    setLoadingXdr(true); setErrXdr(null); setXdr(null); setSignedXdr(""); setSubmitResult(null); setErrSubmit(null);
     try {
-      setXdr(await api("/api/swap/build", {
+      const result = await api("/api/swap/build", {
         method: "POST",
         body: JSON.stringify({ quote, senderAddress: senderAddress.trim() }),
-      }));
+      });
+      if (result?.network) setSwapNetwork(normalizeFreighterNetwork(result.network));
+      setXdr(result);
     }
     catch (e: any) { setErrXdr(e.message); }
     finally { setLoadingXdr(false); }
   }, [quote, senderAddress]);
+
+  const connectFreighter = useCallback(async () => {
+    setConnectingWallet(true); setErrWallet(null);
+    try {
+      const freighter = await import("@stellar/freighter-api");
+      const connected = await freighter.isConnected();
+      const connectedError = freighterError(connected);
+      if (connectedError) throw new Error(connectedError);
+      if (!connected.isConnected) throw new Error("Freighter extension is not installed in this browser.");
+
+      const access = await freighter.requestAccess();
+      const accessError = freighterError(access);
+      if (accessError) throw new Error(accessError);
+      if (!access.address) throw new Error("Freighter did not return a public key.");
+
+      const network = await freighter.getNetwork();
+      const networkError = freighterError(network);
+      if (networkError) throw new Error(networkError);
+
+      setWalletAddress(access.address);
+      setSenderAddress(access.address);
+      setWalletNetwork(network.network || "");
+    }
+    catch (e: any) { setErrWallet(e.message); }
+    finally { setConnectingWallet(false); }
+  }, []);
+
+  const signWithFreighter = useCallback(async () => {
+    if (!xdr?.xdr) return;
+    const address = walletAddress || senderAddress.trim();
+    if (!address) {
+      setErrWallet("Connect Freighter or enter a Stellar address first.");
+      return;
+    }
+
+    setSigningXdr(true); setErrSubmit(null); setSignedXdr(""); setSignerAddress(""); setSubmitResult(null);
+    try {
+      const freighter = await import("@stellar/freighter-api");
+      const network = normalizeFreighterNetwork(xdr.network || quote?.network || swapNetwork);
+      const result = await freighter.signTransaction(xdr.xdr, {
+        networkPassphrase: xdr.networkPassphrase || quote?.networkPassphrase || networkPassphrase(network),
+        address,
+      });
+      const signError = freighterError(result);
+      if (signError) throw new Error(signError);
+      if (!result.signedTxXdr) throw new Error("Freighter did not return a signed XDR.");
+
+      setSignedXdr(result.signedTxXdr);
+      setSignerAddress(result.signerAddress || address);
+    }
+    catch (e: any) { setErrSubmit(e.message); }
+    finally { setSigningXdr(false); }
+  }, [quote?.network, senderAddress, swapNetwork, walletAddress, xdr]);
+
+  const submitSignedSwap = useCallback(async () => {
+    if (!signedXdr) return;
+    setSubmittingSwap(true); setErrSubmit(null); setSubmitResult(null);
+    try {
+      const result = await api("/api/swap/send", {
+        method: "POST",
+        body: JSON.stringify({ signedXdr }),
+      });
+      setSubmitResult(result);
+    }
+    catch (e: any) { setErrSubmit(e.message); }
+    finally { setSubmittingSwap(false); }
+  }, [signedXdr]);
 
   useEffect(() => { loadTokens(); }, [loadTokens]);
 
@@ -662,6 +776,11 @@ function SoroswapPanel() {
       )
     : tokens;
   const canBuildXdr = Boolean(quote && quote.buildAvailable !== false);
+  const activeNetwork = normalizeFreighterNetwork(xdr?.network || quote?.network || swapNetwork);
+  const activePassphrase = xdr?.networkPassphrase || quote?.networkPassphrase || networkPassphrase(activeNetwork);
+  const walletNetworkMatches = walletNetwork
+    ? normalizeFreighterNetwork(walletNetwork) === activeNetwork
+    : true;
 
   return (
     <OperationalCard>
@@ -738,6 +857,34 @@ function SoroswapPanel() {
         )}
       </div>
 
+      {/* Freighter wallet */}
+      <div className="mb-5 rounded border border-tts-border bg-tts-bg p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-3.5 w-3.5 text-tts-muted" />
+            <p className="text-xs font-semibold text-tts-deep">Freighter Wallet</p>
+          </div>
+          {walletAddress
+            ? <StatusPill tone={walletNetworkMatches ? "confirm" : "gold"}>{walletNetwork || "Connected"}</StatusPill>
+            : <StatusPill tone="gold">Not connected</StatusPill>}
+        </div>
+        <div className="mb-3 space-y-0">
+          <Row label="Backend network" value={activeNetwork} />
+          <Row label="Wallet" value={walletAddress ? shortAddress(walletAddress) : "Connect before signing"} mono />
+          {!walletNetworkMatches && (
+            <div className="pt-2 text-xs text-tts-gold">
+              Freighter is on {walletNetwork}; switch to {activeNetwork} before signing.
+            </div>
+          )}
+        </div>
+        <Button size="sm" className="w-full" onClick={connectFreighter} disabled={connectingWallet}>
+          {connectingWallet
+            ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Connecting…</>
+            : <><Wallet className="mr-1.5 h-3.5 w-3.5" />Connect Freighter</>}
+        </Button>
+        {errWallet && <div className="mt-2"><Err msg={errWallet} /></div>}
+      </div>
+
       {/* Build XDR */}
       {quote && canBuildXdr && (
         <div className="mb-5">
@@ -756,16 +903,66 @@ function SoroswapPanel() {
           {errXdr && <div className="mt-2"><Err msg={errXdr} /></div>}
           {xdr && (
             <div className="mt-3 rounded border border-tts-border bg-tts-bg p-3">
+              <div className="mb-2 space-y-0">
+                <Row label="Network" value={xdr.network || activeNetwork} />
+                <Row label="Signer" value={senderAddress ? shortAddress(senderAddress) : undefined} mono />
+              </div>
               <p className="mb-1 text-xs font-semibold text-tts-deep">Unsigned XDR</p>
-              <p className="break-all font-mono text-[10px] text-tts-muted">{xdr.xdr}</p>
-              <a
-                href={`https://lab.stellar.org/transaction/sign?xdr=${encodeURIComponent(xdr.xdr)}&networkPassphrase=Public+Global+Stellar+Network+%3B+September+2015`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs text-tts-primary underline underline-offset-2"
-              >
-                Sign in Stellar Lab →
-              </a>
+              <p className="max-h-24 overflow-y-auto break-all rounded border border-tts-border/60 bg-white/40 p-2 font-mono text-[10px] text-tts-muted">
+                {xdr.xdr}
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button
+                  size="sm"
+                  onClick={signWithFreighter}
+                  disabled={signingXdr || !walletAddress || !walletNetworkMatches}
+                  title="Sign with Freighter"
+                  aria-label="Sign with Freighter"
+                >
+                  {signingXdr
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Wallet className="h-3.5 w-3.5" />}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={submitSignedSwap}
+                  disabled={submittingSwap || !signedXdr}
+                  title="Submit signed transaction"
+                  aria-label="Submit signed transaction"
+                >
+                  {submittingSwap
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Send className="h-3.5 w-3.5" />}
+                </Button>
+                <a
+                  href={stellarLabSignUrl(xdr.xdr, activePassphrase)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in Stellar Lab"
+                  aria-label="Open in Stellar Lab"
+                  className="inline-flex h-9 items-center justify-center rounded border border-tts-border text-xs font-semibold text-tts-muted transition-colors hover:text-tts-deep"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <span className="text-center text-[10px] font-semibold uppercase text-tts-muted">Sign</span>
+                <span className="text-center text-[10px] font-semibold uppercase text-tts-muted">Submit</span>
+                <span className="text-center text-[10px] font-semibold uppercase text-tts-muted">Lab</span>
+              </div>
+              {signedXdr && (
+                <div className="mt-3 rounded border border-tts-confirm/30 bg-tts-confirm/10 p-2 text-xs text-tts-deep">
+                  Signed by <span className="font-mono">{shortAddress(signerAddress)}</span>
+                </div>
+              )}
+              {errSubmit && <div className="mt-2"><Err msg={errSubmit} /></div>}
+              {submitResult && (
+                <div className="mt-3 rounded border border-tts-confirm/30 bg-tts-confirm/10 p-3 space-y-0">
+                  <Row label="Submitted" value={submitResult.successful ? "Yes" : "No"} />
+                  <Row label="Hash" value={submitResult.hash} mono />
+                  <Row label="Ledger" value={submitResult.ledger} />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -822,7 +1019,7 @@ export default function KeyIntegrationsClient() {
         <OperationalStat label="No API key" value="3" detail="Reflector, Fraud, Soroswap" />
         <OperationalStat label="API key needed" value="1" detail="Abroad Finance (partner)" />
         <OperationalStat label="PIX QR decode" value="Free" detail="No key required" />
-        <OperationalStat label="Swap build" value="XDR" detail="Sign in Stellar Lab" />
+        <OperationalStat label="Swap execution" value="Freighter" detail="Sign and submit XDR" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

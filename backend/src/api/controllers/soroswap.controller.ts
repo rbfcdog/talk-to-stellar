@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { loadSoroswapConfig } from '../../integrations/soroswap/config';
 import { SoroswapService } from '../../integrations/soroswap/service';
 import { logger } from '../../utils/logger';
 
@@ -54,13 +55,28 @@ export const SoroswapController = {
   },
 
   /**
+   * POST /soroswap/send
+   * Body: { signedXdr: string }
+   * Returns Horizon submission metadata for the signed swap transaction.
+   */
+  async send(req: Request, res: Response) {
+    try {
+      const { signedXdr } = req.body ?? {};
+      if (!signedXdr) return err(res, 'signedXdr is required', 400);
+      const result = await SoroswapService.sendSignedXdr(String(signedXdr));
+      ok(res, result);
+    } catch (e) { err(res, e); }
+  },
+
+  /**
    * GET /soroswap/tokens
    * Returns all tradable tokens for the configured network (cached 10 min).
    */
   async tokens(_req: Request, res: Response) {
     try {
+      const config = loadSoroswapConfig();
       const tokens = await SoroswapService.getTokenList();
-      ok(res, { count: tokens.length, tokens });
+      ok(res, { count: tokens.length, network: config.network, tokens });
     } catch (e) { err(res, e); }
   },
 };

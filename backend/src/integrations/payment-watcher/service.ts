@@ -26,6 +26,8 @@ const ACCOUNT_NOT_FOUND_RETRY_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_
 const ACCOUNT_CHECK_TIMEOUT_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_TIMEOUT_MS || '10000', 10);
 const ACCOUNT_CHECK_SPACING_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS || '1000', 10);
 const HORIZON_RATE_LIMIT_RETRY_MS = parseInt(process.env.PAYMENT_WATCHER_RATE_LIMIT_RETRY_MS || '300000', 10);
+const STREAM_OPEN_SPACING_MS = parseInt(process.env.PAYMENT_WATCHER_STREAM_OPEN_SPACING_MS || '1000', 10);
+const STREAM_RATE_LIMIT_RETRY_MS = parseInt(process.env.PAYMENT_WATCHER_STREAM_RATE_LIMIT_RETRY_MS || '300000', 10);
 
 class HorizonRateLimitError extends Error {
   constructor(public readonly retryAfterMs: number) {
@@ -65,6 +67,15 @@ function maskedKey(publicKey: string) {
 function isNotFoundError(err: any): boolean {
   const message = String(err?.message || err?.statusText || err || '').toLowerCase();
   return err?.status === 404 || message.includes('not found');
+}
+
+function isRateLimitError(err: any): boolean {
+  const message = String(err?.message || err?.statusText || err || '').toLowerCase();
+  return err?.status === 429
+    || err?.response?.status === 429
+    || message.includes('429')
+    || message.includes('too many requests')
+    || message.includes('rate limit');
 }
 
 function clampDelay(ms: number): number {
@@ -151,6 +162,10 @@ class PaymentWatcherService {
   private lastAccountCheckAt = 0;
   private horizonRateLimitedUntil = 0;
   private nextRateLimitLogAt = 0;
+  private streamOpenQueue: Promise<void> = Promise.resolve();
+  private lastStreamOpenAt = 0;
+  private horizonStreamRateLimitedUntil = 0;
+  private nextStreamRateLimitLogAt = 0;
   private started = false;
 
   async start(): Promise<void> {
@@ -203,6 +218,8 @@ class PaymentWatcherService {
         return;
       }
 
+      await this.waitForStreamOpenSlot();
+      if (!this.pendingSubscribes.has(key)) return;
       this.openStream(key);
       this.retryCounts.delete(key);
       this.missingAccountLogs.delete(key);
@@ -266,6 +283,35 @@ class PaymentWatcherService {
     this.nextRateLimitLogAt = now + Math.max(delayMs, 60000);
   }
 
+  private async waitForStreamOpenSlot(): Promise<void> {
+    const previous = this.streamOpenQueue.catch(() => undefined);
+    const next = previous.then(async () => {
+      const rateLimitDelay = Math.max(0, this.horizonStreamRateLimitedUntil - Date.now());
+      if (rateLimitDelay > 0) {
+        await sleep(rateLimitDelay);
+      }
+
+      const spacingMs = nonNegativeDelay(STREAM_OPEN_SPACING_MS, 1000);
+      const elapsedMs = Date.now() - this.lastStreamOpenAt;
+      if (this.lastStreamOpenAt > 0 && elapsedMs < spacingMs) {
+        await sleep(spacingMs - elapsedMs);
+      }
+
+      this.lastStreamOpenAt = Date.now();
+    });
+
+    this.streamOpenQueue = next;
+    await next;
+  }
+
+  private logStreamRateLimit(delayMs: number): void {
+    const now = Date.now();
+    if (now < this.nextStreamRateLimitLogAt) return;
+
+    logger.warn(`[payment-watcher] Horizon SSE stream rate limited (HTTP 429); pausing stream reconnects for ${Math.round(delayMs / 1000)}s`);
+    this.nextStreamRateLimitLogAt = now + Math.max(delayMs, 60000);
+  }
+
   private openStream(publicKey: string): void {
     const server = new Horizon.Server(HORIZON_URL);
     const stream = server
@@ -309,6 +355,14 @@ class PaymentWatcherService {
 
     if (isNotFoundError(err)) {
       this.scheduleAccountRetry(publicKey);
+      return;
+    }
+
+    if (isRateLimitError(err)) {
+      const delayMs = nonNegativeDelay(STREAM_RATE_LIMIT_RETRY_MS, 300000);
+      this.horizonStreamRateLimitedUntil = Math.max(this.horizonStreamRateLimitedUntil, Date.now() + delayMs);
+      this.logStreamRateLimit(delayMs);
+      this.scheduleReconnect(publicKey, delayMs);
       return;
     }
 

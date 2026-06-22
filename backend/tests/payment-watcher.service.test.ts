@@ -1,6 +1,8 @@
 process.env.STELLAR_NETWORK = 'TESTNET';
 process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS = '0';
 process.env.PAYMENT_WATCHER_RATE_LIMIT_RETRY_MS = '0';
+process.env.PAYMENT_WATCHER_STREAM_OPEN_SPACING_MS = '0';
+process.env.PAYMENT_WATCHER_STREAM_RATE_LIMIT_RETRY_MS = '0';
 
 jest.mock('../src/utils/logger', () => ({
   logger: {
@@ -126,6 +128,28 @@ describe('PaymentWatcherService', () => {
 
     expect(mockCloseStream).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(paymentWatcher.status()).toMatchObject({
+      watching: 0,
+      reconnecting: 1,
+      reconnectingAddresses: [key],
+    });
+  });
+
+  it('stream error — pauses reconnects when Horizon SSE is rate limited', async () => {
+    const key = 'GPUBKEY429ERR222222222222222222222222222222222222222222';
+    await paymentWatcher.subscribe(key);
+
+    streamHandlers.onerror?.({ status: 429, message: 'Too Many Requests' });
+    streamHandlers.onerror?.({ status: 429, message: 'Too Many Requests' });
+
+    expect(mockCloseStream).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Horizon SSE stream rate limited (HTTP 429)')
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('SSE error for')
+    );
     expect(paymentWatcher.status()).toMatchObject({
       watching: 0,
       reconnecting: 1,
