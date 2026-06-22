@@ -33,6 +33,173 @@ function bridgeError(error: unknown, fallback: string) {
   };
 }
 
+type VirtualAccountBalanceSource = "virtual_account" | "bridge_wallet" | "activity";
+
+type VirtualAccountBalanceSummary = {
+  amount: string;
+  currency: string;
+  source: VirtualAccountBalanceSource;
+  label: string;
+  wallet_id?: string;
+  event_count?: number;
+};
+
+function readAmount(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const amount = typeof value === "number" ? String(value) : String(value).trim();
+  if (!amount) return null;
+  const parsed = Number(amount);
+  return Number.isFinite(parsed) ? amount : null;
+}
+
+function readCurrency(value: unknown, fallback = "usd"): string {
+  const currency = String(value || fallback || "usd").trim();
+  return currency ? currency.toUpperCase() : "USD";
+}
+
+function addBalance(
+  balances: VirtualAccountBalanceSummary[],
+  amount: unknown,
+  currency: unknown,
+  source: VirtualAccountBalanceSource,
+  label: string,
+  extras: Partial<VirtualAccountBalanceSummary> = {},
+): void {
+  const normalizedAmount = readAmount(amount);
+  if (!normalizedAmount) return;
+  balances.push({
+    amount: normalizedAmount,
+    currency: readCurrency(currency),
+    source,
+    label,
+    ...extras,
+  });
+}
+
+function collectBalanceValue(
+  balances: VirtualAccountBalanceSummary[],
+  value: unknown,
+  fallbackCurrency: string,
+  source: VirtualAccountBalanceSource,
+  label: string,
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectBalanceValue(balances, item, fallbackCurrency, source, label);
+    }
+    return;
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const record = value as Record<string, unknown>;
+    addBalance(
+      balances,
+      record.amount ?? record.balance ?? record.available ?? record.total,
+      record.currency ?? record.asset ?? record.asset_code ?? fallbackCurrency,
+      source,
+      label,
+    );
+    return;
+  }
+
+  addBalance(balances, value, fallbackCurrency, source, label);
+}
+
+function virtualAccountCurrency(account: Record<string, unknown> | null): string {
+  if (!account) return "USD";
+  const destination = account.destination as Record<string, unknown> | undefined;
+  return readCurrency(
+    account.source_currency ??
+      (account.source as Record<string, unknown> | undefined)?.currency ??
+      destination?.currency,
+  );
+}
+
+function collectVirtualAccountBalances(account: Record<string, unknown> | null): VirtualAccountBalanceSummary[] {
+  if (!account) return [];
+  const balances: VirtualAccountBalanceSummary[] = [];
+  const fallbackCurrency = virtualAccountCurrency(account);
+  collectBalanceValue(balances, account.available_balance, fallbackCurrency, "virtual_account", "Available balance");
+  collectBalanceValue(balances, account.current_balance, fallbackCurrency, "virtual_account", "Current balance");
+  collectBalanceValue(balances, account.balance, fallbackCurrency, "virtual_account", "Virtual account balance");
+  collectBalanceValue(balances, account.balances, fallbackCurrency, "virtual_account", "Virtual account balance");
+  return balances;
+}
+
+function collectDestinationHints(account: Record<string, unknown> | null): string[] {
+  if (!account) return [];
+  const destination = (account.destination ?? {}) as Record<string, unknown>;
+  const hints = [
+    destination.bridge_wallet_id,
+    destination.wallet_id,
+    destination.id,
+    destination.address,
+    destination.to_address,
+    account.destination_wallet_id,
+    account.destination_address,
+  ];
+  return Array.from(
+    new Set(
+      hints
+        .map((hint) => String(hint || "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function collectBridgeWalletBalances(
+  account: Record<string, unknown> | null,
+  bridgeBalances: Array<Record<string, unknown>>,
+): VirtualAccountBalanceSummary[] {
+  const hints = collectDestinationHints(account).map((hint) => hint.toLowerCase());
+  if (!hints.length) return [];
+  const balances: VirtualAccountBalanceSummary[] = [];
+  for (const balance of bridgeBalances) {
+    const walletId = String(balance.wallet_id || "").trim();
+    if (!walletId || !hints.includes(walletId.toLowerCase())) continue;
+    addBalance(
+      balances,
+      balance.amount,
+      balance.currency,
+      "bridge_wallet",
+      "Destination wallet balance",
+      { wallet_id: walletId },
+    );
+  }
+  return balances;
+}
+
+function isCreditActivity(type: string): boolean {
+  const normalized = type.toLowerCase();
+  if (/(failed|reversed|returned|cancelled|canceled|fee|debit|withdraw)/.test(normalized)) {
+    return false;
+  }
+  return /(funds_received|deposit|received|credit|wire|ach|sepa|pix)/.test(normalized);
+}
+
+function collectActivityBalances(events: Array<Record<string, unknown>>): VirtualAccountBalanceSummary[] {
+  const totals = new Map<string, { amount: number; event_count: number }>();
+  for (const event of events) {
+    const type = String(event.type || "");
+    if (!isCreditActivity(type)) continue;
+    const amount = Number(readAmount(event.amount));
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const currency = readCurrency(event.currency);
+    const current = totals.get(currency) ?? { amount: 0, event_count: 0 };
+    current.amount += amount;
+    current.event_count += 1;
+    totals.set(currency, current);
+  }
+
+  return Array.from(totals.entries()).map(([currency, total]) => ({
+    amount: total.amount.toFixed(2),
+    currency,
+    source: "activity" as const,
+    label: "Received via activity",
+    event_count: total.event_count,
+  }));
+}
+
 /** Verify a Stellar address exists, is funded, and has the USDC trustline before sending to Bridge. */
 async function validateStellarDestination(address: string): Promise<{ ok: boolean; reason?: string }> {
   if (!address) return { ok: false, reason: "Stellar destination address is required." };
@@ -712,6 +879,68 @@ export class BridgeController {
       logger.error(`[bridge] getVirtualAccountActivity failed: ${error.message}`);
       res.status(statusFromError(error)).json({ success: false, message: error?.message || 'Failed to get activity.' });
     }
+  }
+
+  static async getVirtualAccountBalance(req: Request, res: Response): Promise<void> {
+    const customerId = String(req.params.id);
+    const virtualAccountId = String(req.params.virtualAccountId);
+    const service = getBridgeService();
+    const warnings: string[] = [];
+    let account: Record<string, unknown> | null = null;
+    let events: Array<Record<string, unknown>> = [];
+    let bridgeBalances: Array<Record<string, unknown>> = [];
+
+    try {
+      account = await service.getVirtualAccount(virtualAccountId) as unknown as Record<string, unknown>;
+      if (account?.id) {
+        void BridgeController.upsertVirtualAccount(account, customerId);
+      }
+    } catch (error: any) {
+      warnings.push(`virtual_account: ${error?.message || "unavailable"}`);
+    }
+
+    try {
+      events = await service.getVirtualAccountActivity(customerId, virtualAccountId, { limit: 100 }) as unknown as Array<Record<string, unknown>>;
+    } catch (error: any) {
+      warnings.push(`activity: ${error?.message || "unavailable"}`);
+    }
+
+    try {
+      bridgeBalances = await service.getWalletBalances() as unknown as Array<Record<string, unknown>>;
+    } catch (error: any) {
+      warnings.push(`wallet_balances: ${error?.message || "unavailable"}`);
+    }
+
+    if (!account && !events.length && !bridgeBalances.length) {
+      res.status(502).json({
+        success: false,
+        message: "Bridge virtual account balance could not be loaded.",
+        warnings,
+      });
+      return;
+    }
+
+    const directBalances = collectVirtualAccountBalances(account);
+    const walletBalances = collectBridgeWalletBalances(account, bridgeBalances);
+    const activityBalances = collectActivityBalances(events);
+    const liveBalances = [...directBalances, ...walletBalances];
+    const nonZeroLiveBalances = liveBalances.filter((balance) => Number(balance.amount) > 0);
+    const balances = nonZeroLiveBalances.length
+      ? nonZeroLiveBalances
+      : activityBalances.length
+        ? activityBalances
+        : liveBalances;
+
+    res.json({
+      success: true,
+      virtual_account: account,
+      balances,
+      activity_totals: activityBalances,
+      event_count: events.length,
+      destination_hints: collectDestinationHints(account),
+      warnings,
+      refreshed_at: new Date().toISOString(),
+    });
   }
 
   // ── Additional Virtual Account On-Ramps ───────────────────────

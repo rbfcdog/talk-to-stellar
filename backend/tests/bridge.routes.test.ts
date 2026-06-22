@@ -64,6 +64,8 @@ describe("Bridge Customer API", () => {
       createBrlVirtualAccount: jest.fn(),
       listVirtualAccounts: jest.fn(),
       getVirtualAccount: jest.fn(),
+      getVirtualAccountActivity: jest.fn(),
+      getWalletBalances: jest.fn(),
     };
     (getBridgeService as jest.Mock).mockReturnValue(mockService);
   });
@@ -304,6 +306,56 @@ describe("Bridge Customer API", () => {
       "stellar",
     );
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it("summarizes virtual account received funds when no live balance is exposed", async () => {
+    mockService.getVirtualAccount.mockResolvedValue({
+      id: "va_001",
+      status: "activated",
+      source_currency: "usd",
+      destination: { payment_rail: "base", bridge_wallet_id: "wallet_001" },
+    });
+    mockService.getVirtualAccountActivity.mockResolvedValue([
+      {
+        id: "event_001",
+        type: "funds_received",
+        amount: "125.50",
+        currency: "usd",
+        virtual_account_id: "va_001",
+      },
+      {
+        id: "event_002",
+        type: "payment_submitted",
+        amount: "125.50",
+        currency: "usdc",
+        virtual_account_id: "va_001",
+      },
+    ]);
+    mockService.getWalletBalances.mockResolvedValue([]);
+
+    const req = mockReq({ params: { id: "cust_123", virtualAccountId: "va_001" } });
+    const res = mockRes();
+    await BridgeController.getVirtualAccountBalance(req, res);
+
+    expect(mockService.getVirtualAccount).toHaveBeenCalledWith("va_001");
+    expect(mockService.getVirtualAccountActivity).toHaveBeenCalledWith(
+      "cust_123",
+      "va_001",
+      { limit: 100 },
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        balances: [
+          expect.objectContaining({
+            amount: "125.50",
+            currency: "USD",
+            source: "activity",
+            label: "Received via activity",
+          }),
+        ],
+      }),
+    );
   });
 
   // ── Error paths ───────────────────────────

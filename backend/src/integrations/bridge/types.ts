@@ -172,9 +172,14 @@ export interface BridgeVirtualAccount {
   id: string;
   status: VirtualAccountStatus;
   customer_id: string;
+  source_currency?: Currency;
   developer_fee_percent?: string;
   source_deposit_instructions: DepositInstructions;
   destination: TransferEndpoint;
+  balance?: string | { amount?: string; currency?: Currency };
+  balances?: Array<{ amount?: string; currency?: Currency }>;
+  available_balance?: string | { amount?: string; currency?: Currency };
+  current_balance?: string | { amount?: string; currency?: Currency };
   created_at: string;
   updated_at: string;
 }
