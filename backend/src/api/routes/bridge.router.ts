@@ -10,6 +10,9 @@ const router = Router();
 // All bridge routes require bridge enabled
 router.use(requireBridgeEnabled);
 
+// ── Session-based helpers (use session_id to look up customer) ──
+router.get("/session/usd-account", BridgeController.getSessionUsdAccount);
+
 // ── Customers ───────────────────────────────────────────
 router.post("/customers", BridgeController.createCustomer);
 router.get("/customers/by-email", BridgeController.findCustomerByEmail);

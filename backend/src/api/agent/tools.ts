@@ -1489,6 +1489,75 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "open_wire_onramp_interface",
+    description: "Return the frontend URL for the USD wire/ACH deposit screen. Use when the user wants to bring dollars from a US bank account via wire transfer or ACH. Opens the dedicated wire onramp page with their USD bank account deposit details.",
+    parameters: {
+      type: "object",
+      properties: {
+        amount: {
+          type: "string",
+          description: "Optional USD amount the user mentioned wanting to deposit.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+        session_scope: {
+          type: "string",
+          enum: ["whatsapp", "telegram", ""],
+          description: "Preserve the originating external session scope.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "open_swap_interface",
+    description: "Return the frontend URL for the DEX token swap screen (Soroswap/Phoenix). Use when the user wants to swap tokens directly: XLM↔USDC, USDC↔BRZ, BRZ↔XLM, etc. Does not involve PIX.",
+    parameters: {
+      type: "object",
+      properties: {
+        from_asset: {
+          type: "string",
+          description: "Source token to swap from (e.g. XLM, USDC, BRZ).",
+        },
+        to_asset: {
+          type: "string",
+          description: "Destination token to swap into (e.g. USDC, XLM, BRZ).",
+        },
+        amount: {
+          type: "string",
+          description: "Optional amount to prefill.",
+        },
+        trade_type: {
+          type: "string",
+          enum: ["EXACT_IN", "EXACT_OUT"],
+          description: "EXACT_IN means the amount is the input amount; EXACT_OUT means the amount is the output amount.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+        session_scope: {
+          type: "string",
+          enum: ["whatsapp", "telegram", ""],
+          description: "Preserve the originating external session scope.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "send_receipt_image",
     description: "Gera o link do comprovante da última operação concluída do usuário. Não envia imagem/anexo no chat.",
     parameters: {
@@ -2429,6 +2498,10 @@ export async function executeTool(
         return await executeCreateBrlUsdQuote(toolInput);
       case "create_usd_bank_transfer_intent":
         return await executeCreateUsdBankTransferIntent(toolInput);
+      case "open_wire_onramp_interface":
+        return await executeOpenWireOnrampInterface(toolInput);
+      case "open_swap_interface":
+        return await executeOpenSwapInterface(toolInput);
       case "send_receipt_image":
         return await executeSendReceiptImage(toolInput);
       case "create_wallet":
@@ -3762,6 +3835,80 @@ async function executeCreateUsdBankTransferIntent(input: any): Promise<string> {
         `Transferência internacional ${transfer.orchestration_public_ref ? `${transfer.orchestration_public_ref} ` : ''}criada com status ${transfer.status}. ` +
         `Próximo passo: criar a intenção PIX em /api/transfers/${transfer.transfer_id}/pix-intent. ` +
         `Conta destino modelada como conta bancária USD internacional.`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function executeOpenWireOnrampInterface(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const amount = String(input.amount || '').trim();
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || '');
+    const rawUrl = buildFrontendInterfaceUrl({
+      path: '/wire-onramp',
+      params: {
+        amount,
+        currency: 'USD',
+        from: 'chat',
+        session_scope: sessionScope,
+        lang: language,
+      },
+    });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'wire_onramp', sessionId);
+    return JSON.stringify({
+      success: true,
+      frontend_url: frontendUrl,
+      message: language === 'en'
+        ? `USD wire/ACH deposit is ready.\n\nOpen:\n${frontendUrl}`
+        : `Depósito em dólar via banco americano (wire/ACH) pronto.\n\nAbrir:\n${frontendUrl}`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function executeOpenSwapInterface(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const fromAsset = normalizePairQuoteAsset(input.from_asset || input.fromAsset || input.source_asset_code || input.asset_code || 'XLM');
+    const toAsset = normalizePairQuoteAsset(input.to_asset || input.toAsset || input.dest_asset_code || 'USDC');
+    const amount = String(input.amount || '').trim();
+    const tradeType = String(input.trade_type || input.tradeType || 'EXACT_IN').trim().toUpperCase() === 'EXACT_OUT' ? 'EXACT_OUT' : 'EXACT_IN';
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || '');
+    const rawUrl = buildFrontendInterfaceUrl({
+      path: '/swap',
+      params: {
+        from: fromAsset,
+        to: toAsset,
+        amount,
+        trade_type: tradeType,
+        origin: 'chat',
+        session_scope: sessionScope,
+        lang: language,
+      },
+    });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'swap', sessionId);
+    const pair = `${fromAsset} → ${toAsset}`;
+    return JSON.stringify({
+      success: true,
+      from_asset: fromAsset,
+      to_asset: toAsset,
+      amount: amount || null,
+      trade_type: tradeType,
+      frontend_url: frontendUrl,
+      message: language === 'en'
+        ? `DEX swap ${pair} is ready.\n\nOpen:\n${frontendUrl}`
+        : `Swap ${pair} via DEX pronto.\n\nAbrir:\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
