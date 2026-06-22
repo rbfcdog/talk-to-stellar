@@ -262,20 +262,23 @@
 - Symbol quote `USDC -> XLM` returned `stellar-broker-fallback` after Soroswap `400 Invalid Stellar address`.
 - Raw testnet contract quote `USDC -> XLM` and `XLM -> USDC` returned Soroswap `No path found`.
 - Scanning XLM against every token returned by `/api/swap/tokens` found no buildable route.
+- On 2026-06-22, live Soroswap TESTNET `/quote` was reachable with the configured API key but returned `400 No path found` for USDC->XLM, while Horizon strict-send paths returned a classic TESTNET USDC->XLM route.
 
 **Diagnosis steps**:
 1. Confirm `STELLAR_NETWORK=TESTNET`.
 2. Call `GET /api/swap/tokens` and capture the XLM/USDC contract addresses.
 3. Call `GET /api/swap/quote?assetIn=USDC&assetOut=XLM&amount=10&tradeType=EXACT_IN`.
-4. If the response is `stellar-broker-fallback`, inspect `rawQuote.soroswapError`.
-5. Retry with raw token contract IDs from `/api/swap/tokens`.
-6. If Soroswap returns `No path found`, this is provider liquidity/route availability, not wallet signing.
-7. If fallback receives contract IDs and returns `Invalid asset`, the fallback path is being used for a contract quote it cannot price.
+4. If the response is `stellar-path-payment-fallback`, it is buildable through Horizon path-payment XDR rather than Soroswap build.
+5. If the response is `stellar-broker-fallback`, inspect `rawQuote.soroswapError`; this is display-only pricing and `/api/swap/build` should stay disabled.
+6. Retry with raw token contract IDs from `/api/swap/tokens`.
+7. If Soroswap returns `No path found`, this is provider liquidity/route availability, not wallet signing.
+8. If `/api/swap/build` returns an unfunded-account message, fund/activate the Freighter TESTNET account and add the source asset trustline before retrying.
+9. If fallback receives contract IDs and returns `Invalid asset`, the fallback path is being used for a contract quote it cannot price.
 
-**Fix**: `2a48ab3` made token resolution network-aware, corrected the static mainnet USDC SAC wrapper, added explicit testnet XLM/USDC SAC wrappers, stopped routing raw Soroban contract IDs into Stellar Broker fallback, and returns a non-buildable `soroswap-unavailable` response when Soroswap has no route. Buildable quotes can now be built, signed with Freighter, and submitted through `POST /api/swap/send`.
+**Fix**: `2a48ab3` made token resolution network-aware, corrected the static mainnet USDC SAC wrapper, added explicit testnet XLM/USDC SAC wrappers, stopped routing raw Soroban contract IDs into Stellar Broker fallback, and returns a non-buildable `soroswap-unavailable` response when Soroswap has no route. The current fix adds a buildable `stellar-path-payment-fallback` for symbol pairs when Horizon can quote a trusted strict-send/strict-receive path, and `/api/swap/build` uses the existing Stellar path-payment XDR builders for that fallback. Buildable quotes can now be built, signed with Freighter, and submitted through `POST /api/swap/send`; an unfunded Freighter account still must be activated before build succeeds.
 
 **Files**: `backend/src/integrations/soroswap/service.ts`, `backend/src/integrations/soroswap/config.ts`, `backend/tests/soroswap.service.test.ts`
-**Related**: Pain point #56
+**Related**: Pain points #56, #60
 
 ## 17. Payment Watcher SSE HTTP 429 Fan-Out (FIXED)
 

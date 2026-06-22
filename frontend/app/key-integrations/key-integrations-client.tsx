@@ -540,7 +540,7 @@ function SoroswapPanel() {
       )}
       {quote && !canBuildXdr && (
         <div className="mb-5 rounded border border-tts-gold/30 bg-tts-gold/10 p-3 text-xs text-tts-gold">
-          XDR build unavailable for this fallback quote.
+          XDR build unavailable for this quote.
         </div>
       )}
 

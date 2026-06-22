@@ -34,6 +34,7 @@ Operator opens /key-integrations
 - **Soroswap quote provider 400** (#54): Fixed by `17a821f`. If Soroswap `/quote` returns its contract-discovery 400, the backend returns a `stellar-broker-fallback` pricing quote with `buildAvailable: false`; the panel shows the fallback source/warning and hides XDR build.
 - **Soroswap wallet boundary**: Token list and quote tests do not require a wallet. XDR build requires a real `G...` Stellar public key, and execution requires a funded wallet/signing path. See `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md`.
 - **Soroswap testnet execution boundary + Freighter flow** (#56): Fixed by `2a48ab3`. Token resolution is now network-aware, raw contract route failures return a non-buildable `soroswap-unavailable` response instead of falling into Stellar Broker, and the panel can connect Freighter, build for the connected address, sign the XDR, submit the signed transaction, and show the Horizon hash.
+- **Soroswap fallback order placement** (#60): Fixed by `6cae190`. When Soroswap TESTNET `/quote` is reachable but returns `No path found` for a symbol pair such as USDC->XLM, the backend now tries an executable Horizon path-payment fallback (`source: "stellar-path-payment-fallback"`, `protocols: ["sdex"]`) before falling back to display-only Stellar Broker pricing. The Freighter account still must be funded on the selected network and hold the source asset/trustline before XDR build succeeds.
 - **Payment watcher SSE stream rate limit fan-out** (#57): Fixed by `2a48ab3`. Stream opening has a serialized queue and stream-level `429` cooldown, preventing provider-level rate limits from becoming per-wallet warning bursts.
 - **Key integrations scope**: Fixed by `0ddedd7` and `8af4f34`. `/key-integrations` now focuses on Freighter, Blend v2, and Soroswap only.
 
@@ -53,7 +54,7 @@ Operator opens /key-integrations
 - `backend/src/api/controllers/blend.controller.ts` — Blend pool/status controller.
 - `backend/src/integrations/blend/service.ts` — Blend v2 pool registry/status checks.
 - `backend/src/api/routes/soroswap.router.ts` — Soroswap route mount.
-- `backend/src/integrations/soroswap/service.ts` — Soroswap quote/build/token logic, token fallback, and Stellar Broker quote fallback.
+- `backend/src/integrations/soroswap/service.ts` — Soroswap quote/build/token logic, token fallback, executable Stellar path-payment fallback, and display-only Stellar Broker quote fallback.
 - `backend/src/integrations/soroswap/types.ts` — quote capability fields (`source`, `buildAvailable`, `warning`).
 - `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md` — operator workflow for wallet creation, quote-only testing, XDR build, signing, submission, and verification.
 
@@ -79,3 +80,4 @@ Operator opens /key-integrations
 - `npm --prefix frontend run build` passed and listed `/key-integrations` plus dynamic `/api/[...path]`.
 - `2a48ab3` added network-aware Soroswap token resolution, non-buildable contract-route responses, Freighter connect/sign controls, signed-XDR submission through `/api/swap/send`, and stream-level payment watcher `429` throttling.
 - `0ddedd7` and `8af4f34` slimmed the screen to Blend v2, Soroswap, and Freighter only.
+- `6cae190` made symbol-pair Soroswap fallback quotes executable through Horizon path-payment XDRs when Soroswap has no TESTNET route but Horizon does.
