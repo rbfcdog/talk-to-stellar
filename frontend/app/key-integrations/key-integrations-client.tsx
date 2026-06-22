@@ -97,6 +97,7 @@ function SectionHead({
   );
 }
 
+
 // ── 1. Blend v2 Lending ────────────────────────────────────────────────────────
 
 const BLEND_API = '/api/blend';
@@ -574,6 +575,89 @@ function SoroswapPanel() {
     </OperationalCard>
   );
 }
+// ── 3. Freighter Wallet ──────────────────────────────────────────────────────────
+
+function FreighterPanel() {
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletNetwork, setWalletNetwork] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeNetwork, setActiveNetwork] = useState<"TESTNET" | "PUBLIC">("PUBLIC");
+
+  const connect = useCallback(async () => {
+    setConnecting(true); setError(null);
+    try {
+      const freighter = await import("@stellar/freighter-api");
+      const connected = await freighter.isConnected();
+      const ce = freighterError(connected);
+      if (ce) throw new Error(ce);
+      if (!connected.isConnected) throw new Error("Freighter extension not installed.");
+
+      const access = await freighter.requestAccess();
+      const ae = freighterError(access);
+      if (ae) throw new Error(ae);
+      if (!access.address) throw new Error("Freighter did not return a public key.");
+
+      const network = await freighter.getNetwork();
+      const ne = freighterError(network);
+      if (ne) throw new Error(ne);
+
+      setWalletAddress(access.address);
+      setWalletNetwork(network.network || "");
+      setActiveNetwork(normalizeFreighterNetwork(network.network));
+    } catch (e: any) { setError(e.message); }
+    finally { setConnecting(false); }
+  }, []);
+
+  const disconnect = useCallback(() => {
+    setWalletAddress("");
+    setWalletNetwork("");
+    setError(null);
+  }, []);
+
+  const walletNetworkMatches = walletNetwork
+    ? normalizeFreighterNetwork(walletNetwork) === activeNetwork
+    : true;
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+          <Wallet className="h-4 w-4 text-tts-gold" />
+          Freighter Wallet
+        </h2>
+        {walletAddress
+          ? <StatusPill tone={walletNetworkMatches ? "confirm" : "gold"}>{walletNetwork || "Connected"}</StatusPill>
+          : <StatusPill tone="gold">Not connected</StatusPill>}
+      </div>
+      {walletAddress ? (
+        <div className="space-y-2">
+          <Row label="Network" value={walletNetwork || "Unknown"} />
+          <Row label="Address" value={shortAddress(walletAddress)} mono />
+          <p className="break-all font-mono text-[10px] text-tts-muted/60">{walletAddress}</p>
+          {!walletNetworkMatches && (
+            <p className="text-xs text-tts-gold">Freighter is on {walletNetwork}; switch to {activeNetwork}.</p>
+          )}
+          <Button size="sm" variant="outline" className="w-full" onClick={disconnect}>
+            Disconnect
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-tts-muted">
+            Connect the Freighter browser extension to sign Stellar transactions.
+            Required for executing swaps via Soroswap.
+          </p>
+          <Button size="sm" className="w-full" onClick={connect} disabled={connecting}>
+            {connecting ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Connecting…</> : <><Wallet className="mr-1.5 h-3.5 w-3.5" />Connect Freighter</>}
+          </Button>
+          {error && <Err msg={error} />}
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -582,16 +666,17 @@ export default function KeyIntegrationsClient() {
     <OperationalPage>
       <OperationalHeader
         title="Key Integrations"
-        description="Soroswap multi-protocol DEX + Blend v2 lending — connected via Freighter wallet."
+        description="Soroswap DEX · Blend v2 Lending · Freighter Wallet — test every feature end to end."
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <OperationalStat label="Swap" value="Soroswap" detail="4 protocols — soroswap, phoenix, aqua, sdex" />
-        <OperationalStat label="Lending" value="Blend v2" detail="USDC/XLM pools — on-chain contracts" />
         <OperationalStat label="Wallet" value="Freighter" detail="Sign and submit XDR" />
+        <OperationalStat label="Lending" value="Blend v2" detail="USDC/XLM pools — on-chain contracts" />
+        <OperationalStat label="Swap" value="Soroswap" detail="4 protocols — soroswap, phoenix, aqua, sdex" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <FreighterPanel />
         <BlendPanel />
         <SoroswapPanel />
       </div>
