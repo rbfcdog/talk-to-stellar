@@ -13,6 +13,11 @@ function backendBaseUrl() {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Embed BACKEND_URL at build time so it's available in Route Handlers at runtime.
+  // Without this, process.env.BACKEND_URL is undefined in production server code.
+  env: {
+    BACKEND_URL: backendBaseUrl(),
+  },
   reactStrictMode: true,
   compress: true,
   poweredByHeader: false,
