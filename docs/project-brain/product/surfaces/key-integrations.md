@@ -26,6 +26,7 @@ Operator opens /key-integrations
 ### Fixed
 
 - **Payment watcher deploy log storm + Backend unreachable** (#53): Fixed by `ef1f793` and `299a21d`. The backend watcher now preflights Horizon account existence, treats 404 accounts as unfunded activation retries, and deduplicates reconnect timers. The frontend catch-all API route now uses the shared production-aware backend proxy, so key-integrations panels no longer depend on a localhost fallback in deployed builds. The Soroswap token panel falls back to built-in Stellar tokens when upstream token discovery fails or returns empty.
+- **Soroswap quote provider 400** (#54): Fixed by `17a821f`. If Soroswap `/quote` returns its contract-discovery 400, the backend returns a `stellar-broker-fallback` pricing quote with `buildAvailable: false`; the panel shows the fallback source/warning and hides XDR build.
 
 ### Still Open
 
@@ -43,7 +44,8 @@ Operator opens /key-integrations
 - `backend/src/api/routes/fraud-screening.router.ts` — StellarExpert fraud-screen route mount.
 - `backend/src/api/routes/soroswap.router.ts` — Soroswap route mount.
 - `backend/src/integrations/payment-watcher/service.ts` — related background watcher that can affect backend reachability during deploys.
-- `backend/src/integrations/soroswap/service.ts` — Soroswap quote/build/token logic and built-in token fallback.
+- `backend/src/integrations/soroswap/service.ts` — Soroswap quote/build/token logic, token fallback, and Stellar Broker quote fallback.
+- `backend/src/integrations/soroswap/types.ts` — quote capability fields (`source`, `buildAvailable`, `warning`).
 
 ## Endpoints
 
@@ -71,4 +73,5 @@ Operator opens /key-integrations
 - `npm --prefix frontend run build` passed and listed `/key-integrations` plus dynamic `/api/[...path]`.
 - After `ef1f793`/`3ce5a80` were pushed, production `/health` recovered at `2026-06-22T01:38:57Z`; `/api/oracle/rates`, `/api/abroad/corridors`, and `/api/fraud-screen/address/:address` responded from the backend.
 - `GET /api/payment-watcher/status` returned active watchers with one reconnecting unfunded account and zero pending subscriptions, confirming the watcher was no longer stuck in a large pending loop.
-- Before `299a21d`, `/api/swap/tokens` and `/api/swap/quote` reached the backend but Soroswap upstream returned `Failed to get Soroswap contract address`. `299a21d` fixes the token-list panel with built-in fallback tokens; quote/build still depends on Soroswap upstream availability.
+- Before `299a21d`, `/api/swap/tokens` and `/api/swap/quote` reached the backend but Soroswap upstream returned `Failed to get Soroswap contract address`. `299a21d` fixes the token-list panel with built-in fallback tokens.
+- `17a821f` fixes the quote panel by falling back to Stellar Broker pricing and marking fallback quotes as not buildable. Soroswap XDR build still requires a real Soroswap quote.

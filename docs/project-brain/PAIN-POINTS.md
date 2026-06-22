@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-22. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-50 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+51 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -373,7 +373,7 @@
 
 ---
 
-## Cluster H — Reliability (12 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (13 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -447,6 +447,15 @@
 - **Status**: **Fixed by `ef1f793` and `299a21d`**. `subscribe()` now preflights Horizon account existence with a timeout, treats `404` as an unfunded-account retry at debug level, closes failed streams, deduplicates reconnect timers, uses exponential backoff for transient stream/preflight failures, and exposes reconnecting counts in `status()`. The frontend catch-all route now uses `proxyBackendApi()` and production builds fall back to the deployed Railway backend instead of `localhost:3001`. Soroswap token discovery now returns a built-in Stellar token list when the upstream token endpoint fails or returns empty, keeping the `/key-integrations` token panel usable. Regression coverage: `backend/tests/payment-watcher.service.test.ts:75`, `frontend/__tests__/unit/api-catchall-proxy.test.ts:25`, and `backend/tests/soroswap.service.test.ts:178`.
 - **Lesson**: **Background watchers must distinguish expected not-yet-funded accounts from operational failures**. Do not open noisy long-lived streams before a cheap existence check, and do not let deployed browser-facing proxies default to localhost.
 
+### #54 — Soroswap Quote Provider 400
+> **Quote**: "Soroswap /quote returned 400: {\"message\":\"Failed to get Soroswap contract address: Failed to fetch contract data: Request failed with status code 404\",\"error\":\"Bad Request\",\"statusCode\":400}"
+> **Gloss**: `/api/swap/quote` reached the backend but returned Soroswap's upstream contract-discovery 400 instead of a usable quote.
+
+- **Where**: `backend/src/integrations/soroswap/service.ts:91`, `backend/src/integrations/soroswap/service.ts:149`, `backend/src/integrations/soroswap/service.ts:199`, `frontend/app/key-integrations/key-integrations-client.tsx:664`, `frontend/app/key-integrations/key-integrations-client.tsx:727`.
+- **Root cause**: `SoroswapService.getQuote()` treated Soroswap API `/quote` as the only quote source. When Soroswap's upstream contract lookup returned `404` internally and surfaced as HTTP 400, the controller propagated the provider error. The key-integrations UI then showed the raw error and still offered an XDR-build path even though no Soroswap quote object was available.
+- **Status**: **Fixed by `17a821f`**. `getQuote()` now falls back to `StellarBrokerService.getQuote()` for pricing when Soroswap `/quote` fails, marks the response with `source: "stellar-broker-fallback"` and `buildAvailable: false`, and blocks Soroswap XDR build attempts for fallback quotes. The key-integrations panel shows the fallback source/warning and hides the XDR builder for fallback quotes. Regression coverage: `backend/tests/soroswap.service.test.ts:102`, `backend/tests/soroswap.service.test.ts:127`, and `backend/tests/soroswap.service.test.ts:209`.
+- **Lesson**: **Provider-specific quote failures need a pricing fallback and an explicit capability boundary**. A fallback quote can keep pricing visible, but transaction-build controls must be disabled unless the quote source can build a compatible XDR.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -487,7 +496,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 50 documented incidents:
+Ranked by frequency × severity across the 51 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -495,19 +504,19 @@ Ranked by frequency × severity across the 50 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
-| 5 | **H — Reliability** | 12 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 13 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Soroswap provider fallback, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 25 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53)
+- **Confirmed fixed**: 26 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 25 of 50 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 26 of 51 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -540,3 +549,4 @@ Fixing commits verified in codebase:
 | #51 | Current code, deployment restart | Build/start current frontend and backend so `/api/wire-test/send` and `/api/transfers/wire-test/send` are mounted; verified Circle HTTP 201 through UI |
 | #52 | `1ab10cd` | Harden `/api/wire-test/send` backend fallback/error passthrough and show upstream Circle/backend status in the UI |
 | #53 | `ef1f793`, `299a21d` | Preflight/dedupe payment watcher Horizon streams, route key-integrations API calls through the shared production-aware backend proxy, and keep Soroswap token discovery usable with built-in fallback tokens |
+| #54 | `17a821f` | Fall back from Soroswap quote 400s to Stellar Broker pricing and disable XDR build for fallback quotes |
