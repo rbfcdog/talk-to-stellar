@@ -16,6 +16,7 @@
 import { loadSoroswapConfig, MAINNET_TOKENS } from './config';
 import { SwapToken, SwapQuoteInput, SwapQuoteResult, SwapBuildInput, SwapBuildResult } from './types';
 import { logger } from '../../utils/logger';
+import { StellarBrokerService } from '../stellar-broker/service';
 
 // 10-minute cache for token list
 let tokenCache: { tokens: SwapToken[]; fetchedAt: number } | null = null;
@@ -36,6 +37,11 @@ function builtInTokenList(network: string): SwapToken[] {
     decimals: 7,
     network,
   }));
+}
+
+function displayAsset(symbolOrAddress: string, resolvedAddress: string): string {
+  const upper = symbolOrAddress.toUpperCase();
+  return MAINNET_TOKENS[upper] ? upper : resolvedAddress;
 }
 
 export const SoroswapService = {
@@ -86,6 +92,8 @@ export const SoroswapService = {
     const config = loadSoroswapConfig();
     const assetInAddress = SoroswapService.resolveTokenAddress(input.assetIn, config.network);
     const assetOutAddress = SoroswapService.resolveTokenAddress(input.assetOut, config.network);
+    const assetIn = displayAsset(input.assetIn, assetInAddress);
+    const assetOut = displayAsset(input.assetOut, assetOutAddress);
     const amountInStroops = SoroswapService.humanToStroops(input.amount);
     const tradeType = input.tradeType || 'EXACT_IN';
 
@@ -127,8 +135,57 @@ export const SoroswapService = {
       };
     } catch (e: any) {
       logger.warn(`[soroswap] getQuote failed: ${e.message}`);
-      throw e;
+      return SoroswapService.getBrokerFallbackQuote({
+        input,
+        tradeType,
+        assetIn,
+        assetOut,
+        amountInStroops,
+        failureMessage: e.message,
+      });
     }
+  },
+
+  async getBrokerFallbackQuote({
+    input,
+    tradeType,
+    assetIn,
+    assetOut,
+    amountInStroops,
+    failureMessage,
+  }: {
+    input: SwapQuoteInput;
+    tradeType: 'EXACT_IN' | 'EXACT_OUT';
+    assetIn: string;
+    assetOut: string;
+    amountInStroops: string;
+    failureMessage: string;
+  }): Promise<SwapQuoteResult> {
+    const direction = tradeType === 'EXACT_OUT' ? 'receive' : 'send';
+    const quote = await StellarBrokerService.getQuote(assetIn, assetOut, input.amount, direction);
+    const amountIn = String(quote.sellAmount ?? (tradeType === 'EXACT_IN' ? input.amount : '0'));
+    const amountOut = String(quote.buyAmount ?? (tradeType === 'EXACT_OUT' ? input.amount : '0'));
+
+    return {
+      assetIn,
+      assetOut,
+      amountIn,
+      amountOut,
+      amountInStroops: SoroswapService.humanToStroops(amountIn),
+      amountOutStroops: SoroswapService.humanToStroops(amountOut),
+      priceImpact: 0,
+      protocols: ['stellar-broker'],
+      route: quote.directTrade?.path ?? [],
+      rawQuote: {
+        provider: 'stellar-broker',
+        fallback: true,
+        soroswapError: failureMessage,
+        quote,
+      },
+      source: 'stellar-broker-fallback',
+      buildAvailable: false,
+      warning: 'Soroswap quote API is unavailable; showing a Stellar Broker fallback quote. XDR build is unavailable for fallback quotes.',
+    };
   },
 
   /**
@@ -138,6 +195,10 @@ export const SoroswapService = {
   async buildSwapXdr(input: SwapBuildInput): Promise<SwapBuildResult> {
     const config = loadSoroswapConfig();
     const slippageBps = input.slippageBps ?? config.defaultSlippageBps;
+
+    if (input.quote.rawQuote?.fallback || input.quote.source === 'stellar-broker-fallback') {
+      throw new Error('Soroswap XDR build unavailable for fallback quotes. Soroswap quote API is currently unavailable; use the quote for pricing only.');
+    }
 
     const url = `${config.apiUrl}/quote/build`;
     const body = {

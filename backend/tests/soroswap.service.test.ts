@@ -4,6 +4,14 @@ jest.mock('../src/utils/logger', () => ({
   logger: { warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() },
 }));
 
+const mockBrokerGetQuote = jest.fn();
+
+jest.mock('../src/integrations/stellar-broker/service', () => ({
+  StellarBrokerService: {
+    getQuote: mockBrokerGetQuote,
+  },
+}));
+
 import { SoroswapService } from '../src/integrations/soroswap/service';
 
 const USDC = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNZT7WSEE9MCZGE6H4SXNVGXNWMSE';
@@ -14,6 +22,15 @@ describe('SoroswapService', () => {
 
   beforeEach(() => {
     fetchMock = jest.spyOn(global, 'fetch');
+    mockBrokerGetQuote.mockResolvedValue({
+      from: 'USDC',
+      to: 'XLM',
+      sellAmount: '1',
+      buyAmount: '4.65',
+      directTrade: { path: [] },
+      slippageTolerance: 0.02,
+      direction: 'strict_send',
+    });
     SoroswapService.clearTokenCache();
   });
 
@@ -82,22 +99,63 @@ describe('SoroswapService', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it('throws on non-ok API response', async () => {
+    it('returns a Stellar Broker fallback quote on non-ok Soroswap API response', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => 'Failed to get Soroswap contract address',
+      } as any);
+
+      const result = await SoroswapService.getQuote({ assetIn: 'USDC', assetOut: 'XLM', amount: '1' });
+
+      expect(result).toMatchObject({
+        assetIn: 'USDC',
+        assetOut: 'XLM',
+        amountIn: '1',
+        amountOut: '4.65',
+        protocols: ['stellar-broker'],
+        source: 'stellar-broker-fallback',
+        buildAvailable: false,
+      });
+      expect(result.rawQuote).toMatchObject({
+        provider: 'stellar-broker',
+        fallback: true,
+      });
+      expect(mockBrokerGetQuote).toHaveBeenCalledWith('USDC', 'XLM', '1', 'send');
+    });
+
+    it('returns a Stellar Broker fallback quote on Soroswap network error', async () => {
+      fetchMock.mockRejectedValue(new Error('Network unreachable'));
+
+      const result = await SoroswapService.getQuote({ assetIn: 'USDC', assetOut: 'XLM', amount: '1' });
+
+      expect(result.source).toBe('stellar-broker-fallback');
+      expect(result.rawQuote.soroswapError).toBe('Network unreachable');
+    });
+
+    it('uses receive direction for exact-out fallback quotes', async () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 400,
         text: async () => 'Bad request',
       } as any);
+      mockBrokerGetQuote.mockResolvedValue({
+        sellAmount: '2.1',
+        buyAmount: '10',
+        directTrade: { path: ['AQUA'] },
+      });
 
-      await expect(SoroswapService.getQuote({ assetIn: 'USDC', assetOut: 'XLM', amount: '1' }))
-        .rejects.toThrow('Soroswap /quote returned 400');
-    });
+      const result = await SoroswapService.getQuote({
+        assetIn: 'XLM',
+        assetOut: 'USDC',
+        amount: '10',
+        tradeType: 'EXACT_OUT',
+      });
 
-    it('throws on network error', async () => {
-      fetchMock.mockRejectedValue(new Error('Network unreachable'));
-
-      await expect(SoroswapService.getQuote({ assetIn: 'USDC', assetOut: 'XLM', amount: '1' }))
-        .rejects.toThrow('Network unreachable');
+      expect(result.amountIn).toBe('2.1');
+      expect(result.amountOut).toBe('10');
+      expect(result.route).toEqual(['AQUA']);
+      expect(mockBrokerGetQuote).toHaveBeenCalledWith('XLM', 'USDC', '10', 'receive');
     });
   });
 
@@ -146,6 +204,27 @@ describe('SoroswapService', () => {
 
       await expect(SoroswapService.buildSwapXdr({ quote: mockQuote, senderAddress: 'GABC' }))
         .rejects.toThrow('missing xdr field');
+    });
+
+    it('rejects XDR build for fallback quotes', async () => {
+      const fallbackQuote = {
+        assetIn: 'USDC',
+        assetOut: 'XLM',
+        amountIn: '1',
+        amountOut: '4.65',
+        amountInStroops: '10000000',
+        amountOutStroops: '46500000',
+        priceImpact: 0,
+        protocols: ['stellar-broker'],
+        route: [],
+        rawQuote: { provider: 'stellar-broker', fallback: true },
+        source: 'stellar-broker-fallback',
+        buildAvailable: false,
+      };
+
+      await expect(SoroswapService.buildSwapXdr({ quote: fallbackQuote, senderAddress: 'GABC' }))
+        .rejects.toThrow('Soroswap XDR build unavailable for fallback quotes');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

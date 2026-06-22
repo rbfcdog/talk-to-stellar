@@ -661,6 +661,7 @@ function SoroswapPanel() {
         (t.name ?? "").toLowerCase().includes(tokenSearch.toLowerCase())
       )
     : tokens;
+  const canBuildXdr = Boolean(quote && quote.buildAvailable !== false);
 
   return (
     <OperationalCard>
@@ -729,12 +730,16 @@ function SoroswapPanel() {
             <Row label="Output" value={`${quote.amountOut} ${quote.assetOut}`} />
             <Row label="Price impact" value={`${quote.priceImpact?.toFixed(4)}%`} />
             <Row label="Protocols" value={quote.protocols?.join(", ")} />
+            {quote.source && <Row label="Source" value={quote.source} />}
+            {quote.warning && (
+              <div className="pt-2 text-xs text-tts-gold">{quote.warning}</div>
+            )}
           </div>
         )}
       </div>
 
       {/* Build XDR */}
-      {quote && (
+      {quote && canBuildXdr && (
         <div className="mb-5">
           <p className="mb-2 text-xs font-semibold text-tts-muted">Build Swap Transaction (XDR)</p>
           <div className="flex gap-2">
@@ -763,6 +768,11 @@ function SoroswapPanel() {
               </a>
             </div>
           )}
+        </div>
+      )}
+      {quote && !canBuildXdr && (
+        <div className="mb-5 rounded border border-tts-gold/30 bg-tts-gold/10 p-3 text-xs text-tts-gold">
+          XDR build unavailable for this fallback quote.
         </div>
       )}
 
