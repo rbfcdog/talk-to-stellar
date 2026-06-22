@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-16. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-22. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-49 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+50 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -373,7 +373,7 @@
 
 ---
 
-## Cluster H — Reliability (11 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (12 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -438,6 +438,15 @@
 - **Status**: **Fixed by `1ab10cd`**. The frontend wire-test proxy now tries configured backend URLs, uses the Railway backend as deployed fallback, reads non-JSON backend responses safely, and returns structured `backend_url`, `backend_http_status`, and attempts metadata. The UI now displays the upstream message and keeps raw details visible. Verified on 2026-06-16: built frontend route returned HTTP 200 with Circle HTTP 201 and payout id present for a $1 sandbox wire; invalid ops auth returned structured HTTP 403 rather than HTTP 500.
 - **Lesson**: **Serverless proxy routes must preserve upstream status and diagnostics**. Do not turn backend reachability, authorization, or provider errors into an opaque 500.
 
+### #53 — Payment Watcher SSE Storm and Key Integrations Backend Unreachable
+> **Quote**: "gvomg this 2000 times every deploy, thats why backend is unreachable??? whats happening? still giving also TalkToStellar Key Integrations ... Backend unreachable ... also this in key-integrations/ frontend. fix the logging and page issuae. for all in this session and in the next iterations, push all to main"
+> **Gloss**: Production logs emitted repeated `[payment-watcher] SSE error ... Not Found` warnings during deploys, and the `/key-integrations` page showed `Backend unreachable` for Abroad Finance, Reflector, and Soroswap.
+
+- **Where**: `backend/src/integrations/payment-watcher/service.ts:152`, `frontend/app/api/[...path]/route.ts:4`, `frontend/lib/backend-proxy.ts:13`, `frontend/next.config.mjs:7`, `frontend/app/key-integrations/key-integrations-client.tsx`.
+- **Root cause**: The payment watcher opened Horizon SSE streams for every stored wallet without first checking whether the Stellar account existed. Unfunded accounts return Horizon `404 Not Found`, and the old handler logged each SSE error as a warning while scheduling reconnects without closing/deduplicating pending reconnects. Separately, the generic Next.js `/api/[...path]` proxy had its own localhost fallback, so deployed key-integrations calls could report `Backend unreachable` when backend env was absent or stale.
+- **Status**: **Fixed by `ef1f793`**. `subscribe()` now preflights Horizon account existence with a timeout, treats `404` as an unfunded-account retry at debug level, closes failed streams, deduplicates reconnect timers, uses exponential backoff for transient stream/preflight failures, and exposes reconnecting counts in `status()`. The frontend catch-all route now uses `proxyBackendApi()` and production builds fall back to the deployed Railway backend instead of `localhost:3001`. Regression coverage: `backend/tests/payment-watcher.service.test.ts:75` and `frontend/__tests__/unit/api-catchall-proxy.test.ts:25`.
+- **Lesson**: **Background watchers must distinguish expected not-yet-funded accounts from operational failures**. Do not open noisy long-lived streams before a cheap existence check, and do not let deployed browser-facing proxies default to localhost.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -478,7 +487,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 49 documented incidents:
+Ranked by frequency × severity across the 50 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -486,19 +495,19 @@ Ranked by frequency × severity across the 49 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
-| 5 | **H — Reliability** | 11 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 12 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 24 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52)
+- **Confirmed fixed**: 25 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 24 of 49 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 25 of 50 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -530,3 +539,4 @@ Fixing commits verified in codebase:
 | #50 | `fe90af9` | Change ops dashboard hero metrics from today-only to all loaded ledger records |
 | #51 | Current code, deployment restart | Build/start current frontend and backend so `/api/wire-test/send` and `/api/transfers/wire-test/send` are mounted; verified Circle HTTP 201 through UI |
 | #52 | `1ab10cd` | Harden `/api/wire-test/send` backend fallback/error passthrough and show upstream Circle/backend status in the UI |
+| #53 | `ef1f793` | Preflight/dedupe payment watcher Horizon streams and route key-integrations API calls through the shared production-aware backend proxy |

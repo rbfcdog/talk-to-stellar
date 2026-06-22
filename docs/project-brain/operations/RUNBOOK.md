@@ -211,3 +211,21 @@
 
 **Files**: `frontend/app/api/wire-test/send/route.ts`, `frontend/app/wire-test/wire-test-client.tsx`, `backend/src/api/controllers/international-transfers.controller.ts`
 **Related**: Pain point #52
+
+## 14. Payment Watcher SSE `Not Found` Storm + Key Integrations `Backend unreachable` (FIXED)
+
+**Symptom**: On deploy, logs repeat `[payment-watcher] SSE error for G...: Not Found` hundreds or thousands of times. The `/key-integrations` page also shows `Backend unreachable` for Abroad Finance, Reflector, or Soroswap panels.
+
+**Status**: Fixed by `ef1f793`.
+
+**Diagnosis steps**:
+1. Check backend health first: `GET /health`. If it times out, inspect deploy logs before testing frontend panels.
+2. Search logs for `[payment-watcher]` and count whether `Not Found` appears as `WARN`. After `ef1f793`, not-yet-funded accounts should only produce debug-level activation retry logs.
+3. Check `GET /api/payment-watcher/status`; `reconnecting` can be non-zero for unfunded accounts, but `watching` should only count active Horizon streams.
+4. Confirm `frontend/app/api/[...path]/route.ts` delegates to `proxyBackendApi(req, "api", path, { injectSession: false })`.
+5. Confirm production frontend builds have `BACKEND_URL`/`NEXT_PUBLIC_BACKEND_URL`; if missing, `frontend/lib/backend-proxy.ts` and `frontend/next.config.mjs` now fall back to the deployed Railway backend instead of `localhost:3001`.
+
+**Fix**: The payment watcher now checks `GET Horizon /accounts/{publicKey}` before opening an SSE stream, uses a 10s account-check timeout, treats `404` as an unfunded wallet activation retry, closes failed stream handles, and deduplicates reconnect timers. The generic frontend API route now uses the shared production-aware backend proxy.
+
+**Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`, `frontend/app/api/[...path]/route.ts`, `frontend/lib/backend-proxy.ts`, `frontend/next.config.mjs`, `frontend/__tests__/unit/api-catchall-proxy.test.ts`
+**Related**: Pain point #53
