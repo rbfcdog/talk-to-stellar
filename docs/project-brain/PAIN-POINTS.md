@@ -507,7 +507,7 @@
 
 - **Where**: `backend/src/integrations/soroswap/service.ts`, `backend/tests/soroswap.service.test.ts`, `frontend/app/key-integrations/key-integrations-client.tsx`, `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md`.
 - **Root cause**: The live Soroswap TESTNET `/quote` endpoint was reachable and authenticated, but returned `400 No path found` for the USDC->XLM Soroban-contract route. The backend then returned `stellar-broker-fallback` pricing with `buildAvailable: false`, so the page had no executable XDR path even though Horizon had a classic TESTNET USDC->XLM strict-send path.
-- **Status**: **Fixed by `6cae190`**. `SoroswapService.getQuote()` now tries Soroswap first, then attempts a buildable `stellar-path-payment-fallback` for symbol pairs using Horizon strict-send/strict-receive quotes before falling back to display-only Stellar Broker pricing. `buildSwapXdr()` now builds the fallback with the existing Stellar path-payment XDR builders and gives an actionable TESTNET funding/trustline error when the Freighter account is not activated.
+- **Status**: **Fixed by `2aec3c2`**. `SoroswapService.getQuote()` now tries Soroswap first, then attempts a buildable `stellar-path-payment-fallback` for symbol pairs using Horizon strict-send/strict-receive quotes before falling back to display-only Stellar Broker pricing. `buildSwapXdr()` now builds the fallback with the existing Stellar path-payment XDR builders and gives an actionable TESTNET funding/trustline error when the Freighter account is not activated.
 - **Lesson**: **Fallbacks must declare whether they are executable**. If Soroswap has no liquidity route but Horizon can build a trusted path payment, the page should expose that signable XDR; if only display pricing is available, keep build disabled.
 
 ### #13 — Investments Page Failing
@@ -609,4 +609,4 @@ Fixing commits verified in codebase:
 | #57 | `2a48ab3` | Serialize Horizon SSE stream opening, apply a stream-level 429 cooldown, and suppress per-wallet stream warning fan-out |
 | #58 | `b067970` | Show Bridge virtual-account wire balances from live VA balance fields, destination wallet id matches, and received-funds activity |
 | #59 | `3087e4c` | Use Bridge customer-scoped virtual-account lookup and `/history` activity endpoint for wire balance totals |
-| #60 | `6cae190` | Build executable Stellar path-payment XDRs for Soroswap symbol-pair fallback quotes when Horizon has a trusted path |
+| #60 | `2aec3c2` | Build executable Stellar path-payment XDRs for Soroswap symbol-pair fallback quotes when Horizon has a trusted path |
