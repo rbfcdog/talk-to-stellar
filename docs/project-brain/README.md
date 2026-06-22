@@ -11,7 +11,7 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [DOCS-INDEX.md](./DOCS-INDEX.md) | You need to find which doc covers X. |
 | [NON-PROJECT-BRAIN-DOCS-SUMMARY.md](./NON-PROJECT-BRAIN-DOCS-SUMMARY.md) | You need the entry point for Markdown docs outside project-brain. |
 | [PAIN-POINTS.md](./PAIN-POINTS.md) | Something broke. Check if it's a known pattern. |
-| [OPEN-ISSUES.md](./OPEN-ISSUES.md) | You want the actionable backlog (29 fixed, 22 open). |
+| [OPEN-ISSUES.md](./OPEN-ISSUES.md) | You want the actionable backlog (30 fixed, 22 open). |
 
 ### Distributed Repository Documentation Summaries
 | File | Read when... |
@@ -75,6 +75,7 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [product/surfaces/ops-dashboard-components.md](./product/surfaces/ops-dashboard-components.md) | Backend `/ops` component primitives, status system, and extension rules. |
 | [product/surfaces/admin-transactions-dashboard.md](./product/surfaces/admin-transactions-dashboard.md) | Frontend admin transfer lifecycle dashboard issues. |
 | [product/surfaces/wire-payout-test.md](./product/surfaces/wire-payout-test.md) | Frontend Circle wire payout test screen and endpoint map. |
+| [product/surfaces/bridge-test.md](./product/surfaces/bridge-test.md) | Frontend Bridge mainnet test screen, virtual accounts, wallet balances, and VA activity issues. |
 | [product/surfaces/key-integrations.md](./product/surfaces/key-integrations.md) | Frontend key ecosystem integration test panel and proxy/backend reachability issues. |
 
 ### History
