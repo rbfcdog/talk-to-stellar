@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-22. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-54 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+55 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -36,7 +36,7 @@
 
 ---
 
-## Cluster B — Ledger & Balance Correctness (5 incidents, SEVERITY: HIGH)
+## Cluster B — Ledger & Balance Correctness (6 incidents, SEVERITY: HIGH)
 
 ### #32 — Balance Not Credited
 > **Quote**: "era pra ter mudado o saldo, teste o on ramp e o off ramp, nao esta alterando o saldo nesse caso. o on ramp nao esta funcionando... teste extensivamente se funciona"
@@ -82,6 +82,15 @@
 - **Root cause**: The exact backend error was `Saldo de TESOURO insuficiente para a conversão. Necessário: 123, disponível: 89.6400000.` The public error mappers only recognized contiguous `saldo insuficiente`, so `Saldo de <ASSET> insuficiente` fell through to `temporary_unavailable`.
 - **Status**: **Fixed** by `227832a` (Fix conversion insufficient balance error copy). `publicErrorCode()` in `backend/src/utils/public-error.ts` and `mapPublicError()` in `frontend/lib/public-errors.ts` now classify asset-specific insufficient balance messages as `insufficient_balance`; regression tests cover the exact TESOURO conversion error shape.
 - **Lesson**: **Balance errors must stay actionable through every layer**. Asset-specific messages such as `Saldo de TESOURO insuficiente` must map to insufficient-balance copy, not a generic retry.
+
+### #58 — Bridge Virtual Account Wire Balance Not Showing
+> **Quote**: "also, make so that the virtuall accounts in bridge-test show the actual balancem, i recieved a wirw but right now isnt showing on wirtual account"
+> **Gloss**: `/bridge-test` virtual-account cards did not show the received wire balance/activity for a Bridge virtual account.
+
+- **Where**: `backend/src/api/controllers/bridge.controller.ts:884`, `backend/src/api/routes/bridge.router.ts:104`, `backend/src/integrations/bridge/types.ts:171`, `frontend/app/bridge-test/bridge-test-client.tsx:829`.
+- **Root cause**: The UI treated virtual-account balance as a destination on-chain balance and tried to match Bridge wallet balances by destination address. Bridge wallet balances are keyed by wallet id, and incoming wire deposits can surface first in virtual-account activity as `funds_received`, not in `/wallets/balances`.
+- **Status**: **Fixed** by `b067970` (show virtual account wire balances). `getVirtualAccountBalance()` combines live virtual-account balance fields, destination Bridge wallet balances matched by `bridge_wallet_id`, and received-funds activity totals; the `/bridge-test` VA card now refreshes by virtual-account id and renders the returned source label.
+- **Lesson**: **Virtual-account balances must be provider-native, not inferred from destination addresses**. For Bridge VAs, read live account state and activity before falling back to wallet balances.
 
 ---
 
@@ -523,14 +532,14 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 54 documented incidents:
+Ranked by frequency × severity across the 55 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
 | 1 | **C — Flow State Machine** | 8 | HIGH | Windows don't close, flows auto-advance, links expire, PIN cut off |
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
-| 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
+| 4 | **B — Ledger & Balance** | 6 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility |
 | 5 | **H — Reliability** | 16 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
@@ -538,12 +547,12 @@ Ranked by frequency × severity across the 54 documented incidents:
 
 ## Status Summary
 
-- **Confirmed fixed**: 29 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57)
+- **Confirmed fixed**: 30 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 29 of 54 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 30 of 55 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -580,3 +589,4 @@ Fixing commits verified in codebase:
 | #55 | `935822b` | Serialize payment watcher Horizon account preflights, honor HTTP 429 cooldowns, and replace per-wallet warning bursts with one provider-level warning |
 | #56 | `2a48ab3` | Make Soroswap token resolution network-aware, prevent contract-address fallback into Stellar Broker, add Freighter sign/submit flow |
 | #57 | `2a48ab3` | Serialize Horizon SSE stream opening, apply a stream-level 429 cooldown, and suppress per-wallet stream warning fan-out |
+| #58 | `b067970` | Show Bridge virtual-account wire balances from live VA balance fields, destination wallet id matches, and received-funds activity |

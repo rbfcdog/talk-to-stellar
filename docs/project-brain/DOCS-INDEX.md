@@ -65,6 +65,7 @@ Their source documents now live under categorized root `docs/` folders:
 | `docs/planning/` | TODO and planning notes | ⚠️ Check against current code before using as backlog |
 | `docs/presentations/` | Pitch deck, user demo, and presentation script | ⚠️ Presentation material may lag implementation |
 | `docs/product/` | UX audits, no-mocks plan, invisible wallet, and upgrade roadmap | ✅ Product guidance; dated audits remain snapshots |
+| `docs/project-brain/product/surfaces/bridge-test.md` | Frontend `/bridge-test` Bridge mainnet test screen, virtual-account activity, wallet balances, and VA balance endpoint map | ✅ Current |
 | `docs/project-brain/product/surfaces/wire-payout-test.md` | Frontend `/wire-test` Circle wire payout test screen, endpoint map, and key files | ✅ Current |
 | `docs/qa-session-logs/` | QA session logs and user-flow smoke tests | ⚠️ Historical runs should be rerun before claiming pass |
 | `docs/reference/` | Current feature documentation index | ✅ Current index; verify links after moves |

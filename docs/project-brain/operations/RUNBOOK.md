@@ -296,3 +296,21 @@
 
 **Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`
 **Related**: Pain point #57
+
+## 18. Bridge Virtual Account Wire Balance Missing In `/bridge-test` (FIXED)
+
+**Symptom**: A Bridge virtual account received a wire, but the `/bridge-test` virtual-account card still showed no balance.
+
+**Status**: Fixed by `b067970`. The screen now calls a dedicated virtual-account balance endpoint instead of matching destination addresses against `/wallets/balances`.
+
+**Diagnosis steps**:
+1. Confirm the virtual account id in the `/bridge-test` card.
+2. Call `GET /api/bridge` with header `x-bridge-path: /customers/{customerId}/virtual-accounts/{virtualAccountId}/balance`.
+3. Inspect `balances[]`. Source `virtual_account` means Bridge exposed a direct live balance; source `bridge_wallet` means the endpoint matched destination `bridge_wallet_id`; source `activity` means it summarized received-funds events.
+4. If `balances[]` is empty but `warnings[]` includes `activity`, call `/customers/{customerId}/virtual-accounts/{virtualAccountId}/activity` to confirm Bridge is returning VA events.
+5. If `balances[]` is empty but the bank wire is recent, wait for Bridge activity to post, then refresh the card.
+
+**Fix**: `BridgeController.getVirtualAccountBalance()` loads the live virtual account, activity, and Bridge wallet balances; it prefers non-zero live/wallet balances, falls back to `funds_received` activity totals, and returns zero live balances if no positive value exists.
+
+**Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/src/api/routes/bridge.router.ts`, `backend/src/integrations/bridge/types.ts`, `frontend/app/bridge-test/bridge-test-client.tsx`
+**Related**: Pain point #58
