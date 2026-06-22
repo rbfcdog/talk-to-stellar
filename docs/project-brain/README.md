@@ -11,7 +11,7 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [DOCS-INDEX.md](./DOCS-INDEX.md) | You need to find which doc covers X. |
 | [NON-PROJECT-BRAIN-DOCS-SUMMARY.md](./NON-PROJECT-BRAIN-DOCS-SUMMARY.md) | You need the entry point for Markdown docs outside project-brain. |
 | [PAIN-POINTS.md](./PAIN-POINTS.md) | Something broke. Check if it's a known pattern. |
-| [OPEN-ISSUES.md](./OPEN-ISSUES.md) | You want the actionable backlog (30 fixed, 22 open). |
+| [OPEN-ISSUES.md](./OPEN-ISSUES.md) | You want the actionable backlog (31 fixed, 22 open). |
 
 ### Distributed Repository Documentation Summaries
 | File | Read when... |

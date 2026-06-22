@@ -73,7 +73,7 @@
 - **Endpoint**: Bridge.xyz API (Stripe-owned)
 - **Auth**: `BRIDGE_API_KEY` env
 - **Client**: `backend/src/integrations/bridge/` — service, client, types, config
-- **Features**: PIX virtual accounts, ACH off-ramp, webhook for deposit confirmation; `/bridge-test` can read live VA balances by combining VA fields, destination Bridge wallet balances, and VA activity totals; payout adapter currently remains compatibility-oriented while provider access is pending
+- **Features**: PIX virtual accounts, ACH off-ramp, webhook for deposit confirmation; `/bridge-test` can read live VA balances by combining VA fields, destination Bridge wallet balances, and VA `/history` activity totals; payout adapter currently remains compatibility-oriented while provider access is pending
 - **Failure modes**: Virtual account setup failures, webhook signature validation, recent wire deposits not yet posted to VA activity
 - **Config**: `BRIDGE_API_KEY`, `BRIDGE_WEBHOOK_SECRET`
 

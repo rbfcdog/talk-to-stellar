@@ -19,12 +19,14 @@ Operator opens /bridge-test
 - Purpose: operator-only Bridge mainnet test console for onboarding, wallets, virtual accounts, and money-movement setup checks.
 - Uses `BRIDGE_BASE = "/api/bridge"` and passes the backend path through the `x-bridge-path` header.
 - Virtual-account cards now fetch balance by virtual-account id, not destination address.
+- Bridge VA activity is read from the provider `/history` endpoint; `funds_received` is preferred over `payment_processed` per deposit id to avoid double-counting.
 
 ## Known Issues
 
 ### Fixed
 
 - **Virtual account wire balance missing** (#58): Fixed by `b067970`. The screen now calls `/customers/:id/virtual-accounts/:virtualAccountId/balance`; the backend combines live VA balance fields, destination wallet balance matches by Bridge wallet id, and `funds_received` activity totals.
+- **Bridge VA balance provider-path drift** (#59): Fixed by `3087e4c`. The backend now uses Bridge's customer-scoped virtual-account lookup and `/history` activity endpoint, and it can still return received wire totals when destination wallet lookup emits `Bridge wallet not found`.
 
 ### Still Open
 
@@ -48,7 +50,7 @@ Operator opens /bridge-test
 | Bridge proxy | Any | `/api/bridge` + `x-bridge-path` | `/api/bridge/*` |
 | Cached VAs | GET | `/api/bridge` + `/customers/:id/virtual-accounts/cached` | `/api/bridge/customers/:id/virtual-accounts/cached` |
 | Live VAs | GET | `/api/bridge` + `/customers/:id/virtual-accounts` | `/api/bridge/customers/:id/virtual-accounts` |
-| VA activity | GET | `/api/bridge` + `/customers/:id/virtual-accounts/:virtualAccountId/activity` | `/api/bridge/customers/:id/virtual-accounts/:virtualAccountId/activity` |
+| VA activity | GET | `/api/bridge` + `/customers/:id/virtual-accounts/:virtualAccountId/activity` | `/api/bridge/customers/:id/virtual-accounts/:virtualAccountId/activity` → Bridge `/history` |
 | VA balance | GET | `/api/bridge` + `/customers/:id/virtual-accounts/:virtualAccountId/balance` | `/api/bridge/customers/:id/virtual-accounts/:virtualAccountId/balance` |
 | Wallet balances | GET | `/api/bridge` + `/wallets/balances` | `/api/bridge/wallets/balances` |
 
@@ -57,5 +59,6 @@ Operator opens /bridge-test
 2026-06-22:
 
 - `npm --prefix backend test -- --runInBand tests/bridge.routes.test.ts -t "summarizes virtual account"` passed.
+- `npm --prefix backend test -- --runInBand tests/bridge.routes.test.ts tests/bridge.service.test.ts -t "virtual account"` passed.
 - `npm --prefix backend run build` passed.
 - `npm --prefix frontend run build` passed and listed `/bridge-test`.
