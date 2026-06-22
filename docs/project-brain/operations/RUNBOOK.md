@@ -230,3 +230,22 @@
 
 **Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`, `backend/src/integrations/soroswap/service.ts`, `backend/src/integrations/soroswap/types.ts`, `backend/tests/soroswap.service.test.ts`, `frontend/app/key-integrations/key-integrations-client.tsx`, `frontend/app/api/[...path]/route.ts`, `frontend/lib/backend-proxy.ts`, `frontend/next.config.mjs`, `frontend/__tests__/unit/api-catchall-proxy.test.ts`
 **Related**: Pain points #53 and #54
+
+## 15. Payment Watcher Horizon Preflight HTTP 429 Burst (FIXED)
+
+**Symptom**: Deploy logs repeat `[payment-watcher] Horizon preflight failed for G...: Horizon account check returned HTTP 429; retrying in 120s` across many wallet addresses in the same second.
+
+**Status**: Fixed by `935822b`. Account preflight checks are serialized, spaced, and rate-limit aware.
+
+**Diagnosis steps**:
+1. Search logs for `[payment-watcher] Horizon preflight` and count HTTP `429` occurrences per minute.
+2. Confirm the deployed backend includes `935822b` or later.
+3. Check `PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS`; default is `1000`, which sends at most one account preflight per second.
+4. Check `PAYMENT_WATCHER_RATE_LIMIT_RETRY_MS`; default is `300000` when Horizon does not return `Retry-After`.
+5. Confirm logs now show at most one global warning: `Horizon preflight rate limited (HTTP 429); pausing account checks...`.
+6. Check `GET /api/payment-watcher/status`; many `reconnecting` addresses can be normal after a provider cooldown, but logs should not burst per address.
+
+**Fix**: `PaymentWatcherService.accountExists()` now waits for a global account-check slot before calling Horizon, parses `Retry-After` on HTTP 429, pauses queued account checks during the cooldown, and schedules reconnects after that cooldown. `subscribe()` handles the rate-limit error separately so one provider-level warning replaces per-wallet warning spam.
+
+**Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`
+**Related**: Pain point #55
