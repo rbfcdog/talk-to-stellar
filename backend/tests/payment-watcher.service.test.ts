@@ -1,4 +1,6 @@
 process.env.STELLAR_NETWORK = 'TESTNET';
+process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS = '0';
+process.env.PAYMENT_WATCHER_RATE_LIMIT_RETRY_MS = '0';
 
 jest.mock('../src/utils/logger', () => ({
   logger: {
@@ -84,6 +86,30 @@ describe('PaymentWatcherService', () => {
 
     expect(mockPayments).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
+    expect(paymentWatcher.status()).toMatchObject({
+      watching: 0,
+      reconnecting: 1,
+      reconnectingAddresses: [key],
+    });
+  });
+
+  it('subscribe — pauses account checks when Horizon preflight is rate limited', async () => {
+    const key = 'GPUBKEY429222222222222222222222222222222222222222222222';
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: {
+        get: jest.fn((name: string) => name.toLowerCase() === 'retry-after' ? '0' : null),
+      },
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await paymentWatcher.subscribe(key);
+
+    expect(mockPayments).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Horizon preflight rate limited (HTTP 429)')
+    );
     expect(paymentWatcher.status()).toMatchObject({
       watching: 0,
       reconnecting: 1,
