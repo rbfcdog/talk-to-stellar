@@ -430,6 +430,18 @@ export default function BridgeTestClient() {
     }
   }, [walletKey, walletOnChain, walletBusy]);
 
+  // Auto-fetch VA destination balances when VAs load
+  useEffect(() => {
+    for (const va of virtualAccounts) {
+      if (!va.id) continue;
+      const addr = (va.destination_address || (va.destination as any)?.address || (va.destination as any)?.to_address) as string;
+      if (addr && !vaBalances[va.id]) {
+        fetchVaDestinationBalance(va.id, addr);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [virtualAccounts]);
+
   // ── Session handlers ──────────────────────────────────────────
 
   function handleLogin(e: React.FormEvent) {
@@ -860,6 +872,41 @@ export default function BridgeTestClient() {
         </OperationalCard>
       ) : null}
       {copied ? <div className="rounded-md border border-tts-confirm/25 bg-tts-confirm/10 p-2 text-sm font-semibold text-tts-confirm">Copied: {copied}</div> : null}
+
+      {/* ── Wallet Balances ─────────────────────────────────── */}
+      <OperationalCard>
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+            <Wallet className="h-4 w-4 text-tts-gold" />
+            Wallet Balances
+          </h2>
+          <Button variant="outline" size="sm" onClick={() => walletKey ? fetchBalance() : null} disabled={walletBusy || !walletKey}>
+            {walletBusy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+            Refresh
+          </Button>
+        </div>
+        {!walletKey ? (
+          <p className="mt-2 text-xs text-tts-muted">No wallet selected — go to Step 2 to select or create one.</p>
+        ) : walletBusy ? (
+          <p className="mt-2 flex items-center gap-2 text-xs text-tts-muted"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</p>
+        ) : walletOnChain === false ? (
+          <p className="mt-2 text-xs text-tts-error">Account not found on Stellar mainnet.</p>
+        ) : walletBalances.length === 0 ? (
+          <p className="mt-2 text-xs text-tts-muted">No balances yet — click Refresh.</p>
+        ) : (
+          <div className="mt-2 grid gap-1">
+            {walletBalances.filter((b) => parseFloat(b.balance) > 0 || b.asset_type === "native").map((b, i) => (
+              <div key={i} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1 text-xs">
+                <span className="text-tts-muted">{b.asset_code || "XLM"}</span>
+                <span className="font-mono font-bold text-tts-deep">{parseFloat(b.balance).toFixed(b.asset_type === "native" ? 7 : 2)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {walletKey && (
+          <p className="mt-1.5 truncate font-mono text-[10px] text-tts-muted/60">{walletKey}</p>
+        )}
+      </OperationalCard>
 
       {/* ── Step 1: Customer ─────────────────────────────────── */}
       <OperationalCard>
