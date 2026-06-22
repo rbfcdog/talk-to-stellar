@@ -301,16 +301,17 @@
 
 **Symptom**: A Bridge virtual account received a wire, but the `/bridge-test` virtual-account card still showed no balance.
 
-**Status**: Fixed by `b067970`. The screen now calls a dedicated virtual-account balance endpoint instead of matching destination addresses against `/wallets/balances`.
+**Status**: Fixed by `b067970` and follow-up `3087e4c`. The screen now calls a dedicated virtual-account balance endpoint instead of matching destination addresses against `/wallets/balances`, and the backend uses Bridge's customer-scoped VA lookup plus `/history` activity endpoint.
 
 **Diagnosis steps**:
 1. Confirm the virtual account id in the `/bridge-test` card.
 2. Call `GET /api/bridge` with header `x-bridge-path: /customers/{customerId}/virtual-accounts/{virtualAccountId}/balance`.
 3. Inspect `balances[]`. Source `virtual_account` means Bridge exposed a direct live balance; source `bridge_wallet` means the endpoint matched destination `bridge_wallet_id`; source `activity` means it summarized received-funds events.
-4. If `balances[]` is empty but `warnings[]` includes `activity`, call `/customers/{customerId}/virtual-accounts/{virtualAccountId}/activity` to confirm Bridge is returning VA events.
-5. If `balances[]` is empty but the bank wire is recent, wait for Bridge activity to post, then refresh the card.
+4. If `balances[]` is empty but `warnings[]` includes `activity`, confirm `BridgeService.getVirtualAccountActivity()` is calling `/customers/{customerId}/virtual_accounts/{virtualAccountId}/history`, not `/activity`.
+5. If `warnings[]` includes `Bridge wallet not found`, do not stop diagnosis there; that can refer to destination wallet metadata and does not prove the wire was missing.
+6. If `balances[]` is empty but the bank wire is recent, wait for Bridge history to post a `funds_received` or `payment_processed` event, then refresh the card.
 
-**Fix**: `BridgeController.getVirtualAccountBalance()` loads the live virtual account, activity, and Bridge wallet balances; it prefers non-zero live/wallet balances, falls back to `funds_received` activity totals, and returns zero live balances if no positive value exists.
+**Fix**: `BridgeController.getVirtualAccountBalance()` loads the live virtual account, activity, and Bridge wallet balances; it prefers non-zero live/wallet balances, falls back to received activity totals, and returns zero live balances if no positive value exists. `3087e4c` corrected Bridge VA lookup to `/customers/{customerId}/virtual_accounts/{virtualAccountId}` and activity to `/history`, then dedupes `funds_received`/`payment_processed` by deposit id.
 
 **Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/src/api/routes/bridge.router.ts`, `backend/src/integrations/bridge/types.ts`, `frontend/app/bridge-test/bridge-test-client.tsx`
-**Related**: Pain point #58
+**Related**: Pain points #58 and #59
