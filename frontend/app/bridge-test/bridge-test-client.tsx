@@ -407,12 +407,20 @@ export default function BridgeTestClient() {
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/readiness`)
         .then((p) => setReadiness(p.readiness as ReadinessData))
         .catch(() => {});
-      // Auto-load Bridge custodial wallets from DB (fast, no Bridge API call)
+      // Auto-load Bridge custodial wallets from DB (fast), fall back to API list if cache empty
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets/cached`)
-        .then((p) => setBridgeWallets((p.wallets as BridgeWalletData[]) || []))
+        .then(async (p) => {
+          const cached = (p.wallets as BridgeWalletData[]) || [];
+          setBridgeWallets(cached);
+          if (cached.length === 0) {
+            // Cache empty — fetch from Bridge API directly
+            const live = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets`).catch(() => ({} as any));
+            setBridgeWallets((live.wallets as BridgeWalletData[]) || []);
+          }
+        })
         .catch(() => {});
       // Auto-load Bridge custodial wallet balances
-      fetchBridgeBalances().catch(() => {});
+      setTimeout(() => fetchBridgeBalances().catch(() => {}), 800); // slight delay to let wallets load first
       // Auto-load virtual accounts from DB
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/cached`)
         .then((p) => setVirtualAccounts((p.virtual_accounts as VirtualAccountData[]) || []))
@@ -875,7 +883,7 @@ export default function BridgeTestClient() {
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
         <OperationalStat label="Customer" value={customer?.id?.slice(0, 10) || "-"} detail={customer?.status || customer?.kyc_status || "Not found"} tone={customer ? "confirm" : "default"} />
-        <OperationalStat label="Bridge wallets" value={String(bridgeBalances.length)} detail={bridgeBalances.length ? `${bridgeBalances.reduce((s, b) => s + parseFloat(b.amount || '0'), 0).toFixed(2)} total` : "None yet"} tone={bridgeBalances.length ? "confirm" : "default"} />
+        <OperationalStat label="Bridge wallets" value={String(bridgeWallets.length)} detail={bridgeBalances.length ? `${bridgeBalances.reduce((s, b) => s + parseFloat(b.amount || '0'), 0).toFixed(2)} total` : "0.00 total"} tone={bridgeBalances.length ? "confirm" : "default"} />
         <OperationalStat label="External accounts" value={String(externalAccounts.length)} detail={externalAccounts.length ? "Loaded" : "None yet"} tone={externalAccounts.length ? "confirm" : "default"} />
         <OperationalStat label="Transfers" value={String(transfers.length)} detail={transfers.length ? "Loaded" : "None yet"} tone={transfers.length ? "confirm" : "default"} />
       </div>
@@ -902,22 +910,29 @@ export default function BridgeTestClient() {
             Refresh
           </Button>
         </div>
-        {bridgeBalancesBusy && bridgeBalances.length === 0 ? (
-          <p className="mt-2 flex items-center gap-2 text-xs text-tts-muted"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</p>
-        ) : bridgeBalances.length === 0 ? (
+        {bridgeWallets.length === 0 ? (
           <p className="mt-2 text-xs text-tts-muted">No Bridge custodial wallets yet — create one in Step 2 (Bridge Custodial Wallet section).</p>
         ) : (
           <div className="mt-2 grid gap-1">
-            {bridgeBalances.map((b, i) => (
-              <div key={i} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="rounded bg-tts-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-tts-gold">{b.chain}</span>
-                  <span className="text-tts-deep">{b.currency?.toUpperCase()}</span>
-                  {b.wallet_id && <span className="text-tts-muted/60">{b.wallet_id.slice(0, 10)}…</span>}
+            {bridgeWallets.map((w, i) => {
+              const bal = w.address ? bridgeBalances.find((b) => b.wallet_id === w.id || b.wallet_id === w.address) : null;
+              return (
+                <div key={w.id || i} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="rounded bg-tts-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-tts-gold shrink-0">{w.chain}</span>
+                    {bal ? (
+                      <span className="text-tts-deep">{bal.currency?.toUpperCase()}</span>
+                    ) : (
+                      <span className="text-tts-muted">—</span>
+                    )}
+                    <span className="truncate text-tts-muted/50 font-mono text-[10px]">{w.address?.slice(0, 10)}…</span>
+                  </div>
+                  <span className="font-mono font-bold text-tts-deep shrink-0 ml-2">
+                    {bal ? parseFloat(bal.amount || '0').toFixed(6) : bridgeBalancesBusy ? '…' : '0.000000'}
+                  </span>
                 </div>
-                <span className="font-mono font-bold text-tts-deep">{parseFloat(b.amount || '0').toFixed(6)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </OperationalCard>
