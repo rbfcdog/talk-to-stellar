@@ -216,7 +216,7 @@
 
 **Symptom**: On deploy, logs repeat `[payment-watcher] SSE error for G...: Not Found` hundreds or thousands of times. The `/key-integrations` page also shows `Backend unreachable` for Abroad Finance, Reflector, or Soroswap panels.
 
-**Status**: Fixed by `ef1f793`.
+**Status**: Fixed by `ef1f793` and `299a21d`.
 
 **Diagnosis steps**:
 1. Check backend health first: `GET /health`. If it times out, inspect deploy logs before testing frontend panels.
@@ -225,7 +225,7 @@
 4. Confirm `frontend/app/api/[...path]/route.ts` delegates to `proxyBackendApi(req, "api", path, { injectSession: false })`.
 5. Confirm production frontend builds have `BACKEND_URL`/`NEXT_PUBLIC_BACKEND_URL`; if missing, `frontend/lib/backend-proxy.ts` and `frontend/next.config.mjs` now fall back to the deployed Railway backend instead of `localhost:3001`.
 
-**Fix**: The payment watcher now checks `GET Horizon /accounts/{publicKey}` before opening an SSE stream, uses a 10s account-check timeout, treats `404` as an unfunded wallet activation retry, closes failed stream handles, and deduplicates reconnect timers. The generic frontend API route now uses the shared production-aware backend proxy.
+**Fix**: The payment watcher now checks `GET Horizon /accounts/{publicKey}` before opening an SSE stream, uses a 10s account-check timeout, treats `404` as an unfunded wallet activation retry, closes failed stream handles, and deduplicates reconnect timers. The generic frontend API route now uses the shared production-aware backend proxy. The Soroswap token route returns built-in Stellar tokens if upstream token discovery fails or returns an empty list.
 
-**Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`, `frontend/app/api/[...path]/route.ts`, `frontend/lib/backend-proxy.ts`, `frontend/next.config.mjs`, `frontend/__tests__/unit/api-catchall-proxy.test.ts`
+**Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`, `backend/src/integrations/soroswap/service.ts`, `backend/tests/soroswap.service.test.ts`, `frontend/app/api/[...path]/route.ts`, `frontend/lib/backend-proxy.ts`, `frontend/next.config.mjs`, `frontend/__tests__/unit/api-catchall-proxy.test.ts`
 **Related**: Pain point #53
