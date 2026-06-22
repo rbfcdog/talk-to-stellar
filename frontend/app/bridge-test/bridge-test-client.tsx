@@ -449,8 +449,9 @@ export default function BridgeTestClient() {
     for (const va of virtualAccounts) {
       if (!va.id) continue;
       const addr = (va.destination_address || (va.destination as any)?.address || (va.destination as any)?.to_address) as string;
+      const chain = (va.destination_chain || (va.destination as any)?.payment_rail || (va.destination as any)?.chain) as string;
       if (addr && !vaBalances[va.id]) {
-        fetchVaDestinationBalance(va.id, addr);
+        fetchVaDestinationBalance(va.id, addr, chain);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -802,16 +803,42 @@ export default function BridgeTestClient() {
     }
   }
 
-  async function fetchVaDestinationBalance(vaId: string, address: string) {
+  async function fetchVaDestinationBalance(vaId: string, address: string, _chain?: string) {
     if (!address) return;
     setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: true } }));
-    try {
-      const r = await fetch(`${HORIZON}/accounts/${encodeURIComponent(address)}`);
-      if (!r.ok) throw new Error('Account not found on Stellar network');
-      const d = await r.json();
-      setVaBalances((prev) => ({ ...prev, [vaId]: { balances: d.balances || [], loading: false } }));
-    } catch (e: any) {
-      setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: false, error: e.message } }));
+    // Look up in Bridge wallet balances (covers base, ethereum, solana, etc.)
+    const match = bridgeBalances.filter((b) => b.wallet_id === address || b.wallet_id?.toLowerCase() === address.toLowerCase());
+    if (match.length > 0) {
+      setVaBalances((prev) => ({ ...prev, [vaId]: {
+        balances: match.map((b) => ({
+          asset_type: 'credit_alphanum4',
+          asset_code: b.currency?.toUpperCase(),
+          balance: b.amount || '0',
+        })),
+        loading: false,
+      }}));
+    } else {
+      // Refresh bridge balances and retry
+      try {
+        const p = await runApi('GET', '/wallets/balances');
+        const fresh = (p.balances as Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>) || [];
+        setBridgeBalances(fresh);
+        const freshMatch = fresh.filter((b) => b.wallet_id === address || b.wallet_id?.toLowerCase() === address.toLowerCase());
+        if (freshMatch.length > 0) {
+          setVaBalances((prev) => ({ ...prev, [vaId]: {
+            balances: freshMatch.map((b) => ({
+              asset_type: 'credit_alphanum4',
+              asset_code: b.currency?.toUpperCase(),
+              balance: b.amount || '0',
+            })),
+            loading: false,
+          }}));
+        } else {
+          setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: false, error: 'No balance found for this wallet — has it received funds?' } }));
+        }
+      } catch (e: any) {
+        setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: false, error: e.message || 'Failed to fetch Bridge balances' } }));
+      }
     }
   }
 
@@ -1695,7 +1722,7 @@ export default function BridgeTestClient() {
                           {destAddr && (
                             <button
                               className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
-                              onClick={() => fetchVaDestinationBalance(va.id!, destAddr)}
+                              onClick={() => fetchVaDestinationBalance(va.id!, destAddr, destChain)}
                               disabled={bal?.loading}
                             >
                               {bal?.loading ? '…' : (bal?.balances?.length ?? 0) > 0 ? 'Refresh' : 'Balance'}
