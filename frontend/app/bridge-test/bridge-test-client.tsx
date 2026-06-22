@@ -314,6 +314,10 @@ export default function BridgeTestClient() {
   const [walletTxs, setWalletTxs] = useState<{ walletId: string; txs: BridgeWalletTx[] } | null>(null);
   const [txLoading, setTxLoading] = useState(false);
 
+  // Bridge custodial wallet balances (base, ethereum, solana, tempo, tron)
+  const [bridgeBalances, setBridgeBalances] = useState<Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>>([]);
+  const [bridgeBalancesBusy, setBridgeBalancesBusy] = useState(false);
+
   // On-ramp tabs and static memos
   const [onRampTab, setOnRampTab] = useState<'virtual_account' | 'static_memo'>('virtual_account');
   type StaticMemoData = { id?: string; memo?: string; destination?: Record<string, unknown>; customer_id?: string; created_at?: string };
@@ -407,6 +411,8 @@ export default function BridgeTestClient() {
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/wallets/cached`)
         .then((p) => setBridgeWallets((p.wallets as BridgeWalletData[]) || []))
         .catch(() => {});
+      // Auto-load Bridge custodial wallet balances
+      fetchBridgeBalances().catch(() => {});
       // Auto-load virtual accounts from DB
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/cached`)
         .then((p) => setVirtualAccounts((p.virtual_accounts as VirtualAccountData[]) || []))
@@ -726,6 +732,18 @@ export default function BridgeTestClient() {
     setBridgeWallets((p.wallets as BridgeWalletData[]) || []);
   }
 
+  async function fetchBridgeBalances() {
+    setBridgeBalancesBusy(true);
+    try {
+      const p = await runApi("GET", "/wallets/balances");
+      setBridgeBalances((p.balances as Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>) || []);
+    } catch {
+      // errors surface via runApi's setError
+    } finally {
+      setBridgeBalancesBusy(false);
+    }
+  }
+
   function selectBridgeWallet(w: BridgeWalletData) {
     setSelectedBridgeWallet(w);
     setEvmWallet(w.address || "");
@@ -831,7 +849,6 @@ export default function BridgeTestClient() {
     );
   }
 
-  const usdc = walletBalances.find((b) => b.asset_code === "USDC");
   const offRail = OFFRAMP_RAILS.find((r) => r.id === offRailId)!;
 
   // ── Main UI ───────────────────────────────────────────────────
@@ -858,7 +875,7 @@ export default function BridgeTestClient() {
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
         <OperationalStat label="Customer" value={customer?.id?.slice(0, 10) || "-"} detail={customer?.status || customer?.kyc_status || "Not found"} tone={customer ? "confirm" : "default"} />
-        <OperationalStat label="USDC balance" value={usdc ? `${parseFloat(usdc.balance).toFixed(2)}` : "-"} detail={usdc ? "USDC on Stellar" : "No wallet"} tone={usdc ? "confirm" : "default"} />
+        <OperationalStat label="Bridge wallets" value={String(bridgeBalances.length)} detail={bridgeBalances.length ? `${bridgeBalances.reduce((s, b) => s + parseFloat(b.amount || '0'), 0).toFixed(2)} total` : "None yet"} tone={bridgeBalances.length ? "confirm" : "default"} />
         <OperationalStat label="External accounts" value={String(externalAccounts.length)} detail={externalAccounts.length ? "Loaded" : "None yet"} tone={externalAccounts.length ? "confirm" : "default"} />
         <OperationalStat label="Transfers" value={String(transfers.length)} detail={transfers.length ? "Loaded" : "None yet"} tone={transfers.length ? "confirm" : "default"} />
       </div>
@@ -873,38 +890,35 @@ export default function BridgeTestClient() {
       ) : null}
       {copied ? <div className="rounded-md border border-tts-confirm/25 bg-tts-confirm/10 p-2 text-sm font-semibold text-tts-confirm">Copied: {copied}</div> : null}
 
-      {/* ── Wallet Balances ─────────────────────────────────── */}
+      {/* ── Bridge Wallet Balances ────────────────────────────── */}
       <OperationalCard>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
             <Wallet className="h-4 w-4 text-tts-gold" />
-            Wallet Balances
+            Bridge Wallet Balances
           </h2>
-          <Button variant="outline" size="sm" onClick={() => walletKey ? fetchBalance() : null} disabled={walletBusy || !walletKey}>
-            {walletBusy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+          <Button variant="outline" size="sm" onClick={fetchBridgeBalances} disabled={bridgeBalancesBusy}>
+            {bridgeBalancesBusy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
             Refresh
           </Button>
         </div>
-        {!walletKey ? (
-          <p className="mt-2 text-xs text-tts-muted">No wallet selected — go to Step 2 to select or create one.</p>
-        ) : walletBusy ? (
+        {bridgeBalancesBusy && bridgeBalances.length === 0 ? (
           <p className="mt-2 flex items-center gap-2 text-xs text-tts-muted"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</p>
-        ) : walletOnChain === false ? (
-          <p className="mt-2 text-xs text-tts-error">Account not found on Stellar mainnet.</p>
-        ) : walletBalances.length === 0 ? (
-          <p className="mt-2 text-xs text-tts-muted">No balances yet — click Refresh.</p>
+        ) : bridgeBalances.length === 0 ? (
+          <p className="mt-2 text-xs text-tts-muted">No Bridge custodial wallets yet — create one in Step 2 (Bridge Custodial Wallet section).</p>
         ) : (
           <div className="mt-2 grid gap-1">
-            {walletBalances.filter((b) => parseFloat(b.balance) > 0 || b.asset_type === "native").map((b, i) => (
+            {bridgeBalances.map((b, i) => (
               <div key={i} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-1 text-xs">
-                <span className="text-tts-muted">{b.asset_code || "XLM"}</span>
-                <span className="font-mono font-bold text-tts-deep">{parseFloat(b.balance).toFixed(b.asset_type === "native" ? 7 : 2)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-tts-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-tts-gold">{b.chain}</span>
+                  <span className="text-tts-deep">{b.currency?.toUpperCase()}</span>
+                  {b.wallet_id && <span className="text-tts-muted/60">{b.wallet_id.slice(0, 10)}…</span>}
+                </div>
+                <span className="font-mono font-bold text-tts-deep">{parseFloat(b.amount || '0').toFixed(6)}</span>
               </div>
             ))}
           </div>
-        )}
-        {walletKey && (
-          <p className="mt-1.5 truncate font-mono text-[10px] text-tts-muted/60">{walletKey}</p>
         )}
       </OperationalCard>
 
