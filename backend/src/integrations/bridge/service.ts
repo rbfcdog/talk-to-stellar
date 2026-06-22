@@ -173,8 +173,13 @@ export class BridgeService {
     return Array.isArray(data) ? data : [];
   }
 
-  async getVirtualAccount(accountId: string): Promise<BridgeVirtualAccount> {
-    return this.client.get(`/virtual_accounts/${encodeURIComponent(accountId)}`);
+  async getVirtualAccount(customerId: string, accountId?: string): Promise<BridgeVirtualAccount> {
+    if (accountId) {
+      return this.client.get(
+        `/customers/${encodeURIComponent(customerId)}/virtual_accounts/${encodeURIComponent(accountId)}`,
+      );
+    }
+    return this.client.get(`/virtual_accounts/${encodeURIComponent(customerId)}`);
   }
 
   async deactivateVirtualAccount(accountId: string): Promise<void> {
@@ -772,7 +777,7 @@ export class BridgeService {
     if (params?.limit) q.limit = String(params.limit);
     if (params?.starting_after) q.starting_after = params.starting_after;
     const res = await this.client.get<{ data: BridgeVirtualAccountEvent[] }>(
-      `/customers/${encodeURIComponent(customerId)}/virtual_accounts/${encodeURIComponent(virtualAccountId)}/activity`,
+      `/customers/${encodeURIComponent(customerId)}/virtual_accounts/${encodeURIComponent(virtualAccountId)}/history`,
       q,
     );
     return (res as any).data ?? (res as any) ?? [];
