@@ -175,5 +175,31 @@ describe('SoroswapService', () => {
       const tokens = await SoroswapService.getTokenList();
       expect(tokens).toHaveLength(1);
     });
+
+    it('returns built-in tokens when upstream token discovery fails without cache', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => 'Failed to get Soroswap contract address',
+      } as any);
+
+      const tokens = await SoroswapService.getTokenList();
+
+      expect(tokens.map((t) => t.symbol)).toEqual(expect.arrayContaining(['USDC', 'XLM']));
+      expect(tokens.find((t) => t.symbol === 'USDC')?.address).toBe(USDC);
+    });
+
+    it('returns built-in tokens when upstream token discovery returns an empty list', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ tokens: [] }),
+      } as any);
+
+      const tokens = await SoroswapService.getTokenList();
+
+      expect(tokens.map((t) => t.symbol)).toEqual(expect.arrayContaining(['USDC', 'XLM']));
+      expect(tokens).not.toHaveLength(0);
+    });
   });
 });

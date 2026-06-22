@@ -21,6 +21,23 @@ import { logger } from '../../utils/logger';
 let tokenCache: { tokens: SwapToken[]; fetchedAt: number } | null = null;
 const TOKEN_CACHE_TTL_MS = 10 * 60 * 1000;
 
+const STATIC_TOKEN_NAMES: Record<string, string> = {
+  USDC: 'USD Coin',
+  XLM: 'Stellar Lumens',
+  BRZ: 'Brazilian Digital Token',
+  BRLT: 'BRL Token',
+};
+
+function builtInTokenList(network: string): SwapToken[] {
+  return Object.entries(MAINNET_TOKENS).map(([symbol, address]) => ({
+    address,
+    symbol,
+    name: STATIC_TOKEN_NAMES[symbol] || symbol,
+    decimals: 7,
+    network,
+  }));
+}
+
 export const SoroswapService = {
   /**
    * Resolve a symbol (e.g. 'USDC') or raw contract address to a contract address.
@@ -185,6 +202,13 @@ export const SoroswapService = {
         network: config.network,
       }));
 
+      if (tokens.length === 0) {
+        const fallback = builtInTokenList(config.network);
+        tokenCache = { tokens: fallback, fetchedAt: now };
+        logger.warn('[soroswap] token API returned an empty list; returning built-in Stellar tokens');
+        return fallback;
+      }
+
       tokenCache = { tokens, fetchedAt: now };
       logger.debug(`[soroswap] cached ${tokens.length} tokens`);
       return tokens;
@@ -195,7 +219,10 @@ export const SoroswapService = {
         logger.warn('[soroswap] returning stale token cache after fetch failure');
         return tokenCache.tokens;
       }
-      throw e;
+      const fallback = builtInTokenList(config.network);
+      tokenCache = { tokens: fallback, fetchedAt: now };
+      logger.warn('[soroswap] returning built-in Stellar tokens after fetch failure');
+      return fallback;
     }
   },
 
