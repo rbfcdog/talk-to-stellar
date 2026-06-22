@@ -2,9 +2,9 @@
 
 > **Living document.** Updated when docs are found, moved, created, or become stale.
 
-Generated 2026-06-12. Updated 2026-06-13 after documentation consolidation.
+Generated 2026-06-12. Updated 2026-06-13 after documentation consolidation. Updated 2026-06-22 after compliance-questionnaire alignment, submission artifacts, and Instawards Deliverable 3 upload guidance.
 
-Current scan: **250 non-project-brain Markdown files**: 201 source documents, 13 distributed summary/index files, and 36 redirect stubs. Legend: ✅ current ⚠️ stale ❌ superseded ⚡ contradicts-code
+Current scan: **253 non-project-brain Markdown files**: 204 source documents, 13 distributed summary/index files, and 36 redirect stubs. Legend: ✅ current ⚠️ stale ❌ superseded ⚡ contradicts-code
 
 Primary index: `docs/REPOSITORY-DOCS.md`.
 
@@ -60,7 +60,7 @@ Their source documents now live under categorized root `docs/` folders:
 | `docs/business/` | Executive summary, GTM, market economics, fee model, and business strategy | ✅ Current business context; verify feature claims in code |
 | `docs/compliance/` | Yield APY and compliance guidance | ✅ Current as policy notes; not legal advice |
 | `docs/funding/` | Active Instawards SOW and SOW archive under `docs/funding/sow/` | ✅ Current scope reference |
-| `docs/integrations/` | Etherfuse, regional starter pack, and Defindex notes | ⚠️ Regional starter pack is historical |
+| `docs/integrations/` | Etherfuse, regional starter pack, Defindex notes, and Soroswap SDK/testing workflows | ⚠️ Regional starter pack is historical |
 | `docs/operations/` | Env, migrations, Railway, Evolution, Telegram, balance, and operator guides | ✅ Current where dated; verify env names in code |
 | `docs/planning/` | TODO and planning notes | ⚠️ Check against current code before using as backlog |
 | `docs/presentations/` | Pitch deck, user demo, and presentation script | ⚠️ Presentation material may lag implementation |
@@ -72,6 +72,21 @@ Their source documents now live under categorized root `docs/` folders:
 | `docs/security/` | Security audits, hardening, custody, passkeys, email confirmation, OpenZeppelin notes | ✅ Security context; verify fixed findings in code |
 | `docs/settlement/` | BRL/USD rail, institutional settlement, operator runbook, Wise-era plans | ⚠️ Wise-era docs are historical |
 | `docs/stellar/` | Stellar mainnet, user wallet console, and BRL-like asset strategy | ✅ Current as infrastructure context |
+
+## Root Submission Artifacts
+
+| File | Description | Freshness |
+|------|-------------|-----------|
+| `docs/concise-transfer-evidence-TTS-2026-000001.md` | Character-limit-friendly literal JSON transfer evidence for TTS-2026-000001, including route, exchange, destination, lifecycle, evidence, and sandbox/testnet boundary. | ✅ Current submission artifact |
+| `docs/concise-transfer-evidence-TTS-2026-000001.json` | Raw JSON copy of the concise transfer evidence. | ✅ Current submission artifact |
+| `docs/third-party-money-movement-flow-of-funds.md` | Third-party money movement use-case explanation with linked SVG and PNG flow-of-funds diagram. | ✅ Current submission artifact |
+| `docs/insta-awards/DELIVERABLE-3-SUBMIT-THIS.md` | Exact upload guide for Deliverable 3 fields: Video Demo Completo, Diagramas de Arquitetura, and Screenshot Fluxo Completo. | ✅ Current submission artifact |
+
+## Current Integration Testing Workflows
+
+| File | Description | Freshness |
+|------|-------------|-----------|
+| `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md` | Soroswap SDK reference, wallet requirements, TalkToStellar `/api/swap` endpoints, wallet creation path, and quote/build/sign/submit verification workflow. | ✅ Current operator workflow |
 
 ## Active Instawards
 
@@ -122,6 +137,7 @@ Their source documents now live under categorized root `docs/` folders:
 2. **`docs/operations/session-env-and-migrations.md` vs `docs/operations/SESSION_ENV_AND_MIGRATIONS_20260525.md`**: Both cover session env and migrations. Prefer the dated `SESSION_ENV_AND_MIGRATIONS_20260525.md` version unless code proves otherwise.
 3. **`insta-awards-old/` vs `docs/insta-awards/`**: The old folder was a pre-deliverable preparation. Current work is under `docs/insta-awards/deliverables/deliverable-1/`, `deliverable-2/`, and `deliverable-3/`.
 4. **Historical migration references vs current schema source**: Historical audits and run reports can name retired migration files. The current bootstrap source is `backend/migrations/20260613_00_full_schema.sql`; `backend/migrations/20260614_00_ops_admin_auth.sql` is the current incremental ops-login migration and the runner applies required SQL files in sorted order.
+5. **Resolved 2026-06-22 — `docs/compliance-questionnaire.md` vs current implementation**: Earlier questionnaire wording implied sanctions/PEP checks were already performed on each payout. Current code/docs show provider KYC/KYB paths, same-name payout controls, fraud-screening support, gated real payout execution, and reconciliation, while sanctions screening and transaction monitoring remain pre-live production requirements. `docs/compliance-questionnaire.md` now separates current implementation from production requirements.
 
 ## Stats
 

@@ -1,12 +1,13 @@
 # Documentation Summary: insta-awards
 
-Generated summary for `docs/insta-awards`. Last generated: 2026-06-14.
+Generated summary for `docs/insta-awards`. Last generated: 2026-06-14. Manually updated 2026-06-22 for Deliverable 3 submission guide.
 
 ## Markdown Files
 
 | File | Title | Words | Summary | Language note |
 |------|-------|-------|---------|---------------|
 | [`30-day-execution-plan.md`](./30-day-execution-plan.md) | 30-day-execution-plan | 22 | This document moved to [insta-awards-old/docs/30-day-execution-plan.md](../insta-awards-old/docs/30-day-execution-plan.md). Documentation content is kept under `docs/` directories; this file is only a redirect. | English or mostly English. |
+| [`DELIVERABLE-3-SUBMIT-THIS.md`](./DELIVERABLE-3-SUBMIT-THIS.md) | Deliverable 3 - Submit This | 634 | Practical upload guide for the Deliverable 3 fields Video Demo Completo, Diagramas de Arquitetura, and Screenshot Fluxo Completo, with exact files, media fallbacks, paste-ready descriptions, and submission rules. | English or mostly English. |
 | [`README.md`](./README.md) | README | 22 | This document moved to [insta-awards-old/docs/README.md](../insta-awards-old/docs/README.md). Documentation content is kept under `docs/` directories; this file is only a redirect. | English or mostly English. |
 | [`current-implementation-audit.md`](./current-implementation-audit.md) | current-implementation-audit | 22 | This document moved to [insta-awards-old/docs/current-implementation-audit.md](../insta-awards-old/docs/current-implementation-audit.md). Documentation content is kept under `docs/` directories; this file is only a redirect. | English or mostly English. |
 | [`evidence-framework.md`](./evidence-framework.md) | evidence-framework | 22 | This document moved to [insta-awards-old/docs/evidence-framework.md](../insta-awards-old/docs/evidence-framework.md). Documentation content is kept under `docs/` directories; this file is only a redirect. | English or mostly English. |

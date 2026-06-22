@@ -249,3 +249,50 @@
 
 **Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`
 **Related**: Pain point #55
+
+## 16. Soroswap Testnet Quote/Build Cannot Execute (FIXED)
+
+**Symptom**: A testnet wallet can be created, funded, and given a USDC trustline, but `/api/swap/quote` could not produce a buildable Soroswap quote and `/api/swap/build` rejected the quote as fallback-only.
+
+**Observed on 2026-06-22**:
+- `POST /api/stellar/wallets` returned a test wallet.
+- Friendbot funded the wallet on testnet.
+- A USDC trustline transaction succeeded.
+- `/api/swap/tokens` returned 13 testnet tokens.
+- Symbol quote `USDC -> XLM` returned `stellar-broker-fallback` after Soroswap `400 Invalid Stellar address`.
+- Raw testnet contract quote `USDC -> XLM` and `XLM -> USDC` returned Soroswap `No path found`.
+- Scanning XLM against every token returned by `/api/swap/tokens` found no buildable route.
+
+**Diagnosis steps**:
+1. Confirm `STELLAR_NETWORK=TESTNET`.
+2. Call `GET /api/swap/tokens` and capture the XLM/USDC contract addresses.
+3. Call `GET /api/swap/quote?assetIn=USDC&assetOut=XLM&amount=10&tradeType=EXACT_IN`.
+4. If the response is `stellar-broker-fallback`, inspect `rawQuote.soroswapError`.
+5. Retry with raw token contract IDs from `/api/swap/tokens`.
+6. If Soroswap returns `No path found`, this is provider liquidity/route availability, not wallet signing.
+7. If fallback receives contract IDs and returns `Invalid asset`, the fallback path is being used for a contract quote it cannot price.
+
+**Fix**: `2a48ab3` made token resolution network-aware, corrected the static mainnet USDC SAC wrapper, added explicit testnet XLM/USDC SAC wrappers, stopped routing raw Soroban contract IDs into Stellar Broker fallback, and returns a non-buildable `soroswap-unavailable` response when Soroswap has no route. Buildable quotes can now be built, signed with Freighter, and submitted through `POST /api/swap/send`.
+
+**Files**: `backend/src/integrations/soroswap/service.ts`, `backend/src/integrations/soroswap/config.ts`, `backend/tests/soroswap.service.test.ts`
+**Related**: Pain point #56
+
+## 17. Payment Watcher SSE HTTP 429 Fan-Out (FIXED)
+
+**Symptom**: Backend startup logs many `[payment-watcher] SSE error for G...: Too Many Requests; retrying in 30s` entries after account preflight succeeds.
+
+**Observed on 2026-06-22**: Starting the local backend with 252 stored wallets produced many SSE `Too Many Requests` warnings. The earlier preflight fix still logged one global preflight cooldown, but the stream path independently fanned out warning logs.
+
+**Diagnosis steps**:
+1. Start backend with payment watcher enabled.
+2. Watch for `[payment-watcher] Subscribing to <N> wallets`.
+3. Search logs for `Horizon SSE stream rate limited (HTTP 429)`.
+4. If the provider rate-limits stream opening, the log should appear once per cooldown window rather than once per wallet.
+5. Check `GET /api/payment-watcher/status` if backend is still running; a large number of reconnecting addresses after startup indicates stream-level rate limiting.
+6. Check `PAYMENT_WATCHER_STREAM_OPEN_SPACING_MS`; default is `1000`, which opens at most one stream per second.
+7. Check `PAYMENT_WATCHER_STREAM_RATE_LIMIT_RETRY_MS`; default is `300000` when Horizon does not provide stream retry metadata.
+
+**Fix**: `2a48ab3` added a serialized stream-open queue, detects `429`/`Too Many Requests` in the SSE error path, applies a shared stream cooldown, and suppresses the generic per-wallet `SSE error ... retrying in 30s` warning during provider-level rate limits.
+
+**Files**: `backend/src/integrations/payment-watcher/service.ts`, `backend/tests/payment-watcher.service.test.ts`
+**Related**: Pain point #57

@@ -1,20 +1,25 @@
 # Documentation Summary: docs
 
-Generated summary for `docs`. Last generated: 2026-06-14.
+Generated summary for `docs`. Last generated: 2026-06-14. Manually updated 2026-06-22 for submission artifacts and Instawards Deliverable 3 upload guidance.
 
 ## Markdown Files
 
 | File | Title | Words | Summary | Language note |
 |------|-------|-------|---------|---------------|
+| [`concise-transfer-evidence-TTS-2026-000001.md`](./concise-transfer-evidence-TTS-2026-000001.md) | Concise Transfer Evidence - TTS-2026-000001 | 155 | Character-limit-friendly literal JSON transfer evidence covering BRL PIX funding, USDC Stellar testnet settlement, payout instruction, destination, reconciliation, lifecycle, and sandbox/testnet submission boundary. | English or mostly English. |
 | [`README.md`](./README.md) | TalkToStellar | 2868 | TalkToStellar is a conversational financial product to convert reais into digital dollars and move value using Pix, Stellar and a simple chat experience. The user does not need to understand crypto wallet, issuer, trustline, XDR, pathfinding, anchor or blockch... | Portuguese text remains in source; review for translation. |
 | [`REPOSITORY-DOCS.md`](./REPOSITORY-DOCS.md) | Repository Documentation Index | 447 | Generated: 2026-06-13. Updated after documentation consolidation. Repository documentation belongs in a `docs/` directory. Project-wide material lives under `docs/`; module-specific material lives under `<module>/docs/`. Tool-discovered instruction files (`AGE... | English or mostly English. |
 | [`ROOT-DOCS-SUMMARY.md`](./ROOT-DOCS-SUMMARY.md) | Root Documentation Summary | 81 | Summary for the repository entry point. Repository index: [`REPOSITORY-DOCS.md`](./REPOSITORY-DOCS.md). Source scope: `docs/README.md`. | English or mostly English. |
+| [`third-party-money-movement-flow-of-funds.md`](./third-party-money-movement-flow-of-funds.md) | Third-Party Money Movement - Flow of Funds | 477 | Submission-ready third-party money movement flow-of-funds explanation, including whether BRL is exchanged, where funds ultimately go, compliance controls, and linked SVG/PNG diagram files. | English or mostly English. |
 
 ## Non-Markdown Files
 
 | File | Type |
 |------|------|
 | [`TalkToStellar_OnePager.pdf`](./TalkToStellar_OnePager.pdf) | `.pdf` |
+| [`third-party-money-movement-flow-of-funds.svg`](./third-party-money-movement-flow-of-funds.svg) | `.svg` |
+| [`third-party-money-movement-flow-of-funds.png`](./third-party-money-movement-flow-of-funds.png) | `.png` |
+| [`concise-transfer-evidence-TTS-2026-000001.json`](./concise-transfer-evidence-TTS-2026-000001.json) | `.json` |
 
 ## Child Folders
 
@@ -26,7 +31,7 @@ Generated summary for `docs`. Last generated: 2026-06-14.
 | [`compliance/`](./compliance/) | 2 | [`DOCS-SUMMARY.md`](./compliance/DOCS-SUMMARY.md) |
 | [`funding/`](./funding/) | 5 | [`DOCS-SUMMARY.md`](./funding/DOCS-SUMMARY.md) |
 | [`images/`](./images/) | 0 | [`DOCS-SUMMARY.md`](./images/DOCS-SUMMARY.md) |
-| [`insta-awards/`](./insta-awards/) | 39 | [`DOCS-SUMMARY.md`](./insta-awards/DOCS-SUMMARY.md) |
+| [`insta-awards/`](./insta-awards/) | 40 | [`DOCS-SUMMARY.md`](./insta-awards/DOCS-SUMMARY.md) |
 | [`integrations/`](./integrations/) | 4 | [`DOCS-SUMMARY.md`](./integrations/DOCS-SUMMARY.md) |
 | [`operations/`](./operations/) | 15 | [`DOCS-SUMMARY.md`](./operations/DOCS-SUMMARY.md) |
 | [`planning/`](./planning/) | 1 | [`DOCS-SUMMARY.md`](./planning/DOCS-SUMMARY.md) |

@@ -11,12 +11,17 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [DOCS-INDEX.md](./DOCS-INDEX.md) | You need to find which doc covers X. |
 | [NON-PROJECT-BRAIN-DOCS-SUMMARY.md](./NON-PROJECT-BRAIN-DOCS-SUMMARY.md) | You need the entry point for Markdown docs outside project-brain. |
 | [PAIN-POINTS.md](./PAIN-POINTS.md) | Something broke. Check if it's a known pattern. |
-| [OPEN-ISSUES.md](./OPEN-ISSUES.md) | You want the actionable backlog (27 fixed, 22 open). |
+| [OPEN-ISSUES.md](./OPEN-ISSUES.md) | You want the actionable backlog (29 fixed, 22 open). |
 
 ### Distributed Repository Documentation Summaries
 | File | Read when... |
 |------|-------------|
 | [../REPOSITORY-DOCS.md](../REPOSITORY-DOCS.md) | You need the root index for all Markdown outside project-brain. |
+| [../concise-transfer-evidence-TTS-2026-000001.md](../concise-transfer-evidence-TTS-2026-000001.md) | You need the concise literal-JSON transfer evidence for `TTS-2026-000001`. |
+| [../concise-transfer-evidence-TTS-2026-000001.json](../concise-transfer-evidence-TTS-2026-000001.json) | You need the raw JSON copy of the concise transfer evidence. |
+| [../third-party-money-movement-flow-of-funds.md](../third-party-money-movement-flow-of-funds.md) | You need the third-party money movement flow-of-funds submission artifact and diagram links. |
+| [../insta-awards/DELIVERABLE-3-SUBMIT-THIS.md](../insta-awards/DELIVERABLE-3-SUBMIT-THIS.md) | You need exact upload instructions for Instawards Deliverable 3 fields. |
+| [../integrations/SOROSWAP-SDK-TESTING-FLOW.md](../integrations/SOROSWAP-SDK-TESTING-FLOW.md) | You need Soroswap SDK notes, wallet creation requirements, and the step-by-step swap testing workflow. |
 | [../../docs/agent/AGENT-DOCS-SUMMARY.md](../agent/AGENT-DOCS-SUMMARY.md) | You need repository AI-agent and Copilot instruction context. |
 | [../ROOT-DOCS-SUMMARY.md](../ROOT-DOCS-SUMMARY.md) | You need the root README summary and freshness rule. |
 | [../../backend/docs/DOCS-SUMMARY.md](../../backend/docs/DOCS-SUMMARY.md) | You need a map of backend-specific documentation. |

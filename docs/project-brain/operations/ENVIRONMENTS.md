@@ -61,6 +61,17 @@ USDC_ISSUER                        # USDC issuer public key
 STELLAR_MAINNET_ENABLED=false      # Mainnet feature flag
 ```
 
+### Payment Watcher
+```
+PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS=1000      # Serialize Horizon account preflights
+PAYMENT_WATCHER_RATE_LIMIT_RETRY_MS=300000         # Preflight HTTP 429 cooldown fallback
+PAYMENT_WATCHER_STREAM_OPEN_SPACING_MS=1000        # Serialize Horizon payment SSE stream opens
+PAYMENT_WATCHER_STREAM_RATE_LIMIT_RETRY_MS=300000  # Stream HTTP 429 cooldown fallback
+PAYMENT_WATCHER_RECONNECT_BASE_MS=30000            # Generic stream reconnect backoff base
+PAYMENT_WATCHER_RECONNECT_MAX_MS=300000            # Generic stream reconnect backoff cap
+PAYMENT_WATCHER_ACCOUNT_RETRY_MS=600000            # Retry interval for not-yet-funded accounts
+```
+
 ### Etherfuse (PIX)
 ```
 ETHERFUSE_API_KEY                  # format: api_<env>:<key>:<org_id>

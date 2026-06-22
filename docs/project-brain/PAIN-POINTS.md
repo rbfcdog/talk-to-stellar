@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-22. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-52 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+54 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -373,7 +373,7 @@
 
 ---
 
-## Cluster H — Reliability (14 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (16 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -465,6 +465,24 @@
 - **Status**: **Fixed by `935822b`**. Account preflights now go through a serialized queue with configurable spacing (`PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS`, default 1000ms), respect Horizon `Retry-After` on HTTP 429, pause further account checks during rate-limit windows, log one global rate-limit warning, and schedule reconnects after the provider cooldown.
 - **Lesson**: **External preflights need a global rate limiter, not only per-wallet backoff**. Any watcher that fans out over stored wallets must serialize provider checks and honor `429` cooldowns.
 
+### #56 — Soroswap Testnet Operation Not Buildable
+> **Quote**: "test creating a wallet and doing a soroswap operation"
+> **Gloss**: Testnet wallet creation succeeded, but no Soroswap testnet swap route could produce a buildable XDR.
+
+- **Where**: `backend/src/integrations/soroswap/service.ts:65`, `backend/src/integrations/soroswap/service.ts:104`, `backend/src/integrations/soroswap/service.ts:158`, `backend/src/integrations/soroswap/service.ts:171`, `frontend/app/key-integrations/key-integrations-client.tsx:664`.
+- **Root cause**: With `STELLAR_NETWORK=TESTNET`, symbol-based quote testing still resolved `USDC`/`XLM` through the static mainnet token map and Soroswap returned `400 Invalid Stellar address`. Retrying with raw testnet token contract IDs from `/api/swap/tokens` reached Soroswap, but Soroswap returned `No path found` for every XLM->token pair scanned; the fallback then passed Soroban contract IDs into `StellarBrokerService`, which expects classic Stellar assets and returned `Invalid asset`.
+- **Status**: **Fixed by `2a48ab3`**. `SoroswapService.resolveTokenForQuote()` now resolves symbols against the configured network, uses explicit testnet XLM/USDC SAC wrappers, avoids sending raw Soroban contract IDs into Stellar Broker fallback, and returns a clean non-buildable `soroswap-unavailable` quote when Soroswap has no route (`backend/src/integrations/soroswap/service.ts:105`, `backend/src/integrations/soroswap/service.ts:264`). The key-integrations panel now supports Freighter connect/sign/submit for buildable quotes (`frontend/app/key-integrations/key-integrations-client.tsx:703`, `frontend/app/key-integrations/key-integrations-client.tsx:729`, `frontend/app/key-integrations/key-integrations-client.tsx:756`).
+- **Lesson**: **Swap execution tests need network-aware token resolution and a buildable provider route**. Do not treat fallback pricing as executable, and do not pass Soroban contract IDs into classic Stellar Broker fallback without translation.
+
+### #57 — Payment Watcher SSE HTTP 429 Fan-Out
+> **Quote**: "test creating a wallet and doing a soroswap operation"
+> **Gloss**: During local test startup, account preflight throttling worked, but opening many Horizon SSE streams still triggered `Too Many Requests` warnings across many wallets.
+
+- **Where**: `backend/src/integrations/payment-watcher/service.ts:182`, `backend/src/integrations/payment-watcher/service.ts:206`, `backend/src/integrations/payment-watcher/service.ts:269`, `backend/src/integrations/payment-watcher/service.ts:307`.
+- **Root cause**: The fixed preflight path serializes `GET /accounts/{publicKey}`, but after accounts pass preflight the service still opens one Horizon payment SSE stream per wallet. Starting with 252 wallets produced many concurrent/near-concurrent SSE streams, and Horizon returned `Too Many Requests` from the stream path. The stream error handler treats these as per-wallet transient errors with 30s retry, so the log can still fan out even though preflight 429 logging is fixed.
+- **Status**: **Fixed by `2a48ab3`**. Stream opening now has its own serialized queue and cooldown (`PAYMENT_WATCHER_STREAM_OPEN_SPACING_MS`, default 1000ms; `PAYMENT_WATCHER_STREAM_RATE_LIMIT_RETRY_MS`, default 300000ms), and stream `429`/`Too Many Requests` errors produce one provider-level warning instead of per-wallet warning fan-out (`backend/src/integrations/payment-watcher/service.ts:29`, `backend/src/integrations/payment-watcher/service.ts:286`, `backend/src/integrations/payment-watcher/service.ts:361`).
+- **Lesson**: **Long-lived stream fan-out needs its own concurrency and 429 policy**. Preflight throttling is not enough if opening hundreds of SSE streams can independently rate-limit Horizon.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -505,7 +523,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 52 documented incidents:
+Ranked by frequency × severity across the 54 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -513,19 +531,19 @@ Ranked by frequency × severity across the 52 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
-| 5 | **H — Reliability** | 14 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight rate-limit fix, Soroswap provider fallback, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 16 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 27 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55)
+- **Confirmed fixed**: 29 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 27 of 52 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 29 of 54 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -560,3 +578,5 @@ Fixing commits verified in codebase:
 | #53 | `ef1f793`, `299a21d` | Preflight/dedupe payment watcher Horizon streams, route key-integrations API calls through the shared production-aware backend proxy, and keep Soroswap token discovery usable with built-in fallback tokens |
 | #54 | `17a821f` | Fall back from Soroswap quote 400s to Stellar Broker pricing and disable XDR build for fallback quotes |
 | #55 | `935822b` | Serialize payment watcher Horizon account preflights, honor HTTP 429 cooldowns, and replace per-wallet warning bursts with one provider-level warning |
+| #56 | `2a48ab3` | Make Soroswap token resolution network-aware, prevent contract-address fallback into Stellar Broker, add Freighter sign/submit flow |
+| #57 | `2a48ab3` | Serialize Horizon SSE stream opening, apply a stream-level 429 cooldown, and suppress per-wallet stream warning fan-out |
