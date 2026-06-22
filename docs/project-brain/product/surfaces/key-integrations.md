@@ -10,7 +10,7 @@ Operator opens /key-integrations
   -> Client calls same-origin /api/abroad, /api/oracle, /api/fraud-screen, and /api/swap paths
   -> frontend/app/api/[...path]/route.ts forwards through proxyBackendApi()
   -> Backend Express routes call Abroad Finance, Reflector, StellarExpert, and Soroswap services
-  -> Panels show live corridor, price, fraud, token, quote, and XDR-build results
+  -> Panels show live corridor, price, fraud, token, quote, XDR-build, Freighter-sign, and submit results
 ```
 
 ## Current Behavior
@@ -27,10 +27,13 @@ Operator opens /key-integrations
 
 - **Payment watcher deploy log storm + Backend unreachable** (#53): Fixed by `ef1f793` and `299a21d`. The backend watcher now preflights Horizon account existence, treats 404 accounts as unfunded activation retries, and deduplicates reconnect timers. The frontend catch-all API route now uses the shared production-aware backend proxy, so key-integrations panels no longer depend on a localhost fallback in deployed builds. The Soroswap token panel falls back to built-in Stellar tokens when upstream token discovery fails or returns empty.
 - **Soroswap quote provider 400** (#54): Fixed by `17a821f`. If Soroswap `/quote` returns its contract-discovery 400, the backend returns a `stellar-broker-fallback` pricing quote with `buildAvailable: false`; the panel shows the fallback source/warning and hides XDR build.
+- **Soroswap wallet boundary**: Token list and quote tests do not require a wallet. XDR build requires a real `G...` Stellar public key, and execution requires a funded wallet/signing path. See `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md`.
+- **Soroswap testnet execution boundary + Freighter flow** (#56): Fixed by `2a48ab3`. Token resolution is now network-aware, raw contract route failures return a non-buildable `soroswap-unavailable` response instead of falling into Stellar Broker, and the panel can connect Freighter, build for the connected address, sign the XDR, submit the signed transaction, and show the Horizon hash.
+- **Payment watcher SSE stream rate limit fan-out** (#57): Fixed by `2a48ab3`. Stream opening has a serialized queue and stream-level `429` cooldown, preventing provider-level rate limits from becoming per-wallet warning bursts.
 
 ### Still Open
 
-- None currently tracked for this surface. If a panel fails, first separate backend health from provider behavior: `Backend unreachable` means proxy/backend reachability; provider-specific JSON errors mean the backend route was reached.
+- If a panel fails, first separate backend health from provider behavior: `Backend unreachable` means proxy/backend reachability; provider-specific JSON errors mean the backend route was reached.
 
 ## Key Files
 
@@ -46,6 +49,7 @@ Operator opens /key-integrations
 - `backend/src/integrations/payment-watcher/service.ts` — related background watcher that can affect backend reachability during deploys.
 - `backend/src/integrations/soroswap/service.ts` — Soroswap quote/build/token logic, token fallback, and Stellar Broker quote fallback.
 - `backend/src/integrations/soroswap/types.ts` — quote capability fields (`source`, `buildAvailable`, `warning`).
+- `docs/integrations/SOROSWAP-SDK-TESTING-FLOW.md` — operator workflow for wallet creation, quote-only testing, XDR build, signing, submission, and verification.
 
 ## Endpoints
 
@@ -61,6 +65,7 @@ Operator opens /key-integrations
 | Soroswap tokens | GET | `/api/swap/tokens` | `/api/swap/tokens` |
 | Soroswap quote | GET | `/api/swap/quote?...` | `/api/swap/quote` |
 | Soroswap XDR build | POST | `/api/swap/build` | `/api/swap/build` |
+| Soroswap signed submit | POST | `/api/swap/send` | `/api/swap/send` |
 
 ## Latest Verification
 
@@ -75,3 +80,4 @@ Operator opens /key-integrations
 - `GET /api/payment-watcher/status` returned active watchers with one reconnecting unfunded account and zero pending subscriptions, confirming the watcher was no longer stuck in a large pending loop.
 - Before `299a21d`, `/api/swap/tokens` and `/api/swap/quote` reached the backend but Soroswap upstream returned `Failed to get Soroswap contract address`. `299a21d` fixes the token-list panel with built-in fallback tokens.
 - `17a821f` fixes the quote panel by falling back to Stellar Broker pricing and marking fallback quotes as not buildable. Soroswap XDR build still requires a real Soroswap quote.
+- `2a48ab3` adds network-aware Soroswap token resolution, non-buildable contract-route responses, Freighter connect/sign controls, signed-XDR submission through `/api/swap/send`, and stream-level payment watcher `429` throttling. Focused tests and both production builds passed after the change.

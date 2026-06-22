@@ -233,7 +233,9 @@ Aggregates liquidity across every Stellar DEX in a single quote: Soroswap AMM, P
 
 **Files:** `backend/src/integrations/soroswap/` — `types.ts`, `config.ts`, `service.ts`, `index.ts` · `api/controllers/soroswap.controller.ts` · `api/routes/soroswap.router.ts`
 
-**API used:** `https://api.soroswap.finance` — no auth required
+**API used:** `https://api.soroswap.finance`. Current REST-wrapper mode can run without an API key when the provider permits unauthenticated calls; SDK mode requires `SOROSWAP_API_KEY`.
+
+**Testing workflow:** See [`SOROSWAP-SDK-TESTING-FLOW.md`](./SOROSWAP-SDK-TESTING-FLOW.md) for the wallet creation, quote, XDR build, sign, submit, and verification checklist.
 
 **Endpoints:**
 - `GET /api/swap/quote?assetIn=USDC&assetOut=XLM&amount=10&tradeType=EXACT_IN` — best price + route across all protocols
@@ -244,7 +246,7 @@ Aggregates liquidity across every Stellar DEX in a single quote: Soroswap AMM, P
 - USDC SAC: `CCW67TSZV3SSS2HXMBQ5JFGCKJNZT7WSEE9MCZGE6H4SXNVGXNWMSE`
 - XLM SAC: `CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA`
 
-**Key env vars:** `SOROSWAP_API_URL` (default: `https://api.soroswap.finance`), `SOROSWAP_DEFAULT_SLIPPAGE_BPS` (default: 50), `STELLAR_NETWORK`
+**Key env vars:** `SOROSWAP_API_URL` (default: `https://api.soroswap.finance`), `SOROSWAP_API_KEY` (required for SDK/authenticated provider mode), `SOROSWAP_DEFAULT_SLIPPAGE_BPS` (default: 50), `STELLAR_NETWORK`
 
 ---
 

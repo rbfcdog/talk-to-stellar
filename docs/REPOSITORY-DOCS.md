@@ -1,6 +1,6 @@
 # Repository Documentation Index
 
-Generated: 2026-06-13. Updated after documentation consolidation.
+Generated: 2026-06-13. Updated after documentation consolidation. Updated 2026-06-22 after adding submission artifacts and Instawards Deliverable 3 upload guidance.
 
 Repository documentation belongs in a `docs/` directory. Project-wide material lives under `docs/`; module-specific material lives under `<module>/docs/`. Tool-discovered instruction files (`AGENTS.md` and `.github/*.md`) are the only exceptions.
 
@@ -14,7 +14,7 @@ The former top-level `artifacts/`, `new/`, `sow/`, and `presentation-scripts/` d
 | [Root README](./ROOT-DOCS-SUMMARY.md) | `docs/README.md` | 1 |
 | [Backend](../backend/docs/DOCS-SUMMARY.md) | `backend/docs/**/*.md` | 13 |
 | [Deprecated providers and sandboxes](../deprecated/docs/DOCS-SUMMARY.md) | `deprecated/docs/**/*.md` | 23 |
-| [Project-wide docs](./DOCS-SUMMARY.md) | `docs/**/*.md`, excluding project-brain and repository summary/index files | 91 |
+| [Project-wide docs](./DOCS-SUMMARY.md) | `docs/**/*.md`, excluding project-brain and repository summary/index files | 94 |
 | [Evolution](../evolution/docs/DOCS-SUMMARY.md) | `evolution/docs/README.md` | 1 |
 | [Frontend](../frontend/docs/DOCS-SUMMARY.md) | `frontend/docs/**/*.md` | 5 |
 | [Active Instawards](./insta-awards/deliverables/DOCS-SUMMARY.md) | `docs/insta-awards/deliverables/**/*.md` | 36 |
@@ -23,9 +23,9 @@ The former top-level `artifacts/`, `new/`, `sow/`, and `presentation-scripts/` d
 | [Notion exports](../notion/docs/DOCS-SUMMARY.md) | `notion/docs/*.md` | 2 |
 | [Telegram](../telegram/docs/DOCS-SUMMARY.md) | `telegram/docs/README.md` | 1 |
 | Legacy final presentation | `final/docs/*.md` | 1 |
-| **Total source docs summarized** | | **201** |
+| **Total source docs summarized** | | **204** |
 
-The current non-project-brain scan contains **250 Markdown files**: 201 source documents, 13 distributed summary/index files, and 36 redirect stubs at old Markdown paths. Redirect stubs contain no source documentation; they only point to the matching `docs/` location.
+The current non-project-brain scan contains **253 Markdown files**: 204 source documents, 13 distributed summary/index files, and 36 redirect stubs at old Markdown paths. Redirect stubs contain no source documentation; they only point to the matching `docs/` location.
 
 ## Root Docs Categories
 
@@ -47,6 +47,21 @@ The current non-project-brain scan contains **250 Markdown files**: 201 source d
 | `docs/security/` | Security scans, hardening, custody, passkeys, email confirmation, and OpenZeppelin notes |
 | `docs/settlement/` | BRL/USD rail, Wise-era settlement plans, and institutional settlement docs |
 | `docs/stellar/` | Stellar mainnet, wallet console, and BRL-like asset documentation |
+
+## Root Integration Testing Workflows
+
+| File | Content |
+|------|---------|
+| [`integrations/SOROSWAP-SDK-TESTING-FLOW.md`](./integrations/SOROSWAP-SDK-TESTING-FLOW.md) | Soroswap SDK notes, wallet requirements, TalkToStellar `/api/swap` endpoint map, and step-by-step quote/build/sign/submit testing workflow. |
+
+## Root Submission Artifacts
+
+| File | Content |
+|------|---------|
+| [`concise-transfer-evidence-TTS-2026-000001.md`](./concise-transfer-evidence-TTS-2026-000001.md) | Character-limit-friendly literal JSON transfer evidence for `TTS-2026-000001`, with testnet/sandbox boundary and redaction guidance. |
+| [`concise-transfer-evidence-TTS-2026-000001.json`](./concise-transfer-evidence-TTS-2026-000001.json) | Raw JSON version of the concise transfer evidence. |
+| [`third-party-money-movement-flow-of-funds.md`](./third-party-money-movement-flow-of-funds.md) | Submission-ready flow-of-funds explanation for third-party money movement, with SVG and PNG diagram links. |
+| [`insta-awards/DELIVERABLE-3-SUBMIT-THIS.md`](./insta-awards/DELIVERABLE-3-SUBMIT-THIS.md) | Exact upload guide for Deliverable 3 fields: video, architecture diagrams, and complete-flow screenshots. |
 
 ## Freshness Order
 

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
+  <title id="title">TalkToStellar Third-Party Money Movement Flow of Funds</title>
+  <desc id="desc">A high contrast diagram showing customer BRL funds entering through PIX, conversion to USDC on Stellar, and payout through Bridge to an approved USD destination.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="28" markerHeight="28" refX="26" refY="14" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 28 14 L 0 28 z" fill="#111827"/>
+    </marker>
+    <style>
+      .page { fill: #ffffff; }
+      .title { font: 800 44px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 24px Arial, Helvetica, sans-serif; fill: #334155; }
+      .section { font: 800 25px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .box-title { font: 800 25px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .box-line { font: 500 20px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .box-line-dark { font: 600 20px Arial, Helvetica, sans-serif; fill: #111827; }
+      .callout-title { font: 800 25px Arial, Helvetica, sans-serif; fill: #111827; }
+      .callout-line { font: 600 20px Arial, Helvetica, sans-serif; fill: #111827; }
+      .label { font: 800 18px Arial, Helvetica, sans-serif; fill: #111827; }
+      .small { font: 600 17px Arial, Helvetica, sans-serif; fill: #334155; }
+      .arrow { stroke: #111827; stroke-width: 6; fill: none; marker-end: url(#arrow); }
+      .thin { stroke: #64748b; stroke-width: 3; fill: none; }
+    </style>
+  </defs>
+
+  <rect class="page" x="0" y="0" width="1800" height="1200"/>
+  <rect x="0" y="0" width="1800" height="142" fill="#e0f2fe"/>
+  <text class="title" x="70" y="62">TalkToStellar Third-Party Money Movement</text>
+  <text class="subtitle" x="70" y="105">Flow of funds for PIX-funded BRL conversion, Stellar USDC settlement, and Bridge payout to an approved USD destination.</text>
+
+  <text class="section" x="70" y="190">Main Flow</text>
+
+  <rect x="70" y="230" width="480" height="220" rx="22" fill="#0f766e"/>
+  <text class="box-title" x="105" y="278">1. Customer / Sender</text>
+  <text class="box-line" x="105" y="320">Starts in WhatsApp, Telegram, or web</text>
+  <text class="box-line" x="105" y="354">Approves quote and fees</text>
+  <text class="box-line" x="105" y="388">Pays BRL from own bank account</text>
+  <text class="box-line" x="105" y="422">Funding rail: PIX</text>
+
+  <rect x="660" y="230" width="480" height="220" rx="22" fill="#1d4ed8"/>
+  <text class="box-title" x="695" y="278">2. PIX / Fiat Ramp Partner</text>
+  <text class="box-line" x="695" y="320">Receives BRL through PIX</text>
+  <text class="box-line" x="695" y="354">Bridge KYC/KYB where required</text>
+  <text class="box-line" x="695" y="388">Confirms payment by webhook/API</text>
+  <text class="box-line" x="695" y="422">Provider: Bridge</text>
+
+  <rect x="1250" y="230" width="480" height="220" rx="22" fill="#6d28d9"/>
+  <text class="box-title" x="1285" y="278">3. TalkToStellar Orchestration</text>
+  <text class="box-line" x="1285" y="320">Records quote, fee, and status</text>
+  <text class="box-line" x="1285" y="354">Runs identity and payout controls</text>
+  <text class="box-line" x="1285" y="388">Customer funds are not operating capital</text>
+  <text class="box-line" x="1285" y="422">Stores reconciliation evidence</text>
+
+  <path class="arrow" d="M 550 340 L 640 340"/>
+  <path class="arrow" d="M 1140 340 L 1230 340"/>
+
+  <rect x="70" y="590" width="480" height="220" rx="22" fill="#be6b00"/>
+  <text class="box-title" x="105" y="638">4. Exchange + Stellar Settlement</text>
+  <text class="box-line" x="105" y="680">BRL value is exchanged to USDC</text>
+  <text class="box-line" x="105" y="714">USDC settles on Stellar</text>
+  <text class="box-line" x="105" y="748">Transaction hash is recorded</text>
+  <text class="box-line" x="105" y="782">Fees and receipt evidence retained</text>
+
+  <rect x="660" y="590" width="480" height="220" rx="22" fill="#334155"/>
+  <text class="box-title" x="695" y="638">5. Payout / Off-Ramp Partner</text>
+  <text class="box-line" x="695" y="680">Bridge receives payout instruction</text>
+  <text class="box-line" x="695" y="714">Redeems or routes value to fiat</text>
+  <text class="box-line" x="695" y="748">Bridge compliance controls apply</text>
+  <text class="box-line" x="695" y="782">Provider: Bridge</text>
+
+  <rect x="1250" y="590" width="480" height="220" rx="22" fill="#047857"/>
+  <text class="box-title" x="1285" y="638">6. Ultimate Destination</text>
+  <text class="box-line" x="1285" y="680">Customer's same-name US bank</text>
+  <text class="box-line" x="1285" y="714">Approved US recipient account</text>
+  <text class="box-line" x="1285" y="748">USD payout destination</text>
+  <text class="box-line" x="1285" y="782">Final status and receipt returned</text>
+
+  <path class="arrow" d="M 1490 450 L 1490 512 L 310 512 L 310 570"/>
+  <path class="arrow" d="M 550 700 L 640 700"/>
+  <path class="arrow" d="M 1140 700 L 1230 700"/>
+  <text class="label" x="705" y="500">Exchange occurs: BRL -&gt; USDC on Stellar; payout is intended as USD.</text>
+
+  <rect x="70" y="870" width="1660" height="260" rx="22" fill="#f8fafc" stroke="#cbd5e1" stroke-width="4"/>
+  <text class="callout-title" x="105" y="920">Controls, Review, and Exception Handling</text>
+  <text class="callout-line" x="105" y="962">Received funds exchanged? Yes. BRL received through PIX is converted to USDC on Stellar, then routed for USD payout.</text>
+  <text class="callout-line" x="105" y="1000">Where do funds ultimately go? Through Bridge to the customer's approved USD bank account or approved recipient account.</text>
+  <text class="callout-line" x="105" y="1038">KYC/KYB and sanctions/AML screening are required before live external payouts through Bridge and internal review controls.</text>
+  <text class="callout-line" x="105" y="1076">If same-name matching is required and not approved, payout is blocked for manual review.</text>
+  <text class="callout-line" x="105" y="1114">If compliance, exchange, settlement, or payout fails, funds enter review, refund, or cancellation handling.</text>
+</svg>
