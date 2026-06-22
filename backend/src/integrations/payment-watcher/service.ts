@@ -20,9 +20,26 @@ const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
 const HORIZON_URL = process.env.STELLAR_NETWORK === 'mainnet' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
 const USDC_ISSUER_MAINNET = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
 const USDC_ISSUER_TESTNET = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+const STREAM_RECONNECT_BASE_MS = parseInt(process.env.PAYMENT_WATCHER_RECONNECT_BASE_MS || '30000', 10);
+const STREAM_RECONNECT_MAX_MS = parseInt(process.env.PAYMENT_WATCHER_RECONNECT_MAX_MS || '300000', 10);
+const ACCOUNT_NOT_FOUND_RETRY_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_RETRY_MS || '600000', 10);
+const ACCOUNT_CHECK_TIMEOUT_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_TIMEOUT_MS || '10000', 10);
 
 function getUsdcIssuer() {
   return process.env.STELLAR_NETWORK === 'mainnet' ? USDC_ISSUER_MAINNET : USDC_ISSUER_TESTNET;
+}
+
+function maskedKey(publicKey: string) {
+  return `${publicKey.slice(0, 8)}...`;
+}
+
+function isNotFoundError(err: any): boolean {
+  const message = String(err?.message || err?.statusText || err || '').toLowerCase();
+  return err?.status === 404 || message.includes('not found');
+}
+
+function clampDelay(ms: number): number {
+  return Number.isFinite(ms) && ms > 0 ? ms : 30_000;
 }
 
 async function sendWhatsApp(phone: string, text: string): Promise<void> {
@@ -89,6 +106,10 @@ async function formatPaymentMessage(payment: any, to: string): Promise<string> {
 
 class PaymentWatcherService {
   private streams = new Map<string, any>();
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private pendingSubscribes = new Set<string>();
+  private retryCounts = new Map<string, number>();
+  private missingAccountLogs = new Set<string>();
   private started = false;
 
   async start(): Promise<void> {
@@ -119,7 +140,7 @@ class PaymentWatcherService {
 
       logger.info(`[payment-watcher] Subscribing to ${keys.size} wallets`);
       for (const key of keys) {
-        this.subscribe(key);
+        await this.subscribe(key);
         // Stagger connections to avoid hammering Horizon
         await new Promise(r => setTimeout(r, 50));
       }
@@ -128,9 +149,41 @@ class PaymentWatcherService {
     }
   }
 
-  subscribe(publicKey: string): void {
-    if (this.streams.has(publicKey)) return;
+  async subscribe(publicKey: string): Promise<void> {
+    const key = publicKey.trim();
+    if (!key || this.streams.has(key) || this.pendingSubscribes.has(key) || this.reconnectTimers.has(key)) return;
 
+    this.pendingSubscribes.add(key);
+
+    try {
+      const accountReady = await this.accountExists(key);
+      if (!accountReady) {
+        this.scheduleAccountRetry(key);
+        return;
+      }
+
+      this.openStream(key);
+      this.retryCounts.delete(key);
+      this.missingAccountLogs.delete(key);
+    } catch (e: any) {
+      const delayMs = this.nextBackoffMs(key);
+      logger.warn(`[payment-watcher] Horizon preflight failed for ${maskedKey(key)}: ${e.message}; retrying in ${Math.round(delayMs / 1000)}s`);
+      this.scheduleReconnect(key, delayMs);
+    } finally {
+      this.pendingSubscribes.delete(key);
+    }
+  }
+
+  private async accountExists(publicKey: string): Promise<boolean> {
+    const res = await fetch(`${HORIZON_URL}/accounts/${encodeURIComponent(publicKey)}`, {
+      signal: AbortSignal.timeout(clampDelay(ACCOUNT_CHECK_TIMEOUT_MS)),
+    });
+    if (res.status === 404) return false;
+    if (!res.ok) throw new Error(`Horizon account check returned HTTP ${res.status}`);
+    return true;
+  }
+
+  private openStream(publicKey: string): void {
     const server = new Horizon.Server(HORIZON_URL);
     const stream = server
       .payments()
@@ -147,7 +200,7 @@ class PaymentWatcherService {
             const isXlm = payment.asset_type === 'native';
             if (!isUsdc && !isXlm) return;
 
-            logger.info(`[payment-watcher] Payment received address=${publicKey.slice(0,8)}... amount=${payment.amount} asset=${payment.asset_code || 'XLM'}`);
+            logger.info(`[payment-watcher] Payment received address=${maskedKey(publicKey)} amount=${payment.amount} asset=${payment.asset_code || 'XLM'}`);
 
             const phone = await lookupPhone(publicKey);
             if (!phone) return;
@@ -160,29 +213,84 @@ class PaymentWatcherService {
           }
         },
         onerror: (err: any) => {
-          logger.warn(`[payment-watcher] SSE error for ${publicKey.slice(0,8)}...: ${err?.message || err}`);
-          // Remove and let restart handle reconnection
-          this.streams.delete(publicKey);
-          // Reconnect after 30s
-          setTimeout(() => this.subscribe(publicKey), 30_000);
+          this.handleStreamError(publicKey, err);
         },
       });
 
     this.streams.set(publicKey, stream);
-    logger.debug(`[payment-watcher] Subscribed to ${publicKey.slice(0,8)}...`);
+    logger.debug(`[payment-watcher] Subscribed to ${maskedKey(publicKey)}`);
+  }
+
+  private handleStreamError(publicKey: string, err: any): void {
+    this.closeStream(publicKey);
+
+    if (isNotFoundError(err)) {
+      this.scheduleAccountRetry(publicKey);
+      return;
+    }
+
+    if (this.reconnectTimers.has(publicKey)) return;
+
+    const delayMs = this.nextBackoffMs(publicKey);
+    logger.warn(`[payment-watcher] SSE error for ${maskedKey(publicKey)}: ${err?.message || err}; retrying in ${Math.round(delayMs / 1000)}s`);
+    this.scheduleReconnect(publicKey, delayMs);
+  }
+
+  private nextBackoffMs(publicKey: string): number {
+    const retries = (this.retryCounts.get(publicKey) || 0) + 1;
+    this.retryCounts.set(publicKey, retries);
+    const base = clampDelay(STREAM_RECONNECT_BASE_MS);
+    const max = clampDelay(STREAM_RECONNECT_MAX_MS);
+    return Math.min(base * 2 ** (retries - 1), max);
+  }
+
+  private scheduleAccountRetry(publicKey: string): void {
+    if (!this.missingAccountLogs.has(publicKey)) {
+      logger.debug(`[payment-watcher] ${maskedKey(publicKey)} is not funded on Horizon yet; retrying activation check in ${Math.round(clampDelay(ACCOUNT_NOT_FOUND_RETRY_MS) / 1000)}s`);
+      this.missingAccountLogs.add(publicKey);
+    }
+    this.scheduleReconnect(publicKey, clampDelay(ACCOUNT_NOT_FOUND_RETRY_MS));
+  }
+
+  private scheduleReconnect(publicKey: string, delayMs: number): void {
+    if (this.reconnectTimers.has(publicKey)) return;
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(publicKey);
+      void this.subscribe(publicKey);
+    }, delayMs);
+    timer.unref?.();
+    this.reconnectTimers.set(publicKey, timer);
+  }
+
+  private closeStream(publicKey: string): void {
+    const stream = this.streams.get(publicKey);
+    if (!stream) return;
+    try { (stream as any)(); } catch {}
+    this.streams.delete(publicKey);
   }
 
   unsubscribe(publicKey: string): void {
-    const stream = this.streams.get(publicKey);
-    if (stream) {
-      try { (stream as any)(); } catch {}
-      this.streams.delete(publicKey);
+    this.closeStream(publicKey);
+    const timer = this.reconnectTimers.get(publicKey);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(publicKey);
     }
+    this.pendingSubscribes.delete(publicKey);
+    this.retryCounts.delete(publicKey);
+    this.missingAccountLogs.delete(publicKey);
   }
 
-  status(): { watching: number; addresses: string[] } {
+  status(): { watching: number; addresses: string[]; reconnecting: number; reconnectingAddresses: string[]; pending: number } {
     const addresses = [...this.streams.keys()];
-    return { watching: addresses.length, addresses };
+    const reconnectingAddresses = [...this.reconnectTimers.keys()];
+    return {
+      watching: addresses.length,
+      addresses,
+      reconnecting: reconnectingAddresses.length,
+      reconnectingAddresses,
+      pending: this.pendingSubscribes.size,
+    };
   }
 }
 

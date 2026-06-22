@@ -19,7 +19,12 @@ jest.mock('../src/config/supabase', () => ({
 }));
 
 // --- Stellar SDK mock ---
-const mockStream = jest.fn(() => jest.fn()); // returns a close function
+const mockCloseStream = jest.fn();
+let streamHandlers: { onmessage?: (payment: any) => Promise<void>; onerror?: (err: any) => void } = {};
+const mockStream = jest.fn((handlers: typeof streamHandlers) => {
+  streamHandlers = handlers;
+  return mockCloseStream;
+});
 const mockCursor = jest.fn(() => ({ stream: mockStream }));
 const mockForAccount = jest.fn(() => ({ cursor: mockCursor }));
 const mockPayments = jest.fn(() => ({ forAccount: mockForAccount }));
@@ -31,35 +36,96 @@ jest.mock('@stellar/stellar-sdk', () => ({
 }));
 
 import { paymentWatcher } from '../src/integrations/payment-watcher/service';
+import { logger } from '../src/utils/logger';
 
 describe('PaymentWatcherService', () => {
+  beforeEach(() => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({}),
+    }) as any;
+  });
+
   afterEach(() => {
     // Clean up all subscriptions to keep tests isolated
-    const { addresses } = paymentWatcher.status();
-    for (const addr of addresses) {
+    const { addresses, reconnectingAddresses } = paymentWatcher.status();
+    for (const addr of [...addresses, ...reconnectingAddresses]) {
       paymentWatcher.unsubscribe(addr);
     }
+    streamHandlers = {};
     jest.clearAllMocks();
   });
 
-  it('subscribe — opens an SSE stream for a new public key', () => {
-    paymentWatcher.subscribe('GPUBKEY111111111111111111111111111111111111111111111111');
+  it('subscribe — opens an SSE stream for a funded public key', async () => {
+    await paymentWatcher.subscribe('GPUBKEY111111111111111111111111111111111111111111111111');
 
     expect(mockPayments).toHaveBeenCalled();
     expect(mockForAccount).toHaveBeenCalledWith('GPUBKEY111111111111111111111111111111111111111111111111');
   });
 
-  it('subscribe — ignores duplicate subscriptions', () => {
+  it('subscribe — ignores duplicate subscriptions', async () => {
     const key = 'GPUBKEY222222222222222222222222222222222222222222222222';
-    paymentWatcher.subscribe(key);
-    paymentWatcher.subscribe(key);
+    await paymentWatcher.subscribe(key);
+    await paymentWatcher.subscribe(key);
 
     expect(mockPayments).toHaveBeenCalledTimes(1);
   });
 
-  it('unsubscribe — closes the stream and removes from map', () => {
+  it('subscribe — skips unfunded accounts without warning or opening SSE', async () => {
+    const key = 'GPUBKEY404222222222222222222222222222222222222222222222';
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await paymentWatcher.subscribe(key);
+
+    expect(mockPayments).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(paymentWatcher.status()).toMatchObject({
+      watching: 0,
+      reconnecting: 1,
+      reconnectingAddresses: [key],
+    });
+  });
+
+  it('stream error — deduplicates repeated transient reconnects', async () => {
+    const key = 'GPUBKEYERR2222222222222222222222222222222222222222222222';
+    await paymentWatcher.subscribe(key);
+
+    streamHandlers.onerror?.(new Error('temporary network error'));
+    streamHandlers.onerror?.(new Error('temporary network error'));
+
+    expect(mockCloseStream).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(paymentWatcher.status()).toMatchObject({
+      watching: 0,
+      reconnecting: 1,
+      reconnectingAddresses: [key],
+    });
+  });
+
+  it('stream error — treats Not Found as unfunded account retry, not a warning loop', async () => {
+    const key = 'GPUBKEYNF22222222222222222222222222222222222222222222222';
+    await paymentWatcher.subscribe(key);
+
+    streamHandlers.onerror?.(new Error('Not Found'));
+    streamHandlers.onerror?.(new Error('Not Found'));
+
+    expect(mockCloseStream).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(paymentWatcher.status()).toMatchObject({
+      watching: 0,
+      reconnecting: 1,
+      reconnectingAddresses: [key],
+    });
+  });
+
+  it('unsubscribe — closes the stream and removes from map', async () => {
     const key = 'GPUBKEY333333333333333333333333333333333333333333333333';
-    paymentWatcher.subscribe(key);
+    await paymentWatcher.subscribe(key);
 
     expect(paymentWatcher.status().watching).toBe(1);
 
@@ -68,11 +134,11 @@ describe('PaymentWatcherService', () => {
     expect(paymentWatcher.status().watching).toBe(0);
   });
 
-  it('status — reports watching count and addresses', () => {
+  it('status — reports watching count and addresses', async () => {
     const key1 = 'GA111111111111111111111111111111111111111111111111111111';
     const key2 = 'GA222222222222222222222222222222222222222222222222222222';
-    paymentWatcher.subscribe(key1);
-    paymentWatcher.subscribe(key2);
+    await paymentWatcher.subscribe(key1);
+    await paymentWatcher.subscribe(key2);
 
     const { watching, addresses } = paymentWatcher.status();
 
