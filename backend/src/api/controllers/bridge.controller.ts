@@ -169,21 +169,37 @@ function collectBridgeWalletBalances(
   return balances;
 }
 
-function isCreditActivity(type: string): boolean {
+function activityCreditPriority(type: string): number {
   const normalized = type.toLowerCase();
   if (/(failed|reversed|returned|cancelled|canceled|fee|debit|withdraw)/.test(normalized)) {
-    return false;
+    return 0;
   }
-  return /(funds_received|deposit|received|credit|wire|ach|sepa|pix)/.test(normalized);
+  if (normalized.includes("funds_received")) return 4;
+  if (normalized.includes("payment_processed")) return 3;
+  if (/(deposit|received|credit|wire|ach|sepa|pix)/.test(normalized)) return 2;
+  return 0;
 }
 
 function collectActivityBalances(events: Array<Record<string, unknown>>): VirtualAccountBalanceSummary[] {
-  const totals = new Map<string, { amount: number; event_count: number }>();
+  const deposits = new Map<string, { event: Record<string, unknown>; priority: number }>();
+  let anonymousIndex = 0;
+
   for (const event of events) {
-    const type = String(event.type || "");
-    if (!isCreditActivity(type)) continue;
+    const priority = activityCreditPriority(String(event.type || ""));
+    if (!priority) continue;
     const amount = Number(readAmount(event.amount));
     if (!Number.isFinite(amount) || amount <= 0) continue;
+
+    const depositKey = String(event.deposit_id || event.id || `event-${anonymousIndex++}`);
+    const current = deposits.get(depositKey);
+    if (!current || priority > current.priority) {
+      deposits.set(depositKey, { event, priority });
+    }
+  }
+
+  const totals = new Map<string, { amount: number; event_count: number }>();
+  for (const { event } of deposits.values()) {
+    const amount = Number(readAmount(event.amount));
     const currency = readCurrency(event.currency);
     const current = totals.get(currency) ?? { amount: 0, event_count: 0 };
     current.amount += amount;
@@ -891,7 +907,7 @@ export class BridgeController {
     let bridgeBalances: Array<Record<string, unknown>> = [];
 
     try {
-      account = await service.getVirtualAccount(virtualAccountId) as unknown as Record<string, unknown>;
+      account = await service.getVirtualAccount(customerId, virtualAccountId) as unknown as Record<string, unknown>;
       if (account?.id) {
         void BridgeController.upsertVirtualAccount(account, customerId);
       }

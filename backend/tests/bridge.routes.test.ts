@@ -304,6 +304,7 @@ describe("Bridge Customer API", () => {
       "cust_123",
       "GABC...",
       "stellar",
+      undefined,
     );
     expect(res.status).toHaveBeenCalledWith(201);
   });
@@ -337,7 +338,7 @@ describe("Bridge Customer API", () => {
     const res = mockRes();
     await BridgeController.getVirtualAccountBalance(req, res);
 
-    expect(mockService.getVirtualAccount).toHaveBeenCalledWith("va_001");
+    expect(mockService.getVirtualAccount).toHaveBeenCalledWith("cust_123", "va_001");
     expect(mockService.getVirtualAccountActivity).toHaveBeenCalledWith(
       "cust_123",
       "va_001",
@@ -346,14 +347,59 @@ describe("Bridge Customer API", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        balances: [
+        balances: expect.arrayContaining([
           expect.objectContaining({
             amount: "125.50",
             currency: "USD",
             source: "activity",
             label: "Received via activity",
           }),
+        ]),
+      }),
+    );
+  });
+
+  it("returns virtual account activity totals even when live wallet lookups fail", async () => {
+    mockService.getVirtualAccount.mockRejectedValue(new Error("Bridge wallet not found"));
+    mockService.getVirtualAccountActivity.mockResolvedValue([
+      {
+        id: "event_001",
+        type: "funds_received",
+        deposit_id: "deposit_001",
+        amount: "250.00",
+        currency: "usd",
+        virtual_account_id: "va_001",
+      },
+      {
+        id: "event_002",
+        type: "payment_processed",
+        deposit_id: "deposit_001",
+        amount: "249.00",
+        currency: "usdc",
+        virtual_account_id: "va_001",
+      },
+    ]);
+    mockService.getWalletBalances.mockRejectedValue(new Error("Bridge wallet not found"));
+
+    const req = mockReq({ params: { id: "cust_123", virtualAccountId: "va_001" } });
+    const res = mockRes();
+    await BridgeController.getVirtualAccountBalance(req, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        balances: [
+          expect.objectContaining({
+            amount: "250.00",
+            currency: "USD",
+            source: "activity",
+          }),
         ],
+        warnings: expect.arrayContaining([
+          "virtual_account: Bridge wallet not found",
+          "wallet_balances: Bridge wallet not found",
+        ]),
       }),
     );
   });
