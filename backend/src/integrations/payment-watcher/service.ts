@@ -24,6 +24,35 @@ const STREAM_RECONNECT_BASE_MS = parseInt(process.env.PAYMENT_WATCHER_RECONNECT_
 const STREAM_RECONNECT_MAX_MS = parseInt(process.env.PAYMENT_WATCHER_RECONNECT_MAX_MS || '300000', 10);
 const ACCOUNT_NOT_FOUND_RETRY_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_RETRY_MS || '600000', 10);
 const ACCOUNT_CHECK_TIMEOUT_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_TIMEOUT_MS || '10000', 10);
+const ACCOUNT_CHECK_SPACING_MS = parseInt(process.env.PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS || '1000', 10);
+const HORIZON_RATE_LIMIT_RETRY_MS = parseInt(process.env.PAYMENT_WATCHER_RATE_LIMIT_RETRY_MS || '300000', 10);
+
+class HorizonRateLimitError extends Error {
+  constructor(public readonly retryAfterMs: number) {
+    super('Horizon account check returned HTTP 429');
+    this.name = 'HorizonRateLimitError';
+  }
+}
+
+function isHorizonRateLimitError(error: unknown): error is HorizonRateLimitError {
+  return error instanceof HorizonRateLimitError || (error as any)?.name === 'HorizonRateLimitError';
+}
+
+function parseRetryAfterMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, seconds * 1000);
+  }
+
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+
+  return null;
+}
 
 function getUsdcIssuer() {
   return process.env.STELLAR_NETWORK === 'mainnet' ? USDC_ISSUER_MAINNET : USDC_ISSUER_TESTNET;
@@ -40,6 +69,14 @@ function isNotFoundError(err: any): boolean {
 
 function clampDelay(ms: number): number {
   return Number.isFinite(ms) && ms > 0 ? ms : 30_000;
+}
+
+function nonNegativeDelay(ms: number, fallback = 0): number {
+  return Number.isFinite(ms) && ms >= 0 ? ms : fallback;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function sendWhatsApp(phone: string, text: string): Promise<void> {
@@ -110,6 +147,10 @@ class PaymentWatcherService {
   private pendingSubscribes = new Set<string>();
   private retryCounts = new Map<string, number>();
   private missingAccountLogs = new Set<string>();
+  private accountCheckQueue: Promise<void> = Promise.resolve();
+  private lastAccountCheckAt = 0;
+  private horizonRateLimitedUntil = 0;
+  private nextRateLimitLogAt = 0;
   private started = false;
 
   async start(): Promise<void> {
@@ -166,6 +207,12 @@ class PaymentWatcherService {
       this.retryCounts.delete(key);
       this.missingAccountLogs.delete(key);
     } catch (e: any) {
+      if (isHorizonRateLimitError(e)) {
+        this.logRateLimit(e.retryAfterMs);
+        this.scheduleReconnect(key, e.retryAfterMs);
+        return;
+      }
+
       const delayMs = this.nextBackoffMs(key);
       logger.warn(`[payment-watcher] Horizon preflight failed for ${maskedKey(key)}: ${e.message}; retrying in ${Math.round(delayMs / 1000)}s`);
       this.scheduleReconnect(key, delayMs);
@@ -175,12 +222,48 @@ class PaymentWatcherService {
   }
 
   private async accountExists(publicKey: string): Promise<boolean> {
+    await this.waitForAccountCheckSlot();
+
     const res = await fetch(`${HORIZON_URL}/accounts/${encodeURIComponent(publicKey)}`, {
       signal: AbortSignal.timeout(clampDelay(ACCOUNT_CHECK_TIMEOUT_MS)),
     });
     if (res.status === 404) return false;
+    if (res.status === 429) {
+      const retryAfterMs = parseRetryAfterMs(res.headers?.get?.('retry-after')) ?? clampDelay(HORIZON_RATE_LIMIT_RETRY_MS);
+      this.horizonRateLimitedUntil = Math.max(this.horizonRateLimitedUntil, Date.now() + retryAfterMs);
+      throw new HorizonRateLimitError(retryAfterMs);
+    }
     if (!res.ok) throw new Error(`Horizon account check returned HTTP ${res.status}`);
     return true;
+  }
+
+  private async waitForAccountCheckSlot(): Promise<void> {
+    const previous = this.accountCheckQueue.catch(() => undefined);
+    const next = previous.then(async () => {
+      const rateLimitDelay = Math.max(0, this.horizonRateLimitedUntil - Date.now());
+      if (rateLimitDelay > 0) {
+        await sleep(rateLimitDelay);
+      }
+
+      const spacingMs = nonNegativeDelay(ACCOUNT_CHECK_SPACING_MS, 1000);
+      const elapsedMs = Date.now() - this.lastAccountCheckAt;
+      if (this.lastAccountCheckAt > 0 && elapsedMs < spacingMs) {
+        await sleep(spacingMs - elapsedMs);
+      }
+
+      this.lastAccountCheckAt = Date.now();
+    });
+
+    this.accountCheckQueue = next;
+    await next;
+  }
+
+  private logRateLimit(delayMs: number): void {
+    const now = Date.now();
+    if (now < this.nextRateLimitLogAt) return;
+
+    logger.warn(`[payment-watcher] Horizon preflight rate limited (HTTP 429); pausing account checks for ${Math.round(delayMs / 1000)}s`);
+    this.nextRateLimitLogAt = now + Math.max(delayMs, 60000);
   }
 
   private openStream(publicKey: string): void {
