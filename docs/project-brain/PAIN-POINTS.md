@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-22. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-51 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+52 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -373,7 +373,7 @@
 
 ---
 
-## Cluster H — Reliability (13 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (14 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -456,6 +456,15 @@
 - **Status**: **Fixed by `17a821f`**. `getQuote()` now falls back to `StellarBrokerService.getQuote()` for pricing when Soroswap `/quote` fails, marks the response with `source: "stellar-broker-fallback"` and `buildAvailable: false`, and blocks Soroswap XDR build attempts for fallback quotes. The key-integrations panel shows the fallback source/warning and hides the XDR builder for fallback quotes. Regression coverage: `backend/tests/soroswap.service.test.ts:102`, `backend/tests/soroswap.service.test.ts:127`, and `backend/tests/soroswap.service.test.ts:209`.
 - **Lesson**: **Provider-specific quote failures need a pricing fallback and an explicit capability boundary**. A fallback quote can keep pricing visible, but transaction-build controls must be disabled unless the quote source can build a compatible XDR.
 
+### #55 — Horizon Preflight HTTP 429 Burst
+> **Quote**: "err]  [2026-06-22T15:36:55.289Z] [WARN] [payment-watcher] Horizon preflight failed for GA2RJTB4...: Horizon account check returned HTTP 429; retrying in 120s" and "giving this error. after finishing, push the changes to main"
+> **Gloss**: Payment watcher account preflight sent many Horizon account checks in the same deploy window and hit Horizon HTTP 429.
+
+- **Where**: `backend/src/integrations/payment-watcher/service.ts:27`, `backend/src/integrations/payment-watcher/service.ts:224`, `backend/src/integrations/payment-watcher/service.ts:240`, `backend/tests/payment-watcher.service.test.ts:96`.
+- **Root cause**: The previous deploy-hardening preflight checked every stored wallet before opening SSE, but only used a 50ms boot stagger and per-wallet retry timers. On rate limit, every wallet logged its own warning and scheduled reconnect using stream backoff, so a burst of accounts could hit Horizon at once and repeat noisy warnings.
+- **Status**: **Fixed by `935822b`**. Account preflights now go through a serialized queue with configurable spacing (`PAYMENT_WATCHER_ACCOUNT_CHECK_SPACING_MS`, default 1000ms), respect Horizon `Retry-After` on HTTP 429, pause further account checks during rate-limit windows, log one global rate-limit warning, and schedule reconnects after the provider cooldown.
+- **Lesson**: **External preflights need a global rate limiter, not only per-wallet backoff**. Any watcher that fans out over stored wallets must serialize provider checks and honor `429` cooldowns.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -496,7 +505,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 51 documented incidents:
+Ranked by frequency × severity across the 52 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -504,19 +513,19 @@ Ranked by frequency × severity across the 51 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 5 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy |
-| 5 | **H — Reliability** | 13 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Soroswap provider fallback, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 14 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight rate-limit fix, Soroswap provider fallback, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 26 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54)
+- **Confirmed fixed**: 27 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 26 of 51 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
+**Key**: 27 of 52 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish and conversational routing improvements. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -550,3 +559,4 @@ Fixing commits verified in codebase:
 | #52 | `1ab10cd` | Harden `/api/wire-test/send` backend fallback/error passthrough and show upstream Circle/backend status in the UI |
 | #53 | `ef1f793`, `299a21d` | Preflight/dedupe payment watcher Horizon streams, route key-integrations API calls through the shared production-aware backend proxy, and keep Soroswap token discovery usable with built-in fallback tokens |
 | #54 | `17a821f` | Fall back from Soroswap quote 400s to Stellar Broker pricing and disable XDR build for fallback quotes |
+| #55 | `935822b` | Serialize payment watcher Horizon account preflights, honor HTTP 429 cooldowns, and replace per-wallet warning bursts with one provider-level warning |
