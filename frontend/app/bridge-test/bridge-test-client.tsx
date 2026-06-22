@@ -423,6 +423,13 @@ export default function BridgeTestClient() {
     if (walletKey && !onRampChain) setOnRampChain("stellar");
   }, [walletKey, onRampChain]);
 
+  // Auto-fetch balance for saved wallet on mount
+  useEffect(() => {
+    if (walletKey && walletOnChain === null && !walletBusy) {
+      fetchBalance(walletKey);
+    }
+  }, [walletKey, walletOnChain, walletBusy]);
+
   // ── Session handlers ──────────────────────────────────────────
 
   function handleLogin(e: React.FormEvent) {
@@ -1000,8 +1007,21 @@ export default function BridgeTestClient() {
                 Clear
               </Button>
             </div>
-            {walletBalances.length > 0 ? (
-              <div className="mt-3 grid gap-1">
+            <div className="mt-3">
+              {walletBusy ? (
+                <p className="flex items-center gap-2 text-xs text-tts-muted">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Fetching balance…
+                </p>
+              ) : walletOnChain === null ? (
+                <p className="text-xs text-tts-muted">Balance not fetched yet — click Refresh below.</p>
+              ) : walletOnChain === false ? (
+                <p className="text-xs text-tts-error">Account not found on Stellar mainnet — wallet may be unfunded or on testnet.</p>
+              ) : walletOnChain === true && walletBalances.length === 0 ? (
+                <p className="text-xs text-tts-muted">No Stellar assets on mainnet.</p>
+              ) : null}
+            </div>
+            {walletBalances.length > 0 && walletOnChain === true && (
+              <div className="mt-2 grid gap-1">
                 {walletBalances.filter((b) => parseFloat(b.balance) > 0 || b.asset_type === "native").map((b, i) => (
                   <div key={i} className="flex items-center justify-between text-sm">
                     <span className="text-tts-muted">{b.asset_code || "XLM"}</span>
@@ -1009,7 +1029,7 @@ export default function BridgeTestClient() {
                   </div>
                 ))}
               </div>
-            ) : null}
+            )}
             <Button variant="outline" size="sm" className="mt-2" onClick={() => fetchBalance()} disabled={walletBusy}>
               {walletBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Refresh balance
