@@ -326,6 +326,9 @@ export default function BridgeTestClient() {
   const [vaActivity, setVaActivity] = useState<{ vaId: string; events: VAEvent[] } | null>(null);
   const [vaActivityLoading, setVaActivityLoading] = useState(false);
 
+  // VA destination on-chain balance
+  const [vaBalances, setVaBalances] = useState<Record<string, { balances: StellarBalance[]; loading: boolean; error?: string }>>({});
+
   // Exchange rates
   const [rateFrom, setRateFrom] = useState("usd");
   const [rateTo, setRateTo] = useState("brl");
@@ -751,6 +754,19 @@ export default function BridgeTestClient() {
       setVaActivity({ vaId, events: (p.events as VAEvent[]) || [] });
     } finally {
       setVaActivityLoading(false);
+    }
+  }
+
+  async function fetchVaDestinationBalance(vaId: string, address: string) {
+    if (!address) return;
+    setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: true } }));
+    try {
+      const r = await fetch(`${HORIZON}/accounts/${encodeURIComponent(address)}`);
+      if (!r.ok) throw new Error('Account not found on Stellar network');
+      const d = await r.json();
+      setVaBalances((prev) => ({ ...prev, [vaId]: { balances: d.balances || [], loading: false } }));
+    } catch (e: any) {
+      setVaBalances((prev) => ({ ...prev, [vaId]: { balances: [], loading: false, error: e.message } }));
     }
   }
 
@@ -1528,9 +1544,20 @@ export default function BridgeTestClient() {
             {newVA && (
               <div className="mt-4 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="font-mono text-xs text-tts-muted">{newVA.id}</span>
+                  <div>
+                    <span className="font-mono text-xs text-tts-muted">{newVA.id}</span>
+                    <span className="ml-2 rounded bg-tts-gold/10 px-1.5 py-0.5 text-xs text-tts-gold">{newVA.source_currency?.toUpperCase()}</span>
+                  </div>
                   <StatusPill tone={newVA.status === 'activated' ? 'confirm' : 'gold'}>{newVA.status}</StatusPill>
                 </div>
+                {(newVA.destination_chain || (newVA.destination as any)?.payment_rail) && (
+                  <p className="mb-2 text-xs text-tts-muted">
+                    → {newVA.destination_chain || (newVA.destination as any)?.payment_rail}
+                    {(newVA.destination_address || (newVA.destination as any)?.address || (newVA.destination as any)?.to_address) && (
+                      <>: {(newVA.destination_address || (newVA.destination as any)?.address || (newVA.destination as any)?.to_address) as string}</>
+                    )}
+                  </p>
+                )}
                 {newVA.source_deposit_instructions && (
                   <DepositInstructions instr={newVA.source_deposit_instructions} onCopy={handleCopy} />
                 )}
@@ -1542,10 +1569,20 @@ export default function BridgeTestClient() {
               <div className="mt-3 grid gap-2">
                 {virtualAccounts.filter((v) => v.id !== newVA?.id).map((va) => {
                   const showActivity = vaActivity?.vaId === va.id;
+                  const destAddr = (va.destination_address || (va.destination as any)?.address || (va.destination as any)?.to_address) as string;
+                  const destChain = (va.destination_chain || (va.destination as any)?.payment_rail || (va.destination as any)?.chain) as string;
+                  const bal = va.id ? vaBalances[va.id] : null;
+                  // Total deposited from activity events for this VA
+                  const activityTotal = showActivity && vaActivity?.events
+                    ? vaActivity.events.reduce((sum, ev) => sum + (parseFloat(ev.amount || '0') || 0), 0)
+                    : null;
                   return (
                     <div key={va.id} className="rounded-md border border-tts-border bg-tts-bg/50 p-3 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-tts-muted">{va.id?.slice(0, 24)}…</span>
+                        <div>
+                          <span className="font-mono text-tts-muted">{va.id?.slice(0, 24)}…</span>
+                          <span className="ml-2 rounded bg-tts-gold/10 px-1.5 py-0.5 text-tts-gold">{va.source_currency?.toUpperCase()}</span>
+                        </div>
                         <div className="flex items-center gap-2">
                           <StatusPill tone={va.status === 'activated' ? 'confirm' : 'gold'}>{va.status}</StatusPill>
                           <button
@@ -1556,11 +1593,46 @@ export default function BridgeTestClient() {
                           </button>
                         </div>
                       </div>
+                      {destChain && (
+                        <div className="mt-1.5 flex items-center gap-3 text-tts-muted">
+                          <span>→ {destChain}{destAddr ? `: ${destAddr.slice(0, 12)}…${destAddr.slice(-6)}` : ''}</span>
+                          {destAddr && (
+                            <button
+                              className="rounded border border-tts-border px-2 py-0.5 text-xs text-tts-muted hover:border-tts-confirm/30 hover:text-tts-confirm"
+                              onClick={() => fetchVaDestinationBalance(va.id!, destAddr)}
+                              disabled={bal?.loading}
+                            >
+                              {bal?.loading ? '…' : (bal?.balances?.length ?? 0) > 0 ? 'Refresh' : 'Balance'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {bal && (bal.balances?.length ?? 0) > 0 && (
+                        <div className="mt-2 border-t border-tts-border pt-2">
+                          <div className="grid gap-0.5">
+                            {bal.balances.filter((b) => parseFloat(b.balance) > 0 || b.asset_type === 'native').map((b, i) => (
+                              <div key={i} className="flex items-center justify-between rounded bg-tts-bg/60 px-2 py-0.5">
+                                <span className="text-tts-muted">{b.asset_code || 'XLM'}</span>
+                                <span className="font-mono font-semibold text-tts-deep">{parseFloat(b.balance).toFixed(b.asset_type === 'native' ? 7 : 2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {bal?.error && (
+                        <p className="mt-2 text-tts-error">{bal.error}</p>
+                      )}
                       {va.source_deposit_instructions && (
                         <DepositInstructions instr={va.source_deposit_instructions} onCopy={handleCopy} />
                       )}
                       {showActivity && (
                         <div className="mt-3 border-t border-tts-border pt-2">
+                          {activityTotal !== null && activityTotal > 0 && (
+                            <div className="mb-2 flex items-center justify-between rounded bg-tts-confirm/10 px-2 py-1.5">
+                              <span className="font-semibold text-tts-confirm">Total deposited</span>
+                              <span className="font-mono font-bold text-tts-confirm">{activityTotal.toFixed(2)} {va.source_currency?.toUpperCase()}</span>
+                            </div>
+                          )}
                           {vaActivity!.events.length === 0 ? (
                             <p className="text-tts-muted">No activity yet.</p>
                           ) : (
