@@ -11,11 +11,13 @@ import {
   CalendarDays,
   CheckCircle2,
   Coins,
+  ExternalLink,
   FileCheck2,
   HelpCircle,
   Loader2,
   LockKeyhole,
   Plus,
+  Wallet,
   WalletCards,
 } from "lucide-react";
 import {
@@ -504,7 +506,7 @@ export default function RendimentosClient({
 } = {}) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const [tab, setTab] = useState<"returns" | "apply">(initialView === "application" ? "apply" : "returns");
+  const [tab, setTab] = useState<"returns" | "apply" | "swap">(initialView === "application" ? "apply" : "returns");
 
   useEffect(() => {
     const next = initialView === "application" ? "apply" : "returns";
@@ -769,9 +771,10 @@ export default function RendimentosClient({
       {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); /* refresh */ }} />}
 
       <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-8">
-        <div className="tts-stage-strip mb-5 grid-cols-2">
+        <div className="tts-stage-strip mb-5 grid-cols-3">
           <button type="button" className="tts-stage-button" data-active={tab === "returns"} onClick={() => setTab("returns")}>{L("Rendimentos", "Returns")}</button>
           <button type="button" className="tts-stage-button" data-active={tab === "apply"} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</button>
+          <button type="button" className="tts-stage-button" data-active={tab === "swap"} onClick={() => setTab("swap")}>{L("Trocar", "Swap")}</button>
         </div>
 
         {apiState.error && (
@@ -827,6 +830,10 @@ export default function RendimentosClient({
                 onPrepare={prepareYield} onConfirm={confirmYield}
                 convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
               />
+            )}
+
+            {tab === "swap" && (
+              <SwapInlinePanel language={language} />
             )}
           </>
         )}
@@ -1338,6 +1345,335 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
       <p className="text-xl font-bold mt-1">{value}</p>
       {sub && <p className="text-xs text-tts-muted mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Inline Soroswap swap widget ──────────────────────────────────────────────
+
+function SwapInlinePanel({ language }: { language: AppLanguage }) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+
+  const [assetIn, setAssetIn] = useState("XLM");
+  const [assetOut, setAssetOut] = useState("USDC");
+  const [amount, setAmount] = useState("10");
+  const [tradeType, setTradeType] = useState<"EXACT_IN" | "EXACT_OUT">("EXACT_IN");
+
+  const [quote, setQuote] = useState<any>(null);
+  const [loadingQuote, setLoadingQuote] = useState(false);
+  const [errQuote, setErrQuote] = useState<string | null>(null);
+
+  const [xdrResult, setXdrResult] = useState<any>(null);
+  const [loadingXdr, setLoadingXdr] = useState(false);
+  const [errXdr, setErrXdr] = useState<string | null>(null);
+
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletNetwork, setWalletNetwork] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [errWallet, setErrWallet] = useState<string | null>(null);
+
+  const [signedXdr, setSignedXdr] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [errSign, setErrSign] = useState<string | null>(null);
+
+  const [submitResult, setSubmitResult] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errSubmit, setErrSubmit] = useState<string | null>(null);
+
+  const [swapNetwork, setSwapNetwork] = useState<"TESTNET" | "PUBLIC">("TESTNET");
+
+  const PAIRS = [
+    { from: "XLM", to: "USDC" },
+    { from: "USDC", to: "XLM" },
+  ];
+
+  function resetBuild() {
+    setXdrResult(null);
+    setSignedXdr("");
+    setSubmitResult(null);
+    setErrXdr(null);
+    setErrSign(null);
+    setErrSubmit(null);
+  }
+
+  function shortAddr(addr: string) {
+    if (!addr) return "";
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  }
+
+  function netPassphrase(net: string) {
+    return net === "TESTNET"
+      ? "Test SDF Network ; September 2015"
+      : "Public Global Stellar Network ; September 2015";
+  }
+
+  async function getQuote() {
+    setLoadingQuote(true);
+    setErrQuote(null);
+    setQuote(null);
+    resetBuild();
+    try {
+      const qs = new URLSearchParams({ assetIn, assetOut, amount, tradeType });
+      const res = await fetch(`/api/swap/quote?${qs}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.network) setSwapNetwork(data.network === "testnet" ? "TESTNET" : "PUBLIC");
+      setQuote(data);
+    } catch (e: any) {
+      setErrQuote(e.message);
+    } finally {
+      setLoadingQuote(false);
+    }
+  }
+
+  async function buildXdr() {
+    if (!quote || !walletAddress) return;
+    setLoadingXdr(true);
+    setErrXdr(null);
+    resetBuild();
+    try {
+      const res = await fetch("/api/swap/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quote, senderAddress: walletAddress }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      if (data.network) setSwapNetwork(data.network === "testnet" ? "TESTNET" : "PUBLIC");
+      setXdrResult(data);
+    } catch (e: any) {
+      setErrXdr(e.message);
+    } finally {
+      setLoadingXdr(false);
+    }
+  }
+
+  async function connectFreighter() {
+    setConnecting(true);
+    setErrWallet(null);
+    try {
+      const f = await import("@stellar/freighter-api");
+      const connected = await f.isConnected();
+      if (!connected.isConnected) throw new Error("Freighter extension not installed.");
+      const access = await f.requestAccess();
+      if (!access.address) throw new Error("Freighter did not return a public key.");
+      const net = await f.getNetwork();
+      setWalletAddress(access.address);
+      setWalletNetwork(net.network || "");
+    } catch (e: any) {
+      setErrWallet(e.message);
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function signWithFreighter() {
+    if (!xdrResult?.xdr || !walletAddress) return;
+    setSigning(true);
+    setErrSign(null);
+    setSignedXdr("");
+    setSubmitResult(null);
+    try {
+      const f = await import("@stellar/freighter-api");
+      const pass = xdrResult.networkPassphrase || netPassphrase(swapNetwork);
+      const result = await f.signTransaction(xdrResult.xdr, { networkPassphrase: pass, address: walletAddress });
+      if (!result.signedTxXdr) throw new Error("Freighter did not return signed XDR.");
+      setSignedXdr(result.signedTxXdr);
+    } catch (e: any) {
+      setErrSign(e.message);
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  async function submitSwap() {
+    if (!signedXdr) return;
+    setSubmitting(true);
+    setErrSubmit(null);
+    setSubmitResult(null);
+    try {
+      const res = await fetch("/api/swap/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedXdr }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      setSubmitResult(data);
+    } catch (e: any) {
+      setErrSubmit(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const walletNetOk = !walletNetwork || (walletNetwork.toUpperCase().includes("TEST") ? "TESTNET" : "PUBLIC") === swapNetwork;
+
+  return (
+    <div className="space-y-5">
+      <div className="border border-tts-border bg-tts-surface p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Trocar tokens", "Swap tokens")}</p>
+            <h3 className="text-lg font-bold mt-0.5">{L("Swap via DEX", "Swap via DEX")}</h3>
+          </div>
+          <span className="rounded border border-tts-border px-2 py-1 text-[10px] font-bold uppercase text-tts-muted">{swapNetwork}</span>
+        </div>
+
+        {/* Pair quick-select */}
+        <div className="flex gap-2 mb-3">
+          {PAIRS.map((p) => (
+            <button
+              key={`${p.from}-${p.to}`}
+              onClick={() => { setAssetIn(p.from); setAssetOut(p.to); resetBuild(); setQuote(null); setErrQuote(null); }}
+              className={`rounded border px-3 py-1.5 text-xs font-bold transition ${assetIn === p.from && assetOut === p.to ? "border-tts-deep bg-tts-deep text-tts-surface" : "border-tts-border text-tts-muted hover:border-tts-deep"}`}
+            >
+              {p.from} → {p.to}
+            </button>
+          ))}
+        </div>
+
+        {/* Inputs */}
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div>
+            <label className="block mb-1 text-xs font-bold text-tts-muted uppercase">{L("De", "From")}</label>
+            <input value={assetIn} onChange={(e) => { setAssetIn(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full border border-tts-border bg-tts-bg px-3 py-2 text-sm font-bold outline-none focus:border-tts-deep" />
+          </div>
+          <div>
+            <label className="block mb-1 text-xs font-bold text-tts-muted uppercase">{L("Para", "To")}</label>
+            <input value={assetOut} onChange={(e) => { setAssetOut(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full border border-tts-border bg-tts-bg px-3 py-2 text-sm font-bold outline-none focus:border-tts-deep" />
+          </div>
+          <div>
+            <label className="block mb-1 text-xs font-bold text-tts-muted uppercase">{L("Valor", "Amount")}</label>
+            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); resetBuild(); setQuote(null); }} className="w-full border border-tts-border bg-tts-bg px-3 py-2 text-sm font-bold outline-none focus:border-tts-deep" />
+          </div>
+        </div>
+
+        {/* Trade type */}
+        <div className="flex gap-2 mb-4">
+          {(["EXACT_IN", "EXACT_OUT"] as const).map((t) => (
+            <button key={t} onClick={() => { setTradeType(t); resetBuild(); setQuote(null); }}
+              className={`rounded border px-3 py-1 text-xs font-bold transition ${tradeType === t ? "border-tts-deep bg-tts-deep text-tts-surface" : "border-tts-border text-tts-muted"}`}>
+              {t === "EXACT_IN" ? L("Exato entrada", "Exact in") : L("Exato saída", "Exact out")}
+            </button>
+          ))}
+        </div>
+
+        {/* Step 1: Quote */}
+        <button onClick={getQuote} disabled={loadingQuote}
+          className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40 mb-3">
+          {loadingQuote ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
+          {L("1 — Obter cotação", "1 — Get quote")}
+        </button>
+
+        {errQuote && (
+          <div className="flex items-start gap-2 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400 mb-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {errQuote}
+          </div>
+        )}
+
+        {quote && (
+          <div className="rounded border border-tts-border bg-tts-bg p-3 mb-4 space-y-1">
+            <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Você envia", "You send")}</span><span className="font-bold">{quote.amountIn} {quote.assetIn || assetIn}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Você recebe", "You receive")}</span><span className="font-bold text-tts-confirm">{quote.amountOut} {quote.assetOut || assetOut}</span></div>
+            {quote.priceImpact != null && <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Impacto", "Impact")}</span><span className="font-bold">{Number(quote.priceImpact).toFixed(4)}%</span></div>}
+            {quote.protocols && <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Protocolos", "Protocols")}</span><span className="font-bold">{Array.isArray(quote.protocols) ? quote.protocols.join(", ") : quote.protocols}</span></div>}
+            {quote.warning && <p className="text-xs text-tts-gold pt-1">{quote.warning}</p>}
+          </div>
+        )}
+
+        {/* Step 2: Wallet + Build */}
+        {quote && (
+          <div className="space-y-3">
+            <div className="rounded border border-tts-border bg-tts-bg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-tts-muted uppercase">{L("Carteira Freighter", "Freighter Wallet")}</p>
+                {walletAddress
+                  ? <span className="text-xs font-bold text-tts-confirm">{walletNetwork || "Connected"}</span>
+                  : <span className="text-xs font-bold text-tts-gold">{L("Não conectada", "Not connected")}</span>}
+              </div>
+              {walletAddress ? (
+                <p className="font-mono text-xs text-tts-muted break-all">{walletAddress}</p>
+              ) : (
+                <button onClick={connectFreighter} disabled={connecting}
+                  className="flex w-full items-center justify-center gap-2 border border-tts-border py-2 text-xs font-bold disabled:opacity-40 hover:bg-tts-bg transition">
+                  {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+                  {L("Conectar Freighter", "Connect Freighter")}
+                </button>
+              )}
+              {errWallet && <p className="mt-2 text-xs text-red-400">{errWallet}</p>}
+              {!walletNetOk && <p className="mt-2 text-xs text-tts-gold">{L(`Freighter está na rede ${walletNetwork}; mude para ${swapNetwork}.`, `Freighter is on ${walletNetwork}; switch to ${swapNetwork}.`)}</p>}
+            </div>
+
+            {walletAddress && walletNetOk && (
+              <button onClick={buildXdr} disabled={loadingXdr}
+                className="flex w-full items-center justify-center gap-2 border border-tts-deep py-3 text-sm font-bold disabled:opacity-40 hover:bg-tts-bg transition">
+                {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {L(`2 — Preparar transação (${shortAddr(walletAddress)})`, `2 — Build XDR (${shortAddr(walletAddress)})`)}
+              </button>
+            )}
+            {errXdr && <p className="text-xs text-red-400">{errXdr}</p>}
+          </div>
+        )}
+
+        {/* Step 3: Sign */}
+        {xdrResult?.xdr && (
+          <div className="space-y-3 mt-3">
+            <div className="rounded border border-tts-border bg-tts-bg p-3">
+              <p className="text-xs font-bold text-tts-muted mb-1">{L("XDR não assinado", "Unsigned XDR")}</p>
+              <p className="max-h-14 overflow-y-auto break-all font-mono text-[10px] text-tts-muted/70">{xdrResult.xdr}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={signWithFreighter} disabled={signing || !walletAddress}
+                className="flex items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40">
+                {signing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                {L("3 — Assinar", "3 — Sign")}
+              </button>
+              <a href={`https://lab.stellar.org/transaction/sign?xdr=${encodeURIComponent(xdrResult.xdr)}&networkPassphrase=${encodeURIComponent(xdrResult.networkPassphrase || netPassphrase(swapNetwork))}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 border border-tts-border py-3 text-sm font-bold hover:bg-tts-bg transition">
+                <ExternalLink className="h-4 w-4" /> {L("Stellar Lab", "Stellar Lab")}
+              </a>
+            </div>
+            {errSign && <p className="text-xs text-red-400">{errSign}</p>}
+            {signedXdr && (
+              <div className="flex items-center gap-2 rounded border border-tts-confirm/30 bg-tts-confirm/10 p-2 text-xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-tts-confirm shrink-0" />
+                {L(`Assinado por ${shortAddr(walletAddress)}`, `Signed by ${shortAddr(walletAddress)}`)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 4: Submit */}
+        {signedXdr && (
+          <div className="space-y-3 mt-3">
+            <button onClick={submitSwap} disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {L("4 — Enviar para Stellar", "4 — Submit to Stellar")}
+            </button>
+            {errSubmit && <p className="text-xs text-red-400">{errSubmit}</p>}
+            {submitResult && (
+              <div className="rounded border border-tts-confirm/30 bg-tts-confirm/10 p-3 space-y-1">
+                <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Status", "Status")}</span><span className="font-bold text-tts-confirm">{submitResult.successful ? "✓ Sucesso" : "Falha"}</span></div>
+                {submitResult.hash && <div className="flex justify-between text-xs"><span className="text-tts-muted">Hash</span><span className="font-mono font-bold">{submitResult.hash.slice(0, 16)}…</span></div>}
+                {submitResult.ledger && <div className="flex justify-between text-xs"><span className="text-tts-muted">Ledger</span><span className="font-bold">{submitResult.ledger}</span></div>}
+                {submitResult.hash && (
+                  <a href={`https://stellar.expert/explorer/testnet/tx/${submitResult.hash}`} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-tts-primary hover:underline mt-1">
+                    <ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="text-center text-xs text-tts-muted">
+        {L("Troca via DEX. Após trocar, vá para Aplicar para depositar na vault.", "Swap via DEX. After swapping, go to Apply to deposit into the vault.")}
+      </p>
     </div>
   );
 }
