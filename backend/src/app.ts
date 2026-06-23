@@ -41,6 +41,8 @@ import allbridgeRouter from './api/routes/allbridge.router';
 import axelarRouter from './api/routes/axelar.router';
 import nearIntentsRouter from './api/routes/near-intents.router';
 import scfRouter from './api/routes/scf.router';
+import autoYieldRouter from './api/routes/auto-yield.router';
+import { startAutoYieldScheduler } from './integrations/auto-yield/service';
 import { paymentWatcher } from './integrations/payment-watcher/service';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
@@ -140,12 +142,14 @@ app.use('/api/allbridge', allbridgeRouter);
 app.use('/api/axelar', axelarRouter);
 app.use('/api/near-intents', nearIntentsRouter);
 app.use('/api/scf', scfRouter);
+app.use('/api/auto-yield', autoYieldRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 
 // Start background summary scheduler (idempotent per process).
 DailySummaryService.startScheduler();
 FxRateAlertService.startScheduler();
+startAutoYieldScheduler();
 
 logger.info(`[evolution-startup] Evolution services starting. base_url=${process.env.EVOLUTION_API_URL || '?'} instance=${process.env.EVOLUTION_INSTANCE || '?'} public_backend=${process.env.PUBLIC_BACKEND_URL || '?'} agent_url=${process.env.EVOLUTION_AGENT_URL || 'default'} webhook_sync=${process.env.EVOLUTION_WEBHOOK_SYNC_PROCESSING || 'false'}`);
 EvolutionService.startWebhookAutoConfiguration();

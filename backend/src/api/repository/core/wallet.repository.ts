@@ -205,4 +205,19 @@ export class WalletRepository {
       throw new Error(`Failed to set alert threshold: ${error.message}`);
     }
   }
+
+  /**
+   * Get all custodial wallets with a vault_secret_id (eligible for auto-yield).
+   */
+  async getAllEligibleForAutoYield(): Promise<WalletInfo[]> {
+    const { data, error } = await this.supabase
+      .from('wallets')
+      .select('session_id, public_key, vault_secret_id, balance')
+      .not('vault_secret_id', 'is', null);
+
+    if (error) {
+      throw new Error(`Failed to get eligible wallets: ${error.message}`);
+    }
+    return (data as WalletInfo[]) || [];
+  }
 }
