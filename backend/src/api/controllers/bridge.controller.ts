@@ -2,9 +2,8 @@ import type { Request, Response } from "express";
 import { getBridgeService } from "../../integrations/bridge";
 import { logger } from "../../utils/logger";
 import { assertBridgeAmountInRange } from "../middlewares/bridge-mainnet.middleware";
-import { server as horizonServer, stellarConfig } from "../../config/stellar";
-import { PUBLIC_USDC_ISSUER, TESTNET_USDC_ISSUER } from "../../config/assets";
-import { Networks } from "@stellar/stellar-sdk";
+import { mainnetServer } from "../../config/stellar";
+import { PUBLIC_USDC_ISSUER } from "../../config/assets";
 import { supabase } from "../../config/supabase";
 
 function readText(value: unknown, fallback = ""): string {
@@ -340,21 +339,20 @@ function collectActivityBalances(events: Array<Record<string, unknown>>): Virtua
 async function validateStellarDestination(address: string): Promise<{ ok: boolean; reason?: string }> {
   if (!address) return { ok: false, reason: "Stellar destination address is required." };
   try {
-    const account = await horizonServer.loadAccount(address);
-    const usdcIssuer = stellarConfig.network === Networks.PUBLIC ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
-    const hasTrustline = account.balances.some(
-      (b: any) => b.asset_type === 'credit_alphanum4' && b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer,
-    );
-    if (!hasTrustline) {
-      return { ok: false, reason: `Stellar address ${address} exists but has no USDC trustline. Add it before using with Bridge.` };
+    // Bridge wallets live on mainnet even when the project runs on testnet
+    const account = await mainnetServer.loadAccount(address);
+    if (!account.balances.some(
+      (b: any) => b.asset_type === 'credit_alphanum4' && b.asset_code === 'USDC' && b.asset_issuer === PUBLIC_USDC_ISSUER,
+    )) {
+      return { ok: false, reason: `Stellar address ${address} exists but has no mainnet USDC trustline. Add it before using with Bridge.` };
     }
     return { ok: true };
   } catch (e: any) {
     const status = e?.response?.status ?? e?.status;
     if (status === 404) {
-      return { ok: false, reason: `Stellar address ${address} does not exist on ${stellarConfig.networkName} mainnet. Fund it with ≥2 XLM and add USDC trustline first.` };
+      return { ok: false, reason: `Stellar address ${address} does not exist on mainnet. Fund it with ≥2 XLM and add USDC trustline first.` };
     }
-    logger.warn(`[bridge] Horizon check failed for ${address}: ${e?.message}`);
+    logger.warn(`[bridge] Mainnet Horizon check failed for ${address}: ${e?.message}`);
     // Don't block on Horizon errors — let Bridge validate
     return { ok: true };
   }
@@ -528,13 +526,12 @@ export class BridgeController {
             .eq('session_id', sessionRow.session_id)
             .maybeSingle();
           if (walletRow?.public_key) {
-            // Fetch live USDC balance from Horizon
+            // Fetch live USDC balance from mainnet Horizon (Bridge wallets live on mainnet)
             let usdcBalance: string | null = null;
             try {
-              const account = await horizonServer.loadAccount(walletRow.public_key);
-              const usdcIssuer = stellarConfig.network === Networks.PUBLIC ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
+              const account = await mainnetServer.loadAccount(walletRow.public_key);
               const usdcEntry = account.balances.find(
-                (b: any) => b.asset_type === 'credit_alphanum4' && b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer,
+                (b: any) => b.asset_type === 'credit_alphanum4' && b.asset_code === 'USDC' && b.asset_issuer === PUBLIC_USDC_ISSUER,
               );
               usdcBalance = usdcEntry?.balance ?? '0';
             } catch {
