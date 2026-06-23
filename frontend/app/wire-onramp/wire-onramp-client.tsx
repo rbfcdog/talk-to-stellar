@@ -872,6 +872,23 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                         {L("Saldo da conta virtual (pode precisar de sweep)", "Virtual account balance (may need sweep)")}
                       </p>
                     )}
+                    {/* Show VA destination info for diagnostics */}
+                    {activeVa?.destination_chain && (
+                      <p className="mt-1 text-[10px] text-tts-muted/40">
+                        {L(
+                          `Rota: ${activeVa.destination_chain} → ${(activeVa.destination_address || '').slice(0, 8)}...`,
+                          `Route: ${activeVa.destination_chain} → ${(activeVa.destination_address || '').slice(0, 8)}...`,
+                        )}
+                        {activeVa.bridge_wallet_id && (
+                          <span>
+                            {" "}· {L(
+                              `Wallet: ${activeVa.bridge_wallet_id.slice(0, 8)}...`,
+                              `Wallet: ${activeVa.bridge_wallet_id.slice(0, 8)}...`,
+                            )}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="mb-4 rounded-lg bg-amber-50/40 dark:bg-amber-900/10 px-3 py-2">
