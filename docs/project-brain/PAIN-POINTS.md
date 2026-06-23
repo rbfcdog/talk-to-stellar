@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-23. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-60 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+61 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -36,7 +36,7 @@
 
 ---
 
-## Cluster B — Ledger & Balance Correctness (7 incidents, SEVERITY: HIGH)
+## Cluster B — Ledger & Balance Correctness (8 incidents, SEVERITY: HIGH)
 
 ### #32 — Balance Not Credited
 > **Quote**: "era pra ter mudado o saldo, teste o on ramp e o off ramp, nao esta alterando o saldo nesse caso. o on ramp nao esta funcionando... teste extensivamente se funciona"
@@ -100,6 +100,15 @@
 - **Root cause**: The Bridge service used stale provider paths: direct VA lookup called `/virtual_accounts/{id}` instead of the customer-scoped `/customers/{customerId}/virtual_accounts/{virtualAccountId}`, and VA activity called `/activity` instead of Bridge's `/history` endpoint. The balance endpoint could therefore fail before seeing the wire history, and `payment_submitted`-style events risked being counted as balances if included naively.
 - **Status**: **Fixed** by `3087e4c` (use virtual account history for wire balances). `BridgeService.getVirtualAccount()` now supports customer-scoped VA lookup; `getVirtualAccountActivity()` uses `/history`; `getVirtualAccountBalance()` passes customer id; activity totals prefer `funds_received` over `payment_processed` per deposit id to avoid double-counting. Regression tests cover the `Bridge wallet not found` warning plus successful `funds_received` balance response.
 - **Lesson**: **Provider endpoint drift is a balance bug**. For Bridge virtual accounts, use customer-scoped VA routes and history events; do not treat missing destination wallet metadata as proof that the wire was not received.
+
+### #64 — Bridge Virtual Accounts Need Visible Wallet-to-Stellar Connection
+> **Quote**: "make so that the mainnet can see the wallets in the virtual account in  bridge, make so there is this visual conection in the page, and make so that can connect the bridge to the stellar wallet and use the usd in these"
+> **Gloss**: `/bridge-test` needed a mainnet money-path view showing which Bridge virtual account routes to which Bridge wallet, and how that connects to the active Stellar wallet.
+
+- **Where**: `frontend/app/bridge-test/bridge-test-client.tsx`, `backend/src/api/controllers/bridge.controller.ts`, `backend/src/api/routes/bridge.router.ts`, `backend/tests/bridge.routes.test.ts`.
+- **Root cause**: The page displayed virtual accounts, Bridge wallets, and Stellar wallets as separate raw sections. Operators had to infer relationships from provider fields, and there was no dedicated action for creating a USD virtual account pointed directly at Stellar or moving Bridge wallet USDC to Stellar.
+- **Status**: **Fixed by `34b27a7`**. `/bridge-test` now has a Bridge-to-Stellar connection map, `GET /customers/:id/virtual-accounts/connections` returns VA → Bridge wallet → Stellar relationship data, `POST /customers/:id/wallets/:walletId/transfer-to-stellar` creates a Bridge-wallet-to-Stellar USDC transfer, and the page exposes a one-click `Create USD → Stellar VA` path.
+- **Lesson**: **Provider objects need a visible money path, not separate raw lists**. For Bridge, show fiat deposit account, destination wallet, balance source, and Stellar receiving wallet in one relationship model.
 
 ---
 
@@ -633,14 +642,14 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 60 documented incidents:
+Ranked by frequency × severity across the 61 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
 | 1 | **C — Flow State Machine** | 9 | HIGH | Windows don't close, flows auto-advance, links expire, PIN cut off, wire-onramp email override |
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
-| 4 | **B — Ledger & Balance** | 7 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility and provider-path drift |
+| 4 | **B — Ledger & Balance** | 8 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility, provider-path drift, Bridge-to-Stellar wallet linkage |
 | 5 | **H — Reliability** | 19 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, Blend pool discovery, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
@@ -648,12 +657,12 @@ Ranked by frequency × severity across the 60 documented incidents:
 
 ## Status Summary
 
-- **Confirmed fixed**: 35 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63)
+- **Confirmed fixed**: 36 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 35 of 60 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 36 of 61 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -696,3 +705,4 @@ Fixing commits verified in codebase:
 | #61 | `f1229d9` | Resolve wire-onramp short-link context, fall back to cached Bridge USD virtual accounts, and cache the login email in-browser |
 | #62 | `008da16` | Let `/wire-onramp` search a manually entered Bridge account email even when it differs from WhatsApp/session context |
 | #63 | `008da16` | Validate Blend pool contract ids and discover current v2 pools from the backstop reward zone |
+| #64 | `34b27a7` | Add Bridge virtual-account connection map, direct USD-to-Stellar VA creation, and Bridge-wallet-to-Stellar transfer route |
