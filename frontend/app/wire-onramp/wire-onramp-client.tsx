@@ -14,7 +14,6 @@ import {
   Info,
   Loader2,
   RefreshCw,
-  Search,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
@@ -40,6 +39,7 @@ type UsdVA = {
   id: string;
   status: string;
   currency?: string;
+  source_currency?: string;
   source_deposit_instructions?: DepositInstructions;
   total_received_usd?: number;
 };
@@ -247,7 +247,7 @@ function VaCard({ va }: { va: UsdVA }) {
             "Log into your US bank or wire service.",
             "Create a new wire or ACH transfer to the account above.",
             reference ? (
-              <span>In the <strong className="text-tts-deep">Reference / Memo</strong> field, enter <span className="font-mono font-semibold text-amber-700 dark:text-amber-400">{reference}</span> exactly — required for routing.</span>
+              <span key="ref">In the <strong className="text-tts-deep">Reference / Memo</strong> field, enter <span className="font-mono font-semibold text-amber-700 dark:text-amber-400">{reference}</span> exactly — required for routing.</span>
             ) : "Include a memo if your bank requests one.",
             "Funds typically arrive within 1–2 business days.",
           ].map((step, i) => (
@@ -351,46 +351,42 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const isEn = lang === "en";
   const L = (pt: string, en: string) => (isEn ? en : pt);
 
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "no_account" | "error">("idle");
-  const [loading, setLoading] = useState(false);
+  type Status = "login" | "loading" | "ready" | "no_account" | "error";
+  const [status, setStatus] = useState<Status>("login");
   const [data, setData] = useState<ApiResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [emailInput, setEmailInput] = useState(emailParam);
+  const [loggedEmail, setLoggedEmail] = useState("");
   const didAuto = useRef(false);
 
-  const load = useCallback(async (emailOverride?: string) => {
-    const params = new URLSearchParams();
-    if (sessionId) params.set("session_id", sessionId);
-    const email = emailOverride ?? emailInput.trim().toLowerCase();
-    if (!sessionId && email) params.set("email", email);
-
-    if (!sessionId && !email) {
-      setStatus("idle");
-      return;
-    }
-
+  const load = useCallback(async (email: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed && !sessionId) return;
     setStatus("loading");
-    setLoading(true);
     setErrorMsg("");
     try {
+      const params = new URLSearchParams();
+      if (sessionId) params.set("session_id", sessionId);
+      else params.set("email", trimmed);
+
       const res = await fetch(`/api/bridge/session/usd-account?${params}`, { cache: "no-store" });
       const json: ApiResponse = await res.json().catch(() => ({}));
       if (!res.ok && res.status !== 404) throw new Error(json.message || `HTTP ${res.status}`);
       setData(json);
+      setLoggedEmail(json.email ?? trimmed);
       setStatus(json.has_account ? "ready" : "no_account");
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
       setStatus("error");
-    } finally {
-      setLoading(false);
     }
-  }, [sessionId, emailInput]);
+  }, [sessionId]);
 
+  // Auto-load when session_id or email is in the URL
   useEffect(() => {
     if (didAuto.current) return;
     if (sessionId || emailParam) {
       didAuto.current = true;
-      load(emailParam || undefined);
+      load(emailParam);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -399,24 +395,179 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     ["active", "enabled", "activated", "pending"].includes(String(va.status ?? "").toLowerCase())
   );
 
+  // ── Login gate ─────────────────────────────────────────────────────────────
+
+  if (status === "login") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-8">
+
+          {/* Brand */}
+          <div className="text-center space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+              TalkToStellar
+            </p>
+            <h1 className="text-3xl font-bold text-tts-deep">
+              {L("Depositar em Dólar", "USD Deposit")}
+            </h1>
+            <p className="text-sm text-tts-muted">
+              {L("Entre com seu e-mail para ver sua conta", "Enter your email to see your account")}
+            </p>
+          </div>
+
+          {/* Amount hint */}
+          {amount && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
+              <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                {L(`Valor: US$ ${amount}`, `Amount: US$ ${amount}`)}
+              </span>
+            </div>
+          )}
+
+          {/* Email form */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); load(emailInput); }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-2">
+                {L("E-mail da conta", "Account email")}
+              </label>
+              <input
+                type="email"
+                autoFocus
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="you@email.com"
+                className="w-full rounded-xl border border-tts-border bg-tts-bg px-4 py-3 text-sm outline-none
+                           focus:border-tts-deep placeholder:text-tts-muted/40 transition-colors text-center"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!emailInput.trim()}
+              className="w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-white
+                         disabled:opacity-40 transition-opacity hover:opacity-90"
+            >
+              {L("Continuar", "Continue")}
+            </button>
+          </form>
+
+          <p className="text-center text-xs text-tts-muted/60">
+            TalkToStellar · Powered by Stellar Network
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-tts-muted">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">{L("Carregando sua conta...", "Loading your account...")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error ──────────────────────────────────────────────────────────────────
+
+  if (status === "error") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <AlertTriangle className="h-10 w-10 text-red-400 mx-auto" />
+          <div>
+            <p className="font-semibold text-tts-deep">
+              {L("Erro ao carregar", "Failed to load")}
+            </p>
+            <p className="mt-1 text-sm text-tts-muted">{errorMsg}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => load(emailInput)}
+              className="w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-white hover:opacity-90"
+            >
+              {L("Tentar novamente", "Try again")}
+            </button>
+            <button
+              onClick={() => { setStatus("login"); setErrorMsg(""); }}
+              className="w-full rounded-xl border border-tts-border py-3 text-sm font-medium text-tts-muted hover:bg-tts-surface"
+            >
+              {L("Mudar e-mail", "Change email")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── No account ─────────────────────────────────────────────────────────────
+
+  if (status === "no_account") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-tts-border bg-tts-surface">
+            <Building2 className="h-7 w-7 text-tts-muted" />
+          </div>
+          <div>
+            <p className="font-semibold text-tts-deep">
+              {L("Conta USD não encontrada", "No USD account found")}
+            </p>
+            <p className="mt-1.5 text-sm text-tts-muted leading-relaxed">
+              {loggedEmail && (
+                <span className="block font-mono text-xs text-tts-deep/60 mb-2">{loggedEmail}</span>
+              )}
+              {L(
+                "Nenhuma conta de recebimento em dólar encontrada. Fale com a gente no WhatsApp para ativá-la.",
+                "No USD receiving account found for this email. Message us on WhatsApp to set one up."
+              )}
+            </p>
+          </div>
+          <button
+            onClick={() => { setStatus("login"); setData(null); }}
+            className="w-full rounded-xl border border-tts-border py-3 text-sm font-medium text-tts-muted hover:bg-tts-surface"
+          >
+            {L("Tentar outro e-mail", "Try a different email")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ready ──────────────────────────────────────────────────────────────────
+
   return (
     <div className="min-h-screen bg-tts-bg">
       <div className="mx-auto max-w-md px-4 py-10 space-y-5">
 
-        {/* Brand + title */}
-        <div className="text-center space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-            TalkToStellar
-          </p>
-          <h1 className="text-2xl font-bold text-tts-deep">
-            {L("Depositar em Dólar", "USD Deposit")}
-          </h1>
-          <p className="text-sm text-tts-muted">
-            {L(
-              "Transfira dólares do seu banco americano via wire ou ACH",
-              "Transfer dollars from your US bank via wire or ACH"
-            )}
-          </p>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+              TalkToStellar
+            </p>
+            <h1 className="text-xl font-bold text-tts-deep">
+              {L("Depositar em Dólar", "USD Deposit")}
+            </h1>
+          </div>
+          <button
+            onClick={() => { setStatus("login"); setData(null); setLoggedEmail(""); }}
+            className="text-xs text-tts-muted hover:text-tts-deep transition-colors"
+          >
+            {loggedEmail ? (
+              <span className="flex flex-col items-end gap-0.5">
+                <span className="font-mono">{loggedEmail.split("@")[0]}</span>
+                <span className="text-[10px] underline">change</span>
+              </span>
+            ) : L("Sair", "Sign out")}
+          </button>
         </div>
 
         {/* Amount hint */}
@@ -429,122 +580,41 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         )}
 
-        {/* Email lookup — only shown when no session_id and no auto-load */}
-        {!sessionId && (status === "idle" || status === "no_account" || status === "error") && (
-          <div className="rounded-2xl border border-tts-border bg-tts-surface p-5">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-2">
-              {L("E-mail da conta", "Account email")}
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && load()}
-                placeholder="you@email.com"
-                className="flex-1 rounded-xl border border-tts-border bg-tts-bg px-3 py-2.5 text-sm outline-none
-                           focus:border-tts-deep placeholder:text-tts-muted/40 transition-colors"
-              />
-              <button
-                onClick={() => load()}
-                disabled={loading || !emailInput.trim()}
-                className="flex items-center gap-2 rounded-xl bg-tts-deep px-4 py-2.5 text-sm font-bold
-                           text-white disabled:opacity-40 transition-opacity hover:opacity-90"
-              >
-                {loading
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Search className="h-4 w-4" />
-                }
-                {L("Buscar", "Search")}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Loading */}
-        {status === "loading" && (
-          <div className="flex items-center justify-center gap-2 py-12 text-tts-muted">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">{L("Carregando sua conta...", "Loading your account...")}</span>
-          </div>
-        )}
-
-        {/* Error */}
-        {status === "error" && (
-          <div className="rounded-2xl border border-red-200 bg-red-50/40 dark:bg-red-900/10 p-6 text-center space-y-3">
-            <AlertTriangle className="h-8 w-8 text-red-400 mx-auto" />
-            <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
-            <button
-              onClick={() => load()}
-              className="inline-flex items-center gap-2 rounded-xl border border-tts-border px-4 py-2 text-sm font-medium
-                         hover:bg-tts-bg transition-colors"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              {L("Tentar novamente", "Try again")}
-            </button>
-          </div>
-        )}
-
-        {/* No account */}
-        {status === "no_account" && (
-          <div className="rounded-2xl border border-tts-border bg-tts-surface p-8 text-center space-y-4">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-tts-border bg-tts-bg">
-              <Building2 className="h-6 w-6 text-tts-muted" />
-            </div>
-            <div>
-              <p className="font-semibold text-tts-deep">
-                {L("Conta USD não configurada", "USD account not set up")}
-              </p>
-              <p className="mt-1.5 text-sm text-tts-muted leading-relaxed">
-                {L(
-                  "Sua conta de recebimento em dólar ainda não foi ativada. Fale com a gente no WhatsApp para ativá-la.",
-                  "Your USD receiving account hasn't been activated yet. Message us on WhatsApp to set it up."
-                )}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Ready — VA cards + Stellar wallet */}
-        {status === "ready" && (
+        {/* VA cards */}
+        {usdAccounts.length > 0 ? (
           <>
-            {usdAccounts.length > 0 ? (
+            {usdAccounts.map((va) => <VaCard key={va.id} va={va} />)}
+            {data?.stellar_wallet && (
               <>
-                {usdAccounts.map((va) => <VaCard key={va.id} va={va} />)}
-                {data?.stellar_wallet && (
-                  <>
-                    <FlowArrow />
-                    <StellarWalletCard wallet={data.stellar_wallet} />
-                  </>
-                )}
+                <FlowArrow />
+                <StellarWalletCard wallet={data.stellar_wallet} />
               </>
-            ) : (
-              <div className="rounded-2xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-6 text-center space-y-3">
-                <Clock className="h-8 w-8 text-amber-500 mx-auto" />
-                <p className="font-semibold text-tts-deep">
-                  {L("Conta em processamento", "Account being processed")}
-                </p>
-                <p className="text-sm text-tts-muted">
-                  {L(
-                    "Sua conta USD está sendo configurada. Aguarde alguns minutos.",
-                    "Your USD account is being set up. Check back in a few minutes."
-                  )}
-                </p>
-              </div>
             )}
-
-            {/* Refresh */}
-            <button
-              onClick={() => load()}
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-tts-border
-                         py-2.5 text-sm text-tts-muted hover:bg-tts-surface transition-colors disabled:opacity-40"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              {L("Atualizar", "Refresh")}
-            </button>
           </>
+        ) : (
+          <div className="rounded-2xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-6 text-center space-y-3">
+            <Clock className="h-8 w-8 text-amber-500 mx-auto" />
+            <p className="font-semibold text-tts-deep">
+              {L("Conta em processamento", "Account being processed")}
+            </p>
+            <p className="text-sm text-tts-muted">
+              {L(
+                "Sua conta USD está sendo configurada. Aguarde alguns minutos.",
+                "Your USD account is being set up. Check back in a few minutes."
+              )}
+            </p>
+          </div>
         )}
+
+        {/* Refresh */}
+        <button
+          onClick={() => load(loggedEmail || emailInput)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-tts-border
+                     py-2.5 text-sm text-tts-muted hover:bg-tts-surface transition-colors"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          {L("Atualizar", "Refresh")}
+        </button>
 
         {/* Footer */}
         <div className="flex items-center justify-center gap-1.5 text-xs text-tts-muted/60 pb-4">
