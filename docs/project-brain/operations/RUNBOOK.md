@@ -358,3 +358,23 @@
 
 **Files**: `backend/src/integrations/blend/service.ts`, `backend/tests/blend.service.test.ts`, `frontend/app/rendimentos/rendimentos-client.tsx`, `docs/project-brain/product/surfaces/investments-page.md`, `docs/project-brain/product/surfaces/key-integrations.md`
 **Related**: Pain point #63
+
+## 21. Bridge Virtual Account Is Not Visibly Connected To Bridge/Stellar Wallets (FIXED)
+
+**Symptom**: `/bridge-test` shows Bridge virtual accounts and Bridge wallet balances, but operators cannot see which virtual account routes to which Bridge wallet or how that wallet connects to the active Stellar wallet.
+
+**Status**: Fixed by `34b27a7`. The backend now exposes a relationship endpoint and a Bridge-wallet-to-Stellar transfer route; the frontend renders a Bridge-to-Stellar connection map and direct USD virtual-account creation for the active Stellar wallet.
+
+**Diagnosis steps**:
+1. Confirm a Bridge customer is loaded in `/bridge-test`.
+2. Call `GET /api/bridge` with header `x-bridge-path: /customers/{customerId}/virtual-accounts/connections?stellar_address={G...}`.
+3. Inspect `connections[]`. Each row should include `virtual_account`, `destination.chain`, optional `bridge_wallet`, `bridge_wallet_balances[]`, and optional `stellar_wallet`.
+4. If `bridge_wallet` is null, inspect the VA destination fields for `bridge_wallet_id`, `wallet_id`, `address`, and `to_address`; these are the hints used for matching.
+5. If balances are missing, call `GET /api/bridge` with `x-bridge-path: /wallets/balances` and confirm Bridge returns a `wallet_id` matching the connection's wallet.
+6. If the operator wants future USD deposits to land directly on Stellar, use the page action `Create USD -> Stellar VA`; the selected Stellar wallet must exist on mainnet and have a USDC trustline.
+7. If the operator wants to move an existing Bridge wallet balance to Stellar, use `Use in Stellar`; backend route is `POST /customers/{customerId}/wallets/{walletId}/transfer-to-stellar`.
+
+**Fix**: `BridgeController.getVirtualAccountConnections()` loads live VAs, Bridge custodial wallets, and global Bridge wallet balances, then returns an explicit relationship graph. `BridgeController.createBridgeWalletToStellarTransfer()` validates the Stellar destination and creates a Bridge transfer with `source.payment_rail = "bridge_wallet"` and `destination.payment_rail = "stellar"`. `BridgeTestClient` renders the relationship and exposes both direct USD-to-Stellar VA creation and Bridge-wallet-to-Stellar transfer controls.
+
+**Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/src/api/routes/bridge.router.ts`, `backend/tests/bridge.routes.test.ts`, `frontend/app/bridge-test/bridge-test-client.tsx`, `docs/project-brain/product/surfaces/bridge-test.md`
+**Related**: Pain point #64
