@@ -1387,6 +1387,15 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
 
   const [swapNetwork, setSwapNetwork] = useState<"TESTNET" | "PUBLIC">("TESTNET");
 
+  const [lpPool, setLpPool] = useState<{ fee_bp?: number; reserves?: Array<{ asset: string; amount: string }>; pool_id?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/swap/pool-info?network=mainnet", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setLpPool(d); })
+      .catch(() => {});
+  }, []);
+
   const PAIRS = [
     { from: "XLM", to: "USDC" },
     { from: "USDC", to: "XLM" },
@@ -1676,6 +1685,56 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
             )}
           </div>
         )}
+      </div>
+
+      {/* LP Yield */}
+      <div className="border border-tts-border bg-tts-surface p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Rendimento via liquidez", "Liquidity yield")}</p>
+            <h3 className="text-lg font-bold mt-0.5">{L("Fornecer Liquidez", "Provide Liquidity")}</h3>
+          </div>
+          <span className="rounded border border-tts-border px-2 py-1 text-[10px] font-bold uppercase text-tts-gold">{L("Avançado", "Advanced")}</span>
+        </div>
+
+        <p className="text-xs text-tts-muted mb-3">
+          {L(
+            `Além de trocar, você pode fornecer liquidez no par ${assetIn}/${assetOut} e ganhar uma parte das taxas de cada swap realizado.`,
+            `Beyond swapping, you can provide ${assetIn}/${assetOut} liquidity and earn a share of fees from every trade.`
+          )}
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="rounded border border-tts-border bg-tts-bg p-3 text-center">
+            <p className="text-[10px] font-bold uppercase text-tts-muted mb-1">{L("Taxa por swap", "Fee per swap")}</p>
+            <p className="text-xl font-bold text-tts-confirm">{((lpPool?.fee_bp ?? 30) / 100).toFixed(1)}%</p>
+          </div>
+          {lpPool?.reserves?.length ? (
+            <div className="rounded border border-tts-border bg-tts-bg p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-tts-muted mb-1">{L("Liquidez (mainnet)", "Liquidity (mainnet)")}</p>
+              {lpPool.reserves.map((r) => (
+                <p key={r.asset} className="text-xs font-bold">
+                  {parseFloat(r.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })} {r.asset === "native" ? "XLM" : r.asset.split(":")[0]}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded border border-tts-border bg-tts-bg p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-tts-muted mb-1">{L("Rendimento", "Return")}</p>
+              <p className="text-xs text-tts-muted">{L("Proporcional ao volume", "Proportional to volume")}</p>
+            </div>
+          )}
+        </div>
+
+        <a
+          href="https://app.soroswap.finance/liquidity"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-2 border border-tts-border py-2.5 text-xs font-bold hover:bg-tts-bg transition"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          {L("Ver pools de liquidez →", "View liquidity pools →")}
+        </a>
       </div>
 
       <p className="text-center text-xs text-tts-muted">
