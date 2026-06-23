@@ -325,8 +325,16 @@ export class BridgeController {
       try {
         const accounts = await service.listVirtualAccounts(bridgeCustomerId);
         const usdAccounts = (Array.isArray(accounts) ? accounts : []).filter((va: any) => {
-          const cur = (va.source_currency || va.currency || '').toLowerCase();
-          return cur === 'usd';
+          // Currency can live at the top level (source_currency/currency) or nested
+          // inside source_deposit_instructions.currency. Accept any of them.
+          const cur = (
+            va.source_currency ||
+            va.currency ||
+            va.source_deposit_instructions?.currency ||
+            ''
+          ).toLowerCase();
+          // If no currency is resolvable at all, keep the VA rather than hide it.
+          return cur === 'usd' || cur === '';
         });
         // Enrich each VA with total funds received from activity history
         virtualAccounts = await Promise.all(
