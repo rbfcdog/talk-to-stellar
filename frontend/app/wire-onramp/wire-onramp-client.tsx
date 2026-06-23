@@ -19,6 +19,7 @@ import {
   Send,
   TriangleAlert,
   User,
+  Wallet,
 } from "lucide-react";
 import {
   OperationalCard,
@@ -79,6 +80,14 @@ type BridgeWallet = {
   balances: Array<{ currency: string; amount: string }>;
 };
 
+type MainnetWallet = {
+  id: string;
+  public_key: string;
+  label: string;
+  is_primary: boolean;
+  last_balance?: Array<{ asset_code: string; balance: string; asset_type: string }>;
+};
+
 type ApiResponse = {
   success: boolean;
   has_account?: boolean;
@@ -91,6 +100,7 @@ type ApiResponse = {
   virtual_accounts?: UsdVA[];
   stellar_wallet?: StellarWallet | null;
   bridge_wallets?: BridgeWallet[];
+  mainnet_wallets?: MainnetWallet[];
   message?: string;
 };
 
@@ -792,6 +802,69 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         </div>
       </OperationalCard>
+
+        {/* Mainnet Stellar wallets (linked for Bridge routing) */}
+        {data?.mainnet_wallets && data.mainnet_wallets.length > 0 && (
+          <OperationalCard>
+            <div className="flex items-center gap-2.5 mb-4">
+              <Wallet className="h-5 w-5 text-tts-muted" />
+              <div>
+                <p className="text-sm font-bold text-tts-deep">
+                  {L("Carteiras Mainnet vinculadas", "Linked Mainnet Wallets")}
+                </p>
+                <p className="text-[11px] text-tts-muted mt-0.5">
+                  {L("Usadas como destino das contas Bridge", "Used as destination for Bridge accounts")}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2 border-t border-tts-border/40 pt-4">
+              {data.mainnet_wallets.map((mw) => {
+                const usdcLine = (mw.last_balance || []).find(
+                  (b: any) => b.asset_code === 'USDC'
+                );
+                return (
+                  <div key={mw.id} className="flex items-center justify-between rounded bg-tts-bg/70 px-3 py-2">
+                    <div>
+                      <span className="text-sm font-mono font-semibold text-tts-deep">
+                        {mw.public_key.length > 12
+                          ? `${mw.public_key.slice(0, 6)}...${mw.public_key.slice(-6)}`
+                          : mw.public_key}
+                      </span>
+                      <span className="ml-2 text-[10px] text-tts-muted">{mw.label}</span>
+                    </div>
+                    <div className="text-right">
+                      {usdcLine ? (
+                        <span className="text-sm font-bold tabular-nums text-tts-deep">
+                          {fmt(Number(usdcLine.balance))} USDC
+                        </span>
+                      ) : (
+                        <span className="text-xs text-tts-muted">
+                          {L("Saldo não sincronizado", "Balance not synced")}
+                        </span>
+                      )}
+                      {mw.is_primary && (
+                        <span className="ml-2 text-[10px] text-tts-confirm font-medium">
+                          {L("Principal", "Primary")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 pt-4 border-t border-tts-border/40">
+              <div className="flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
+                <p className="text-xs text-tts-muted leading-relaxed">
+                  {L(
+                    "Essas carteiras mainnet podem ser usadas como destino das suas contas Bridge. Para vincular uma nova, use o comando no chat.",
+                    "These mainnet wallets can be used as destination for your Bridge accounts. To link a new one, use the chat command."
+                  )}
+                </p>
+              </div>
+            </div>
+          </OperationalCard>
+        )}
 
         {/* VA cards */}
         {usdAccounts.length > 0 && activeVa ? (

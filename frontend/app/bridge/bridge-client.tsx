@@ -18,6 +18,7 @@ import {
   Send,
   TriangleAlert,
   User,
+  Wallet,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -59,6 +60,14 @@ type BridgeWallet = {
   balances: Array<{ currency: string; amount: string }>;
 };
 
+type MainnetWallet = {
+  id: string;
+  public_key: string;
+  label: string;
+  is_primary: boolean;
+  last_balance?: Array<{ asset_code: string; balance: string; asset_type: string }>;
+};
+
 type ApiResponse = {
   success: boolean;
   has_account?: boolean;
@@ -69,6 +78,7 @@ type ApiResponse = {
   virtual_accounts?: UsdVA[];
   stellar_wallet?: StellarWallet | null;
   bridge_wallets?: BridgeWallet[];
+  mainnet_wallets?: MainnetWallet[];
   message?: string;
 };
 
@@ -572,6 +582,58 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
             <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
               {L(`Valor desejado: US$ ${amount}`, `Requested amount: US$ ${amount}`)}
             </span>
+          </div>
+        )}
+
+        {/* Mainnet Stellar wallets */}
+        {data?.mainnet_wallets && data.mainnet_wallets.length > 0 && (
+          <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+            <div className="flex items-center gap-2.5 px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+              <Wallet className="h-5 w-5 text-tts-muted" />
+              <div>
+                <p className="text-sm font-bold text-tts-deep">
+                  {L("Carteiras Mainnet vinculadas", "Linked Mainnet Wallets")}
+                </p>
+                <p className="text-[11px] text-tts-muted mt-0.5">
+                  {L("Usadas como destino das contas Bridge", "Used as destination for Bridge accounts")}
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              {data.mainnet_wallets.map((mw) => {
+                const usdcLine = (mw.last_balance || []).find(
+                  (b: any) => b.asset_code === 'USDC'
+                );
+                return (
+                  <div key={mw.id} className="flex items-center justify-between rounded bg-tts-bg/70 px-3 py-2">
+                    <div>
+                      <span className="text-sm font-mono font-semibold text-tts-deep">
+                        {mw.public_key.length > 12
+                          ? `${mw.public_key.slice(0, 6)}...${mw.public_key.slice(-6)}`
+                          : mw.public_key}
+                      </span>
+                      <span className="ml-2 text-[10px] text-tts-muted">{mw.label}</span>
+                    </div>
+                    <div className="text-right">
+                      {usdcLine ? (
+                        <span className="text-sm font-bold tabular-nums text-tts-deep">
+                          {fmt(Number(usdcLine.balance))} USDC
+                        </span>
+                      ) : (
+                        <span className="text-xs text-tts-muted">
+                          {L("Saldo não sincronizado", "Balance not synced")}
+                        </span>
+                      )}
+                      {mw.is_primary && (
+                        <span className="ml-2 text-[10px] text-tts-confirm font-medium">
+                          {L("Principal", "Primary")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
