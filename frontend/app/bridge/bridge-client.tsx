@@ -5,17 +5,19 @@ import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDownToLine,
-  ArrowRight,
   BadgeCheck,
   Building2,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Copy,
   Info,
   Loader2,
   RefreshCw,
+  Send,
   TriangleAlert,
-  Wallet,
+  User,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -66,6 +68,25 @@ function fmt(n: number) {
 
 function isActive(va: UsdVA) {
   return ["active", "enabled", "activated"].includes(String(va.status).toLowerCase());
+}
+
+/** Deduplicate a name that appears stacked (e.g. "John Doe John Doe" → "John Doe"). */
+function dedupName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length < 4) return trimmed;
+  const half = Math.floor(trimmed.length / 2);
+  if (trimmed.slice(0, half) === trimmed.slice(half).trimStart()) {
+    return trimmed.slice(0, half).trim();
+  }
+  const midSpace = trimmed.lastIndexOf(' ', half + 5);
+  if (midSpace > 2 && midSpace < trimmed.length - 3) {
+    const left = trimmed.slice(0, midSpace).trim();
+    const right = trimmed.slice(midSpace).trim();
+    if (left && right && left === right) return left;
+    if (right.startsWith(left)) return left;
+    if (left.startsWith(right)) return right;
+  }
+  return trimmed;
 }
 
 // ── Copy button ────────────────────────────────────────────────────────────────
@@ -192,7 +213,7 @@ function VaCard({ va }: { va: UsdVA }) {
           {instr.bank_name && <Field label="Bank" value={instr.bank_name} mono={false} />}
           {instr.bank_routing_number && <Field label="Routing number" value={instr.bank_routing_number} />}
           {instr.bank_account_number && <Field label="Account number" value={instr.bank_account_number} masked />}
-          {instr.bank_beneficiary_name && <Field label="Beneficiary" value={instr.bank_beneficiary_name} mono={false} />}
+          {instr.bank_beneficiary_name && <Field label="Beneficiary" value={dedupName(instr.bank_beneficiary_name)} mono={false} />}
           {instr.bank_beneficiary_address && <Field label="Beneficiary address" value={instr.bank_beneficiary_address} mono={false} />}
           {instr.iban && <Field label="IBAN" value={instr.iban} />}
           {instr.bic && <Field label="BIC / SWIFT" value={instr.bic} />}
@@ -228,74 +249,6 @@ function VaCard({ va }: { va: UsdVA }) {
   );
 }
 
-// ── Stellar wallet card ────────────────────────────────────────────────────────
-
-function StellarWalletCard({ wallet }: { wallet: StellarWallet }) {
-  const short = wallet.public_key.length > 12
-    ? `${wallet.public_key.slice(0, 6)}...${wallet.public_key.slice(-6)}`
-    : wallet.public_key;
-  const balance = wallet.usdc_balance !== null ? Number(wallet.usdc_balance) : null;
-
-  return (
-    <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
-        <div className="flex items-center gap-2.5">
-          <Wallet className="h-5 w-5 text-tts-muted" />
-          <div>
-            <p className="text-sm font-bold text-tts-deep">Stellar Wallet</p>
-            <p className="text-[11px] text-tts-muted mt-0.5">USDC destination</p>
-          </div>
-        </div>
-        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase px-2.5 py-1 rounded-full border border-tts-confirm/30 bg-tts-confirm/10 text-tts-confirm">
-          <ArrowRight className="h-3 w-3" />
-          Auto-routed
-        </span>
-      </div>
-
-      <div className="px-5 py-5 border-b border-tts-border/40">
-        {balance !== null && (
-          <div className="mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-1">USDC balance</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold tabular-nums text-tts-deep">{fmt(balance)}</span>
-              <span className="text-base font-bold text-tts-muted">USDC</span>
-            </div>
-          </div>
-        )}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-0.5">Wallet address</p>
-            <span className="text-sm font-mono font-semibold text-tts-deep">{short}</span>
-          </div>
-          <CopyBtn value={wallet.public_key} label="wallet address" />
-        </div>
-      </div>
-
-      <div className="px-5 py-4 bg-tts-bg/50">
-        <div className="flex items-start gap-2">
-          <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
-          <p className="text-xs text-tts-muted leading-relaxed">
-            When USD arrives via wire or ACH, it is automatically converted to USDC and credited to this wallet. No action needed.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Arrow divider ──────────────────────────────────────────────────────────────
-
-function FlowArrow() {
-  return (
-    <div className="flex items-center justify-center py-1">
-      <div className="flex flex-col items-center gap-0.5">
-        <div className="h-4 w-px bg-tts-border/60" />
-        <ArrowRight className="h-4 w-4 text-tts-muted rotate-90" />
-      </div>
-    </div>
-  );
-}
-
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function BridgeClient({ initialQuery = "" }: { initialQuery?: string }) {
@@ -315,6 +268,7 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
   const [errorMsg, setErrorMsg] = useState("");
   const [emailInput, setEmailInput] = useState(emailParam);
   const [loggedEmail, setLoggedEmail] = useState("");
+  const [accountIndex, setAccountIndex] = useState(0);
   const didAuto = useRef(false);
 
   const load = useCallback(async (email: string) => {
@@ -350,6 +304,12 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
 
   // Show all VAs the backend returned (already filtered to USD by backend)
   const usdAccounts = data?.virtual_accounts ?? [];
+  const safeIndex = Math.max(0, Math.min(accountIndex, usdAccounts.length - 1));
+  const activeVa = usdAccounts.length > 0 ? usdAccounts[safeIndex] : null;
+  const beneficiaryName = activeVa?.source_deposit_instructions?.bank_beneficiary_name
+    ? dedupName(activeVa.source_deposit_instructions.bank_beneficiary_name)
+    : "";
+  const totalReceivedAll = usdAccounts.reduce((sum, va) => sum + (va.total_received_usd ?? 0), 0);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -510,6 +470,19 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
           </button>
         </div>
 
+        {/* Beneficiary name at top */}
+        {beneficiaryName && (
+          <div className="flex items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-4 py-3">
+            <User className="h-4 w-4 text-tts-muted shrink-0" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+                {L("Titular da conta", "Account holder")}
+              </p>
+              <p className="text-sm font-semibold text-tts-deep">{beneficiaryName}</p>
+            </div>
+          </div>
+        )}
+
         {amount && (
           <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
             <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
@@ -519,41 +492,118 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
           </div>
         )}
 
-        {usdAccounts.length > 0 ? (
+        {usdAccounts.length > 0 && activeVa ? (
           <>
-            {usdAccounts.map((va) => <VaCard key={va.id} va={va} />)}
-            {data?.stellar_wallet && (
+            <VaCard key={activeVa.id} va={activeVa} />
+
+            {usdAccounts.length > 1 && (
               <>
-                <FlowArrow />
-                <StellarWalletCard wallet={data.stellar_wallet} />
-                {/* Bridge → Yield integration CTA */}
-                {data.stellar_wallet.usdc_balance && Number(data.stellar_wallet.usdc_balance) > 0 && (
-                  <div className="rounded-2xl border border-tts-confirm/30 bg-tts-confirm/5 p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-tts-confirm">
-                          {L("Rendimento disponível", "Yield available")}
-                        </p>
-                        <p className="text-sm font-bold text-tts-deep">
-                          {L("Seu USDC pode estar rendendo", "Your USDC can be earning yield")}
-                        </p>
-                        <p className="text-xs text-tts-muted leading-relaxed">
-                          {L(
-                            "Invista seu USDC em rendimentos automáticos e acompanhe seus ganhos.",
-                            "Invest your USDC in automatic yield and track your earnings."
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <a
-                      href={`/rendimentos?view=application&action=deposit&asset=USDC&amount=${Math.floor(Number(data.stellar_wallet.usdc_balance))}&lang=${lang}`}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-confirm py-3 text-sm font-bold text-white hover:opacity-90 transition-opacity"
-                    >
-                      {L("Investir USDC", "Invest USDC")}
-                    </a>
-                  </div>
-                )}
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => setAccountIndex((i) => (i - 1 + usdAccounts.length) % usdAccounts.length)}
+                    className="flex items-center gap-1 rounded-lg border border-tts-border px-3 py-1.5 text-xs font-medium
+                               text-tts-muted hover:bg-tts-surface hover:text-tts-deep transition-colors"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    {L("Anterior", "Prev")}
+                  </button>
+                  <span className="text-xs font-mono text-tts-muted tabular-nums">
+                    {safeIndex + 1} / {usdAccounts.length}
+                  </span>
+                  <button
+                    onClick={() => setAccountIndex((i) => (i + 1) % usdAccounts.length)}
+                    className="flex items-center gap-1 rounded-lg border border-tts-border px-3 py-1.5 text-xs font-medium
+                               text-tts-muted hover:bg-tts-surface hover:text-tts-deep transition-colors"
+                  >
+                    {L("Próximo", "Next")}
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-tts-border/60 bg-tts-bg/50 px-4 py-3">
+                  <span className="text-xs text-tts-muted uppercase tracking-wide">
+                    {L("Total todas as contas", "Total all accounts")}
+                  </span>
+                  <span className="text-sm font-bold tabular-nums text-tts-deep">
+                    {fmt(totalReceivedAll)} <span className="text-tts-muted font-medium">USD</span>
+                  </span>
+                </div>
               </>
+            )}
+
+            {data?.stellar_wallet && (
+              <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+                <div className="flex items-center gap-2.5 px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+                  <Send className="h-5 w-5 text-tts-muted" />
+                  <div>
+                    <p className="text-sm font-bold text-tts-deep">
+                      {L("Enviar para carteira Stellar", "Send to Stellar Wallet")}
+                    </p>
+                    <p className="text-[11px] text-tts-muted mt-0.5">
+                      {L("Seus fundos são convertidos para USDC automaticamente", "Your funds are converted to USDC automatically")}
+                    </p>
+                  </div>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-tts-muted">
+                      {L("Destino", "Destination")}
+                    </span>
+                    <span className="text-sm font-mono font-semibold text-tts-deep">
+                      {data.stellar_wallet.public_key.length > 12
+                        ? `${data.stellar_wallet.public_key.slice(0, 6)}...${data.stellar_wallet.public_key.slice(-6)}`
+                        : data.stellar_wallet.public_key}
+                    </span>
+                  </div>
+                  {data.stellar_wallet.usdc_balance !== null && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-tts-muted">
+                        {L("Saldo USDC atual", "Current USDC balance")}
+                      </span>
+                      <span className="text-sm font-bold tabular-nums text-tts-deep">
+                        {fmt(Number(data.stellar_wallet.usdc_balance))} USDC
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="px-5 py-4 bg-tts-bg/50 border-t border-tts-border/40">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
+                    <p className="text-xs text-tts-muted leading-relaxed">
+                      {L(
+                        "Quando seu depósito em USD chegar, ele será convertido e enviado automaticamente para esta carteira Stellar. Nenhuma ação é necessária.",
+                        "When your USD deposit arrives, it is automatically converted and sent to this Stellar wallet. No action needed."
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {data?.stellar_wallet?.usdc_balance && Number(data.stellar_wallet.usdc_balance) > 0 && (
+              <div className="rounded-2xl border border-tts-confirm/30 bg-tts-confirm/5 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-tts-confirm">
+                      {L("Rendimento disponível", "Yield available")}
+                    </p>
+                    <p className="text-sm font-bold text-tts-deep">
+                      {L("Seu USDC pode estar rendendo", "Your USDC can be earning yield")}
+                    </p>
+                    <p className="text-xs text-tts-muted leading-relaxed">
+                      {L(
+                        "Invista seu USDC em rendimentos automáticos e acompanhe seus ganhos.",
+                        "Invest your USDC in automatic yield and track your earnings."
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={`/rendimentos?view=application&action=deposit&asset=USDC&amount=${Math.floor(Number(data.stellar_wallet.usdc_balance))}&lang=${lang}`}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-confirm py-3 text-sm font-bold text-white hover:opacity-90 transition-opacity"
+                >
+                  {L("Investir USDC", "Invest USDC")}
+                </a>
+              </div>
             )}
           </>
         ) : (
