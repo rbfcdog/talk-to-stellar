@@ -532,6 +532,16 @@ export default function RendimentosClient({
   const loadedDataRef = useRef(false);
   const requestedAssetRef = useRef("");
 
+  // Network toggle: "auto" = use backend configured network, "mainnet" | "testnet" = override
+  type NetworkView = "testnet" | "mainnet";
+  const [networkView, setNetworkView] = useState<NetworkView>("testnet");
+  const [bridgeWalletBalances, setBridgeWalletBalances] = useState<{
+    public_key: string | null;
+    testnet: { usdc: string; xlm: string } | null;
+    mainnet: { usdc: string; xlm: string } | null;
+  } | null>(null);
+  const [bridgeWalletLoading, setBridgeWalletLoading] = useState(false);
+
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
   const sortedOptions = useMemo(() => [...options], [options]);
   const bestOption = sortedOptions[0] || null;
@@ -541,6 +551,10 @@ export default function RendimentosClient({
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
   const yieldNetwork = String(yieldStatus?.runtime?.network || "").toLowerCase();
   const isTestnetYield = yieldNetwork === "testnet" || Boolean(yieldStatus?.runtime?.disclosure?.testnet);
+  const activeNetworkIsMainnet = networkView === "mainnet";
+  const mainnetUsdcBalance = bridgeWalletBalances?.mainnet?.usdc ?? null;
+  const testnetUsdcBalance = bridgeWalletBalances?.testnet?.usdc ?? null;
+  const activeNetworkUsdcBalance = activeNetworkIsMainnet ? mainnetUsdcBalance : testnetUsdcBalance;
 
   const safeSelectedCode = normalizeUiAssetCode(selectedCode) || optionCode(actionableOption) || selectedCode;
   const sessionLinkContext = useMemo(() => scopedLinkContext(initialQuery), [initialQuery]);
@@ -606,6 +620,22 @@ export default function RendimentosClient({
   async function refreshAccountBalances() {
     const accountPayload = await yieldApi("etherfuse/wallet-balances", undefined, 20000, session.sessionSource);
     setBalances(Array.isArray(accountPayload?.balances) ? accountPayload.balances : []);
+  }
+
+  async function fetchBridgeWalletBalances(sid?: string) {
+    setBridgeWalletLoading(true);
+    try {
+      const params = new URLSearchParams();
+      const id = sid || session.sessionId;
+      if (id) params.set("session_id", id);
+      const res = await fetch(`/api/bridge/session/stellar-balances?${params}`, { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (json?.success) setBridgeWalletBalances(json);
+    } catch {
+      // non-critical
+    } finally {
+      setBridgeWalletLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -688,6 +718,8 @@ export default function RendimentosClient({
       setReturnsPinVerified(true);
       setReturnsPinState({ loading: false, message: "", error: "" });
       setApiState({ loading: true, message: "", error: "" });
+      // Fetch bridge wallet balances for both networks (non-blocking)
+      fetchBridgeWalletBalances().catch(() => null);
       try {
         await refreshAccountBalances();
         setApiState({ loading: false, message: "", error: "" });
@@ -787,10 +819,69 @@ export default function RendimentosClient({
           </div>
         )}
 
-        {isTestnetYield && (
-          <div className="flex items-center gap-2 mb-6 text-xs font-bold text-tts-muted">
-            <AlertTriangle className="h-3.5 w-3.5 text-tts-gold" />
-            <span>{L("Testnet · valores estimados", "Testnet · estimated values")}</span>
+        {/* Network toggle */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            {isTestnetYield && (
+              <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                {L("Valores estimados", "Estimated values")}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-tts-border bg-tts-bg p-0.5">
+            <button
+              type="button"
+              onClick={() => setNetworkView("testnet")}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "testnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
+            >
+              Testnet
+            </button>
+            <button
+              type="button"
+              onClick={() => setNetworkView("mainnet")}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "mainnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
+            >
+              Mainnet
+            </button>
+          </div>
+        </div>
+
+        {/* Bridge wallet balance banner (mainnet) */}
+        {networkView === "mainnet" && returnsPinVerified && (
+          <div className="mb-5 rounded-2xl border border-tts-border bg-tts-surface overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Carteira Stellar · Mainnet", "Stellar Wallet · Mainnet")}</p>
+                <p className="text-sm font-bold text-tts-deep mt-0.5">{L("Saldo real USDC", "Real USDC balance")}</p>
+              </div>
+              {bridgeWalletLoading && <Loader2 className="h-4 w-4 animate-spin text-tts-muted" />}
+            </div>
+            <div className="px-5 py-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-3xl font-bold tabular-nums text-tts-deep">
+                  {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                </p>
+                <p className="text-sm font-bold text-tts-muted mt-0.5">USDC</p>
+              </div>
+              {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
+                <a
+                  href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: "USDC", amount: Math.floor(Number(mainnetUsdcBalance)).toString(), ...sessionLinkContext, lang: language })}
+                  className="shrink-0 flex items-center gap-1.5 rounded-xl bg-tts-confirm/15 border border-tts-confirm/30 px-4 py-2.5 text-xs font-bold text-tts-confirm hover:bg-tts-confirm/25 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {L("Investir", "Invest")}
+                </a>
+              )}
+            </div>
+            {testnetUsdcBalance !== null && (
+              <div className="px-5 py-3 border-t border-tts-border/40 bg-tts-bg/50 flex items-center justify-between">
+                <span className="text-xs text-tts-muted">{L("Testnet USDC", "Testnet USDC")}</span>
+                <span className="text-xs font-mono font-semibold text-tts-muted">
+                  {Number(testnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                </span>
+              </div>
+            )}
           </div>
         )}
 

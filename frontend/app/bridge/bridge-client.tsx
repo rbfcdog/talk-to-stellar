@@ -1,758 +1,591 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDownToLine,
-  Banknote,
+  ArrowRight,
+  BadgeCheck,
+  Building2,
   CheckCircle2,
+  Clock,
   Copy,
-  ExternalLink,
-  Globe,
+  Info,
   Loader2,
   RefreshCw,
-  ShieldCheck,
+  TriangleAlert,
+  Wallet,
 } from "lucide-react";
-import {
-  OperationalCard,
-  OperationalHeader,
-  OperationalPage,
-  OperationalStat,
-  StatusPill,
-} from "@/components/layout/OperationalShell";
-import { Button } from "@/components/ui/button";
 
-// ── Types ──────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
-type VirtualAccount = {
-  id: string;
-  currency: string;
-  status: string;
-  deposit_instructions?: {
-    payment_rail?: string;
-    bank_name?: string;
-    routing_number?: string;
-    account_number?: string;
-    bank_address?: string;
-    beneficiary_name?: string;
-    beneficiary_address?: string;
-    reference?: string;
-  };
+type DepositInstructions = {
+  bank_name?: string;
+  bank_address?: string;
+  bank_routing_number?: string;
+  bank_account_number?: string;
+  bank_beneficiary_name?: string;
+  bank_beneficiary_address?: string;
+  payment_rail?: string;
+  payment_rails?: string[];
+  deposit_message?: string;
+  wire_reference?: string;
+  iban?: string;
+  bic?: string;
 };
 
-type UsdAccountResponse = {
+type UsdVA = {
+  id: string;
+  status: string;
+  source_deposit_instructions?: DepositInstructions;
+  total_received_usd?: number;
+};
+
+type StellarWallet = {
+  public_key: string;
+  usdc_balance: string | null;
+};
+
+type ApiResponse = {
   success: boolean;
   has_account?: boolean;
   kyc_status?: string;
   customer_status?: string;
-  virtual_accounts?: VirtualAccount[];
+  email?: string;
+  virtual_accounts?: UsdVA[];
+  stellar_wallet?: StellarWallet | null;
   message?: string;
 };
 
-type RateResponse = {
-  success: boolean;
-  rate?: number;
-  from?: string;
-  to?: string;
-  message?: string;
-};
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-type LoadStatus = "idle" | "loading" | "ready" | "no_account" | "no_session" | "error";
-
-// ── Helpers ────────────────────────────────────────────────────────────
-
-function mask(value: string) {
-  if (!value || value.length < 4) return value;
-  return "•".repeat(Math.max(0, value.length - 4)) + value.slice(-4);
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function kycTone(status?: string): "confirm" | "gold" | "error" | "default" {
-  const s = (status || "").toLowerCase();
-  if (s === "approved" || s === "active") return "confirm";
-  if (s === "pending" || s === "under_review") return "gold";
-  if (s === "rejected" || s === "failed") return "error";
-  return "default";
+function isActive(va: UsdVA) {
+  return ["active", "enabled", "activated"].includes(String(va.status).toLowerCase());
 }
 
-function kycLabel(status: string | undefined, L: (pt: string, en: string) => string) {
-  const s = (status || "").toLowerCase();
-  if (s === "approved") return L("Aprovado", "Approved");
-  if (s === "active") return L("Ativo", "Active");
-  if (s === "pending") return L("Pendente", "Pending");
-  if (s === "under_review") return L("Em análise", "Under review");
-  if (s === "rejected") return L("Rejeitado", "Rejected");
-  if (s === "failed") return L("Falhou", "Failed");
-  if (!status) return L("—", "—");
-  return status;
-}
+// ── Copy button ────────────────────────────────────────────────────────────────
 
-// ── Small UI pieces ────────────────────────────────────────────────────
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+function CopyBtn({ value, label }: { value: string; label?: string }) {
+  const [done, setDone] = useState(false);
+  function tap() {
+    navigator.clipboard.writeText(value).catch(() => null);
+    setDone(true);
+    setTimeout(() => setDone(false), 1800);
+  }
   return (
     <button
-      onClick={() => {
-        navigator.clipboard.writeText(text).catch(() => null);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
-      }}
-      className="ml-2 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-tts-text/60 hover:text-tts-text transition-colors"
+      onClick={tap}
+      className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
+                 text-tts-muted hover:text-tts-deep hover:bg-tts-border/40"
+      title={`Copy ${label ?? value}`}
     >
-      {copied ? (
-        <CheckCircle2 className="h-3.5 w-3.5 text-tts-green" />
+      {done ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-tts-confirm shrink-0" />
       ) : (
-        <Copy className="h-3.5 w-3.5" />
+        <Copy className="h-3.5 w-3.5 shrink-0" />
       )}
+      {done ? "Copied" : "Copy"}
     </button>
   );
 }
 
-function DepositField({
+// ── Field row ──────────────────────────────────────────────────────────────────
+
+function Field({
   label,
   value,
+  mono = true,
   masked = false,
+  highlight = false,
 }: {
   label: string;
   value: string;
+  mono?: boolean;
   masked?: boolean;
+  highlight?: boolean;
 }) {
   const [revealed, setRevealed] = useState(!masked);
+  const display = masked && !revealed
+    ? "•".repeat(Math.max(0, value.length - 4)) + value.slice(-4)
+    : value;
+
   return (
-    <div className="flex items-center justify-between py-2 border-b border-tts-border/30 last:border-0">
-      <span className="text-xs text-tts-text/50 uppercase tracking-wide min-w-32">{label}</span>
-      <div className="flex items-center gap-1">
-        <span className="font-mono text-sm text-tts-deep font-medium">
-          {masked && !revealed ? mask(value) : value}
+    <div className={`flex items-center justify-between gap-4 px-4 py-3 border-b border-tts-border/40 last:border-0
+                     ${highlight ? "bg-amber-50/30 dark:bg-amber-900/10" : ""}`}>
+      <span className="text-xs text-tts-muted uppercase tracking-wide shrink-0 w-36">{label}</span>
+      <div className="flex items-center gap-1 min-w-0 ml-auto">
+        {highlight && <TriangleAlert className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+        <span className={`text-sm font-semibold truncate ${mono ? "font-mono" : ""} ${highlight ? "text-amber-700 dark:text-amber-400" : "text-tts-deep"}`}>
+          {display}
         </span>
         {masked && (
           <button
             onClick={() => setRevealed((r) => !r)}
-            className="ml-1 text-xs text-tts-text/40 hover:text-tts-text/70"
+            className="ml-1 text-xs text-tts-muted hover:text-tts-deep"
           >
-            {revealed ? "ocultar" : "ver"}
+            {revealed ? "hide" : "show"}
           </button>
         )}
-        <CopyButton text={value} />
+        <CopyBtn value={value} label={label} />
       </div>
     </div>
   );
 }
 
-// ── Tab bar ────────────────────────────────────────────────────────────
+// ── VA Card ────────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { id: "receive", labelPt: "Receber USD", labelEn: "Receive USD" },
-  { id: "rates", labelPt: "Taxas", labelEn: "Rates" },
-  { id: "status", labelPt: "Status", labelEn: "Status" },
-] as const;
+function VaCard({ va }: { va: UsdVA }) {
+  const instr = va.source_deposit_instructions;
+  const active = isActive(va);
+  const received = va.total_received_usd ?? 0;
+  const rail = instr?.payment_rail?.toUpperCase() ?? "WIRE";
+  const allRails = instr?.payment_rails?.map((r) => r.toUpperCase()).join(" · ") ?? rail;
+  const reference = instr?.wire_reference || instr?.deposit_message;
 
-type TabId = (typeof TABS)[number]["id"];
-
-function TabBar({
-  active,
-  onChange,
-  isEn,
-}: {
-  active: TabId;
-  onChange: (t: TabId) => void;
-  isEn: boolean;
-}) {
   return (
-    <div className="flex gap-1 rounded-lg bg-tts-surface border border-tts-border p-1">
-      {TABS.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => onChange(t.id)}
-          className={[
-            "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            active === t.id
-              ? "bg-tts-deep text-white shadow-sm"
-              : "text-tts-text/60 hover:text-tts-deep",
-          ].join(" ")}
-        >
-          {isEn ? t.labelEn : t.labelPt}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── Tab 1: Receive USD ─────────────────────────────────────────────────
-
-function ReceiveTab({
-  status,
-  data,
-  sessionId,
-  onRetry,
-  L,
-}: {
-  status: LoadStatus;
-  data: UsdAccountResponse | null;
-  sessionId: string;
-  onRetry: () => void;
-  L: (pt: string, en: string) => string;
-}) {
-  const usdAccounts =
-    data?.virtual_accounts?.filter((va) =>
-      ["active", "enabled", "pending"].includes(
-        String(va.status || "").toLowerCase()
-      )
-    ) ?? [];
-  const activeAccount = usdAccounts[0];
-  const instr = activeAccount?.deposit_instructions;
-
-  if (status === "loading") {
-    return (
-      <OperationalCard>
-        <div className="flex items-center justify-center gap-2 py-8 text-tts-text/50">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">{L("Carregando sua conta...", "Loading your account...")}</span>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-3 py-6 text-center">
-          <AlertTriangle className="h-8 w-8 text-tts-error" />
-          <p className="text-sm text-tts-text/60">
-            {L("Erro ao carregar os dados da conta.", "Error loading account data.")}
-          </p>
-          <Button size="sm" variant="outline" onClick={onRetry}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            {L("Tentar novamente", "Retry")}
-          </Button>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  if (status === "no_session") {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-4 py-6 text-center">
-          <Banknote className="h-10 w-10 text-tts-text/30" />
-          <p className="text-sm text-tts-text/60 max-w-xs">
-            {L(
-              "Acesse pelo link enviado no WhatsApp para carregar seus dados.",
-              "Open the link sent in WhatsApp to load your data."
-            )}
-          </p>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  if (status === "no_account") {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-4 py-6 text-center">
-          <Banknote className="h-10 w-10 text-tts-gold/60" />
+    <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+        <div className="flex items-center gap-2.5">
+          <Building2 className="h-5 w-5 text-tts-muted" />
           <div>
-            <p className="font-medium text-tts-deep">
-              {L("Conta USD não configurada", "USD account not set up")}
+            <p className="text-sm font-bold text-tts-deep">
+              {instr?.bank_name ?? "US Bank Account"}
             </p>
-            <p className="mt-1 text-sm text-tts-text/60">
-              {L(
-                "Para receber via wire ou ACH, ative sua conta de banco americano.",
-                "To receive via wire or ACH, activate your US bank account."
-              )}
-            </p>
+            <p className="text-[11px] text-tts-muted mt-0.5">{allRails}</p>
           </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              const url = sessionId
-                ? `/bridge-test?session_id=${encodeURIComponent(sessionId)}`
-                : "/bridge-test";
-              window.open(url, "_blank", "noopener");
-            }}
-          >
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            {L("Configurar conta USD", "Set up USD account")}
-          </Button>
         </div>
-      </OperationalCard>
-    );
-  }
+        <span className={`flex items-center gap-1.5 text-[11px] font-bold uppercase px-2.5 py-1 rounded-full border
+          ${active
+            ? "border-tts-confirm/30 bg-tts-confirm/10 text-tts-confirm"
+            : "border-amber-400/40 bg-amber-50/40 text-amber-600 dark:text-amber-400"
+          }`}>
+          {active ? <BadgeCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+          {active ? "Active" : va.status}
+        </span>
+      </div>
 
-  // status === "ready" but no active account with instructions
-  if (status === "ready" && (!activeAccount || !instr)) {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-3 py-6 text-center">
-          <Loader2 className="h-8 w-8 text-tts-gold animate-spin" />
-          <p className="font-medium text-tts-deep">
-            {L("Conta em processamento", "Account being processed")}
-          </p>
-          <p className="text-sm text-tts-text/60">
-            {L(
-              "Sua conta USD está sendo configurada. Aguarde alguns minutos e atualize.",
-              "Your USD account is being set up. Wait a few minutes and refresh."
-            )}
-          </p>
-          <Button size="sm" variant="outline" onClick={onRetry}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            {L("Atualizar", "Refresh")}
-          </Button>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  // Ready with deposit instructions
-  return (
-    <>
-      <OperationalCard>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <ArrowDownToLine className="h-4 w-4 text-tts-green" />
-            <span className="text-sm font-medium text-tts-deep">
-              {L("Dados para transferência", "Transfer details")}
-            </span>
-          </div>
-          <StatusPill
-            tone={
-              activeAccount!.status === "active" || activeAccount!.status === "enabled"
-                ? "confirm"
-                : "gold"
-            }
-          >
-            {activeAccount!.status === "active" || activeAccount!.status === "enabled"
-              ? L("Ativa", "Active")
-              : L("Pendente", "Pending")}
-          </StatusPill>
-        </div>
-
-        <div className="space-y-0">
-          {instr?.bank_name && (
-            <DepositField label={L("Banco", "Bank")} value={instr.bank_name} />
-          )}
-          {instr?.routing_number && (
-            <DepositField
-              label={L("Routing number", "Routing number")}
-              value={instr.routing_number}
-            />
-          )}
-          {instr?.account_number && (
-            <DepositField
-              label={L("Account number", "Account number")}
-              value={instr.account_number}
-              masked
-            />
-          )}
-          {instr?.beneficiary_name && (
-            <DepositField
-              label={L("Beneficiário", "Beneficiary")}
-              value={instr.beneficiary_name}
-            />
-          )}
-          {instr?.payment_rail && (
-            <DepositField label="Rail" value={instr.payment_rail.toUpperCase()} />
-          )}
-          {instr?.reference && (
-            <DepositField label={L("Referência", "Reference")} value={instr.reference} />
-          )}
-        </div>
-
-        <p className="mt-4 text-xs text-tts-text/40 leading-relaxed">
-          {L(
-            "Seu dólar chega em 1–2 dias úteis via banco americano.",
-            "Your dollars arrive within 1–2 business days via US bank."
-          )}
+      <div className="px-5 py-5 border-b border-tts-border/40">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-1">
+          Total received
         </p>
-      </OperationalCard>
-
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <OperationalStat label={L("Moeda", "Currency")} value="USD" />
-        <OperationalStat
-          label={L("Prazo estimado", "Est. arrival")}
-          value={L("1–2 dias úteis", "1–2 business days")}
-        />
-      </div>
-
-      <div className="mt-4 flex justify-end">
-        <Button size="sm" variant="outline" onClick={onRetry}>
-          <RefreshCw className="mr-1 h-3.5 w-3.5" />
-          {L("Atualizar", "Refresh")}
-        </Button>
-      </div>
-    </>
-  );
-}
-
-// ── Tab 2: Exchange Rates ──────────────────────────────────────────────
-
-const RATE_PAIRS = [
-  { from: "USD", to: "BRL", flag: "🇧🇷" },
-  { from: "USD", to: "MXN", flag: "🇲🇽" },
-  { from: "USD", to: "EUR", flag: "🇪🇺" },
-] as const;
-
-type RateEntry = {
-  from: string;
-  to: string;
-  flag: string;
-  rate?: number;
-  loading: boolean;
-  error?: string;
-};
-
-function RatesTab({ L }: { L: (pt: string, en: string) => string }) {
-  const [rates, setRates] = useState<RateEntry[]>(
-    RATE_PAIRS.map((p) => ({ ...p, loading: true }))
-  );
-
-  const loadRates = useCallback(async () => {
-    setRates(RATE_PAIRS.map((p) => ({ ...p, loading: true, error: undefined, rate: undefined })));
-
-    const results = await Promise.allSettled(
-      RATE_PAIRS.map(async (p) => {
-        const res = await fetch(
-          `/api/bridge/exchange-rates?from=${p.from}&to=${p.to}`,
-          { cache: "no-store" }
-        );
-        const json: RateResponse = await res.json().catch(() => ({}));
-        if (!res.ok || !json.success) {
-          throw new Error(json.message || `HTTP ${res.status}`);
-        }
-        return json.rate;
-      })
-    );
-
-    setRates(
-      RATE_PAIRS.map((p, i) => {
-        const r = results[i];
-        return {
-          ...p,
-          loading: false,
-          rate: r.status === "fulfilled" ? (r.value as number) : undefined,
-          error: r.status === "rejected" ? String(r.reason) : undefined,
-        };
-      })
-    );
-  }, []);
-
-  useEffect(() => {
-    loadRates();
-  }, [loadRates]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {rates.map((entry) => (
-          <OperationalCard key={`${entry.from}-${entry.to}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <Globe className="h-4 w-4 text-tts-text/40" />
-              <span className="text-xs text-tts-text/50 uppercase tracking-wide">
-                {entry.from} → {entry.to}
-              </span>
-              <span>{entry.flag}</span>
-            </div>
-            {entry.loading ? (
-              <div className="flex items-center gap-2 text-tts-text/40">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">{L("Carregando...", "Loading...")}</span>
-              </div>
-            ) : entry.error ? (
-              <div className="flex items-center gap-1 text-tts-error">
-                <AlertTriangle className="h-4 w-4" />
-                <span className="text-sm">{L("Erro", "Error")}</span>
-              </div>
-            ) : (
-              <OperationalStat
-                label={`1 ${entry.from}`}
-                value={
-                  entry.rate != null
-                    ? `${entry.rate.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })} ${entry.to}`
-                    : "—"
-                }
-              />
-            )}
-          </OperationalCard>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-tts-text/40 leading-relaxed">
-          {L(
-            "Taxas indicativas Bridge.xyz. Podem variar no momento da operação.",
-            "Indicative rates from Bridge.xyz. May vary at the time of the transaction."
-          )}
-        </p>
-        <Button size="sm" variant="outline" onClick={loadRates}>
-          <RefreshCw className="mr-1 h-3.5 w-3.5" />
-          {L("Atualizar", "Refresh")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ── Tab 3: Status ──────────────────────────────────────────────────────
-
-function StatusTab({
-  status,
-  data,
-  sessionId,
-  onRetry,
-  L,
-}: {
-  status: LoadStatus;
-  data: UsdAccountResponse | null;
-  sessionId: string;
-  onRetry: () => void;
-  L: (pt: string, en: string) => string;
-}) {
-  if (status === "loading") {
-    return (
-      <OperationalCard>
-        <div className="flex items-center justify-center gap-2 py-8 text-tts-text/50">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">{L("Verificando status...", "Checking status...")}</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-bold tabular-nums text-tts-deep">{fmt(received)}</span>
+          <span className="text-base font-bold text-tts-muted">USD</span>
         </div>
-      </OperationalCard>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-3 py-6 text-center">
-          <AlertTriangle className="h-8 w-8 text-tts-error" />
-          <p className="text-sm text-tts-text/60">
-            {L("Erro ao carregar o status.", "Error loading status.")}
+        {!active && (
+          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+            Account pending activation — transfers may be held until KYC is approved.
           </p>
-          <Button size="sm" variant="outline" onClick={onRetry}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            {L("Tentar novamente", "Retry")}
-          </Button>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  if (status === "no_session" || !data) {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-4 py-6 text-center">
-          <ShieldCheck className="h-10 w-10 text-tts-text/30" />
-          <p className="text-sm text-tts-text/60 max-w-xs">
-            {L(
-              "Acesse pelo link enviado no WhatsApp para ver seu status.",
-              "Open the link sent in WhatsApp to view your status."
-            )}
-          </p>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  if (status === "no_account") {
-    return (
-      <OperationalCard>
-        <div className="flex flex-col items-center gap-4 py-6 text-center">
-          <ShieldCheck className="h-10 w-10 text-tts-gold/60" />
-          <div>
-            <p className="font-medium text-tts-deep">
-              {L("Conta não configurada", "Account not set up")}
-            </p>
-            <p className="mt-1 text-sm text-tts-text/60">
-              {L(
-                "Complete o KYC para ativar sua conta USD.",
-                "Complete KYC to activate your USD account."
-              )}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              const url = sessionId
-                ? `/bridge-test?session_id=${encodeURIComponent(sessionId)}`
-                : "/bridge-test";
-              window.open(url, "_blank", "noopener");
-            }}
-          >
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            {L("Fazer KYC", "Complete KYC")}
-          </Button>
-        </div>
-      </OperationalCard>
-    );
-  }
-
-  // Has data — show KYC / customer status
-  const kycStatus = data.kyc_status;
-  const customerStatus = data.customer_status;
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <OperationalCard>
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-4 w-4 text-tts-text/40" />
-            <span className="text-xs text-tts-text/50 uppercase tracking-wide">
-              {L("KYC", "KYC")}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusPill tone={kycTone(kycStatus)}>
-              {kycLabel(kycStatus, L)}
-            </StatusPill>
-          </div>
-          {kycStatus && (
-            <p className="mt-2 font-mono text-xs text-tts-text/40">{kycStatus}</p>
-          )}
-        </OperationalCard>
-
-        <OperationalCard>
-          <div className="flex items-center gap-2 mb-3">
-            <Banknote className="h-4 w-4 text-tts-text/40" />
-            <span className="text-xs text-tts-text/50 uppercase tracking-wide">
-              {L("Cliente", "Customer")}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusPill tone={kycTone(customerStatus)}>
-              {kycLabel(customerStatus, L)}
-            </StatusPill>
-          </div>
-          {customerStatus && (
-            <p className="mt-2 font-mono text-xs text-tts-text/40">{customerStatus}</p>
-          )}
-        </OperationalCard>
+        )}
       </div>
 
-      {(kycStatus !== "approved" || customerStatus !== "active") && (
-        <div className="rounded-lg bg-tts-gold/10 border border-tts-gold/30 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle className="h-4 w-4 text-tts-gold mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm text-tts-deep font-medium">
-              {L("Ação necessária", "Action required")}
-            </p>
-            <p className="mt-1 text-xs text-tts-text/60">
-              {L(
-                "Seu KYC ou status de cliente ainda não está aprovado. Complete o processo para liberar sua conta.",
-                "Your KYC or customer status is not yet approved. Complete the process to unlock your account."
-              )}
-            </p>
-            <Button
-              size="sm"
-              className="mt-3"
-              onClick={() => {
-                const url = sessionId
-                  ? `/bridge-test?session_id=${encodeURIComponent(sessionId)}`
-                  : "/bridge-test";
-                window.open(url, "_blank", "noopener");
-              }}
-            >
-              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-              {L("Continuar KYC", "Continue KYC")}
-            </Button>
-          </div>
+      {instr && (
+        <div>
+          <p className="px-5 pt-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+            Wire / ACH details
+          </p>
+          {instr.bank_name && <Field label="Bank" value={instr.bank_name} mono={false} />}
+          {instr.bank_routing_number && <Field label="Routing number" value={instr.bank_routing_number} />}
+          {instr.bank_account_number && <Field label="Account number" value={instr.bank_account_number} masked />}
+          {instr.bank_beneficiary_name && <Field label="Beneficiary" value={instr.bank_beneficiary_name} mono={false} />}
+          {instr.bank_beneficiary_address && <Field label="Beneficiary address" value={instr.bank_beneficiary_address} mono={false} />}
+          {instr.iban && <Field label="IBAN" value={instr.iban} />}
+          {instr.bic && <Field label="BIC / SWIFT" value={instr.bic} />}
+          {reference && <Field label="Reference / Memo" value={reference} highlight />}
+          {instr.bank_address && <Field label="Bank address" value={instr.bank_address} mono={false} />}
         </div>
       )}
 
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={onRetry}>
-          <RefreshCw className="mr-1 h-3.5 w-3.5" />
-          {L("Atualizar", "Refresh")}
-        </Button>
+      <div className="px-5 py-4 bg-tts-bg/50 border-t border-tts-border/40">
+        <div className="flex items-center gap-2 mb-3">
+          <Info className="h-3.5 w-3.5 text-tts-muted shrink-0" />
+          <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">How to deposit</p>
+        </div>
+        <ol className="space-y-2">
+          {[
+            "Log into your US bank or wire service.",
+            "Create a new wire or ACH transfer to the account above.",
+            reference ? (
+              <span key="ref">In the <strong className="text-tts-deep">Reference / Memo</strong> field, enter <span className="font-mono font-semibold text-amber-700 dark:text-amber-400">{reference}</span> exactly.</span>
+            ) : "Include a memo if your bank requests one.",
+            "Funds typically arrive within 1–2 business days.",
+          ].map((step, i) => (
+            <li key={i} className="flex gap-3 text-xs text-tts-muted">
+              <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-tts-border bg-tts-surface text-[10px] font-bold text-tts-deep">
+                {i + 1}
+              </span>
+              <span className="leading-relaxed">{step}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────
+// ── Stellar wallet card ────────────────────────────────────────────────────────
+
+function StellarWalletCard({ wallet }: { wallet: StellarWallet }) {
+  const short = wallet.public_key.length > 12
+    ? `${wallet.public_key.slice(0, 6)}...${wallet.public_key.slice(-6)}`
+    : wallet.public_key;
+  const balance = wallet.usdc_balance !== null ? Number(wallet.usdc_balance) : null;
+
+  return (
+    <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+        <div className="flex items-center gap-2.5">
+          <Wallet className="h-5 w-5 text-tts-muted" />
+          <div>
+            <p className="text-sm font-bold text-tts-deep">Stellar Wallet</p>
+            <p className="text-[11px] text-tts-muted mt-0.5">USDC destination</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase px-2.5 py-1 rounded-full border border-tts-confirm/30 bg-tts-confirm/10 text-tts-confirm">
+          <ArrowRight className="h-3 w-3" />
+          Auto-routed
+        </span>
+      </div>
+
+      <div className="px-5 py-5 border-b border-tts-border/40">
+        {balance !== null && (
+          <div className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-1">USDC balance</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold tabular-nums text-tts-deep">{fmt(balance)}</span>
+              <span className="text-base font-bold text-tts-muted">USDC</span>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-0.5">Wallet address</p>
+            <span className="text-sm font-mono font-semibold text-tts-deep">{short}</span>
+          </div>
+          <CopyBtn value={wallet.public_key} label="wallet address" />
+        </div>
+      </div>
+
+      <div className="px-5 py-4 bg-tts-bg/50">
+        <div className="flex items-start gap-2">
+          <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
+          <p className="text-xs text-tts-muted leading-relaxed">
+            When USD arrives via wire or ACH, it is automatically converted to USDC and credited to this wallet. No action needed.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Arrow divider ──────────────────────────────────────────────────────────────
+
+function FlowArrow() {
+  return (
+    <div className="flex items-center justify-center py-1">
+      <div className="flex flex-col items-center gap-0.5">
+        <div className="h-4 w-px bg-tts-border/60" />
+        <ArrowRight className="h-4 w-4 text-tts-muted rotate-90" />
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function BridgeClient({ initialQuery = "" }: { initialQuery?: string }) {
   const searchParams = useSearchParams();
-  const queryParams = new URLSearchParams(initialQuery || searchParams.toString());
+  const qp = new URLSearchParams(initialQuery || searchParams.toString());
 
-  const sessionId = queryParams.get("session_id") || "";
-  const amount = queryParams.get("amount") || "";
-  const lang = queryParams.get("lang") || "pt-BR";
+  const sessionId = qp.get("session_id") ?? "";
+  const emailParam = qp.get("email") ?? "";
+  const amount = qp.get("amount") ?? "";
+  const lang = qp.get("lang") ?? "pt-BR";
   const isEn = lang === "en" || lang === "en-US";
-
   const L = (pt: string, en: string) => (isEn ? en : pt);
 
-  const [activeTab, setActiveTab] = useState<TabId>("receive");
-  const [status, setStatus] = useState<LoadStatus>("idle");
-  const [data, setData] = useState<UsdAccountResponse | null>(null);
+  type Status = "login" | "loading" | "ready" | "no_account" | "error";
+  const [status, setStatus] = useState<Status>("login");
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [emailInput, setEmailInput] = useState(emailParam);
+  const [loggedEmail, setLoggedEmail] = useState("");
+  const didAuto = useRef(false);
 
-  const loadAccount = useCallback(async () => {
-    if (!sessionId) {
-      setStatus("no_session");
-      return;
-    }
+  const load = useCallback(async (email: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed && !sessionId) return;
     setStatus("loading");
+    setErrorMsg("");
     try {
-      const url = `/api/bridge/session/usd-account?session_id=${encodeURIComponent(sessionId)}`;
-      const res = await fetch(url, { cache: "no-store" });
-      const json: UsdAccountResponse = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) {
-        if (res.status === 404 || json.has_account === false) {
-          setData(json);
-          setStatus("no_account");
-          return;
-        }
-        throw new Error(json.message || `HTTP ${res.status}`);
-      }
+      const params = new URLSearchParams();
+      if (sessionId) params.set("session_id", sessionId);
+      else params.set("email", trimmed);
+
+      const res = await fetch(`/api/bridge/session/usd-account?${params}`, { cache: "no-store" });
+      const json: ApiResponse = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 404) throw new Error(json.message || `HTTP ${res.status}`);
       setData(json);
+      setLoggedEmail(json.email ?? trimmed);
       setStatus(json.has_account ? "ready" : "no_account");
-    } catch {
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? String(e));
       setStatus("error");
     }
   }, [sessionId]);
 
   useEffect(() => {
-    loadAccount();
-  }, [loadAccount]);
+    if (didAuto.current) return;
+    if (sessionId || emailParam) {
+      didAuto.current = true;
+      load(emailParam);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const usdAccounts = (data?.virtual_accounts ?? []).filter((va) =>
+    ["active", "enabled", "activated", "pending"].includes(String(va.status ?? "").toLowerCase())
+  );
+
+  // ── Login gate ─────────────────────────────────────────────────────────────
+
+  if (status === "login") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">TalkToStellar</p>
+            <h1 className="text-3xl font-bold text-tts-deep">
+              {L("Depositar em Dólar", "USD Deposit")}
+            </h1>
+            <p className="text-sm text-tts-muted">
+              {L("Entre com seu e-mail para ver sua conta", "Enter your email to see your account")}
+            </p>
+          </div>
+
+          {amount && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
+              <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                {L(`Valor: US$ ${amount}`, `Amount: US$ ${amount}`)}
+              </span>
+            </div>
+          )}
+
+          <form onSubmit={(e) => { e.preventDefault(); load(emailInput); }} className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-2">
+                {L("E-mail da conta", "Account email")}
+              </label>
+              <input
+                type="email"
+                autoFocus
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="you@email.com"
+                className="w-full rounded-xl border border-tts-border bg-tts-bg px-4 py-3 text-sm outline-none
+                           focus:border-tts-deep placeholder:text-tts-muted/40 transition-colors text-center"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!emailInput.trim()}
+              className="w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-white
+                         disabled:opacity-40 transition-opacity hover:opacity-90"
+            >
+              {L("Continuar", "Continue")}
+            </button>
+          </form>
+
+          <p className="text-center text-xs text-tts-muted/60">TalkToStellar · Powered by Stellar Network</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-tts-muted">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">{L("Carregando sua conta...", "Loading your account...")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error ──────────────────────────────────────────────────────────────────
+
+  if (status === "error") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <AlertTriangle className="h-10 w-10 text-red-400 mx-auto" />
+          <div>
+            <p className="font-semibold text-tts-deep">{L("Erro ao carregar", "Failed to load")}</p>
+            <p className="mt-1 text-sm text-tts-muted">{errorMsg}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => load(emailInput)}
+              className="w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-white hover:opacity-90"
+            >
+              {L("Tentar novamente", "Try again")}
+            </button>
+            <button
+              onClick={() => { setStatus("login"); setErrorMsg(""); }}
+              className="w-full rounded-xl border border-tts-border py-3 text-sm font-medium text-tts-muted hover:bg-tts-surface"
+            >
+              {L("Mudar e-mail", "Change email")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── No account ─────────────────────────────────────────────────────────────
+
+  if (status === "no_account") {
+    return (
+      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-tts-border bg-tts-surface">
+            <Building2 className="h-7 w-7 text-tts-muted" />
+          </div>
+          <div>
+            <p className="font-semibold text-tts-deep">
+              {L("Conta USD não encontrada", "No USD account found")}
+            </p>
+            <p className="mt-1.5 text-sm text-tts-muted leading-relaxed">
+              {loggedEmail && (
+                <span className="block font-mono text-xs text-tts-deep/60 mb-2">{loggedEmail}</span>
+              )}
+              {L(
+                "Nenhuma conta de recebimento em dólar encontrada. Fale com a gente no WhatsApp para ativá-la.",
+                "No USD receiving account found for this email. Message us on WhatsApp to set one up."
+              )}
+            </p>
+          </div>
+          <button
+            onClick={() => { setStatus("login"); setData(null); }}
+            className="w-full rounded-xl border border-tts-border py-3 text-sm font-medium text-tts-muted hover:bg-tts-surface"
+          >
+            {L("Tentar outro e-mail", "Try a different email")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ready ──────────────────────────────────────────────────────────────────
 
   return (
-    <OperationalPage size="sm">
-      <OperationalHeader
-        title={L("Receber em Dólar", "Receive in USD")}
-        description={L(
-          "Transfira dólares do seu banco americano via wire ou ACH",
-          "Transfer dollars from your US bank via wire or ACH"
-        )}
-      />
+    <div className="min-h-screen bg-tts-bg">
+      <div className="mx-auto max-w-md px-4 py-10 space-y-5">
 
-      {/* Amount hint */}
-      {amount && (
-        <div className="rounded-lg bg-tts-gold/10 border border-tts-gold/30 px-4 py-3 text-sm text-tts-deep font-medium">
-          {L(`Valor desejado: US$ ${amount}`, `Desired amount: US$ ${amount}`)}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">TalkToStellar</p>
+            <h1 className="text-xl font-bold text-tts-deep">
+              {L("Depositar em Dólar", "USD Deposit")}
+            </h1>
+          </div>
+          <button
+            onClick={() => { setStatus("login"); setData(null); setLoggedEmail(""); }}
+            className="text-xs text-tts-muted hover:text-tts-deep transition-colors"
+          >
+            {loggedEmail ? (
+              <span className="flex flex-col items-end gap-0.5">
+                <span className="font-mono">{loggedEmail.split("@")[0]}</span>
+                <span className="text-[10px] underline">change</span>
+              </span>
+            ) : L("Sair", "Sign out")}
+          </button>
         </div>
-      )}
 
-      {/* Tab bar */}
-      <TabBar active={activeTab} onChange={setActiveTab} isEn={isEn} />
+        {amount && (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
+            <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+              {L(`Valor desejado: US$ ${amount}`, `Requested amount: US$ ${amount}`)}
+            </span>
+          </div>
+        )}
 
-      {/* Tab panels */}
-      {activeTab === "receive" && (
-        <ReceiveTab
-          status={status}
-          data={data}
-          sessionId={sessionId}
-          onRetry={loadAccount}
-          L={L}
-        />
-      )}
-      {activeTab === "rates" && <RatesTab L={L} />}
-      {activeTab === "status" && (
-        <StatusTab
-          status={status}
-          data={data}
-          sessionId={sessionId}
-          onRetry={loadAccount}
-          L={L}
-        />
-      )}
-    </OperationalPage>
+        {usdAccounts.length > 0 ? (
+          <>
+            {usdAccounts.map((va) => <VaCard key={va.id} va={va} />)}
+            {data?.stellar_wallet && (
+              <>
+                <FlowArrow />
+                <StellarWalletCard wallet={data.stellar_wallet} />
+                {/* Bridge → Yield integration CTA */}
+                {data.stellar_wallet.usdc_balance && Number(data.stellar_wallet.usdc_balance) > 0 && (
+                  <div className="rounded-2xl border border-tts-confirm/30 bg-tts-confirm/5 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-tts-confirm">
+                          {L("Rendimento disponível", "Yield available")}
+                        </p>
+                        <p className="text-sm font-bold text-tts-deep">
+                          {L("Seu USDC pode estar rendendo", "Your USDC can be earning yield")}
+                        </p>
+                        <p className="text-xs text-tts-muted leading-relaxed">
+                          {L(
+                            "Invista seu USDC em rendimentos automáticos e acompanhe seus ganhos.",
+                            "Invest your USDC in automatic yield and track your earnings."
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={`/rendimentos?view=application&action=deposit&asset=USDC&amount=${Math.floor(Number(data.stellar_wallet.usdc_balance))}&lang=${lang}`}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-confirm py-3 text-sm font-bold text-white hover:opacity-90 transition-opacity"
+                    >
+                      {L("Investir USDC", "Invest USDC")}
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        ) : (
+          <div className="rounded-2xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-6 text-center space-y-3">
+            <Clock className="h-8 w-8 text-amber-500 mx-auto" />
+            <p className="font-semibold text-tts-deep">
+              {L("Conta em processamento", "Account being processed")}
+            </p>
+            <p className="text-sm text-tts-muted">
+              {L(
+                "Sua conta USD está sendo configurada. Aguarde alguns minutos.",
+                "Your USD account is being set up. Check back in a few minutes."
+              )}
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={() => load(loggedEmail || emailInput)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-tts-border
+                     py-2.5 text-sm text-tts-muted hover:bg-tts-surface transition-colors"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          {L("Atualizar", "Refresh")}
+        </button>
+
+        <div className="flex items-center justify-center gap-1.5 text-xs text-tts-muted/60 pb-4">
+          <CheckCircle2 className="h-3 w-3" />
+          <span>TalkToStellar · Powered by Stellar Network</span>
+        </div>
+      </div>
+    </div>
   );
 }

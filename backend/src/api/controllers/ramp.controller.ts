@@ -165,9 +165,10 @@ export class RampController {
     }
   }
 
-  static async getDefindexYieldStatus(_req: Request, res: Response) {
+  static async getDefindexYieldStatus(req: Request, res: Response) {
     try {
-      const result = await AnchorService.getDefindexYieldStatus();
+      const network = String(req.query.network || '').trim().toLowerCase() || undefined;
+      const result = await AnchorService.getDefindexYieldStatus(network);
       res.status(200).json(result);
     } catch (error: any) {
       logYieldRouteFailure('status', _req, error);

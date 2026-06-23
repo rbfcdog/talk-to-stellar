@@ -273,8 +273,11 @@ function sdkNetwork(network?: DefindexNetwork): SupportedNetworks {
 export class DefindexYieldService {
   private static vaultAssetInfoCache = new Map<string, Promise<DefindexVaultAssetInfo>>();
 
-  static getRuntimeInfo(): DefindexRuntimeInfo {
-    const network = defaultNetwork();
+  static getRuntimeInfo(networkOverride?: string): DefindexRuntimeInfo {
+    const resolvedOverride = networkOverride === 'mainnet' || networkOverride === 'public' ? 'mainnet'
+      : networkOverride === 'testnet' ? 'testnet'
+      : undefined;
+    const network: DefindexNetwork = resolvedOverride ?? defaultNetwork();
     const stellarNetwork = stellarRuntimeNetwork();
     const networkMismatch = network !== stellarNetwork;
     const executionRequested = envFlag('DEFINDEX_ENABLE_EXECUTION', network === 'testnet');

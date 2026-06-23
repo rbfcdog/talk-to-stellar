@@ -12,6 +12,7 @@ router.use(requireBridgeEnabled);
 
 // ── Session-based helpers (use session_id to look up customer) ──
 router.get("/session/usd-account", BridgeController.getSessionUsdAccount);
+router.get("/session/stellar-balances", BridgeController.getSessionStellarBalances);
 
 // ── Customers ───────────────────────────────────────────
 router.post("/customers", BridgeController.createCustomer);
