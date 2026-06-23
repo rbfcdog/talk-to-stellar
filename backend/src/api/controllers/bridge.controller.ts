@@ -341,12 +341,14 @@ const MAINNET_PASSPHRASE = Networks.PUBLIC;
 const FUNDING_XLM = '5'; // Enough for base reserve + trustline reserve + fees
 
 /**
- * Resolve the funded mainnet sponsor key used to create new accounts.
+ * Resolve the funded mainnet sponsor/treasury key used to create new accounts.
  * Falls back across the keys that may carry XLM on a given deployment so a
- * missing STELLAR_WALLET_SPONSOR_SECRET doesn't block wallet creation.
+ * missing primary var doesn't block wallet creation. Fund ONE of these
+ * addresses with XLM and the platform sponsors every user wallet's reserves.
  */
 function resolveSponsorSecret(): string {
   return (
+    process.env.STELLAR_SPONSOR_SECRET ||
     process.env.STELLAR_WALLET_SPONSOR_SECRET ||
     process.env.STELLAR_MAINNET_SPONSOR_SECRET ||
     process.env.STELLAR_SECRET_KEY ||
@@ -381,20 +383,32 @@ async function ensureUsdcTrustline(address: string): Promise<{ ok: boolean; reas
   }
   if (hasUsdcTrustline(account)) return { ok: true };
 
-  // Look up the custodial wallet's vaulted secret by public key
+  // Look up the custodial wallet's vaulted secret by public key — check both the
+  // session wallets table and the email-keyed bridge destination wallets.
+  let vaultSecretId: string | null = null;
   const { data: walletRow } = await supabase
     .from('wallets')
     .select('vault_secret_id')
     .eq('public_key', address)
     .maybeSingle();
+  vaultSecretId = walletRow?.vault_secret_id ?? null;
 
-  if (!walletRow?.vault_secret_id) {
+  if (!vaultSecretId) {
+    const { data: bridgeWalletRow } = await supabase
+      .from('bridge_stellar_wallets')
+      .select('vault_secret_id')
+      .eq('public_key', address)
+      .maybeSingle();
+    vaultSecretId = bridgeWalletRow?.vault_secret_id ?? null;
+  }
+
+  if (!vaultSecretId) {
     return { ok: false, reason: `Stellar wallet ${address} needs a USDC trustline but its signing key is not available.` };
   }
 
   let secret = '';
   try {
-    secret = await vaultSecretService.getSecret(String(walletRow.vault_secret_id));
+    secret = await vaultSecretService.getSecret(String(vaultSecretId));
   } catch (e: any) {
     return { ok: false, reason: `Could not load signing key for ${address}: ${e?.message || e}` };
   }
@@ -402,14 +416,34 @@ async function ensureUsdcTrustline(address: string): Promise<{ ok: boolean; reas
 
   try {
     const walletKeypair = Keypair.fromSecret(secret);
-    const trustTx = new TransactionBuilder(account, {
-      fee: '100',
-      networkPassphrase: MAINNET_PASSPHRASE,
-    })
-      .addOperation(Operation.changeTrust({ asset: new Asset('USDC', PUBLIC_USDC_ISSUER) }))
-      .setTimeout(60)
-      .build();
-    trustTx.sign(walletKeypair);
+    // If a sponsor is configured, sponsor the trustline reserve so the user
+    // wallet still doesn't need its own XLM. Otherwise the wallet pays from its
+    // own (manually funded) XLM.
+    const sponsorSecret = resolveSponsorSecret();
+    let trustTx;
+    if (sponsorSecret) {
+      const sponsorKeypair = Keypair.fromSecret(sponsorSecret);
+      const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
+      trustTx = new TransactionBuilder(sponsorAccount, {
+        fee: '1000',
+        networkPassphrase: MAINNET_PASSPHRASE,
+      })
+        .addOperation(Operation.beginSponsoringFutureReserves({ sponsoredId: address, source: sponsorKeypair.publicKey() }))
+        .addOperation(Operation.changeTrust({ asset: new Asset('USDC', PUBLIC_USDC_ISSUER), source: address }))
+        .addOperation(Operation.endSponsoringFutureReserves({ source: address }))
+        .setTimeout(120)
+        .build();
+      trustTx.sign(sponsorKeypair, walletKeypair);
+    } else {
+      trustTx = new TransactionBuilder(account, {
+        fee: '100',
+        networkPassphrase: MAINNET_PASSPHRASE,
+      })
+        .addOperation(Operation.changeTrust({ asset: new Asset('USDC', PUBLIC_USDC_ISSUER) }))
+        .setTimeout(60)
+        .build();
+      trustTx.sign(walletKeypair);
+    }
     await mainnetServer.submitTransaction(trustTx);
     logger.info(`[bridge] Added USDC trustline to mainnet wallet ${address}`);
     return { ok: true };
@@ -493,12 +527,18 @@ async function validateStellarDestination(address: string): Promise<{ ok: boolea
 }
 
 /**
- * Generate a brand-new custodial Stellar wallet. The keypair is always created
- * and its secret stored encrypted in the vault. Funding the account on mainnet
- * is BEST-EFFORT: if a sponsor key is available we create + USDC-trustline it
- * immediately; otherwise we return the wallet anyway so the person can fund the
- * address themselves (send XLM to the public key). The USDC trustline is added
- * automatically the next time the account is used as a transfer destination.
+ * Generate a brand-new custodial Stellar wallet using SPONSORED RESERVES.
+ *
+ * The keypair is always created and its secret stored encrypted in the vault.
+ * If a platform sponsor/treasury key is configured, a single atomic transaction
+ * sponsors the account's reserves so:
+ *   - the user wallet holds 0 XLM (the ~1.5 XLM reserve is locked on the sponsor)
+ *   - the USDC trustline is created in the same sponsored sandwich
+ *   - the account is immediately ready to receive USDC from Bridge
+ *
+ * The locked XLM is reclaimable by the sponsor when the wallet is later merged.
+ * If no sponsor key is configured, the keypair is still returned (unfunded) so
+ * the address can be funded manually.
  */
 async function createAndFundMainnetWallet(label: string): Promise<{
   ok: boolean;
@@ -507,6 +547,7 @@ async function createAndFundMainnetWallet(label: string): Promise<{
   vault_secret_id: string;
   funded: boolean;
   trustline: boolean;
+  sponsored: boolean;
 }> {
   const keypair = Keypair.random();
   const publicKey = keypair.publicKey();
@@ -519,71 +560,79 @@ async function createAndFundMainnetWallet(label: string): Promise<{
     `Bridge destination wallet ${label}`.slice(0, 120),
   );
 
-  // Funding is optional — only attempt it when a sponsor key is configured.
   const sponsorSecret = resolveSponsorSecret();
   if (!sponsorSecret) {
-    logger.info(`[bridge] Generated mainnet keypair ${publicKey} (unfunded — awaiting user funding)`);
+    logger.info(`[bridge] Generated mainnet keypair ${publicKey} (no sponsor — awaiting manual funding)`);
     return {
       ok: true,
       public_key: publicKey,
       vault_secret_id: vaultSecretId,
       funded: false,
       trustline: false,
+      sponsored: false,
       reason: "Wallet created. Send XLM to this address to activate it, then it can receive USDC.",
     };
   }
 
-  let funded = false;
-  let trustline = false;
   try {
     const sponsorKeypair = Keypair.fromSecret(sponsorSecret);
     const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
-    const createTx = new TransactionBuilder(sponsorAccount, {
-      fee: '100',
+
+    // One atomic sponsored-reserves sandwich:
+    //   begin(sponsor) → createAccount(balance 0) → changeTrust(USDC) → end(new account)
+    // Sponsor pays both reserves; the new account ends up holding 0 XLM but
+    // USDC-ready. Signed by BOTH the sponsor and the new account.
+    const tx = new TransactionBuilder(sponsorAccount, {
+      fee: '1000',
       networkPassphrase: MAINNET_PASSPHRASE,
     })
-      .addOperation(Operation.createAccount({ destination: publicKey, startingBalance: FUNDING_XLM }))
-      .setTimeout(60)
+      .addOperation(Operation.beginSponsoringFutureReserves({
+        sponsoredId: publicKey,
+        source: sponsorKeypair.publicKey(),
+      }))
+      .addOperation(Operation.createAccount({
+        destination: publicKey,
+        startingBalance: '0',
+        source: sponsorKeypair.publicKey(),
+      }))
+      .addOperation(Operation.changeTrust({
+        asset: new Asset('USDC', PUBLIC_USDC_ISSUER),
+        source: publicKey,
+      }))
+      .addOperation(Operation.endSponsoringFutureReserves({
+        source: publicKey,
+      }))
+      .setTimeout(120)
       .build();
-    createTx.sign(sponsorKeypair);
-    await mainnetServer.submitTransaction(createTx);
 
-    for (let i = 0; i < 10; i++) {
-      try { await mainnetServer.loadAccount(publicKey); funded = true; break; }
-      catch { await new Promise((r) => setTimeout(r, 500)); }
-    }
+    tx.sign(sponsorKeypair, keypair);
+    await mainnetServer.submitTransaction(tx);
 
-    if (funded) {
-      const newAccount = await mainnetServer.loadAccount(publicKey);
-      const trustTx = new TransactionBuilder(newAccount, {
-        fee: '100',
-        networkPassphrase: MAINNET_PASSPHRASE,
-      })
-        .addOperation(Operation.changeTrust({ asset: new Asset('USDC', PUBLIC_USDC_ISSUER) }))
-        .setTimeout(60)
-        .build();
-      trustTx.sign(keypair);
-      await mainnetServer.submitTransaction(trustTx);
-      trustline = true;
-    }
-  } catch (e: any) {
-    const msg = e?.response?.data?.extras?.result_codes
-      ? JSON.stringify(e.response.data.extras.result_codes)
-      : String(e?.message || e);
-    // Keypair is saved — return it so the person can fund manually.
-    logger.warn(`[bridge] Auto-fund failed for ${publicKey}, returning unfunded: ${msg}`);
+    logger.info(`[bridge] Sponsored mainnet wallet ${publicKey} (0 XLM held, USDC-ready)`);
     return {
       ok: true,
       public_key: publicKey,
       vault_secret_id: vaultSecretId,
-      funded,
-      trustline,
-      reason: `Wallet created. Auto-funding unavailable (${msg}). Send XLM to this address to activate it.`,
+      funded: true,
+      trustline: true,
+      sponsored: true,
+    };
+  } catch (e: any) {
+    const msg = e?.response?.data?.extras?.result_codes
+      ? JSON.stringify(e.response.data.extras.result_codes)
+      : String(e?.message || e);
+    // Keypair is saved — return it so the address can be funded manually.
+    logger.warn(`[bridge] Sponsored creation failed for ${publicKey}, returning unfunded: ${msg}`);
+    return {
+      ok: true,
+      public_key: publicKey,
+      vault_secret_id: vaultSecretId,
+      funded: false,
+      trustline: false,
+      sponsored: false,
+      reason: `Wallet created. Sponsored funding unavailable (${msg}). Send XLM to this address to activate it.`,
     };
   }
-
-  logger.info(`[bridge] Generated mainnet wallet ${publicKey} (funded=${funded}, trustline=${trustline})`);
-  return { ok: true, public_key: publicKey, vault_secret_id: vaultSecretId, funded, trustline };
 }
 
 export class BridgeController {
@@ -2603,6 +2652,7 @@ export class BridgeController {
         success: true,
         // When the wallet couldn't be auto-funded, this note tells the user to send XLM.
         needs_funding: !result.funded,
+        sponsored: Boolean(result.sponsored),
         message: result.reason,
         wallet: { ...inserted, usdc_balance: "0", exists_on_mainnet: Boolean(result.funded) },
       });
