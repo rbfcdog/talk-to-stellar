@@ -386,7 +386,7 @@ export const SoroswapService = {
         },
         source: 'stellar-path-payment-fallback',
         buildAvailable: true,
-        warning: 'Soroswap has no route for this pair on the configured network; using an executable Stellar path-payment route instead.',
+        warning: 'Via Stellar SDEX (sem pool Soroswap para este par na testnet — swap disponível).',
         network: networkNameForFreighter(config.network),
         networkPassphrase: networkPassphraseFor(config.network),
       };
@@ -421,7 +421,7 @@ export const SoroswapService = {
       },
       source: 'stellar-path-payment-fallback',
       buildAvailable: true,
-      warning: 'Soroswap has no route for this pair on the configured network; using an executable Stellar path-payment route instead.',
+      warning: 'Via Stellar SDEX (sem pool Soroswap para este par na testnet — swap disponível).',
       network: networkNameForFreighter(config.network),
       networkPassphrase: networkPassphraseFor(config.network),
     };

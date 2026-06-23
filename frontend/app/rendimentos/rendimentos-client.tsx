@@ -1559,6 +1559,27 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
           ))}
         </div>
 
+        {/* Freighter Wallet — always visible so user can connect before getting a quote */}
+        <div className="rounded border border-tts-border bg-tts-bg p-3 mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-tts-muted uppercase">{L("Carteira Freighter", "Freighter Wallet")}</p>
+            {walletAddress
+              ? <span className="text-xs font-bold text-tts-confirm">{walletNetwork || "Connected"}</span>
+              : <span className="text-xs font-bold text-tts-gold">{L("Não conectada", "Not connected")}</span>}
+          </div>
+          {walletAddress ? (
+            <p className="font-mono text-xs text-tts-muted break-all">{walletAddress}</p>
+          ) : (
+            <button onClick={connectFreighter} disabled={connecting}
+              className="flex w-full items-center justify-center gap-2 border border-tts-border py-2 text-xs font-bold disabled:opacity-40 hover:bg-tts-bg transition">
+              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+              {L("Conectar Freighter", "Connect Freighter")}
+            </button>
+          )}
+          {errWallet && <p className="mt-2 text-xs text-red-400">{errWallet}</p>}
+          {!walletNetOk && <p className="mt-2 text-xs text-tts-gold">{L(`Freighter está na rede ${walletNetwork}; mude para ${swapNetwork}.`, `Freighter is on ${walletNetwork}; switch to ${swapNetwork}.`)}</p>}
+        </div>
+
         {/* Step 1: Quote */}
         <button onClick={getQuote} disabled={loadingQuote}
           className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40 mb-3">
@@ -1578,42 +1599,23 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
             <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Você recebe", "You receive")}</span><span className="font-bold text-tts-confirm">{quote.amountOut} {quote.assetOut || assetOut}</span></div>
             {quote.priceImpact != null && <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Impacto", "Impact")}</span><span className="font-bold">{Number(quote.priceImpact).toFixed(4)}%</span></div>}
             {quote.protocols && <div className="flex justify-between text-xs"><span className="text-tts-muted">{L("Protocolos", "Protocols")}</span><span className="font-bold">{Array.isArray(quote.protocols) ? quote.protocols.join(", ") : quote.protocols}</span></div>}
-            {quote.warning && <p className="text-xs text-tts-gold pt-1">{quote.warning}</p>}
+            {quote.warning && <p className="text-xs text-tts-muted/70 pt-1">ℹ️ {quote.warning}</p>}
           </div>
         )}
 
-        {/* Step 2: Wallet + Build */}
-        {quote && (
-          <div className="space-y-3">
-            <div className="rounded border border-tts-border bg-tts-bg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold text-tts-muted uppercase">{L("Carteira Freighter", "Freighter Wallet")}</p>
-                {walletAddress
-                  ? <span className="text-xs font-bold text-tts-confirm">{walletNetwork || "Connected"}</span>
-                  : <span className="text-xs font-bold text-tts-gold">{L("Não conectada", "Not connected")}</span>}
-              </div>
-              {walletAddress ? (
-                <p className="font-mono text-xs text-tts-muted break-all">{walletAddress}</p>
-              ) : (
-                <button onClick={connectFreighter} disabled={connecting}
-                  className="flex w-full items-center justify-center gap-2 border border-tts-border py-2 text-xs font-bold disabled:opacity-40 hover:bg-tts-bg transition">
-                  {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
-                  {L("Conectar Freighter", "Connect Freighter")}
-                </button>
-              )}
-              {errWallet && <p className="mt-2 text-xs text-red-400">{errWallet}</p>}
-              {!walletNetOk && <p className="mt-2 text-xs text-tts-gold">{L(`Freighter está na rede ${walletNetwork}; mude para ${swapNetwork}.`, `Freighter is on ${walletNetwork}; switch to ${swapNetwork}.`)}</p>}
-            </div>
-
-            {walletAddress && walletNetOk && (
-              <button onClick={buildXdr} disabled={loadingXdr}
-                className="flex w-full items-center justify-center gap-2 border border-tts-deep py-3 text-sm font-bold disabled:opacity-40 hover:bg-tts-bg transition">
-                {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {L(`2 — Preparar transação (${shortAddr(walletAddress)})`, `2 — Build XDR (${shortAddr(walletAddress)})`)}
-              </button>
-            )}
+        {/* Step 2: Build */}
+        {quote && walletAddress && walletNetOk && (
+          <div className="space-y-3 mb-3">
+            <button onClick={buildXdr} disabled={loadingXdr}
+              className="flex w-full items-center justify-center gap-2 border border-tts-deep py-3 text-sm font-bold disabled:opacity-40 hover:bg-tts-bg transition">
+              {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {L(`2 — Preparar transação (${shortAddr(walletAddress)})`, `2 — Build XDR (${shortAddr(walletAddress)})`)}
+            </button>
             {errXdr && <p className="text-xs text-red-400">{errXdr}</p>}
           </div>
+        )}
+        {quote && !walletAddress && (
+          <p className="text-xs text-tts-gold mb-3">{L("Conecte o Freighter acima para continuar.", "Connect Freighter above to continue.")}</p>
         )}
 
         {/* Step 3: Sign */}
