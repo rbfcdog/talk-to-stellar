@@ -171,8 +171,8 @@ export class RampController {
       const result = await AnchorService.getDefindexYieldStatus(network);
       res.status(200).json(result);
     } catch (error: any) {
-      logYieldRouteFailure('status', _req, error);
-      res.status(statusFromError(error)).json(yieldErrorPayload(error, _req));
+      logYieldRouteFailure('status', req, error);
+      res.status(statusFromError(error)).json(yieldErrorPayload(error, req));
     }
   }
 
