@@ -5,7 +5,8 @@ import { assertBridgeAmountInRange } from "../middlewares/bridge-mainnet.middlew
 import { mainnetServer } from "../../config/stellar";
 import { PUBLIC_USDC_ISSUER } from "../../config/assets";
 import { supabase } from "../../config/supabase";
-import { Keypair, Operation, TransactionBuilder, Networks } from "@stellar/stellar-sdk";
+import { Asset, Keypair, Operation, TransactionBuilder, Networks } from "@stellar/stellar-sdk";
+import { VaultService } from "../services/core/vault.service";
 
 function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
@@ -336,21 +337,103 @@ function collectActivityBalances(events: Array<Record<string, unknown>>): Virtua
   }));
 }
 
-const SPONSOR_SECRET = process.env.STELLAR_WALLET_SPONSOR_SECRET;
 const MAINNET_PASSPHRASE = Networks.PUBLIC;
 const FUNDING_XLM = '5'; // Enough for base reserve + trustline reserve + fees
 
 /**
- * Auto-fund a Stellar address on mainnet if it doesn't exist yet.
- * Returns true if the account already existed or was successfully created.
+ * Resolve the funded mainnet sponsor key used to create new accounts.
+ * Falls back across the keys that may carry XLM on a given deployment so a
+ * missing STELLAR_WALLET_SPONSOR_SECRET doesn't block wallet creation.
+ */
+function resolveSponsorSecret(): string {
+  return (
+    process.env.STELLAR_WALLET_SPONSOR_SECRET ||
+    process.env.STELLAR_MAINNET_SPONSOR_SECRET ||
+    process.env.STELLAR_SECRET_KEY ||
+    process.env.TALKTOSTELLAR_FEE_TREASURY_SECRET_KEY ||
+    ''
+  ).trim();
+}
+
+const vaultSecretService = new VaultService(supabase);
+
+/** Does this account already trust mainnet USDC? */
+function hasUsdcTrustline(account: Awaited<ReturnType<typeof mainnetServer.loadAccount>>): boolean {
+  return account.balances.some(
+    (b: any) =>
+      b.asset_type === 'credit_alphanum4' &&
+      b.asset_code === 'USDC' &&
+      b.asset_issuer === PUBLIC_USDC_ISSUER,
+  );
+}
+
+/**
+ * Add the mainnet USDC trustline to a custodial wallet so it can receive USDC.
+ * The trustline must be signed by the wallet's own key, which lives in the
+ * secret vault keyed by the wallets.vault_secret_id column.
+ */
+async function ensureUsdcTrustline(address: string): Promise<{ ok: boolean; reason?: string }> {
+  let account: Awaited<ReturnType<typeof mainnetServer.loadAccount>>;
+  try {
+    account = await mainnetServer.loadAccount(address);
+  } catch {
+    return { ok: true }; // Can't read it — let Bridge surface any downstream error
+  }
+  if (hasUsdcTrustline(account)) return { ok: true };
+
+  // Look up the custodial wallet's vaulted secret by public key
+  const { data: walletRow } = await supabase
+    .from('wallets')
+    .select('vault_secret_id')
+    .eq('public_key', address)
+    .maybeSingle();
+
+  if (!walletRow?.vault_secret_id) {
+    return { ok: false, reason: `Stellar wallet ${address} needs a USDC trustline but its signing key is not available.` };
+  }
+
+  let secret = '';
+  try {
+    secret = await vaultSecretService.getSecret(String(walletRow.vault_secret_id));
+  } catch (e: any) {
+    return { ok: false, reason: `Could not load signing key for ${address}: ${e?.message || e}` };
+  }
+  if (!secret) return { ok: false, reason: `Empty signing key for ${address}.` };
+
+  try {
+    const walletKeypair = Keypair.fromSecret(secret);
+    const trustTx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: MAINNET_PASSPHRASE,
+    })
+      .addOperation(Operation.changeTrust({ asset: new Asset('USDC', PUBLIC_USDC_ISSUER) }))
+      .setTimeout(60)
+      .build();
+    trustTx.sign(walletKeypair);
+    await mainnetServer.submitTransaction(trustTx);
+    logger.info(`[bridge] Added USDC trustline to mainnet wallet ${address}`);
+    return { ok: true };
+  } catch (e: any) {
+    const msg = e?.response?.data?.extras?.result_codes
+      ? JSON.stringify(e.response.data.extras.result_codes)
+      : String(e?.message || e);
+    return { ok: false, reason: `Failed to add USDC trustline to ${address}: ${msg}` };
+  }
+}
+
+/**
+ * Ensure a Stellar address exists on mainnet AND can receive USDC.
+ * Creates (funds) the account if it doesn't exist, then adds the USDC
+ * trustline — both are required before Bridge can deliver USDC to it.
  */
 async function ensureMainnetAccount(address: string): Promise<{ ok: boolean; reason?: string }> {
   if (!address) return { ok: false, reason: "Stellar destination address is required." };
 
   // Check if account already exists
+  let exists = false;
   try {
     await mainnetServer.loadAccount(address);
-    return { ok: true }; // Exists — no funding needed
+    exists = true;
   } catch (e: any) {
     const status = e?.response?.status ?? e?.status;
     if (status !== 404) {
@@ -359,46 +442,51 @@ async function ensureMainnetAccount(address: string): Promise<{ ok: boolean; rea
     }
   }
 
-  // Account doesn't exist — fund it
-  if (!SPONSOR_SECRET) {
-    return { ok: false, reason: `Stellar address ${address} does not exist on mainnet and STELLAR_WALLET_SPONSOR_SECRET is not configured.` };
-  }
-
-  try {
-    const sponsorKeypair = Keypair.fromSecret(SPONSOR_SECRET);
-    const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
-
-    const createTx = new TransactionBuilder(sponsorAccount, {
-      fee: '100',
-      networkPassphrase: MAINNET_PASSPHRASE,
-    })
-      .addOperation(Operation.createAccount({ destination: address, startingBalance: FUNDING_XLM }))
-      .setTimeout(60)
-      .build();
-
-    createTx.sign(sponsorKeypair);
-    const result = await mainnetServer.submitTransaction(createTx);
-
-    if (!result.successful) {
-      return { ok: false, reason: `Failed to create mainnet account ${address}: transaction failed.` };
+  if (!exists) {
+    // Account doesn't exist — create + fund it
+    const sponsorSecret = resolveSponsorSecret();
+    if (!sponsorSecret) {
+      return { ok: false, reason: `Stellar address ${address} does not exist on mainnet and no funded sponsor key (STELLAR_WALLET_SPONSOR_SECRET) is configured.` };
     }
 
-    // Wait for account to appear
-    for (let i = 0; i < 10; i++) {
-      try { await mainnetServer.loadAccount(address); break; } catch { await new Promise(r => setTimeout(r, 500)); }
-    }
+    try {
+      const sponsorKeypair = Keypair.fromSecret(sponsorSecret);
+      const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
 
-    logger.info(`[bridge] Auto-funded mainnet account ${address} with ${FUNDING_XLM} XLM`);
-    return { ok: true };
-  } catch (e: any) {
-    const msg = e?.response?.data?.extras?.result_codes
-      ? JSON.stringify(e.response.data.extras.result_codes)
-      : String(e?.message || e);
-    return { ok: false, reason: `Failed to fund mainnet account ${address}: ${msg}` };
+      const createTx = new TransactionBuilder(sponsorAccount, {
+        fee: '100',
+        networkPassphrase: MAINNET_PASSPHRASE,
+      })
+        .addOperation(Operation.createAccount({ destination: address, startingBalance: FUNDING_XLM }))
+        .setTimeout(60)
+        .build();
+
+      createTx.sign(sponsorKeypair);
+      const result = await mainnetServer.submitTransaction(createTx);
+
+      if (!result.successful) {
+        return { ok: false, reason: `Failed to create mainnet account ${address}: transaction failed.` };
+      }
+
+      // Wait for account to appear
+      for (let i = 0; i < 10; i++) {
+        try { await mainnetServer.loadAccount(address); break; } catch { await new Promise(r => setTimeout(r, 500)); }
+      }
+
+      logger.info(`[bridge] Auto-funded mainnet account ${address} with ${FUNDING_XLM} XLM`);
+    } catch (e: any) {
+      const msg = e?.response?.data?.extras?.result_codes
+        ? JSON.stringify(e.response.data.extras.result_codes)
+        : String(e?.message || e);
+      return { ok: false, reason: `Failed to fund mainnet account ${address}: ${msg}` };
+    }
   }
+
+  // Account now exists — make sure it can actually hold USDC
+  return ensureUsdcTrustline(address);
 }
 
-/** Verify a Stellar address exists on mainnet (auto-fund if needed). */
+/** Verify a Stellar address exists on mainnet and can receive USDC (auto-create if needed). */
 async function validateStellarDestination(address: string): Promise<{ ok: boolean; reason?: string }> {
   if (!address) return { ok: false, reason: "Stellar destination address is required." };
   return ensureMainnetAccount(address);
