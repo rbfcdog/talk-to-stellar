@@ -237,6 +237,58 @@ function collectBridgeWalletBalances(
   return balances;
 }
 
+function normalizeDestinationChain(account: Record<string, unknown>): string {
+  const destination = (account.destination ?? {}) as Record<string, unknown>;
+  return readText(
+    account.destination_chain ||
+      destination.payment_rail ||
+      destination.chain ||
+      destination.network,
+  ).toLowerCase();
+}
+
+function normalizeDestinationAddress(account: Record<string, unknown>): string {
+  const destination = (account.destination ?? {}) as Record<string, unknown>;
+  return readText(
+    account.destination_address ||
+      destination.address ||
+      destination.to_address ||
+      destination.wallet_address,
+  );
+}
+
+function normalizeBridgeWalletId(account: Record<string, unknown>): string {
+  const destination = (account.destination ?? {}) as Record<string, unknown>;
+  return readText(
+    destination.bridge_wallet_id ||
+      destination.wallet_id ||
+      account.destination_wallet_id,
+  );
+}
+
+function walletMatchesHints(wallet: Record<string, unknown>, hints: string[]): boolean {
+  const normalizedHints = hints.map((hint) => hint.toLowerCase()).filter(Boolean);
+  if (!normalizedHints.length) return false;
+  const walletCandidates = [
+    wallet.id,
+    wallet.wallet_id,
+    wallet.address,
+  ].map((value) => readText(value).toLowerCase()).filter(Boolean);
+  return walletCandidates.some((candidate) => normalizedHints.includes(candidate));
+}
+
+function balanceMatchesWallet(balance: Record<string, unknown>, wallet: Record<string, unknown> | null): boolean {
+  if (!wallet) return false;
+  const balanceWalletId = readText(balance.wallet_id).toLowerCase();
+  if (!balanceWalletId) return false;
+  const walletIds = [
+    wallet.id,
+    wallet.wallet_id,
+    wallet.address,
+  ].map((value) => readText(value).toLowerCase()).filter(Boolean);
+  return walletIds.includes(balanceWalletId);
+}
+
 function activityCreditPriority(type: string): number {
   const normalized = type.toLowerCase();
   if (/(failed|reversed|returned|cancelled|canceled|fee|debit|withdraw)/.test(normalized)) {
@@ -1224,6 +1276,91 @@ export class BridgeController {
     });
   }
 
+  static async getVirtualAccountConnections(req: Request, res: Response): Promise<void> {
+    const customerId = String(req.params.id);
+    const stellarAddress = readText(req.query.stellar_address || req.query.stellarAddress);
+    const service = getBridgeService();
+    const warnings: string[] = [];
+    let accounts: Array<Record<string, unknown>> = [];
+    let wallets: Array<Record<string, unknown>> = [];
+    let bridgeBalances: Array<Record<string, unknown>> = [];
+
+    try {
+      const liveAccounts = await service.listVirtualAccounts(customerId) as unknown as Array<Record<string, unknown>>;
+      accounts = Array.isArray(liveAccounts) ? liveAccounts : [];
+      void Promise.all(accounts.map((account) => BridgeController.upsertVirtualAccount(account, customerId)));
+    } catch (error: any) {
+      warnings.push(`virtual_accounts: ${error?.message || "unavailable"}`);
+      accounts = await loadCachedVirtualAccounts(customerId);
+    }
+
+    try {
+      const liveWallets = await service.listWallets(customerId) as unknown as Array<Record<string, unknown>>;
+      wallets = Array.isArray(liveWallets) ? liveWallets : [];
+    } catch (error: any) {
+      warnings.push(`wallets: ${error?.message || "unavailable"}`);
+      const { data } = await supabase
+        .from("bridge_custodial_wallets")
+        .select("*")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false });
+      wallets = Array.isArray(data) ? data : [];
+    }
+
+    try {
+      const balances = await service.getWalletBalances() as unknown as Array<Record<string, unknown>>;
+      bridgeBalances = Array.isArray(balances) ? balances : [];
+    } catch (error: any) {
+      warnings.push(`wallet_balances: ${error?.message || "unavailable"}`);
+    }
+
+    const connections = accounts.map((account) => {
+      const hints = collectDestinationHints(account);
+      const bridgeWalletId = normalizeBridgeWalletId(account);
+      const destinationChain = normalizeDestinationChain(account);
+      const destinationAddress = normalizeDestinationAddress(account);
+      const matchedWallet =
+        wallets.find((wallet) => walletMatchesHints(wallet, hints)) ||
+        (bridgeWalletId
+          ? wallets.find((wallet) => readText(wallet.id || wallet.wallet_id).toLowerCase() === bridgeWalletId.toLowerCase())
+          : null) ||
+        null;
+      const walletBalances = bridgeBalances.filter((balance) => balanceMatchesWallet(balance, matchedWallet));
+      const isDirectStellar = destinationChain === "stellar";
+
+      return {
+        virtual_account: account,
+        destination: {
+          chain: destinationChain || null,
+          address: destinationAddress || null,
+          bridge_wallet_id: bridgeWalletId || null,
+          hints,
+        },
+        bridge_wallet: matchedWallet,
+        bridge_wallet_balances: walletBalances,
+        stellar_wallet: stellarAddress
+          ? {
+              address: stellarAddress,
+              direct_destination: isDirectStellar && destinationAddress.toLowerCase() === stellarAddress.toLowerCase(),
+              connectable_from_bridge_wallet: Boolean(matchedWallet && walletBalances.length),
+            }
+          : null,
+      };
+    });
+
+    res.json({
+      success: true,
+      customer_id: customerId,
+      stellar_address: stellarAddress || null,
+      virtual_accounts: accounts,
+      bridge_wallets: wallets,
+      bridge_wallet_balances: bridgeBalances,
+      connections,
+      warnings,
+      refreshed_at: new Date().toISOString(),
+    });
+  }
+
   // ── Additional Virtual Account On-Ramps ───────────────────────
 
   static async createUsdVirtualAccount(req: Request, res: Response): Promise<void> {
@@ -1873,6 +2010,53 @@ export class BridgeController {
       res.json({ success: true, wallet });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Bridge Wallet not found." });
+    }
+  }
+
+  static async createBridgeWalletToStellarTransfer(req: Request, res: Response): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const customerId = readText(req.params.id);
+      const walletId = readText(req.params.walletId);
+      const amount = readText(req.body?.amount || "0");
+      const destinationAddress = readText(
+        req.body?.destination_wallet ||
+          req.body?.destinationWallet ||
+          req.body?.stellar_address ||
+          req.body?.stellarAddress,
+      );
+
+      assertBridgeAmountInRange(amount, service.config.minUsdcAmount, service.config.maxUsdcAmount, "USDC");
+      const check = await validateStellarDestination(destinationAddress);
+      if (!check.ok) {
+        res.status(400).json({ success: false, message: check.reason });
+        return;
+      }
+
+      const wallet = await service.getWallet(customerId, walletId) as unknown as Record<string, unknown>;
+      const transfer = await service.createTransfer({
+        on_behalf_of: customerId,
+        developer_fee_percent: readText(req.body?.developer_fee_percent || req.body?.developerFeePercent) || undefined,
+        source: {
+          payment_rail: "bridge_wallet",
+          currency: "usdc",
+          amount,
+          bridge_wallet_id: walletId,
+          from_address: readText(wallet.address) || undefined,
+        },
+        destination: {
+          payment_rail: "stellar",
+          currency: "usdc",
+          amount,
+          address: destinationAddress,
+        },
+      });
+
+      logger.info(`[bridge] bridge-wallet-to-stellar transfer created: ${transfer.id}`);
+      res.status(201).json({ success: true, transfer });
+    } catch (error: any) {
+      logger.error(`[bridge] createBridgeWalletToStellarTransfer failed: ${error.message}`);
+      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create Bridge wallet to Stellar transfer." });
     }
   }
 

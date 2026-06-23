@@ -80,6 +80,8 @@ describe("Bridge Customer API", () => {
       getVirtualAccount: jest.fn(),
       getVirtualAccountActivity: jest.fn(),
       getWalletBalances: jest.fn(),
+      listWallets: jest.fn(),
+      getWallet: jest.fn(),
     };
     (getBridgeService as jest.Mock).mockReturnValue(mockService);
   });
@@ -525,6 +527,100 @@ describe("Bridge Customer API", () => {
         ]),
       }),
     );
+  });
+
+  it("maps virtual accounts to Bridge wallets and active Stellar wallet", async () => {
+    mockService.listVirtualAccounts.mockResolvedValue([
+      {
+        id: "va_001",
+        status: "activated",
+        source_currency: "usd",
+        destination: {
+          payment_rail: "base",
+          bridge_wallet_id: "wallet_001",
+          address: "0xabc",
+        },
+      },
+      {
+        id: "va_002",
+        status: "activated",
+        source_currency: "usd",
+        destination: {
+          payment_rail: "stellar",
+          address: "GSTELLAR",
+        },
+      },
+    ]);
+    mockService.listWallets.mockResolvedValue([
+      { id: "wallet_001", chain: "base", address: "0xabc" },
+    ]);
+    mockService.getWalletBalances.mockResolvedValue([
+      { wallet_id: "wallet_001", chain: "base", currency: "usdc", amount: "42.50" },
+    ]);
+
+    const req = mockReq({
+      params: { id: "cust_123" },
+      query: { stellar_address: "GSTELLAR" },
+    });
+    const res = mockRes();
+    await BridgeController.getVirtualAccountConnections(req, res);
+
+    expect(mockService.listVirtualAccounts).toHaveBeenCalledWith("cust_123");
+    expect(mockService.listWallets).toHaveBeenCalledWith("cust_123");
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        connections: expect.arrayContaining([
+          expect.objectContaining({
+            virtual_account: expect.objectContaining({ id: "va_001" }),
+            destination: expect.objectContaining({ bridge_wallet_id: "wallet_001" }),
+            bridge_wallet: expect.objectContaining({ id: "wallet_001" }),
+            bridge_wallet_balances: [
+              expect.objectContaining({ amount: "42.50", currency: "usdc" }),
+            ],
+          }),
+          expect.objectContaining({
+            virtual_account: expect.objectContaining({ id: "va_002" }),
+            stellar_wallet: expect.objectContaining({ direct_destination: true }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("creates a Bridge wallet to Stellar transfer", async () => {
+    mockService.getWallet.mockResolvedValue({ id: "wallet_001", chain: "base", address: "0xabc" });
+    mockService.createTransfer.mockResolvedValue({ id: "tr_001", state: "awaiting_funds" });
+
+    const req = mockReq({
+      params: { id: "cust_123", walletId: "wallet_001" },
+      body: {
+        amount: "25.00",
+        destination_wallet: "GSTELLAR",
+      },
+    });
+    const res = mockRes();
+    await BridgeController.createBridgeWalletToStellarTransfer(req, res);
+
+    expect(mockService.getWallet).toHaveBeenCalledWith("cust_123", "wallet_001");
+    expect(mockService.createTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        on_behalf_of: "cust_123",
+        source: expect.objectContaining({
+          payment_rail: "bridge_wallet",
+          currency: "usdc",
+          bridge_wallet_id: "wallet_001",
+          from_address: "0xabc",
+        }),
+        destination: expect.objectContaining({
+          payment_rail: "stellar",
+          currency: "usdc",
+          amount: "25.00",
+          address: "GSTELLAR",
+        }),
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 
   // ── Error paths ───────────────────────────
