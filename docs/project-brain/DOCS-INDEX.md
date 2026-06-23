@@ -2,7 +2,7 @@
 
 > **Living document.** Updated when docs are found, moved, created, or become stale.
 
-Generated 2026-06-12. Updated 2026-06-13 after documentation consolidation. Updated 2026-06-22 after compliance-questionnaire alignment, submission artifacts, and Instawards Deliverable 3 upload guidance.
+Generated 2026-06-12. Updated 2026-06-13 after documentation consolidation. Updated 2026-06-22 after compliance-questionnaire alignment, submission artifacts, and Instawards Deliverable 3 upload guidance. Updated 2026-06-23 after wire-onramp short-link/cached-VA surface documentation.
 
 Current scan: **253 non-project-brain Markdown files**: 204 source documents, 13 distributed summary/index files, and 36 redirect stubs. Legend: ✅ current ⚠️ stale ❌ superseded ⚡ contradicts-code
 
@@ -66,6 +66,7 @@ Their source documents now live under categorized root `docs/` folders:
 | `docs/presentations/` | Pitch deck, user demo, and presentation script | ⚠️ Presentation material may lag implementation |
 | `docs/product/` | UX audits, no-mocks plan, invisible wallet, and upgrade roadmap | ✅ Product guidance; dated audits remain snapshots |
 | `docs/project-brain/product/surfaces/bridge-test.md` | Frontend `/bridge-test` Bridge mainnet test screen, virtual-account activity, wallet balances, and VA balance endpoint map | ✅ Current |
+| `docs/project-brain/product/surfaces/wire-onramp.md` | Frontend `/wire-onramp` Bridge USD deposit screen, short-link account resolution, cached login email, and cached/live VA fallback behavior | ✅ Current |
 | `docs/project-brain/product/surfaces/wire-payout-test.md` | Frontend `/wire-test` Circle wire payout test screen, endpoint map, and key files | ✅ Current |
 | `docs/qa-session-logs/` | QA session logs and user-flow smoke tests | ⚠️ Historical runs should be rerun before claiming pass |
 | `docs/reference/` | Current feature documentation index | ✅ Current index; verify links after moves |
@@ -142,8 +143,8 @@ Their source documents now live under categorized root `docs/` folders:
 
 ## Stats
 
-- **Total non-project-brain Markdown files scanned**: 250
-- **Source documents summarized**: 201
+- **Total non-project-brain Markdown files scanned**: 253
+- **Source documents summarized**: 204
 - **Distributed summary/index files**: 13
 - **Old-path redirect stubs**: 36
 - **Primary current summary index**: `docs/REPOSITORY-DOCS.md`
