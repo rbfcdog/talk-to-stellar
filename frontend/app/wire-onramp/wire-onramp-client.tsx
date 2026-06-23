@@ -69,6 +69,13 @@ type StellarWallet = {
   usdc_balance: string | null;
 };
 
+type BridgeWallet = {
+  id: string;
+  chain: string | null;
+  address: string | null;
+  balances: Array<{ currency: string; amount: string }>;
+};
+
 type ApiResponse = {
   success: boolean;
   has_account?: boolean;
@@ -80,6 +87,7 @@ type ApiResponse = {
   virtual_account_source?: string;
   virtual_accounts?: UsdVA[];
   stellar_wallet?: StellarWallet | null;
+  bridge_wallets?: BridgeWallet[];
   message?: string;
 };
 
@@ -451,6 +459,49 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     : "";
   const totalReceived = usdAccounts.reduce((sum, va) => sum + Number(va.total_received_usd || 0), 0);
 
+  // USDC balance available in Bridge custodial wallets (for manual sweep)
+  const bridgeWallets = data?.bridge_wallets ?? [];
+  const bridgeUsdcBalance = bridgeWallets.reduce(
+    (sum, w) => sum + w.balances.filter(b => b.currency === 'USDC').reduce((s, b) => s + Number(b.amount || 0), 0),
+    0,
+  );
+
+  // Manual send state
+  const [sendAmount, setSendAmount] = useState("");
+  const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");
+  const [sendError, setSendError] = useState("");
+
+  const handleSendToStellar = useCallback(async () => {
+    const amountNum = Number(sendAmount);
+    if (!amountNum || amountNum <= 0) return;
+    const wallet = bridgeWallets[0];
+    if (!wallet || !data?.customer_id || !data?.stellar_wallet?.public_key) return;
+    setSendStatus("sending");
+    setSendError("");
+    try {
+      const res = await fetch(
+        `/api/bridge?_path=/customers/${encodeURIComponent(data.customer_id)}/wallets/${encodeURIComponent(wallet.id)}/transfer-to-stellar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: String(amountNum),
+            stellar_address: data.stellar_wallet.public_key,
+          }),
+        },
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+      setSendStatus("ok");
+      setSendAmount("");
+      // Refresh data after a short delay so balances update
+      setTimeout(() => load(loggedEmail || emailInput), 3000);
+    } catch (e: any) {
+      setSendStatus("error");
+      setSendError(e?.message ?? String(e));
+    }
+  }, [sendAmount, bridgeWallets, data, load, loggedEmail, emailInput]);
+
   // ── Login gate ─────────────────────────────────────────────────────────────
 
   if (status === "login") {
@@ -760,11 +811,106 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                       {L("Enviar para carteira Stellar", "Send to Stellar Wallet")}
                     </p>
                     <p className="text-[11px] text-tts-muted mt-0.5">
-                      {L("Seus fundos são convertidos para USDC automaticamente", "Your funds are converted to USDC automatically")}
+                      {L("Envie manualmente os fundos da Bridge para sua carteira", "Manually send Bridge funds to your wallet")}
                     </p>
                   </div>
                 </div>
-                <div className="space-y-3 border-t border-tts-border/40 pt-4">
+
+                {/* Available balance */}
+                {bridgeUsdcBalance > 0 ? (
+                  <div className="mb-4 rounded-lg bg-tts-bg/70 px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-tts-muted">
+                        {L("Saldo disponível na Bridge", "Available Bridge balance")}
+                      </span>
+                      <span className="text-sm font-bold tabular-nums text-tts-deep">
+                        {fmt(bridgeUsdcBalance)} USDC
+                      </span>
+                    </div>
+                    {bridgeWallets.length > 0 && (
+                      <p className="mt-1 text-[10px] text-tts-muted/60">
+                        {L(
+                          `Carteira Bridge: ${bridgeWallets[0].id.slice(0, 10)}...${bridgeWallets[0].id.slice(-6)}`,
+                          `Bridge wallet: ${bridgeWallets[0].id.slice(0, 10)}...${bridgeWallets[0].id.slice(-6)}`,
+                        )}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mb-4 rounded-lg bg-amber-50/40 dark:bg-amber-900/10 px-3 py-2">
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      {L(
+                        "Nenhum saldo disponível para envio. Os fundos podem ainda estar em processamento.",
+                        "No balance available to send. Funds may still be processing."
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {/* Send form */}
+                {bridgeUsdcBalance > 0 && sendStatus !== "ok" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-1.5">
+                        {L("Valor (USDC)", "Amount (USDC)")}
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max={bridgeUsdcBalance}
+                          value={sendAmount}
+                          onChange={(e) => setSendAmount(e.target.value)}
+                          placeholder={`Máx: ${fmt(bridgeUsdcBalance)}`}
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSendAmount(String(bridgeUsdcBalance))}
+                          className="shrink-0 text-xs"
+                        >
+                          {L("Tudo", "Max")}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleSendToStellar}
+                      disabled={sendStatus === "sending" || !sendAmount || Number(sendAmount) <= 0}
+                      className="w-full"
+                    >
+                      {sendStatus === "sending" ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {L("Enviando...", "Sending...")}
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4 mr-2" />
+                          {L("Enviar agora", "Send Now")}
+                        </>
+                      )}
+                    </Button>
+
+                    {sendStatus === "error" && (
+                      <p className="text-xs text-red-500 text-center">{sendError}</p>
+                    )}
+                  </div>
+                )}
+
+                {sendStatus === "ok" && (
+                  <div className="flex items-center gap-2 rounded-lg bg-tts-confirm/10 border border-tts-confirm/30 px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-tts-confirm shrink-0" />
+                    <p className="text-xs text-tts-confirm font-medium">
+                      {L("Transferência iniciada! Atualizando saldos...", "Transfer started! Refreshing balances...")}
+                    </p>
+                  </div>
+                )}
+
+                {/* Destination */}
+                <div className="mt-4 pt-4 border-t border-tts-border/40 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-tts-muted">
                       {L("Destino", "Destination")}
@@ -778,7 +924,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                   {data.stellar_wallet.usdc_balance !== null && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-tts-muted">
-                        {L("Saldo USDC atual", "Current USDC balance")}
+                        {L("Saldo Stellar atual", "Current Stellar balance")}
                       </span>
                       <span className="text-sm font-bold tabular-nums text-tts-deep">
                         {fmt(Number(data.stellar_wallet.usdc_balance))} USDC
@@ -786,13 +932,14 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                     </div>
                   )}
                 </div>
+
                 <div className="mt-4 pt-4 border-t border-tts-border/40">
                   <div className="flex items-start gap-2">
                     <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
                     <p className="text-xs text-tts-muted leading-relaxed">
                       {L(
-                        "Quando seu depósito em USD chegar, ele será convertido e enviado automaticamente para esta carteira Stellar. Nenhuma ação é necessária.",
-                        "When your USD deposit arrives, it is automatically converted and sent to this Stellar wallet. No action needed."
+                        "Esse envio transfere o saldo USDC da sua carteira Bridge para sua carteira Stellar. Use caso o roteamento automático não tenha ocorrido.",
+                        "This sends your Bridge wallet USDC balance to your Stellar wallet. Use if auto-routing did not occur."
                       )}
                     </p>
                   </div>
