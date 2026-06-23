@@ -541,6 +541,36 @@ export class BridgeController {
         // non-fatal
       }
 
+      // Fetch Bridge custodial wallets so frontend can trigger manual sweeps
+      let bridgeWallets: any[] = [];
+      try {
+        const wallets = await service.listWallets(bridgeCustomerId);
+        const liveWallets = Array.isArray(wallets) ? wallets : [];
+        let walletBalances: any[] = [];
+        try {
+          walletBalances = await service.getWalletBalances();
+        } catch {
+          // balances unavailable — still return wallet list
+        }
+        const balanceArr = Array.isArray(walletBalances) ? walletBalances : [];
+        bridgeWallets = liveWallets.map((w: any) => {
+          const walletBal = balanceArr.filter(
+            (b: any) => String(b.wallet_id || '').toLowerCase() === String(w.id || '').toLowerCase()
+          );
+          return {
+            id: w.id,
+            chain: w.chain ?? null,
+            address: w.address ?? null,
+            balances: walletBal.map((b: any) => ({
+              currency: (b.currency || 'USDC').toUpperCase(),
+              amount: String(b.amount ?? '0'),
+            })),
+          };
+        });
+      } catch {
+        // non-fatal — page works without wallet list
+      }
+
       res.json({
         success: true,
         has_account: true,
@@ -552,6 +582,7 @@ export class BridgeController {
         virtual_account_source: virtualAccountSource,
         virtual_accounts: virtualAccounts,
         stellar_wallet: stellarWallet,
+        bridge_wallets: bridgeWallets,
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || 'Failed to load account.' });
