@@ -554,7 +554,6 @@ export default function RendimentosClient({
   const activeNetworkIsMainnet = networkView === "mainnet";
   const mainnetUsdcBalance = bridgeWalletBalances?.mainnet?.usdc ?? null;
   const testnetUsdcBalance = bridgeWalletBalances?.testnet?.usdc ?? null;
-  const activeNetworkUsdcBalance = activeNetworkIsMainnet ? mainnetUsdcBalance : testnetUsdcBalance;
 
   const safeSelectedCode = normalizeUiAssetCode(selectedCode) || optionCode(actionableOption) || selectedCode;
   const sessionLinkContext = useMemo(() => scopedLinkContext(initialQuery), [initialQuery]);
