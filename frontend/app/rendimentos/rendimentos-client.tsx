@@ -551,7 +551,6 @@ export default function RendimentosClient({
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
   const yieldNetwork = String(yieldStatus?.runtime?.network || "").toLowerCase();
   const isTestnetYield = yieldNetwork === "testnet" || Boolean(yieldStatus?.runtime?.disclosure?.testnet);
-  const activeNetworkIsMainnet = networkView === "mainnet";
   const mainnetUsdcBalance = bridgeWalletBalances?.mainnet?.usdc ?? null;
   const testnetUsdcBalance = bridgeWalletBalances?.testnet?.usdc ?? null;
 
