@@ -595,6 +595,35 @@ export class BridgeController {
         // non-fatal — page works without wallet list
       }
 
+      // Fetch mainnet Stellar wallets linked to this email's session (for Bridge routing)
+      let mainnetWallets: any[] = [];
+      try {
+        // Find the session for this email
+        const { data: sessionForMainnet } = await supabase
+          .from('agent_sessions')
+          .select('session_id, user_id')
+          .eq('email', email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (sessionForMainnet?.session_id) {
+          const { data: wallets } = await supabase
+            .from('stellar_mainnet_wallets')
+            .select('*')
+            .eq('session_id', sessionForMainnet.session_id)
+            .order('created_at', { ascending: false });
+          mainnetWallets = (Array.isArray(wallets) ? wallets : []).map((w: any) => ({
+            id: w.id,
+            public_key: w.public_key,
+            label: w.label ?? 'Mainnet wallet',
+            is_primary: w.is_primary ?? false,
+            last_balance: w.last_balance ?? [],
+          }));
+        }
+      } catch {
+        // non-fatal
+      }
+
       res.json({
         success: true,
         has_account: true,
@@ -607,6 +636,7 @@ export class BridgeController {
         virtual_accounts: virtualAccounts,
         stellar_wallet: stellarWallet,
         bridge_wallets: bridgeWallets,
+        mainnet_wallets: mainnetWallets,
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || 'Failed to load account.' });
