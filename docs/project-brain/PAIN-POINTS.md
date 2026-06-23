@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-22. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-23. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-56 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+58 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -391,7 +391,7 @@
 
 ---
 
-## Cluster H — Reliability (16 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (18 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -510,6 +510,27 @@
 - **Status**: **Fixed by `2aec3c2`**. `SoroswapService.getQuote()` now tries Soroswap first, then attempts a buildable `stellar-path-payment-fallback` for symbol pairs using Horizon strict-send/strict-receive quotes before falling back to display-only Stellar Broker pricing. `buildSwapXdr()` now builds the fallback with the existing Stellar path-payment XDR builders and gives an actionable TESTNET funding/trustline error when the Freighter account is not activated.
 - **Lesson**: **Fallbacks must declare whether they are executable**. If Soroswap has no liquidity route but Horizon can build a trusted path payment, the page should expose that signable XDR; if only display pricing is available, keep build disabled.
 
+### #61 — Wire On-Ramp Short Link Shows Processing Despite Existing Account
+> **Quote**: "https://www.talktostellar.com/wire-onramp?currency=USD&from=chat&lang=en&source=whatsapp&session_scope=whatsapp&short_link_code=wtuBS4frJ0un
+>
+> in this page giving
+>
+> TalkToStellar
+> USD Deposit
+>
+> Account being processed
+>
+> Your USD account is being set up. Check back in a few minutes.
+> TalkToStellar · Powered by Stellar Network
+>
+> even through i actally have the account, make so this page is like bridge-test/ also make so cache the login email on browser"
+> **Gloss**: A WhatsApp short-link opened `/wire-onramp` without `session_id` or `email`, so the page showed a generic processing state even though the Bridge customer and USD virtual account existed.
+
+- **Where**: `frontend/app/wire-onramp/wire-onramp-client.tsx`, `backend/src/api/controllers/bridge.controller.ts`, `backend/tests/bridge.routes.test.ts`.
+- **Root cause**: The wire-onramp page only auto-loaded account data from `session_id` or `email`. The backend session USD account endpoint did not accept `short_link_code`, did not resolve `short_links` back to `agent_sessions`, and when the live Bridge VA list was empty did not fall back to `bridge_va_cache`.
+- **Status**: **Fixed by `f1229d9`**. `getSessionUsdAccount()` now resolves `short_link_code`, recovers email from session/link metadata, falls back to cached Bridge VAs when live VA discovery returns empty or fails, and returns customer/VA source metadata. `/wire-onramp` now uses the same operational shell style as `/bridge-test`, shows cached/live VA status and received totals, and caches the last successful login email in browser localStorage.
+- **Lesson**: **Deep-link surfaces must preserve account context through short links**. If a provider has already created an account, the user-facing deposit page should render cached provider instructions instead of a generic pending state.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -550,7 +571,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 57 documented incidents:
+Ranked by frequency × severity across the 58 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -558,19 +579,19 @@ Ranked by frequency × severity across the 57 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 7 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility and provider-path drift |
-| 5 | **H — Reliability** | 17 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 18 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 32 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60)
+- **Confirmed fixed**: 33 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 32 of 57 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 33 of 58 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -610,3 +631,4 @@ Fixing commits verified in codebase:
 | #58 | `b067970` | Show Bridge virtual-account wire balances from live VA balance fields, destination wallet id matches, and received-funds activity |
 | #59 | `3087e4c` | Use Bridge customer-scoped virtual-account lookup and `/history` activity endpoint for wire balance totals |
 | #60 | `2aec3c2` | Build executable Stellar path-payment XDRs for Soroswap symbol-pair fallback quotes when Horizon has a trusted path |
+| #61 | `f1229d9` | Resolve wire-onramp short-link context, fall back to cached Bridge USD virtual accounts, and cache the login email in-browser |

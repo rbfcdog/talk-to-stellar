@@ -318,3 +318,23 @@
 
 **Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/src/api/routes/bridge.router.ts`, `backend/src/integrations/bridge/types.ts`, `frontend/app/bridge-test/bridge-test-client.tsx`
 **Related**: Pain points #58 and #59
+
+## 19. `/wire-onramp` Short Link Shows "Account Being Processed" Despite Existing Bridge Account (FIXED)
+
+**Symptom**: A WhatsApp-generated `/wire-onramp?...&short_link_code=...` URL opens the USD deposit page, but the page shows "Account being processed" instead of Bridge wire/ACH instructions even though the customer already has a USD virtual account.
+
+**Status**: Fixed by `f1229d9`. The frontend now sends `short_link_code` to the session USD account endpoint, and the backend resolves it through `short_links` and `agent_sessions` before loading Bridge customer data.
+
+**Diagnosis steps**:
+1. Open the URL and confirm whether it contains `short_link_code` but no `session_id` or `email`.
+2. Query `short_links` by `code`; confirm it has a `session_id`, email-like `user_id`, or a target URL containing `session_id`/`email`.
+3. Query `agent_sessions` by the resolved `session_id`; confirm `email` or email-like `user_id` is present.
+4. Query `bridge_customers` by email; confirm `bridge_customer_id`, `status`, and `kyc_status`.
+5. If `BridgeService.listVirtualAccounts(customerId)` returns no USD accounts, query `bridge_va_cache` for that customer. `/wire-onramp` should still render cached USD account instructions.
+6. Check the API response from `GET /api/bridge/session/usd-account?short_link_code=...`; `lookup_source` should be `short_link`, and `virtual_account_source` should be `bridge_api` or `db_cache`.
+7. If the page still shows no account, clear `localStorage["tts:wire-onramp:email"]` or use the Change action to avoid testing with a stale cached email.
+
+**Fix**: `BridgeController.getSessionUsdAccount()` accepts `short_link_code`, recovers session/email context, filters USD VAs using both top-level and nested Bridge currency fields, falls back to `bridge_va_cache`, and returns VA source metadata. `WireOnrampClient` now uses the operational shell layout, displays cached/live VA state plus received totals, and caches the successful login email in browser localStorage.
+
+**Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/tests/bridge.routes.test.ts`, `frontend/app/wire-onramp/wire-onramp-client.tsx`, `docs/project-brain/product/surfaces/wire-onramp.md`
+**Related**: Pain point #61
