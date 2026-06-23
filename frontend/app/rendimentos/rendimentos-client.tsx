@@ -813,23 +813,28 @@ export default function RendimentosClient({
             )}
 
             {tab === "apply" && (
-              <ApplyTab
-                language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
-                amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
-                action={action} onActionChange={setAction}
-                selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
-                options={options} onSelectCode={setSelectedCode}
-                selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
-                selectedBalanceInsufficient={selectedBalanceInsufficient}
-                balanceForSelected={balanceForSelected}
-                alternativeConversionCode={alternativeConversionCode}
-                activeStep={activeStep} setActiveStep={setActiveStep}
-                yieldResult={yieldResult} canPrepare={canPrepare}
-                confirmationEnabled={confirmationEnabled} configured={configured}
-                pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
-                onPrepare={prepareYield} onConfirm={confirmYield}
-                convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
-              />
+              <>
+                <ApplyTab
+                  language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
+                  amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
+                  action={action} onActionChange={setAction}
+                  selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
+                  options={options} onSelectCode={setSelectedCode}
+                  selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
+                  selectedBalanceInsufficient={selectedBalanceInsufficient}
+                  balanceForSelected={balanceForSelected}
+                  alternativeConversionCode={alternativeConversionCode}
+                  activeStep={activeStep} setActiveStep={setActiveStep}
+                  yieldResult={yieldResult} canPrepare={canPrepare}
+                  confirmationEnabled={confirmationEnabled} configured={configured}
+                  pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
+                  onPrepare={prepareYield} onConfirm={confirmYield}
+                  convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
+                />
+                <div className="mt-8">
+                  <BlendInlinePanel language={language} />
+                </div>
+              </>
             )}
 
             {tab === "swap" && (
@@ -1675,6 +1680,355 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
 
       <p className="text-center text-xs text-tts-muted">
         {L("Troca via DEX. Após trocar, vá para Aplicar para depositar na vault.", "Swap via DEX. After swapping, go to Apply to deposit into the vault.")}
+      </p>
+    </div>
+  );
+}
+
+// ── Blend v2 Lending Panel ─────────────────────────────────────────────────
+function BlendInlinePanel({ language }: { language: AppLanguage }) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+
+  // Pool / APY
+  const [poolInfo, setPoolInfo] = useState<any>(null);
+  const [loadingPool, setLoadingPool] = useState(false);
+  const [errPool, setErrPool] = useState<string | null>(null);
+
+  // Freighter wallet
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletNetwork, setWalletNetwork] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [errWallet, setErrWallet] = useState<string | null>(null);
+
+  // User position
+  const [position, setPosition] = useState<any>(null);
+  const [loadingPos, setLoadingPos] = useState(false);
+
+  // Supply / Withdraw
+  const [mode, setMode] = useState<"supply" | "withdraw">("supply");
+  const [supplyAmount, setSupplyAmount] = useState("10");
+  const [xdrResult, setXdrResult] = useState<any>(null);
+  const [loadingXdr, setLoadingXdr] = useState(false);
+  const [errXdr, setErrXdr] = useState<string | null>(null);
+
+  const [signedXdr, setSignedXdr] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [errSign, setErrSign] = useState<string | null>(null);
+
+  const [submitResult, setSubmitResult] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errSubmit, setErrSubmit] = useState<string | null>(null);
+
+  // Auto-apply preference
+  const [autoApply, setAutoApply] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("blend_auto_apply") === "1";
+  });
+
+  function toggleAutoApply() {
+    const next = !autoApply;
+    setAutoApply(next);
+    if (typeof window !== "undefined") localStorage.setItem("blend_auto_apply", next ? "1" : "0");
+  }
+
+  function resetBuild() {
+    setXdrResult(null); setSignedXdr(""); setSubmitResult(null);
+    setErrXdr(null); setErrSign(null); setErrSubmit(null);
+  }
+
+  function shortAddr(addr: string) { return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : ""; }
+
+  // ── Load pool APY ──────────────────────────────────────────────────────
+  async function loadPool() {
+    setLoadingPool(true); setErrPool(null);
+    try {
+      const res = await fetch("/api/blend/pool/info");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      setPoolInfo(data);
+    } catch (e: any) {
+      setErrPool(e.message);
+    } finally { setLoadingPool(false); }
+  }
+
+  useEffect(() => { loadPool(); }, []);
+
+  // ── Connect Freighter ──────────────────────────────────────────────────
+  async function connectFreighter() {
+    setConnecting(true); setErrWallet(null);
+    try {
+      const f = (window as any).freighterApi || (await import("@stellar/freighter-api").catch(() => null));
+      if (!f) throw new Error("Freighter não instalado.");
+      const conn = await f.requestAccess();
+      if (conn.error) throw new Error(conn.error);
+      const net = await f.getNetwork();
+      const addr = conn.address || (await f.getPublicKey?.()) || "";
+      setWalletAddress(addr);
+      setWalletNetwork(String(net.network || net || "").toUpperCase());
+    } catch (e: any) { setErrWallet(e.message); }
+    finally { setConnecting(false); }
+  }
+
+  // ── Load user position ─────────────────────────────────────────────────
+  async function loadPosition() {
+    if (!walletAddress) return;
+    setLoadingPos(true);
+    try {
+      const network = walletNetwork.includes("TEST") ? "testnet" : "mainnet";
+      const res = await fetch(`/api/blend/pool/position?address=${walletAddress}&network=${network}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && !data.error) setPosition(data);
+    } catch { /* silent */ }
+    finally { setLoadingPos(false); }
+  }
+
+  useEffect(() => { if (walletAddress) loadPosition(); }, [walletAddress]);
+
+  // ── Build XDR ─────────────────────────────────────────────────────────
+  async function buildXdr() {
+    if (!walletAddress || !poolInfo?.usdc?.assetId) return;
+    resetBuild(); setLoadingXdr(true); setErrXdr(null);
+    try {
+      const amountStroops = Math.round(parseFloat(supplyAmount) * 1e7).toString();
+      const network = walletNetwork.includes("TEST") ? "testnet" : "mainnet";
+      const endpoint = mode === "supply" ? "/api/blend/pool/supply" : "/api/blend/pool/withdraw";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_address: walletAddress,
+          asset_id: poolInfo.usdc.assetId,
+          amount: amountStroops,
+          network,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      setXdrResult(data);
+    } catch (e: any) { setErrXdr(e.message); }
+    finally { setLoadingXdr(false); }
+  }
+
+  // ── Sign with Freighter ────────────────────────────────────────────────
+  async function signWithFreighter() {
+    if (!xdrResult?.xdr) return;
+    setSigning(true); setErrSign(null);
+    try {
+      const f = (window as any).freighterApi || (await import("@stellar/freighter-api").catch(() => null));
+      if (!f) throw new Error("Freighter não disponível.");
+      const pass = xdrResult.networkPassphrase;
+      const result = await f.signTransaction(xdrResult.xdr, { networkPassphrase: pass, address: walletAddress });
+      if (!result.signedTxXdr) throw new Error("Freighter não retornou XDR assinado.");
+      setSignedXdr(result.signedTxXdr);
+    } catch (e: any) { setErrSign(e.message); }
+    finally { setSigning(false); }
+  }
+
+  // ── Submit ─────────────────────────────────────────────────────────────
+  async function submitTx() {
+    if (!signedXdr) return;
+    setSubmitting(true); setErrSubmit(null); setSubmitResult(null);
+    try {
+      const res = await fetch("/api/swap/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedXdr }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      setSubmitResult(data);
+      await loadPosition();
+    } catch (e: any) { setErrSubmit(e.message); }
+    finally { setSubmitting(false); }
+  }
+
+  const usdcApy = poolInfo?.usdc?.supplyApy ?? null;
+  const userSupply = position?.positions?.find((p: any) => p.assetId === poolInfo?.usdc?.assetId)?.supply ?? null;
+  const explorerNet = (walletNetwork || "PUBLIC").includes("TEST") ? "testnet" : "public";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="border border-tts-border bg-tts-surface p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Empréstimos & Rendimentos", "Lending & Yield")}</p>
+            <h3 className="text-lg font-bold mt-0.5">{L("Aplicar no Blend v2", "Supply to Blend v2")}</h3>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            {usdcApy !== null ? (
+              <span className="rounded border border-tts-confirm/40 bg-tts-confirm/10 px-2 py-1 text-xs font-bold text-tts-confirm">
+                USDC {usdcApy.toFixed(2)}% APY
+              </span>
+            ) : loadingPool ? (
+              <Loader2 className="h-4 w-4 animate-spin text-tts-muted" />
+            ) : (
+              <button onClick={loadPool} className="text-xs text-tts-primary hover:underline">{L("Ver APY", "View APY")}</button>
+            )}
+            {poolInfo?.network && (
+              <span className="text-[10px] font-bold uppercase text-tts-muted">{poolInfo.network}</span>
+            )}
+          </div>
+        </div>
+
+        {errPool && (
+          <div className="flex items-center gap-2 rounded border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400 mb-3">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}
+          </div>
+        )}
+
+        {/* Reserves summary */}
+        {poolInfo?.reserves && poolInfo.reserves.length > 0 && (
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {poolInfo.reserves.slice(0, 4).map((r: any) => (
+              <div key={r.assetId} className="rounded border border-tts-border bg-tts-bg p-2">
+                <p className="text-[10px] font-bold uppercase text-tts-muted mb-0.5">{r.assetId.slice(0, 8)}…</p>
+                <p className="text-sm font-bold text-tts-confirm">{r.supplyApy.toFixed(2)}% <span className="text-tts-muted font-normal text-[10px]">APY</span></p>
+                <p className="text-[10px] text-tts-muted">{L(`Util. ${r.utilization.toFixed(1)}%`, `Util. ${r.utilization.toFixed(1)}%`)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Freighter */}
+        <div className="rounded border border-tts-border bg-tts-bg p-3 mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-tts-muted uppercase">{L("Carteira Freighter", "Freighter Wallet")}</p>
+            {walletAddress
+              ? <span className="text-xs font-bold text-tts-confirm">{walletNetwork || "Conectada"}</span>
+              : <span className="text-xs font-bold text-tts-gold">{L("Não conectada", "Not connected")}</span>}
+          </div>
+          {walletAddress ? (
+            <div className="space-y-1">
+              <p className="font-mono text-xs text-tts-muted break-all">{walletAddress}</p>
+              {userSupply !== null && (
+                <p className="text-xs font-bold">
+                  {L("Aplicado: ", "Supplied: ")}
+                  <span className="text-tts-confirm">{userSupply.toFixed(4)} USDC</span>
+                </p>
+              )}
+              {loadingPos && <Loader2 className="h-3 w-3 animate-spin text-tts-muted" />}
+            </div>
+          ) : (
+            <button onClick={connectFreighter} disabled={connecting}
+              className="flex w-full items-center justify-center gap-2 border border-tts-border py-2 text-xs font-bold disabled:opacity-40 hover:bg-tts-surface transition">
+              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+              {L("Conectar Freighter", "Connect Freighter")}
+            </button>
+          )}
+          {errWallet && <p className="mt-2 text-xs text-red-400">{errWallet}</p>}
+        </div>
+
+        {/* Mode toggle */}
+        <div className="flex gap-2 mb-3">
+          {(["supply", "withdraw"] as const).map((m) => (
+            <button key={m} onClick={() => { setMode(m); resetBuild(); }}
+              className={`rounded border px-3 py-1.5 text-xs font-bold transition ${mode === m ? "border-tts-deep bg-tts-deep text-tts-surface" : "border-tts-border text-tts-muted hover:border-tts-deep"}`}>
+              {m === "supply" ? L("Aplicar", "Supply") : L("Retirar", "Withdraw")}
+            </button>
+          ))}
+        </div>
+
+        {/* Amount */}
+        <div className="mb-3">
+          <label className="block mb-1 text-xs font-bold text-tts-muted uppercase">{L("Valor USDC", "USDC Amount")}</label>
+          <input type="number" value={supplyAmount} onChange={(e) => { setSupplyAmount(e.target.value); resetBuild(); }}
+            className="w-full border border-tts-border bg-tts-bg px-3 py-2 text-sm font-bold outline-none focus:border-tts-deep" />
+        </div>
+
+        {/* Auto-apply toggle */}
+        <label className="flex items-center gap-3 cursor-pointer mb-4 select-none">
+          <div className={`relative w-10 h-5 rounded-full transition ${autoApply ? "bg-tts-deep" : "bg-tts-border"}`}
+            onClick={toggleAutoApply}>
+            <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${autoApply ? "translate-x-5" : ""}`} />
+          </div>
+          <span className="text-xs font-bold text-tts-muted">
+            {L("Aplicar automaticamente ao receber USDC", "Auto-apply on USDC deposit")}
+          </span>
+        </label>
+
+        {/* Step 1: Build XDR */}
+        {walletAddress && (
+          <button onClick={buildXdr} disabled={loadingXdr || !supplyAmount}
+            className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40 mb-3">
+            {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
+            {L(`1 — Preparar ${mode === "supply" ? "aplicação" : "retirada"}`, `1 — Build ${mode === "supply" ? "supply" : "withdraw"}`)}
+          </button>
+        )}
+        {errXdr && (
+          <div className="flex items-start gap-2 rounded border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-400 mb-3">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errXdr}
+          </div>
+        )}
+
+        {/* XDR preview */}
+        {xdrResult?.xdr && (
+          <div className="space-y-3 mb-3">
+            <div className="rounded border border-tts-border bg-tts-bg p-2">
+              <p className="text-[10px] font-bold uppercase text-tts-muted mb-1">{L("Transação pronta", "Transaction ready")} · {xdrResult.network}</p>
+              <p className="max-h-12 overflow-y-auto break-all font-mono text-[9px] text-tts-muted/60">{xdrResult.xdr.slice(0, 120)}…</p>
+            </div>
+
+            {/* Step 2: Sign */}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={signWithFreighter} disabled={signing}
+                className="flex items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40">
+                {signing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                {L("2 — Assinar", "2 — Sign")}
+              </button>
+              <a href={`https://lab.stellar.org/transaction/sign?xdr=${encodeURIComponent(xdrResult.xdr)}&networkPassphrase=${encodeURIComponent(xdrResult.networkPassphrase || "")}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 border border-tts-border py-3 text-sm font-bold hover:bg-tts-bg transition">
+                <ExternalLink className="h-4 w-4" /> Stellar Lab
+              </a>
+            </div>
+            {errSign && <p className="text-xs text-red-400">{errSign}</p>}
+
+            {signedXdr && (
+              <div className="flex items-center gap-2 rounded border border-tts-confirm/30 bg-tts-confirm/10 p-2 text-xs">
+                <CheckCircle2 className="h-3.5 w-3.5 text-tts-confirm shrink-0" />
+                {L(`Assinado por ${shortAddr(walletAddress)}`, `Signed by ${shortAddr(walletAddress)}`)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: Submit */}
+        {signedXdr && (
+          <div className="space-y-2">
+            <button onClick={submitTx} disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 bg-tts-deep py-3 text-sm font-bold text-tts-surface disabled:opacity-40">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
+              {L("3 — Enviar para Blend", "3 — Submit to Blend")}
+            </button>
+            {errSubmit && <p className="text-xs text-red-400">{errSubmit}</p>}
+            {submitResult && (
+              <div className="rounded border border-tts-confirm/30 bg-tts-confirm/10 p-3 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-tts-muted">Status</span>
+                  <span className="font-bold text-tts-confirm">{submitResult.successful ? "✓ Confirmado" : "Falhou"}</span>
+                </div>
+                {submitResult.hash && (
+                  <>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-tts-muted">Hash</span>
+                      <span className="font-mono font-bold">{submitResult.hash.slice(0, 16)}…</span>
+                    </div>
+                    <a href={`https://stellar.expert/explorer/${explorerNet}/tx/${submitResult.hash}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-tts-primary hover:underline mt-1">
+                      <ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="text-center text-xs text-tts-muted">
+        {L("Blend v2 — protocolo de empréstimos na Stellar. APY variável baseado na demanda de empréstimos.", "Blend v2 — lending protocol on Stellar. Variable APY based on borrower demand.")}
       </p>
     </div>
   );
