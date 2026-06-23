@@ -340,10 +340,35 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
 
   const handleSendToStellar = useCallback(async () => {
     const amountNum = Number(sendAmount);
-    if (!amountNum || amountNum <= 0) return;
+    if (!amountNum || amountNum <= 0) {
+      setSendStatus("error");
+      setSendError(L("Informe um valor válido.", "Enter a valid amount."));
+      return;
+    }
+    if (!data?.customer_id || !data?.stellar_wallet?.public_key) {
+      setSendStatus("error");
+      setSendError(L("Carteira de destino não encontrada.", "Destination wallet not found."));
+      return;
+    }
     // Prefer Bridge wallet, fallback to VA's bridge_wallet_id
     const walletId = bridgeWallets[0]?.id || activeVa?.bridge_wallet_id;
-    if (!walletId || !data?.customer_id || !data?.stellar_wallet?.public_key) return;
+    if (!walletId) {
+      const destChain = activeVa?.destination_chain || "";
+      if (destChain === "stellar") {
+        setSendStatus("error");
+        setSendError(L(
+          "Esta conta envia direto para Stellar via Bridge. O envio automático deve ocorrer quando o depósito for processado. Se já foi recebido e não chegou, aguarde ou entre em contato pelo WhatsApp.",
+          "This account routes directly to Stellar via Bridge. Auto-routing should happen when the deposit is processed. If received but not arrived, please wait or contact us on WhatsApp."
+        ));
+      } else {
+        setSendStatus("error");
+        setSendError(L(
+          "Nenhuma carteira Bridge encontrada para esta conta. Entre em contato pelo WhatsApp para verificar.",
+          "No Bridge wallet found for this account. Contact us on WhatsApp to check."
+        ));
+      }
+      return;
+    }
     setSendStatus("sending");
     setSendError("");
     try {
@@ -367,7 +392,7 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, activeVa, data, load, loggedEmail, emailInput]);
+  }, [sendAmount, bridgeWallets, activeVa, data, load, loggedEmail, emailInput, L]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
