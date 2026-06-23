@@ -348,9 +348,8 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const usdAccounts = (data?.virtual_accounts ?? []).filter((va) =>
-    ["active", "enabled", "activated", "pending"].includes(String(va.status ?? "").toLowerCase())
-  );
+  // Show all VAs the backend returned (already filtered to USD by backend)
+  const usdAccounts = data?.virtual_accounts ?? [];
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -558,15 +557,16 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
             )}
           </>
         ) : (
-          <div className="rounded-2xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-6 text-center space-y-3">
-            <Clock className="h-8 w-8 text-amber-500 mx-auto" />
+          <div className="rounded-2xl border border-tts-border bg-tts-surface p-6 text-center space-y-3">
+            <Clock className="h-8 w-8 text-tts-muted mx-auto" />
             <p className="font-semibold text-tts-deep">
-              {L("Conta em processamento", "Account being processed")}
+              {L("Nenhuma conta USD vinculada", "No USD account linked")}
             </p>
             <p className="text-sm text-tts-muted">
+              {loggedEmail && <span className="block font-mono text-xs mb-1">{loggedEmail}</span>}
               {L(
-                "Sua conta USD está sendo configurada. Aguarde alguns minutos.",
-                "Your USD account is being set up. Check back in a few minutes."
+                "Esta conta ainda não possui uma conta bancária americana ativa. Fale conosco no WhatsApp para ativá-la.",
+                "This account doesn't have a US bank account yet. Message us on WhatsApp to set one up."
               )}
             </p>
           </div>
