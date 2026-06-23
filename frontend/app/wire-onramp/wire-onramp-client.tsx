@@ -13,10 +13,20 @@ import {
   Copy,
   Info,
   Loader2,
+  LogOut,
   RefreshCw,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
+import {
+  OperationalCard,
+  OperationalHeader,
+  OperationalPage,
+  OperationalStat,
+  StatusPill,
+} from "@/components/layout/OperationalShell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -42,6 +52,14 @@ type UsdVA = {
   source_currency?: string;
   source_deposit_instructions?: DepositInstructions;
   total_received_usd?: number;
+  balance_summaries?: Array<{
+    amount?: string;
+    currency?: string;
+    source?: string;
+    label?: string;
+  }>;
+  account_source?: string;
+  activity_count?: number;
 };
 
 type StellarWallet = {
@@ -54,7 +72,10 @@ type ApiResponse = {
   has_account?: boolean;
   kyc_status?: string;
   customer_status?: string;
+  customer_id?: string;
   email?: string;
+  lookup_source?: string | null;
+  virtual_account_source?: string;
   virtual_accounts?: UsdVA[];
   stellar_wallet?: StellarWallet | null;
   message?: string;
@@ -68,6 +89,42 @@ function fmt(n: number) {
 
 function isActive(va: UsdVA) {
   return ["active", "enabled", "activated"].includes(String(va.status).toLowerCase());
+}
+
+const EMAIL_CACHE_KEY = "tts:wire-onramp:email";
+
+function readCachedEmail() {
+  if (typeof window === "undefined") return "";
+  try {
+    return String(window.localStorage.getItem(EMAIL_CACHE_KEY) || "").trim().toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function writeCachedEmail(email: string) {
+  if (typeof window === "undefined") return;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return;
+  try {
+    window.localStorage.setItem(EMAIL_CACHE_KEY, normalized);
+  } catch {
+    // Browser storage can be disabled; the page still works without cache.
+  }
+}
+
+function clearCachedEmail() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(EMAIL_CACHE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function shortId(value?: string | null) {
+  const raw = String(value || "");
+  return raw.length > 16 ? `${raw.slice(0, 10)}...${raw.slice(-6)}` : raw || "-";
 }
 
 // ── Copy button ────────────────────────────────────────────────────────────────
@@ -143,13 +200,14 @@ function VaCard({ va }: { va: UsdVA }) {
   const instr = va.source_deposit_instructions;
   const active = isActive(va);
   const received = va.total_received_usd ?? 0;
+  const balanceRows = va.balance_summaries ?? [];
 
   const rail = instr?.payment_rail?.toUpperCase() ?? "WIRE";
   const allRails = instr?.payment_rails?.map((r) => r.toUpperCase()).join(" · ") ?? rail;
   const reference = instr?.wire_reference || instr?.deposit_message;
 
   return (
-    <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+    <div className="overflow-hidden rounded-lg border border-tts-border bg-tts-surface shadow-sm">
 
       {/* VA header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
@@ -190,6 +248,18 @@ function VaCard({ va }: { va: UsdVA }) {
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
             Account pending activation — transfers may be held until KYC is approved.
           </p>
+        )}
+        {balanceRows.length > 0 && (
+          <div className="mt-3 grid gap-1">
+            {balanceRows.map((b, index) => (
+              <div key={`${b.source}-${index}`} className="flex items-center justify-between rounded bg-tts-bg/70 px-2 py-1 text-xs">
+                <span className="text-tts-muted">{b.label || b.source || "Balance"}</span>
+                <span className="font-mono font-bold text-tts-deep">
+                  {fmt(Number(b.amount || 0))} {(b.currency || "USD").toUpperCase()}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -273,7 +343,7 @@ function StellarWalletCard({ wallet }: { wallet: StellarWallet }) {
   const balance = wallet.usdc_balance !== null ? Number(wallet.usdc_balance) : null;
 
   return (
-    <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+    <div className="overflow-hidden rounded-lg border border-tts-border bg-tts-surface shadow-sm">
       <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
         <div className="flex items-center gap-2.5">
           <Wallet className="h-5 w-5 text-tts-muted" />
@@ -345,6 +415,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const qp = new URLSearchParams(initialQuery || searchParams.toString());
 
   const sessionId = qp.get("session_id") ?? "";
+  const shortLinkCode = qp.get("short_link_code") ?? "";
   const emailParam = qp.get("email") ?? "";
   const amount = qp.get("amount") ?? "";
   const lang = qp.get("lang") ?? "pt-BR";
@@ -357,66 +428,92 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [errorMsg, setErrorMsg] = useState("");
   const [emailInput, setEmailInput] = useState(emailParam);
   const [loggedEmail, setLoggedEmail] = useState("");
+  const [cachedEmail, setCachedEmail] = useState("");
   const didAuto = useRef(false);
 
-  const load = useCallback(async (email: string) => {
+  const load = useCallback(async (email: string, options: { forceEmail?: boolean } = {}) => {
     const trimmed = email.trim().toLowerCase();
-    if (!trimmed && !sessionId) return;
+    if (!trimmed && !sessionId && !shortLinkCode) return;
     setStatus("loading");
     setErrorMsg("");
     try {
       const params = new URLSearchParams();
-      if (sessionId) params.set("session_id", sessionId);
-      else params.set("email", trimmed);
+      if (options.forceEmail && trimmed) {
+        params.set("email", trimmed);
+      } else if (sessionId) {
+        params.set("session_id", sessionId);
+      } else if (trimmed) {
+        params.set("email", trimmed);
+      } else if (shortLinkCode) {
+        params.set("short_link_code", shortLinkCode);
+      }
+      if (shortLinkCode) params.set("short_link_code", shortLinkCode);
 
       const res = await fetch(`/api/bridge/session/usd-account?${params}`, { cache: "no-store" });
       const json: ApiResponse = await res.json().catch(() => ({}));
       if (!res.ok && res.status !== 404) throw new Error(json.message || `HTTP ${res.status}`);
       setData(json);
-      setLoggedEmail(json.email ?? trimmed);
+      const nextEmail = (json.email ?? trimmed).trim().toLowerCase();
+      setLoggedEmail(nextEmail);
+      if (nextEmail) {
+        setEmailInput(nextEmail);
+        setCachedEmail(nextEmail);
+        writeCachedEmail(nextEmail);
+      }
       setStatus(json.has_account ? "ready" : "no_account");
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
       setStatus("error");
     }
-  }, [sessionId]);
+  }, [sessionId, shortLinkCode]);
 
-  // Auto-load when session_id or email is in the URL
+  const resetLogin = useCallback((clearCache = false) => {
+    if (clearCache) {
+      clearCachedEmail();
+      setCachedEmail("");
+      setEmailInput("");
+    }
+    setStatus("login");
+    setData(null);
+    setLoggedEmail("");
+    setErrorMsg("");
+  }, []);
+
+  // Auto-load when session_id/email/short-link is in the URL, or when the browser has a cached email.
   useEffect(() => {
     if (didAuto.current) return;
-    if (sessionId || emailParam) {
+    const stored = readCachedEmail();
+    if (!emailParam && stored) {
+      setEmailInput(stored);
+      setCachedEmail(stored);
+    }
+    if (sessionId || emailParam || shortLinkCode || stored) {
       didAuto.current = true;
-      load(emailParam);
+      load(emailParam || stored);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Show all VAs returned by backend (already filtered to USD server-side)
   const usdAccounts = data?.virtual_accounts ?? [];
+  const totalReceived = usdAccounts.reduce((sum, va) => sum + Number(va.total_received_usd || 0), 0);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
   if (status === "login") {
     return (
-      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-sm space-y-8">
-
-          {/* Brand */}
-          <div className="text-center space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-              TalkToStellar
-            </p>
-            <h1 className="text-3xl font-bold text-tts-deep">
-              {L("Depositar em Dólar", "USD Deposit")}
-            </h1>
-            <p className="text-sm text-tts-muted">
-              {L("Entre com seu e-mail para ver sua conta", "Enter your email to see your account")}
-            </p>
-          </div>
-
-          {/* Amount hint */}
+      <OperationalPage size="sm" centered>
+        <OperationalHeader
+          eyebrow="Bridge.xyz mainnet"
+          title={L("Depositar em Dólar", "USD Deposit")}
+          description={L(
+            "Entre com seu e-mail para ver as instruções wire/ACH da sua conta Bridge.",
+            "Enter your email to view your Bridge wire/ACH deposit instructions."
+          )}
+        />
+        <OperationalCard>
           {amount && (
-            <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-tts-gold/30 bg-tts-gold-bg px-3 py-2">
               <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
               <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
                 {L(`Valor: US$ ${amount}`, `Amount: US$ ${amount}`)}
@@ -424,40 +521,39 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
             </div>
           )}
 
-          {/* Email form */}
           <form
-            onSubmit={(e) => { e.preventDefault(); load(emailInput); }}
+            onSubmit={(e) => { e.preventDefault(); load(emailInput, { forceEmail: true }); }}
             className="space-y-3"
           >
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-2">
                 {L("E-mail da conta", "Account email")}
               </label>
-              <input
+              <Input
                 type="email"
                 autoFocus
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
                 placeholder="you@email.com"
-                className="w-full rounded-xl border border-tts-border bg-tts-bg px-4 py-3 text-sm outline-none
-                           focus:border-tts-deep placeholder:text-tts-muted/40 transition-colors text-center"
+                className="text-center"
               />
             </div>
-            <button
+            <Button
               type="submit"
               disabled={!emailInput.trim()}
-              className="w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-white
-                         disabled:opacity-40 transition-opacity hover:opacity-90"
+              className="w-full"
             >
               {L("Continuar", "Continue")}
-            </button>
+            </Button>
           </form>
-
-          <p className="text-center text-xs text-tts-muted/60">
-            TalkToStellar · Powered by Stellar Network
-          </p>
-        </div>
-      </div>
+          {cachedEmail && (
+            <p className="mt-3 text-center text-xs text-tts-muted">
+              {L("E-mail salvo neste navegador:", "Saved in this browser:")}{" "}
+              <span className="font-mono text-tts-deep">{cachedEmail}</span>
+            </p>
+          )}
+        </OperationalCard>
+      </OperationalPage>
     );
   }
 
@@ -465,12 +561,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-tts-bg flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-tts-muted">
+      <OperationalPage size="sm" centered>
+        <OperationalCard className="flex flex-col items-center gap-3 text-center text-tts-muted">
           <Loader2 className="h-8 w-8 animate-spin" />
           <p className="text-sm">{L("Carregando sua conta...", "Loading your account...")}</p>
-        </div>
-      </div>
+        </OperationalCard>
+      </OperationalPage>
     );
   }
 
@@ -478,8 +574,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
   if (status === "error") {
     return (
-      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-sm space-y-6 text-center">
+      <OperationalPage size="sm" centered>
+        <OperationalCard className="space-y-6 text-center">
           <AlertTriangle className="h-10 w-10 text-red-400 mx-auto" />
           <div>
             <p className="font-semibold text-tts-deep">
@@ -488,21 +584,22 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
             <p className="mt-1 text-sm text-tts-muted">{errorMsg}</p>
           </div>
           <div className="flex flex-col gap-2">
-            <button
+            <Button
               onClick={() => load(emailInput)}
-              className="w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-white hover:opacity-90"
+              className="w-full"
             >
               {L("Tentar novamente", "Try again")}
-            </button>
-            <button
-              onClick={() => { setStatus("login"); setErrorMsg(""); }}
-              className="w-full rounded-xl border border-tts-border py-3 text-sm font-medium text-tts-muted hover:bg-tts-surface"
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => resetLogin()}
+              className="w-full"
             >
               {L("Mudar e-mail", "Change email")}
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+        </OperationalCard>
+      </OperationalPage>
     );
   }
 
@@ -510,8 +607,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
   if (status === "no_account") {
     return (
-      <div className="min-h-screen bg-tts-bg flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-sm space-y-6 text-center">
+      <OperationalPage size="sm" centered>
+        <OperationalCard className="space-y-6 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-tts-border bg-tts-surface">
             <Building2 className="h-7 w-7 text-tts-muted" />
           </div>
@@ -529,55 +626,101 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
               )}
             </p>
           </div>
-          <button
-            onClick={() => { setStatus("login"); setData(null); }}
-            className="w-full rounded-xl border border-tts-border py-3 text-sm font-medium text-tts-muted hover:bg-tts-surface"
+          <Button
+            variant="outline"
+            onClick={() => resetLogin(true)}
+            className="w-full"
           >
             {L("Tentar outro e-mail", "Try a different email")}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </OperationalCard>
+      </OperationalPage>
     );
   }
 
   // ── Ready ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-tts-bg">
-      <div className="mx-auto max-w-md px-4 py-10 space-y-5">
-
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-              TalkToStellar
-            </p>
-            <h1 className="text-xl font-bold text-tts-deep">
-              {L("Depositar em Dólar", "USD Deposit")}
-            </h1>
+    <OperationalPage size="lg" frameClassName="max-w-4xl">
+      <OperationalHeader
+        eyebrow="Bridge.xyz mainnet"
+        title={L("Depositar em Dólar", "USD Deposit")}
+        description={L(
+          "Use estes dados para enviar wire/ACH. A Bridge converte o depósito para USDC e envia para sua carteira Stellar.",
+          "Use these details to send a wire/ACH deposit. Bridge converts the deposit to USDC and routes it to your Stellar wallet."
+        )}
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs text-tts-muted">{L("Conectado como", "Signed in as")}</p>
+              <p className="text-sm font-semibold text-tts-deep">{loggedEmail || emailInput}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => resetLogin(true)}>
+              <LogOut className="mr-2 h-4 w-4" />
+              {L("Trocar", "Change")}
+            </Button>
           </div>
-          <button
-            onClick={() => { setStatus("login"); setData(null); setLoggedEmail(""); }}
-            className="text-xs text-tts-muted hover:text-tts-deep transition-colors"
-          >
-            {loggedEmail ? (
-              <span className="flex flex-col items-end gap-0.5">
-                <span className="font-mono">{loggedEmail.split("@")[0]}</span>
-                <span className="text-[10px] underline">change</span>
-              </span>
-            ) : L("Sair", "Sign out")}
-          </button>
-        </div>
+        }
+      />
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <OperationalStat
+          label="Customer"
+          value={shortId(data?.customer_id)}
+          detail={data?.customer_status || data?.kyc_status || "Loaded"}
+          tone={data?.customer_id ? "confirm" : "default"}
+        />
+        <OperationalStat
+          label="USD accounts"
+          value={String(usdAccounts.length)}
+          detail={data?.virtual_account_source === "db_cache" ? "Loaded from cache" : "Live Bridge API"}
+          tone={usdAccounts.length ? "confirm" : "gold"}
+        />
+        <OperationalStat
+          label="Received"
+          value={`$${fmt(totalReceived)}`}
+          detail="Bridge account activity"
+          tone={totalReceived > 0 ? "confirm" : "default"}
+        />
+        <OperationalStat
+          label="Destination"
+          value={data?.stellar_wallet?.public_key ? shortId(data.stellar_wallet.public_key) : "-"}
+          detail={data?.stellar_wallet ? "Stellar USDC" : "Wallet not linked"}
+          tone={data?.stellar_wallet ? "confirm" : "gold"}
+        />
+      </div>
 
         {/* Amount hint */}
         {amount && (
-          <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
+          <div className="flex items-center gap-2 rounded-md border border-tts-gold/30 bg-tts-gold-bg px-4 py-3">
             <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
             <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
               {L(`Valor desejado: US$ ${amount}`, `Requested amount: US$ ${amount}`)}
             </span>
           </div>
         )}
+
+      <OperationalCard>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-tts-muted">Bridge account</p>
+            <p className="mt-1 text-sm text-tts-muted">
+              {loggedEmail || emailInput}
+              {data?.lookup_source ? <span className="ml-2 text-tts-muted/60">via {data.lookup_source}</span> : null}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusPill tone={data?.customer_status === "active" || data?.kyc_status === "approved" ? "confirm" : "gold"}>
+              {data?.customer_status || data?.kyc_status || "customer loaded"}
+            </StatusPill>
+            {data?.virtual_account_source && (
+              <StatusPill tone={data.virtual_account_source === "db_cache" ? "gold" : "confirm"}>
+                {data.virtual_account_source === "db_cache" ? "cached VA" : "live VA"}
+              </StatusPill>
+            )}
+          </div>
+        </div>
+      </OperationalCard>
 
         {/* VA cards */}
         {usdAccounts.length > 0 ? (
@@ -591,36 +734,35 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
             )}
           </>
         ) : (
-          <div className="rounded-2xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-6 text-center space-y-3">
-            <Clock className="h-8 w-8 text-amber-500 mx-auto" />
-            <p className="font-semibold text-tts-deep">
-              {L("Conta em processamento", "Account being processed")}
+          <OperationalCard className="text-center">
+            <Clock className="mx-auto h-8 w-8 text-tts-gold" />
+            <p className="mt-3 font-semibold text-tts-deep">
+              {L("Conta Bridge encontrada, sem conta USD listada", "Bridge account found, no USD account listed")}
             </p>
-            <p className="text-sm text-tts-muted">
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-tts-muted">
               {L(
-                "Sua conta USD está sendo configurada. Aguarde alguns minutos.",
-                "Your USD account is being set up. Check back in a few minutes."
+                "Encontramos seu cliente Bridge, mas nenhuma conta USD foi retornada agora. Atualize para buscar novamente; se você acabou de criar a conta, a Bridge pode levar alguns minutos para expor as instruções.",
+                "We found your Bridge customer, but no USD virtual account was returned right now. Refresh to check again; if the account was just created, Bridge can take a few minutes to expose the instructions."
               )}
             </p>
-          </div>
+          </OperationalCard>
         )}
 
         {/* Refresh */}
-        <button
+        <Button
+          variant="outline"
           onClick={() => load(loggedEmail || emailInput)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-tts-border
-                     py-2.5 text-sm text-tts-muted hover:bg-tts-surface transition-colors"
+          className="w-full"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           {L("Atualizar", "Refresh")}
-        </button>
+        </Button>
 
         {/* Footer */}
         <div className="flex items-center justify-center gap-1.5 text-xs text-tts-muted/60 pb-4">
           <CheckCircle2 className="h-3 w-3" />
           <span>TalkToStellar · Powered by Stellar Network</span>
         </div>
-      </div>
-    </div>
+    </OperationalPage>
   );
 }

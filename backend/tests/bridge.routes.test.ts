@@ -1,6 +1,7 @@
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import type { Request, Response } from "express";
 import { BridgeController } from "../src/api/controllers/bridge.controller";
+import { supabase } from "../src/config/supabase";
 import { getBridgeService } from "../src/integrations/bridge";
 
 jest.mock("../src/integrations/bridge", () => ({
@@ -27,6 +28,19 @@ function mockRes(): Response {
   res.json = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
   return res as Response;
+}
+
+function supabaseBuilder({ maybeSingleData = null, listData = [] }: { maybeSingleData?: any; listData?: any[] }) {
+  const builder: any = {};
+  const chain = () => builder;
+  ["select", "eq", "order", "limit"].forEach((method) => {
+    builder[method] = jest.fn(chain);
+  });
+  builder.maybeSingle = jest.fn(() => Promise.resolve({ data: maybeSingleData, error: null }));
+  builder.then = (onFulfilled: any, onRejected: any) => (
+    Promise.resolve({ data: listData, error: null }).then(onFulfilled, onRejected)
+  );
+  return builder;
 }
 
 describe("Bridge Customer API", () => {
@@ -98,7 +112,6 @@ describe("Bridge Customer API", () => {
         first_name: "John",
         email: "john@example.com",
         type: "individual",
-        country: "BR",
       }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
@@ -181,8 +194,10 @@ describe("Bridge Customer API", () => {
     expect(mockService.createLiquidationAddress).toHaveBeenCalledWith(
       "cust_123",
       expect.objectContaining({
-        payment_rail: "pix",
-        currency: "brl",
+        chain: "base",
+        currency: "usdc",
+        destination_payment_rail: "pix",
+        destination_currency: "brl",
         external_account_id: "ea_789",
         custom_developer_fee_percent: "0.20",
       }),
@@ -307,6 +322,114 @@ describe("Bridge Customer API", () => {
       undefined,
     );
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it("loads a USD virtual account from short-link context and DB cache", async () => {
+    mockService.listVirtualAccounts.mockResolvedValue([]);
+    mockService.getVirtualAccountActivity.mockResolvedValue([
+      {
+        id: "event_001",
+        type: "funds_received",
+        amount: "250.00",
+        currency: "usd",
+        virtual_account_id: "va_001",
+      },
+    ]);
+
+    const fromMock = supabase.from as any;
+    const originalImplementation = fromMock.getMockImplementation();
+    fromMock.mockImplementation((table: string) => {
+      if (table === "short_links") {
+        return supabaseBuilder({
+          maybeSingleData: {
+            code: "wtuBS4frJ0un",
+            session_id: "whatsapp-session-001",
+            url: "https://www.talktostellar.com/wire-onramp?short_link_code=wtuBS4frJ0un",
+          },
+        });
+      }
+      if (table === "agent_sessions") {
+        return supabaseBuilder({
+          maybeSingleData: {
+            session_id: "whatsapp-session-001",
+            email: "rodtretinha@gmail.com",
+            user_id: "rodtretinha@gmail.com",
+          },
+        });
+      }
+      if (table === "bridge_customers") {
+        return supabaseBuilder({
+          maybeSingleData: {
+            bridge_customer_id: "cust_001",
+            kyc_status: "approved",
+            status: "active",
+          },
+        });
+      }
+      if (table === "bridge_va_cache") {
+        return supabaseBuilder({
+          listData: [
+            {
+              id: "va_001",
+              customer_id: "cust_001",
+              status: "activated",
+              source_deposit_instructions: {
+                bank_name: "Lead Bank",
+                bank_routing_number: "101019644",
+                bank_account_number: "214921413117",
+                currency: "usd",
+                payment_rails: ["ach_push", "fednow", "wire"],
+              },
+              destination: { chain: "base", address: "0x19edf064c5" },
+            },
+          ],
+        });
+      }
+      if (table === "wallets") {
+        return supabaseBuilder({ maybeSingleData: null });
+      }
+      return supabaseBuilder({});
+    });
+
+    try {
+      const req = mockReq({ query: { short_link_code: "wtuBS4frJ0un" } });
+      const res = mockRes();
+      await BridgeController.getSessionUsdAccount(req, res);
+
+      expect(mockService.listVirtualAccounts).toHaveBeenCalledWith("cust_001");
+      expect(mockService.getVirtualAccountActivity).toHaveBeenCalledWith(
+        "cust_001",
+        "va_001",
+        { limit: 100 },
+      );
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          has_account: true,
+          customer_id: "cust_001",
+          email: "rodtretinha@gmail.com",
+          lookup_source: "short_link",
+          virtual_account_source: "db_cache",
+          virtual_accounts: [
+            expect.objectContaining({
+              id: "va_001",
+              currency: "USD",
+              total_received_usd: 250,
+              balance_summaries: [
+                expect.objectContaining({
+                  amount: "250.00",
+                  currency: "USD",
+                  source: "activity",
+                }),
+              ],
+            }),
+          ],
+        }),
+      );
+    } finally {
+      fromMock.mockImplementation(originalImplementation);
+    }
   });
 
   it("summarizes virtual account received funds when no live balance is exposed", async () => {

@@ -11,6 +11,33 @@ function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
 }
 
+function looksLikeEmail(value: unknown): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function emailFromUrl(rawUrl: unknown): string {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    const value =
+      url.searchParams.get("email") ||
+      url.searchParams.get("user_id") ||
+      url.searchParams.get("userId") ||
+      "";
+    return looksLikeEmail(value) ? value.trim().toLowerCase() : "";
+  } catch {
+    return "";
+  }
+}
+
+function sessionIdFromUrl(rawUrl: unknown): string {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    return String(url.searchParams.get("session_id") || url.searchParams.get("sessionId") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function statusFromError(error: unknown): number {
   const e = error as Record<string, unknown>;
   if (e?.status && typeof e.status === 'number') return e.status >= 400 && e.status < 600 ? e.status : 500;
@@ -108,11 +135,52 @@ function collectBalanceValue(
 function virtualAccountCurrency(account: Record<string, unknown> | null): string {
   if (!account) return "USD";
   const destination = account.destination as Record<string, unknown> | undefined;
+  const source = account.source as Record<string, unknown> | undefined;
+  const instructions = account.source_deposit_instructions as Record<string, unknown> | undefined;
   return readCurrency(
     account.source_currency ??
-      (account.source as Record<string, unknown> | undefined)?.currency ??
+      account.currency ??
+      source?.currency ??
+      instructions?.currency ??
       destination?.currency,
   );
+}
+
+function isUsdVirtualAccount(account: Record<string, unknown>): boolean {
+  const currency = virtualAccountCurrency(account).toLowerCase();
+  return currency === "usd" || !currency;
+}
+
+function normalizeCachedVirtualAccount(row: Record<string, unknown>): Record<string, unknown> {
+  const sourceCurrency = row.source_currency || (row.source_deposit_instructions as any)?.currency || "usd";
+  return {
+    id: row.id,
+    status: row.status,
+    source_currency: sourceCurrency,
+    currency: sourceCurrency,
+    destination: row.destination || {},
+    source_deposit_instructions: row.source_deposit_instructions || null,
+    developer_fee_percent: row.developer_fee_percent || null,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+    synced_at: row.synced_at || null,
+    account_source: "db_cache",
+  };
+}
+
+async function loadCachedVirtualAccounts(customerId: string): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase
+    .from("bridge_va_cache")
+    .select("*")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    logger.warn(`[bridge] cached VA lookup failed: ${error.message}`);
+    return [];
+  }
+
+  return (Array.isArray(data) ? data : []).map((row: any) => normalizeCachedVirtualAccount(row));
 }
 
 function collectVirtualAccountBalances(account: Record<string, unknown> | null): VirtualAccountBalanceSummary[] {
@@ -245,18 +313,35 @@ export class BridgeController {
 
   static async getSessionUsdAccount(req: Request, res: Response): Promise<void> {
     try {
-      const sessionId = String(req.query.session_id || req.headers['x-session-id'] || '').trim();
-      const emailParam = String(req.query.email || '').trim().toLowerCase();
+      let sessionId = String(req.query.session_id || req.headers['x-session-id'] || '').trim();
+      let emailParam = String(req.query.email || '').trim().toLowerCase();
+      const shortLinkCode = String(req.query.short_link_code || req.query.shortLinkCode || '').trim();
 
       let email: string | undefined;
+      let lookupSource = sessionId ? "session" : emailParam ? "email" : "";
+
+      if (!sessionId && !emailParam && shortLinkCode) {
+        const { data: shortLink } = await supabase
+          .from("short_links")
+          .select("url, session_id, user_id")
+          .eq("code", shortLinkCode)
+          .maybeSingle();
+
+        sessionId = String(shortLink?.session_id || sessionIdFromUrl(shortLink?.url) || "").trim();
+        const linkEmail =
+          emailFromUrl(shortLink?.url) ||
+          (looksLikeEmail(shortLink?.user_id) ? String(shortLink?.user_id).trim().toLowerCase() : "");
+        emailParam = linkEmail || emailParam;
+        if (sessionId || emailParam) lookupSource = "short_link";
+      }
 
       if (sessionId) {
         const { data: session } = await supabase
           .from('agent_sessions')
-          .select('email')
+          .select('email, user_id')
           .eq('session_id', sessionId)
           .maybeSingle();
-        email = session?.email ?? undefined;
+        email = session?.email || (looksLikeEmail(session?.user_id) ? String(session?.user_id).trim().toLowerCase() : undefined);
         if (!email) {
           res.status(404).json({ success: false, message: 'Session not found or has no email.' });
           return;
@@ -264,7 +349,7 @@ export class BridgeController {
       } else if (emailParam) {
         email = emailParam;
       } else {
-        res.status(400).json({ success: false, message: 'session_id or email required' });
+        res.status(400).json({ success: false, message: 'session_id, email, or short_link_code required' });
         return;
       }
 
@@ -322,40 +407,50 @@ export class BridgeController {
 
       const service = getBridgeService();
       let virtualAccounts: any[] = [];
+      let virtualAccountSource = "bridge_api";
       try {
         const accounts = await service.listVirtualAccounts(bridgeCustomerId);
-        const usdAccounts = (Array.isArray(accounts) ? accounts : []).filter((va: any) => {
-          // Currency can live at the top level (source_currency/currency) or nested
-          // inside source_deposit_instructions.currency. Accept any of them.
-          const cur = (
-            va.source_currency ||
-            va.currency ||
-            va.source_deposit_instructions?.currency ||
-            ''
-          ).toLowerCase();
-          // If no currency is resolvable at all, keep the VA rather than hide it.
-          return cur === 'usd' || cur === '';
-        });
+        let usdAccounts: any[] = (Array.isArray(accounts) ? accounts : [])
+          .filter((va: any) => isUsdVirtualAccount(va as Record<string, unknown>));
+        if (!usdAccounts.length) {
+          const cached = await loadCachedVirtualAccounts(bridgeCustomerId);
+          usdAccounts = cached.filter((va: any) => isUsdVirtualAccount(va as Record<string, unknown>));
+          if (usdAccounts.length) virtualAccountSource = "db_cache";
+        }
         // Enrich each VA with total funds received from activity history
         virtualAccounts = await Promise.all(
           usdAccounts.map(async (va: any) => {
+            let events: any[] = [];
             try {
-              const events = await service.getVirtualAccountActivity(
+              events = await service.getVirtualAccountActivity(
                 bridgeCustomerId!,
                 va.id,
                 { limit: 100 },
               );
-              const received = (Array.isArray(events) ? events : [])
-                .filter((e: any) => e.type === 'funds_received')
-                .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
-              return { ...va, total_received_usd: received };
             } catch {
-              return { ...va, total_received_usd: 0 };
+              events = [];
             }
+
+            const directBalances = collectVirtualAccountBalances(va as Record<string, unknown>)
+              .filter((b) => b.currency.toLowerCase() === "usd");
+            const activityBalances = collectActivityBalances(Array.isArray(events) ? events : [])
+              .filter((b) => b.currency.toLowerCase() === "usd");
+            const positiveDirect = directBalances.filter((b) => Number(b.amount) > 0);
+            const visibleBalances = positiveDirect.length ? positiveDirect : activityBalances;
+            const received = visibleBalances.reduce((sum: number, b) => sum + Number(b.amount || 0), 0);
+            return {
+              ...va,
+              currency: virtualAccountCurrency(va as Record<string, unknown>),
+              total_received_usd: Number.isFinite(received) ? received : 0,
+              balance_summaries: visibleBalances,
+              activity_count: Array.isArray(events) ? events.length : 0,
+            };
           }),
         );
       } catch {
-        // non-fatal — return empty list
+        const cached = await loadCachedVirtualAccounts(bridgeCustomerId);
+        virtualAccountSource = cached.length ? "db_cache" : "bridge_api";
+        virtualAccounts = cached.filter((va: any) => isUsdVirtualAccount(va as Record<string, unknown>));
       }
 
       // Look up the Stellar wallet linked to this email via agent_sessions → wallets
@@ -399,7 +494,10 @@ export class BridgeController {
         has_account: true,
         kyc_status: bridgeKycStatus,
         customer_status: bridgeStatus,
+        customer_id: bridgeCustomerId,
         email,
+        lookup_source: lookupSource || null,
+        virtual_account_source: virtualAccountSource,
         virtual_accounts: virtualAccounts,
         stellar_wallet: stellarWallet,
       });
@@ -1852,7 +1950,7 @@ export class BridgeController {
         try {
           const r = await fetch(`${horizonUrl}/accounts/${publicKey}`);
           if (!r.ok) return null;
-          const acct = await r.json();
+          const acct: any = await r.json();
           const balances: Array<{ asset_type: string; asset_code?: string; asset_issuer?: string; balance: string }> =
             Array.isArray(acct.balances) ? acct.balances : [];
           const usdc = balances.find(
