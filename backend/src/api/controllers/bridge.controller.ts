@@ -490,12 +490,18 @@ export class BridgeController {
             const positiveDirect = directBalances.filter((b) => Number(b.amount) > 0);
             const visibleBalances = positiveDirect.length ? positiveDirect : activityBalances;
             const received = visibleBalances.reduce((sum: number, b) => sum + Number(b.amount || 0), 0);
+            const bridgeWalletId = normalizeBridgeWalletId(va as Record<string, unknown>);
+            const destinationChain = normalizeDestinationChain(va as Record<string, unknown>);
+            const destinationAddress = normalizeDestinationAddress(va as Record<string, unknown>);
             return {
               ...va,
               currency: virtualAccountCurrency(va as Record<string, unknown>),
               total_received_usd: Number.isFinite(received) ? received : 0,
               balance_summaries: visibleBalances,
               activity_count: Array.isArray(events) ? events.length : 0,
+              bridge_wallet_id: bridgeWalletId || null,
+              destination_chain: destinationChain || null,
+              destination_address: destinationAddress || null,
             };
           }),
         );
