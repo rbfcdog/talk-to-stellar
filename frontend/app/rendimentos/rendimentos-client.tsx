@@ -1039,6 +1039,19 @@ function PortfolioOverview({ language, rows, isTestnet }: {
             const negative = analysis.change < -0.0000001;
             const tone = positive ? "text-tts-confirm" : negative ? "text-tts-error" : "text-tts-muted";
             const hasIgnoredCashflow = Math.abs(analysis.cashflowChange) > 0.0000001;
+
+            // Projected return: shown on testnet when no history points in window but APY is known.
+            // Uses the last deposit date from all-time history to estimate elapsed accrual.
+            const allPoints = (row.history?.points || []).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            const firstDepositDate = allPoints.find((p) => p.action === "deposit")?.date;
+            const daysElapsedSinceDeposit = firstDepositDate
+              ? Math.max(0, (Date.now() - new Date(firstDepositDate).getTime()) / (1000 * 60 * 60 * 24))
+              : 0;
+            const projectedReturn = (isTestnet && analysis.change === 0 && row.rate > 0 && row.amount > 0 && daysElapsedSinceDeposit > 0)
+              ? row.amount * (Math.pow(1 + row.rate / 100, daysElapsedSinceDeposit / 365) - 1)
+              : 0;
+            const showProjected = projectedReturn > 0.00001;
+
             return (
               <div key={row.code} className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-3 last:border-b-0 md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
                 <div className="min-w-0">
@@ -1050,8 +1063,18 @@ function PortfolioOverview({ language, rows, isTestnet }: {
                   <p className="text-[10px] font-semibold text-tts-muted">{isTestnet ? L("Testnet", "Testnet") : L("Rede ativa", "Live")}</p>
                 </div>
                 <div>
-                  <p className={`text-sm font-black ${tone}`}>{formatSignedAmount(analysis.change, row.profile, language)}</p>
-                  <p className={`text-[10px] font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</p>
+                  {showProjected ? (
+                    <>
+                      <p className="text-sm font-black text-tts-confirm">~{formatSignedAmount(projectedReturn, row.profile, language)}</p>
+                      <p className="text-[10px] font-bold text-tts-confirm">~{formatReturnPercent(periodReturnPercent(row.rate, daysElapsedSinceDeposit / 365), language)}</p>
+                      <p className="mt-0.5 text-[9px] font-semibold text-tts-muted uppercase tracking-wide">{L("projetado", "projected")}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className={`text-sm font-black ${tone}`}>{formatSignedAmount(analysis.change, row.profile, language)}</p>
+                      <p className={`text-[10px] font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</p>
+                    </>
+                  )}
                   {hasIgnoredCashflow ? (
                     <p className="mt-0.5 truncate text-[10px] font-semibold text-tts-muted">
                       {L("Fluxo ignorado", "Cash flow ignored")}: {formatSignedAmount(analysis.cashflowChange, row.profile, language)}

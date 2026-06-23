@@ -510,17 +510,21 @@ export class DefindexYieldService {
   static async getVaultAPY(vaultAddress: string, network = defaultNetwork()): Promise<any> {
     try {
       const result = await this.sdk(network).getVaultAPY(vaultAddress, sdkNetwork(network));
-      logDefindexSdk('debug', 'sdk_get_apy_success', {
-        vault_address: maskLogValue(vaultAddress),
-        network,
-      });
+      logDefindexSdk('debug', 'sdk_get_apy_success', { vault_address: maskLogValue(vaultAddress), network });
       return result;
     } catch (error) {
-      logDefindexSdk('warn', 'sdk_get_apy_failed', {
-        vault_address: maskLogValue(vaultAddress),
-        network,
-        ...errorLogFields(error),
-      });
+      logDefindexSdk('warn', 'sdk_get_apy_failed', { vault_address: maskLogValue(vaultAddress), network, ...errorLogFields(error) });
+      // DeFindex vaults are mainnet contracts — testnet APY data doesn't exist.
+      // Fall back to mainnet to get reference APY for projected return display.
+      if (network === 'testnet') {
+        try {
+          const mainnetResult = await this.sdk('mainnet').getVaultAPY(vaultAddress, sdkNetwork('mainnet'));
+          logDefindexSdk('info', 'sdk_get_apy_mainnet_reference', { vault_address: maskLogValue(vaultAddress) });
+          return { ...mainnetResult, source: 'mainnet_reference', testnet_estimated: true };
+        } catch (fallbackErr) {
+          logDefindexSdk('warn', 'sdk_get_apy_mainnet_reference_failed', { vault_address: maskLogValue(vaultAddress), ...errorLogFields(fallbackErr) });
+        }
+      }
       throw error;
     }
   }
@@ -528,19 +532,21 @@ export class DefindexYieldService {
   static async getVaultBalance(vaultAddress: string, caller: string, network = defaultNetwork()): Promise<any> {
     try {
       const result = await this.sdk(network).getVaultBalance(vaultAddress, caller, sdkNetwork(network));
-      logDefindexSdk('info', 'sdk_get_balance_success', {
-        vault_address: maskLogValue(vaultAddress),
-        caller: maskLogValue(caller),
-        network,
-      });
+      logDefindexSdk('info', 'sdk_get_balance_success', { vault_address: maskLogValue(vaultAddress), caller: maskLogValue(caller), network });
       return result;
     } catch (error) {
-      logDefindexSdk('warn', 'sdk_get_balance_failed', {
-        vault_address: maskLogValue(vaultAddress),
-        caller: maskLogValue(caller),
-        network,
-        ...errorLogFields(error),
-      });
+      logDefindexSdk('warn', 'sdk_get_balance_failed', { vault_address: maskLogValue(vaultAddress), caller: maskLogValue(caller), network, ...errorLogFields(error) });
+      // DeFindex vaults are mainnet contracts — try reading real on-chain balance from mainnet.
+      // If the wallet has a real mainnet deposit, this returns the live growing balance.
+      if (network === 'testnet') {
+        try {
+          const mainnetResult = await this.sdk('mainnet').getVaultBalance(vaultAddress, caller, sdkNetwork('mainnet'));
+          logDefindexSdk('info', 'sdk_get_balance_mainnet_fallback', { vault_address: maskLogValue(vaultAddress), caller: maskLogValue(caller) });
+          return { ...mainnetResult, source: 'mainnet_balance', testnet_fallback: true };
+        } catch (fallbackErr) {
+          logDefindexSdk('warn', 'sdk_get_balance_mainnet_fallback_failed', { vault_address: maskLogValue(vaultAddress), caller: maskLogValue(caller), ...errorLogFields(fallbackErr) });
+        }
+      }
       throw error;
     }
   }
