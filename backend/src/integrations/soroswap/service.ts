@@ -664,4 +664,56 @@ export const SoroswapService = {
   clearTokenCache(): void {
     tokenCache = null;
   },
+
+  /**
+   * Build an unsigned XDR for adding liquidity to a Soroswap AMM pool.
+   * Both token amounts must be in stroops (7-decimal integer string).
+   * Returns the unsigned XDR to be signed by the LP provider.
+   */
+  async buildAddLiquidityXdr(params: {
+    tokenA: string;    // SAC contract address
+    tokenB: string;
+    amountADesired: string;  // stroops
+    amountBDesired: string;  // stroops
+    senderAddress: string;
+    slippageBps?: number;
+  }): Promise<{ xdr: string; pool?: string; network: string }> {
+    const config = loadSoroswapConfig();
+    const slippage = params.slippageBps ?? config.defaultSlippageBps;
+    const qs = new URLSearchParams({ network: config.network });
+    const url = `${config.apiUrl}/liquidity/add?${qs}`;
+
+    const body = {
+      tokenA: params.tokenA,
+      tokenB: params.tokenB,
+      amountADesired: params.amountADesired,
+      amountBDesired: params.amountBDesired,
+      to: params.senderAddress,
+      slippageBps: slippage,
+      deadline: Math.floor(Date.now() / 1000) + 3600,
+    };
+
+    logger.debug(`[soroswap] POST ${url} (add-liquidity)`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: soroswapHeaders(config, true),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Soroswap /liquidity/add → ${res.status}: ${text}`);
+    }
+
+    const raw: any = await res.json();
+    const xdr = raw.xdr ?? raw.transaction ?? raw.unsigned_xdr;
+    if (!xdr) throw new Error('Soroswap add-liquidity returned no XDR');
+
+    return {
+      xdr,
+      pool: raw.pool_id ?? raw.pool ?? undefined,
+      network: config.network,
+    };
+  },
 };

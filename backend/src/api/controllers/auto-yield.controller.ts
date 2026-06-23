@@ -17,9 +17,10 @@ export const AutoYieldController = {
    */
   async run(req: Request, res: Response) {
     try {
-      const dryRun = req.body?.dry_run !== undefined ? Boolean(req.body.dry_run) : undefined;
-      const maxWallets = req.body?.max_wallets ? Number(req.body.max_wallets) : undefined;
-      const summary = await runAutoYield({ dryRun, maxWallets });
+      const dryRun     = req.body?.dry_run     !== undefined ? Boolean(req.body.dry_run) : undefined;
+      const maxWallets = req.body?.max_wallets  ? Number(req.body.max_wallets) : undefined;
+      const strategy   = req.body?.strategy    as ('defindex' | 'blend' | 'soroswap_lp' | 'all') | undefined;
+      const summary = await runAutoYield({ dryRun, maxWallets, strategy });
       ok(res, summary);
     } catch (e) { err(res, e); }
   },
