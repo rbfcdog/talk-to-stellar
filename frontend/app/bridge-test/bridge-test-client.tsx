@@ -767,10 +767,18 @@ export default function BridgeTestClient() {
   async function fetchBridgeBalances() {
     setBridgeBalancesBusy(true);
     try {
-      const p = await runApi("GET", "/wallets/balances");
-      setBridgeBalances((p.balances as Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>) || []);
+      const r = await fetch(BRIDGE_BASE, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", "x-bridge-path": "/wallets/balances" },
+        cache: "no-store",
+      });
+      if (r.ok) {
+        const p = await r.json().catch(() => ({}));
+        setBridgeBalances((p.balances as Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>) || []);
+      }
+      // silently ignore non-ok (Bridge.xyz returns 404 when no global wallet exists)
     } catch {
-      // errors surface via runApi's setError
+      // network error — ignore silently
     } finally {
       setBridgeBalancesBusy(false);
     }

@@ -79,4 +79,43 @@ export const SoroswapController = {
       ok(res, { count: tokens.length, network: config.network, tokens });
     } catch (e) { err(res, e); }
   },
+
+  /**
+   * GET /soroswap/pool-info?network=mainnet
+   * Returns XLM/USDC liquidity pool data from Stellar Horizon (fee_bp, reserves).
+   * Always fetches from mainnet as the canonical source of real liquidity data.
+   */
+  async poolInfo(req: Request, res: Response) {
+    try {
+      const network = String(req.query.network || '').toLowerCase();
+      const useMainnet = network === 'mainnet' || network === 'public' || !network;
+      const horizonUrl = useMainnet
+        ? 'https://horizon.stellar.org'
+        : 'https://horizon-testnet.stellar.org';
+      const usdcIssuer = useMainnet
+        ? 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7EJJUD'
+        : 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
+
+      const qs = new URLSearchParams({ reserves: `native,USDC:${usdcIssuer}`, order: 'desc', limit: '5' });
+      const r = await fetch(`${horizonUrl}/liquidity_pools?${qs}`, {
+        signal: AbortSignal.timeout(8_000),
+        headers: { Accept: 'application/json' },
+      });
+      if (!r.ok) throw new Error(`Horizon /liquidity_pools → ${r.status}`);
+      const data: any = await r.json();
+      const pools: any[] = data._embedded?.records ?? [];
+      const pool = pools[0];
+      if (!pool) {
+        return ok(res, { fee_bp: 30, reserves: [], network: useMainnet ? 'mainnet' : 'testnet' });
+      }
+      ok(res, {
+        pool_id: pool.id,
+        fee_bp: pool.fee_bp ?? 30,
+        total_shares: pool.total_shares,
+        total_trustlines: pool.total_trustlines,
+        reserves: pool.reserves ?? [],
+        network: useMainnet ? 'mainnet' : 'testnet',
+      });
+    } catch (e) { err(res, e); }
+  },
 };
