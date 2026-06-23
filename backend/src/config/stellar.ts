@@ -39,3 +39,7 @@ export const stellarConfig = {
 };
 
 export const server = new Horizon.Server(stellarConfig.horizonUrl);
+
+// Always-mainnet Horizon server for Bridge & Defindex wallet balance lookups
+// (the project runs on testnet but Bridge wallets live on mainnet)
+export const mainnetServer = new Horizon.Server('https://horizon.stellar.org');
