@@ -21,7 +21,7 @@ Operator opens /key-integrations
 - Purpose: compact end-to-end test panel for the current SCF key integrations: Freighter, Blend v2, and Soroswap.
 - The screen no longer contains Abroad Finance, Reflector, or StellarExpert panels.
 - Freighter runs in the browser via `@stellar/freighter-api`; no backend API key is exposed.
-- Blend v2 uses `/api/blend/pools` to list configured on-chain pool contracts.
+- Blend v2 uses `/api/blend/pools` and `/api/blend/pool/info` to list valid on-chain pool contracts; if no valid pool override is configured, the backend discovers the active v2 pool from the backstop reward zone.
 - Soroswap uses same-origin frontend API calls; browser code must not call the backend origin directly.
 - The generic catch-all route forwards `/api/<path>` to backend `/api/<path>` through `frontend/lib/backend-proxy.ts`.
 - Production fallback for missing backend env is the deployed Railway backend, not `localhost:3001`.
@@ -37,11 +37,12 @@ Operator opens /key-integrations
 - **Soroswap fallback order placement** (#60): Fixed by `2aec3c2`. When Soroswap TESTNET `/quote` is reachable but returns `No path found` for a symbol pair such as USDC->XLM, the backend now tries an executable Horizon path-payment fallback (`source: "stellar-path-payment-fallback"`, `protocols: ["sdex"]`) before falling back to display-only Stellar Broker pricing. The Freighter account still must be funded on the selected network and hold the source asset/trustline before XDR build succeeds.
 - **Payment watcher SSE stream rate limit fan-out** (#57): Fixed by `2a48ab3`. Stream opening has a serialized queue and stream-level `429` cooldown, preventing provider-level rate limits from becoming per-wallet warning bursts.
 - **Key integrations scope**: Fixed by `0ddedd7` and `8af4f34`. `/key-integrations` now focuses on Freighter, Blend v2, and Soroswap only.
+- **Blend v2 invalid pool id** (#63): Fixed by `008da16`. The backend validates pool contract ids, ignores stale invalid values such as `CBLL...`, discovers the current v2 pool from the Blend backstop reward zone, and exposes `poolSource` so the panel can distinguish configured pools from discovered pools.
 
 ### Still Open
 
 - If a panel fails, first separate backend health from provider behavior: `Backend unreachable` means proxy/backend reachability; provider-specific JSON errors mean the backend route was reached.
-- Blend v2 is currently pool/status discovery only; deposit/borrow transaction construction remains future work unless a dedicated Blend SDK flow is added.
+- Blend v2 supply/withdraw XDR construction exists in the backend service, but browser execution still depends on Freighter connection, correct network, and source asset balance/trustline.
 
 ## Key Files
 
@@ -64,6 +65,7 @@ Operator opens /key-integrations
 |---------|--------|---------------|---------------|
 | Screen | GET | `/key-integrations` | N/A |
 | Blend pools | GET | `/api/blend/pools` | `/api/blend/pools` |
+| Blend pool info | GET | `/api/blend/pool/info` | `/api/blend/pool/info` |
 | Soroswap tokens | GET | `/api/swap/tokens` | `/api/swap/tokens` |
 | Soroswap quote | GET | `/api/swap/quote?...` | `/api/swap/quote` |
 | Soroswap XDR build | POST | `/api/swap/build` | `/api/swap/build` |
@@ -71,8 +73,9 @@ Operator opens /key-integrations
 
 ## Latest Verification
 
-2026-06-22:
+2026-06-23:
 
+- `npm --prefix backend test -- --runInBand tests/blend.service.test.ts tests/bridge.routes.test.ts` passed.
 - `npm --prefix backend test -- --runInBand tests/payment-watcher.service.test.ts` passed.
 - `npm --prefix backend test -- --runInBand tests/soroswap.service.test.ts` passed.
 - `npm --prefix frontend run test -- --run __tests__/unit/api-catchall-proxy.test.ts` passed.

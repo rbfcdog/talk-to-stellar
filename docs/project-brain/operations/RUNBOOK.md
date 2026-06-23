@@ -323,7 +323,7 @@
 
 **Symptom**: A WhatsApp-generated `/wire-onramp?...&short_link_code=...` URL opens the USD deposit page, but the page shows "Account being processed" instead of Bridge wire/ACH instructions even though the customer already has a USD virtual account.
 
-**Status**: Fixed by `f1229d9`. The frontend now sends `short_link_code` to the session USD account endpoint, and the backend resolves it through `short_links` and `agent_sessions` before loading Bridge customer data.
+**Status**: Fixed by `f1229d9` and follow-up `008da16`. The frontend now sends `short_link_code` to the session USD account endpoint, the backend resolves it through `short_links` and `agent_sessions` before loading Bridge customer data, and the empty state lets the user force a lookup with a manually entered Bridge account email that can differ from the WhatsApp/session email.
 
 **Diagnosis steps**:
 1. Open the URL and confirm whether it contains `short_link_code` but no `session_id` or `email`.
@@ -332,9 +332,29 @@
 4. Query `bridge_customers` by email; confirm `bridge_customer_id`, `status`, and `kyc_status`.
 5. If `BridgeService.listVirtualAccounts(customerId)` returns no USD accounts, query `bridge_va_cache` for that customer. `/wire-onramp` should still render cached USD account instructions.
 6. Check the API response from `GET /api/bridge/session/usd-account?short_link_code=...`; `lookup_source` should be `short_link`, and `virtual_account_source` should be `bridge_api` or `db_cache`.
-7. If the page still shows no account, clear `localStorage["tts:wire-onramp:email"]` or use the Change action to avoid testing with a stale cached email.
+7. If the page still shows no account, enter the Bridge account email in the inline no-account form and confirm the request URL includes `email=...` without relying on the short-link/session context.
+8. Clear `localStorage["tts:wire-onramp:email"]` or use the clear-saved-email action to avoid testing with a stale cached email.
 
-**Fix**: `BridgeController.getSessionUsdAccount()` accepts `short_link_code`, recovers session/email context, filters USD VAs using both top-level and nested Bridge currency fields, falls back to `bridge_va_cache`, and returns VA source metadata. `WireOnrampClient` now uses the operational shell layout, displays cached/live VA state plus received totals, and caches the successful login email in browser localStorage.
+**Fix**: `BridgeController.getSessionUsdAccount()` accepts `short_link_code`, recovers session/email context, filters USD VAs using both top-level and nested Bridge currency fields, falls back to `bridge_va_cache`, and returns VA source metadata. `WireOnrampClient` now uses the operational shell layout, displays cached/live VA state plus received totals, caches the successful login email in browser localStorage, and calls `load(..., { forceEmail: true })` for manual Bridge email searches.
 
 **Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/tests/bridge.routes.test.ts`, `frontend/app/wire-onramp/wire-onramp-client.tsx`, `docs/project-brain/product/surfaces/wire-onramp.md`
-**Related**: Pain point #61
+**Related**: Pain points #61 and #62
+
+## 20. Blend v2 Pool Load Fails With `Unsupported address type` (FIXED)
+
+**Symptom**: `/rendimentos` or `/key-integrations` shows `Failed to load Blend pool: Unsupported address type: CBLLNN4MFMABJBA6O7DFEBZJBXJLBTJEKUZHLBAJ7U2KHTM4HFMVNKVT`.
+
+**Status**: Fixed by `008da16`. Blend pool ids are now validated before SDK calls, invalid configured ids are ignored, and the backend discovers the current Blend v2 pool from the backstop reward zone when no valid pool override is configured.
+
+**Diagnosis steps**:
+1. Confirm which network the page requested (`mainnet`, `public`, or `testnet`) and check `GET /api/blend/pool/info?network=...`.
+2. Validate `BLEND_MAINNET_POOL` or `BLEND_TESTNET_POOL` with `StrKey.isValidContract(value)`. If validation fails, the value is not a Soroban contract id and must not be passed to `PoolV2.load()`.
+3. Confirm `BLEND_MAINNET_BACKSTOP_V2` or `BLEND_TESTNET_BACKSTOP_V2` is a valid Blend v2 backstop contract id.
+4. If no valid pool override exists, load `BackstopConfig` and use the first valid `rewardZone` pool id.
+5. Check the API response `poolSource`: `configured` means an env override was used; `reward_zone` means discovery selected the active v2 pool.
+6. Confirm USDC/XLM reserve selection uses network-appropriate SAC contract hints before rendering APY or building supply XDR.
+
+**Fix**: `BlendService.resolvePoolId()` validates configured pool ids with `StrKey.isValidContract`, logs and ignores stale invalid ids, discovers the active pool from `BackstopConfig.rewardZone`, and caches the result briefly. `getPoolInfo()`, `getUserPosition()`, `buildSupplyXdr()`, and `buildWithdrawXdr()` now use the resolved pool id. Regression coverage in `backend/tests/blend.service.test.ts` verifies the stale `CBLL...` id no longer blocks pool loading.
+
+**Files**: `backend/src/integrations/blend/service.ts`, `backend/tests/blend.service.test.ts`, `frontend/app/rendimentos/rendimentos-client.tsx`, `docs/project-brain/product/surfaces/investments-page.md`, `docs/project-brain/product/surfaces/key-integrations.md`
+**Related**: Pain point #63

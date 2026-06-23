@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-23. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-58 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+60 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -103,7 +103,7 @@
 
 ---
 
-## Cluster C — Screen/Flow State Machine (8 incidents, SEVERITY: HIGH)
+## Cluster C — Screen/Flow State Machine (9 incidents, SEVERITY: HIGH)
 
 ### #4 — Window Not Closing After Conversion
 > **Quote**: "after conversion done from the conversion normal screen, the screen didn't close, it was supposed to close"
@@ -122,6 +122,19 @@
 - **Root cause**: Single-use tokens are consumed on first access, not on successful completion. Failed attempt → token burned → retry shows "expired."
 - **Status**: **Partially fixed** by `5a55e6c` (Fix completed short-link state) and `92cc83d` (Increase short-link expiry windows & suppress trivial fee lines). Link expiry windows extended. Core issue (token consumed on failure) may still remain for some paths.
 - **Lesson**: **Idempotency tokens must only be consumed on success**, or use multi-attempt tokens with a short TTL.
+
+### #62 — Wire On-Ramp Must Allow Manual Bridge Email Override
+> **Quote**: "No USD account found
+>
+> rodrigooobfcdog@gmail.comNo USD receiving account found for this email. Message us on WhatsApp to set one up.
+>
+> its supposed to I CAN PUT MY OWN EMAIL, different than whatsapp one"
+> **Gloss**: The `/wire-onramp` empty state treated the WhatsApp/session email as authoritative and did not make the manual Bridge account email path clear enough.
+
+- **Where**: `frontend/app/wire-onramp/wire-onramp-client.tsx`.
+- **Root cause**: The no-account state framed recovery as a WhatsApp setup path, and retry/refresh calls could continue using session or cached context unless the typed email was explicitly forced.
+- **Status**: **Fixed by `008da16`**. The page now explains that the Bridge account email can differ from WhatsApp, shows an inline email form in the no-account state, calls `load(..., { forceEmail: true })` for manual lookups, and keeps a separate clear-saved-email action.
+- **Lesson**: **Account recovery screens must preserve user-entered provider identity**. A deep-link session email is useful context, not a reason to block searching a different provider account.
 
 ### #17 — Back-Navigation Breaks Flow
 > **Quote**: "quando volto a tela pra details, da esse erro mesmo que eu nao tenha mandado nada, faça com que o envio seja independente das mudanças de tela e so avance da chave pro pin quando o usuario apertar em confirmar"
@@ -391,7 +404,7 @@
 
 ---
 
-## Cluster H — Reliability (18 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (19 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -531,6 +544,55 @@
 - **Status**: **Fixed by `f1229d9`**. `getSessionUsdAccount()` now resolves `short_link_code`, recovers email from session/link metadata, falls back to cached Bridge VAs when live VA discovery returns empty or fails, and returns customer/VA source metadata. `/wire-onramp` now uses the same operational shell style as `/bridge-test`, shows cached/live VA status and received totals, and caches the last successful login email in browser localStorage.
 - **Lesson**: **Deep-link surfaces must preserve account context through short links**. If a provider has already created an account, the user-facing deposit page should render cached provider instructions instead of a generic pending state.
 
+### #63 — Blend v2 Pool Load Fails With Unsupported Address Type
+> **Quote**: "Stellar Wallet · Mainnet
+>
+> Real USDC balance
+>
+> —
+>
+> USDC
+> Testnet USDC285.07 USDC
+>
+> Available balance
+>
+> 285.06 USD
+> USD
+>
+> Estimated return
+>
+> Dollars
+>
+> +16.99%
+>
+> 30 days
+>
+> +1.3%
+>
+> 6 months
+>
+> +8.16%
+>
+> 12 months
+>
+> +16.99%
+> Amount
+> USD
+>
+> Lending & Yield
+> Supply to Blend v2
+> Failed to load Blend pool: Unsupported address type: CBLLNN4MFMABJBA6O7DFEBZJBXJLBTJEKUZHLBAJ7U2KHTM4HFMVNKVT
+>
+> Freighter Wallet
+> Not connected
+> USDC Amount"
+> **Gloss**: The `/rendimentos` Blend v2 supply panel failed before loading pool data because the configured mainnet pool id was not a valid Soroban contract id.
+
+- **Where**: `backend/src/integrations/blend/service.ts`, `backend/tests/blend.service.test.ts`, `frontend/app/rendimentos/rendimentos-client.tsx`.
+- **Root cause**: The Blend service trusted a stale hardcoded mainnet pool id (`CBLL...`) and stale testnet/USDC hints instead of validating pool ids and discovering the current Blend v2 reward-zone pool from the backstop contract.
+- **Status**: **Fixed by `008da16`**. Blend pool ids are validated with `StrKey.isValidContract`; invalid configured ids are ignored; the service discovers the active v2 pool from the Blend backstop reward zone; testnet defaults and USDC/XLM reserve hints were updated; and regression coverage proves the stale id no longer blocks pool loading.
+- **Lesson**: **Soroban integration config must validate contract ids before SDK calls**. For Blend v2, prefer backstop reward-zone discovery over stale embedded pool ids.
+
 ### #13 — Investments Page Failing
 > **Quote**: "Não foi possível atualizar a aplicação agora" when applying dollars → "make sure the investment page always works"
 > **Gloss**: Investment page showed a generic error instead of completing the deposit.
@@ -571,27 +633,27 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 58 documented incidents:
+Ranked by frequency × severity across the 60 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
-| 1 | **C — Flow State Machine** | 8 | HIGH | Windows don't close, flows auto-advance, links expire, PIN cut off |
+| 1 | **C — Flow State Machine** | 9 | HIGH | Windows don't close, flows auto-advance, links expire, PIN cut off, wire-onramp email override |
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 7 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility and provider-path drift |
-| 5 | **H — Reliability** | 18 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 19 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, Blend pool discovery, investments fail, payment links unreliable, login redirects wrong |
 | 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 33 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61)
+- **Confirmed fixed**: 35 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 33 of 58 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 35 of 60 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -632,3 +694,5 @@ Fixing commits verified in codebase:
 | #59 | `3087e4c` | Use Bridge customer-scoped virtual-account lookup and `/history` activity endpoint for wire balance totals |
 | #60 | `2aec3c2` | Build executable Stellar path-payment XDRs for Soroswap symbol-pair fallback quotes when Horizon has a trusted path |
 | #61 | `f1229d9` | Resolve wire-onramp short-link context, fall back to cached Bridge USD virtual accounts, and cache the login email in-browser |
+| #62 | `008da16` | Let `/wire-onramp` search a manually entered Bridge account email even when it differs from WhatsApp/session context |
+| #63 | `008da16` | Validate Blend pool contract ids and discover current v2 pools from the backstop reward zone |
