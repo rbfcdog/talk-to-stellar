@@ -1800,4 +1800,76 @@ export class BridgeController {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Bridge Wallet not found." });
     }
   }
+
+  static async getSessionStellarBalances(req: Request, res: Response): Promise<void> {
+    try {
+      const sessionId = readText(req.query.session_id ?? req.body?.session_id);
+      const email = readText(req.query.email ?? req.body?.email).toLowerCase();
+
+      if (!sessionId && !email) {
+        res.status(400).json({ success: false, message: "session_id or email is required." });
+        return;
+      }
+
+      // Resolve public key from session or email
+      let publicKey = "";
+      if (sessionId) {
+        const { data: walletRow } = await supabase
+          .from("wallets").select("public_key").eq("session_id", sessionId).maybeSingle();
+        if (walletRow?.public_key) publicKey = walletRow.public_key;
+      }
+      if (!publicKey && email) {
+        const { data: sessionRow } = await supabase
+          .from("agent_sessions").select("session_id").eq("email", email)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (sessionRow?.session_id) {
+          const { data: walletRow } = await supabase
+            .from("wallets").select("public_key").eq("session_id", sessionRow.session_id).maybeSingle();
+          if (walletRow?.public_key) publicKey = walletRow.public_key;
+        }
+      }
+
+      if (!publicKey) {
+        res.json({ success: true, public_key: null, testnet: null, mainnet: null });
+        return;
+      }
+
+      // Fetch from both Horizon servers in parallel
+      const MAINNET_HORIZON = "https://horizon.stellar.org";
+      const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
+      const MAINNET_USDC = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+      const TESTNET_USDC = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+
+      async function fetchBalance(horizonUrl: string, usdcIssuer: string): Promise<{ usdc: string; xlm: string } | null> {
+        try {
+          const r = await fetch(`${horizonUrl}/accounts/${publicKey}`);
+          if (!r.ok) return null;
+          const acct = await r.json();
+          const balances: Array<{ asset_type: string; asset_code?: string; asset_issuer?: string; balance: string }> =
+            Array.isArray(acct.balances) ? acct.balances : [];
+          const usdc = balances.find(
+            (b) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC" && b.asset_issuer === usdcIssuer
+          )?.balance ?? "0";
+          const xlm = balances.find((b) => b.asset_type === "native")?.balance ?? "0";
+          return { usdc, xlm };
+        } catch {
+          return null;
+        }
+      }
+
+      const [testnetBalance, mainnetBalance] = await Promise.all([
+        fetchBalance(TESTNET_HORIZON, TESTNET_USDC),
+        fetchBalance(MAINNET_HORIZON, MAINNET_USDC),
+      ]);
+
+      res.json({
+        success: true,
+        public_key: publicKey,
+        testnet: testnetBalance,
+        mainnet: mainnetBalance,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to fetch balances." });
+    }
+  }
 }

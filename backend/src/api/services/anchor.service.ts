@@ -6316,12 +6316,12 @@ export class AnchorService {
     };
   }
 
-  static async getDefindexYieldStatus(): Promise<{
+  static async getDefindexYieldStatus(networkOverride?: string): Promise<{
     success: true;
     runtime: ReturnType<typeof DefindexYieldService.getRuntimeInfo>;
     vaults: Array<Record<string, unknown>>;
   }> {
-    const runtime = DefindexYieldService.getRuntimeInfo();
+    const runtime = DefindexYieldService.getRuntimeInfo(networkOverride);
     logDefindex('info', 'status_start', {
       network: runtime.network,
       configured: runtime.configured,
