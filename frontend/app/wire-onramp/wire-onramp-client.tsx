@@ -451,14 +451,16 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         body: JSON.stringify({ email: trimmed }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok && res.status !== 207) throw new Error(json.message || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
       const wallet: DestinationWallet | undefined = json?.wallet;
       if (wallet?.public_key) {
         setDestWallets((cur) => [wallet, ...cur.filter((w) => w.public_key !== wallet.public_key)]);
         setSelectedWalletKey(wallet.public_key);
       }
       setGenStatus("idle");
-      if (json?.partial && json?.message) setGenError(json.message);
+      // Surface the funding instruction when the new wallet isn't funded yet.
+      if (json?.needs_funding && json?.message) setGenError(json.message);
+      else setGenError("");
       await loadDestWallets(trimmed);
     } catch (e: any) {
       setGenStatus("error");
@@ -1052,9 +1054,31 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                   )}
 
                   {genError && <p className="text-xs text-amber-600 dark:text-amber-400">{genError}</p>}
-                  {selectedDestWallet && !selectedDestWallet.has_usdc_trustline && (
+
+                  {/* When the selected wallet isn't on mainnet yet, show full address to fund */}
+                  {selectedDestWallet && !selectedDestWallet.exists_on_mainnet && (
+                    <div className="rounded-lg border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2">
+                      <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                        {L("Carteira criada — falta ativar", "Wallet created — needs activation")}
+                      </p>
+                      <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed">
+                        {L(
+                          "Envie um pouco de XLM (≈2) para este endereço para ativá-lo. Depois ele poderá receber USDC.",
+                          "Send a little XLM (≈2) to this address to activate it. Then it can receive USDC.",
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 break-all rounded bg-tts-bg px-2 py-1.5 text-[11px] font-mono text-tts-deep">
+                          {selectedDestWallet.public_key}
+                        </code>
+                        <CopyBtn value={selectedDestWallet.public_key} label="address" />
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedDestWallet && selectedDestWallet.exists_on_mainnet && !selectedDestWallet.has_usdc_trustline && (
                     <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                      {L("Esta carteira ainda não pode receber USDC. Gere uma nova se o envio falhar.", "This wallet can't receive USDC yet. Generate a new one if the transfer fails.")}
+                      {L("Ativando recebimento de USDC nesta carteira no próximo envio.", "USDC receiving will be enabled on this wallet at the next transfer.")}
                     </p>
                   )}
                 </div>

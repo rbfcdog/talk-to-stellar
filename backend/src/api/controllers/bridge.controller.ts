@@ -493,38 +493,44 @@ async function validateStellarDestination(address: string): Promise<{ ok: boolea
 }
 
 /**
- * Generate a brand-new custodial Stellar wallet, fund it on mainnet via the
- * sponsor key, and add the USDC trustline so it can immediately receive USDC.
- * The secret is stored encrypted in the vault; only the public key is returned.
+ * Generate a brand-new custodial Stellar wallet. The keypair is always created
+ * and its secret stored encrypted in the vault. Funding the account on mainnet
+ * is BEST-EFFORT: if a sponsor key is available we create + USDC-trustline it
+ * immediately; otherwise we return the wallet anyway so the person can fund the
+ * address themselves (send XLM to the public key). The USDC trustline is added
+ * automatically the next time the account is used as a transfer destination.
  */
 async function createAndFundMainnetWallet(label: string): Promise<{
   ok: boolean;
   reason?: string;
-  public_key?: string;
-  vault_secret_id?: string;
-  funded?: boolean;
-  trustline?: boolean;
+  public_key: string;
+  vault_secret_id: string;
+  funded: boolean;
+  trustline: boolean;
 }> {
-  const sponsorSecret = resolveSponsorSecret();
-  if (!sponsorSecret) {
-    return { ok: false, reason: "No funded sponsor key is configured to create a mainnet wallet." };
-  }
-
   const keypair = Keypair.random();
   const publicKey = keypair.publicKey();
   const secret = keypair.secret();
 
-  // Store the signing key in the vault before any on-chain work, so a wallet is
-  // never funded with an unrecoverable secret.
-  let vaultSecretId: string;
-  try {
-    vaultSecretId = await vaultSecretService.storeSecret(
-      secret,
-      `bridge_stellar_${publicKey}`,
-      `Bridge destination wallet ${label}`.slice(0, 120),
-    );
-  } catch (e: any) {
-    return { ok: false, reason: `Could not store wallet key securely: ${e?.message || e}` };
+  // Always store the signing key first — the keypair must never be lost.
+  const vaultSecretId = await vaultSecretService.storeSecret(
+    secret,
+    `bridge_stellar_${publicKey}`,
+    `Bridge destination wallet ${label}`.slice(0, 120),
+  );
+
+  // Funding is optional — only attempt it when a sponsor key is configured.
+  const sponsorSecret = resolveSponsorSecret();
+  if (!sponsorSecret) {
+    logger.info(`[bridge] Generated mainnet keypair ${publicKey} (unfunded — awaiting user funding)`);
+    return {
+      ok: true,
+      public_key: publicKey,
+      vault_secret_id: vaultSecretId,
+      funded: false,
+      trustline: false,
+      reason: "Wallet created. Send XLM to this address to activate it, then it can receive USDC.",
+    };
   }
 
   let funded = false;
@@ -564,8 +570,16 @@ async function createAndFundMainnetWallet(label: string): Promise<{
     const msg = e?.response?.data?.extras?.result_codes
       ? JSON.stringify(e.response.data.extras.result_codes)
       : String(e?.message || e);
-    // Wallet+secret are persisted; surface partial state so the caller can retry trustline/funding.
-    return { ok: false, reason: `Wallet created but mainnet setup failed: ${msg}`, public_key: publicKey, vault_secret_id: vaultSecretId, funded, trustline };
+    // Keypair is saved — return it so the person can fund manually.
+    logger.warn(`[bridge] Auto-fund failed for ${publicKey}, returning unfunded: ${msg}`);
+    return {
+      ok: true,
+      public_key: publicKey,
+      vault_secret_id: vaultSecretId,
+      funded,
+      trustline,
+      reason: `Wallet created. Auto-funding unavailable (${msg}). Send XLM to this address to activate it.`,
+    };
   }
 
   logger.info(`[bridge] Generated mainnet wallet ${publicKey} (funded=${funded}, trustline=${trustline})`);
@@ -2585,20 +2599,12 @@ export class BridgeController {
 
       if (insertError) throw insertError;
 
-      if (!result.ok) {
-        // Funded/trustline partially failed — return the wallet but flag the issue.
-        res.status(207).json({
-          success: true,
-          partial: true,
-          message: result.reason,
-          wallet: { ...inserted, usdc_balance: "0", exists_on_mainnet: Boolean(result.funded) },
-        });
-        return;
-      }
-
       res.status(201).json({
         success: true,
-        wallet: { ...inserted, usdc_balance: "0", exists_on_mainnet: true },
+        // When the wallet couldn't be auto-funded, this note tells the user to send XLM.
+        needs_funding: !result.funded,
+        message: result.reason,
+        wallet: { ...inserted, usdc_balance: "0", exists_on_mainnet: Boolean(result.funded) },
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || "Failed to generate wallet." });
