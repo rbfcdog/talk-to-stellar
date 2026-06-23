@@ -391,9 +391,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const usdAccounts = (data?.virtual_accounts ?? []).filter((va) =>
-    ["active", "enabled", "activated", "pending"].includes(String(va.status ?? "").toLowerCase())
-  );
+  // Show all VAs returned by backend (already filtered to USD server-side)
+  const usdAccounts = data?.virtual_accounts ?? [];
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
