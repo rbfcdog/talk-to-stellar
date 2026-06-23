@@ -245,47 +245,75 @@ export class BridgeController {
 
   static async getSessionUsdAccount(req: Request, res: Response): Promise<void> {
     try {
-      const sessionId = String(
-        req.query.session_id || req.headers['x-session-id'] || ''
-      ).trim();
-      if (!sessionId) {
-        res.status(400).json({ success: false, message: 'session_id required' });
+      const sessionId = String(req.query.session_id || req.headers['x-session-id'] || '').trim();
+      const emailParam = String(req.query.email || '').trim().toLowerCase();
+
+      let email: string | undefined;
+
+      if (sessionId) {
+        const { data: session } = await supabase
+          .from('agent_sessions')
+          .select('email')
+          .eq('session_id', sessionId)
+          .maybeSingle();
+        email = session?.email ?? undefined;
+        if (!email) {
+          res.status(404).json({ success: false, message: 'Session not found or has no email.' });
+          return;
+        }
+      } else if (emailParam) {
+        email = emailParam;
+      } else {
+        res.status(400).json({ success: false, message: 'session_id or email required' });
         return;
       }
-      const { data: session } = await supabase
-        .from('agent_sessions')
-        .select('email, user_id')
-        .eq('session_id', sessionId)
-        .maybeSingle();
-      const email = session?.email;
-      if (!email) {
-        res.status(404).json({ success: false, message: 'Session not found or has no email.' });
-        return;
-      }
+
       const { data: bridgeRow } = await supabase
         .from('bridge_customers')
         .select('bridge_customer_id, kyc_status, status')
         .eq('email', email)
         .maybeSingle();
+
       if (!bridgeRow?.bridge_customer_id) {
-        res.json({ success: true, has_account: false, kyc_status: null, virtual_accounts: [] });
+        res.json({ success: true, has_account: false, kyc_status: null, virtual_accounts: [], email });
         return;
       }
+
       const service = getBridgeService();
       let virtualAccounts: any[] = [];
       try {
         const accounts = await service.listVirtualAccounts(bridgeRow.bridge_customer_id);
-        virtualAccounts = (Array.isArray(accounts) ? accounts : []).filter(
-          (va: any) => va.currency === 'usd' || va.currency === 'USD'
+        const usdAccounts = (Array.isArray(accounts) ? accounts : []).filter(
+          (va: any) => va.currency === 'usd' || va.currency === 'USD',
+        );
+        // Enrich each VA with total funds received from activity history
+        virtualAccounts = await Promise.all(
+          usdAccounts.map(async (va: any) => {
+            try {
+              const events = await service.getVirtualAccountActivity(
+                bridgeRow.bridge_customer_id,
+                va.id,
+                { limit: 100 },
+              );
+              const received = (Array.isArray(events) ? events : [])
+                .filter((e: any) => e.type === 'funds_received')
+                .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+              return { ...va, total_received_usd: received };
+            } catch {
+              return { ...va, total_received_usd: 0 };
+            }
+          }),
         );
       } catch {
-        // non-fatal
+        // non-fatal — return empty list
       }
+
       res.json({
         success: true,
         has_account: true,
         kyc_status: bridgeRow.kyc_status,
         customer_status: bridgeRow.status,
+        email,
         virtual_accounts: virtualAccounts,
       });
     } catch (error: any) {
