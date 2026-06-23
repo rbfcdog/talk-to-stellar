@@ -70,7 +70,7 @@ export function loadBridgeConfig(): BridgeConfig {
     defaultDestinationRail: env('BRIDGE_DEFAULT_DESTINATION_RAIL', 'pix'),
     minBrlAmount: env('BRIDGE_MIN_BRL_AMOUNT', '10'),
     maxBrlAmount: env('BRIDGE_MAX_BRL_AMOUNT', '50000'),
-    minUsdcAmount: env('BRIDGE_MIN_USDC_AMOUNT', '5'),
+    minUsdcAmount: env('BRIDGE_MIN_USDC_AMOUNT', '0.01'),
     maxUsdcAmount: env('BRIDGE_MAX_USDC_AMOUNT', '10000'),
     minUsdAmount: env('BRIDGE_MIN_USD_AMOUNT', '5'),
     maxUsdAmount: env('BRIDGE_MAX_USD_AMOUNT', '50000'),
