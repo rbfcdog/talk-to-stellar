@@ -16,8 +16,8 @@
  *   5. rpc.assembleTransaction() → ready for signing
  */
 
-import { Networks, TransactionBuilder, rpc as SorobanRpc, xdr, BASE_FEE } from '@stellar/stellar-sdk';
-import { PoolV2, PoolContractV2, RequestType } from '@blend-capital/blend-sdk';
+import { Networks, TransactionBuilder, rpc as SorobanRpc, xdr, BASE_FEE, StrKey } from '@stellar/stellar-sdk';
+import { BackstopConfig, PoolV2, PoolContractV2, RequestType } from '@blend-capital/blend-sdk';
 import { stellarConfig } from '../../config/stellar';
 import { logger } from '../../utils/logger';
 
@@ -26,27 +26,29 @@ const NETWORKS = {
   mainnet: {
     rpc: process.env.BLEND_MAINNET_RPC || 'https://mainnet.sorobanrpc.com',
     passphrase: Networks.PUBLIC,
-    pool: 'CBLLNN4MFMABJBA6O7DFEBZJBXJLBTJEKUZHLBAJ7U2KHTM4HFMVNKVT',
+    pool: process.env.BLEND_MAINNET_POOL || '',
+    backstop: process.env.BLEND_MAINNET_BACKSTOP_V2 || 'CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7',
     label: 'mainnet',
   },
   testnet: {
     rpc: process.env.BLEND_TESTNET_RPC || 'https://soroban-testnet.stellar.org',
     passphrase: Networks.TESTNET,
-    // Blend testnet pool — if unavailable, service falls back to mainnet APY data
-    pool: process.env.BLEND_TESTNET_POOL || 'CAQFFD3ZNXB5LFHBY5SQCNIWAHUBQFMZP25M7FXRGXIHPHNLBM5AXGJ',
+    pool: process.env.BLEND_TESTNET_POOL || 'CCEBVDYM32YNYCVNRXQKDFFPISJJCV557CDZEIRBEE4NCV4KHPQ44HGF',
+    backstop: process.env.BLEND_TESTNET_BACKSTOP_V2 || 'CBDVWXT433PRVTUNM56C3JREF3HIZHRBA64NB2C3B2UNCKIS65ZYCLZA',
     label: 'testnet',
   },
 } as const;
 
 type NetKey = 'mainnet' | 'testnet';
+type NetConfig = (typeof NETWORKS)[NetKey];
 
-function resolveNet(network?: string): (typeof NETWORKS)[NetKey] {
+function resolveNet(network?: string): NetConfig {
   if (network === 'mainnet' || network === 'public') return NETWORKS.mainnet;
   if (network === 'testnet') return NETWORKS.testnet;
   return stellarConfig.networkName === 'PUBLIC' ? NETWORKS.mainnet : NETWORKS.testnet;
 }
 
-function getRpcServer(net: (typeof NETWORKS)[NetKey]) {
+function getRpcServer(net: NetConfig) {
   return new SorobanRpc.Server(net.rpc, { allowHttp: net.rpc.startsWith('http://') });
 }
 
@@ -55,8 +57,13 @@ interface PoolCache {
   data: PoolInfoResult;
   ts: number;
 }
+interface PoolIdCache {
+  poolId: string;
+  ts: number;
+}
 const CACHE_TTL = 60_000;
 const poolCache: Record<string, PoolCache> = {};
+const poolIdCache: Record<string, PoolIdCache> = {};
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface ReserveInfo {
@@ -71,6 +78,8 @@ export interface ReserveInfo {
 export interface PoolInfoResult {
   poolId: string;
   network: string;
+  poolSource?: 'configured' | 'reward_zone';
+  backstopId?: string;
   reserves: ReserveInfo[];
   usdc?: ReserveInfo;
   xlm?: ReserveInfo;
@@ -79,9 +88,14 @@ export interface PoolInfoResult {
 
 // known asset IDs used as hints for identifying USDC/XLM reserves
 const USDC_HINTS = [
-  'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7EJJUD', // mainnet Circle USDC SAC
+  'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75', // mainnet Circle USDC SAC
+  'CAQCFVLOBK5GIULPNZRGATJJMIZL5BSP7X5YJVMGCPTUEPFM4AVSRCJU', // current Blend testnet USDC
   'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA', // testnet USDC
   'CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F', // alt testnet USDC
+];
+const XLM_HINTS = [
+  'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA', // mainnet XLM SAC
+  'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC', // testnet XLM SAC
 ];
 
 function findReserveByHints(reserves: ReserveInfo[], hints: string[]) {
@@ -92,19 +106,69 @@ function findReserveByHints(reserves: ReserveInfo[], hints: string[]) {
   return undefined;
 }
 
+function validContractId(value: unknown): string {
+  const contractId = String(value || '').trim();
+  return contractId && StrKey.isValidContract(contractId) ? contractId : '';
+}
+
+async function resolvePoolId(net: NetConfig): Promise<{ poolId: string; source: 'configured' | 'reward_zone' }> {
+  const configured = String(net.pool || '').trim();
+  const validConfigured = validContractId(configured);
+  if (validConfigured) {
+    return { poolId: validConfigured, source: 'configured' };
+  }
+  if (configured) {
+    logger.warn(`[blend] ignoring invalid ${net.label} pool id: ${configured}`);
+  }
+
+  const cacheKey = `${net.label}:pool-id`;
+  const now = Date.now();
+  if (poolIdCache[cacheKey] && now - poolIdCache[cacheKey].ts < CACHE_TTL) {
+    return { poolId: poolIdCache[cacheKey].poolId, source: 'reward_zone' };
+  }
+
+  const backstopId = validContractId(net.backstop);
+  if (!backstopId) {
+    throw new Error(`Invalid Blend ${net.label} backstop contract id`);
+  }
+
+  const config = await BackstopConfig.load({ rpc: net.rpc, passphrase: net.passphrase }, backstopId);
+  const poolId = config.rewardZone.find((id) => StrKey.isValidContract(id));
+  if (!poolId) {
+    throw new Error(`Blend ${net.label} backstop reward zone has no valid pool`);
+  }
+
+  poolIdCache[cacheKey] = { poolId, ts: now };
+  return { poolId, source: 'reward_zone' };
+}
+
 // ── Core Service ───────────────────────────────────────────────────────────
 export const BlendService = {
   // Legacy list helpers (kept for existing routes)
   async listPools() {
     const pools = [NETWORKS.mainnet, NETWORKS.testnet];
-    return pools.map((p) => ({
-      id: p.label,
-      name: `Blend Stellar Pool (${p.label})`,
-      contract: p.pool,
-      assets: ['USDC', 'XLM'],
-      network: p.label,
-      explorer: `https://stellar.expert/explorer/${p.label}/contract/${p.pool}`,
-    }));
+    return Promise.all(
+      pools.map(async (p) => {
+        let contract = validContractId(p.pool);
+        let poolSource = contract ? 'configured' : 'unavailable';
+        try {
+          const resolved = await resolvePoolId(p);
+          contract = resolved.poolId;
+          poolSource = resolved.source;
+        } catch (error: any) {
+          logger.warn(`[blend] ${p.label} pool discovery failed: ${error.message}`);
+        }
+        return {
+          id: p.label,
+          name: `Blend Stellar Pool (${p.label})`,
+          contract,
+          assets: ['USDC', 'XLM'],
+          network: p.label,
+          poolSource,
+          explorer: contract ? `https://stellar.expert/explorer/${p.label}/contract/${contract}` : null,
+        };
+      }),
+    );
   },
 
   async getPool(poolId: string) {
@@ -116,8 +180,8 @@ export const BlendService = {
 
   getPoolAddresses() {
     return [
-      { id: 'mainnet', name: 'Blend Stellar Pool (mainnet)', contract: NETWORKS.mainnet.pool, assets: ['USDC', 'XLM'] },
-      { id: 'testnet', name: 'Blend Stellar Pool (testnet)', contract: NETWORKS.testnet.pool, assets: ['USDC', 'XLM'] },
+      { id: 'mainnet', name: 'Blend Stellar Pool (mainnet)', contract: validContractId(NETWORKS.mainnet.pool), backstop: NETWORKS.mainnet.backstop, assets: ['USDC', 'XLM'] },
+      { id: 'testnet', name: 'Blend Stellar Pool (testnet)', contract: validContractId(NETWORKS.testnet.pool), backstop: NETWORKS.testnet.backstop, assets: ['USDC', 'XLM'] },
     ];
   },
 
@@ -131,10 +195,11 @@ export const BlendService = {
     }
 
     const blendNet = { rpc: net.rpc, passphrase: net.passphrase };
+    const { poolId, source } = await resolvePoolId(net);
     let pool: PoolV2;
 
     try {
-      pool = await PoolV2.load(blendNet, net.pool);
+      pool = await PoolV2.load(blendNet, poolId);
     } catch (e: any) {
       // If testnet pool isn't deployed, fall back to mainnet data as reference
       if (net.label === 'testnet') {
@@ -156,12 +221,16 @@ export const BlendService = {
       });
     });
 
+    const usdcReserve = findReserveByHints(reserves, USDC_HINTS) || reserves[0];
+    const xlmReserve = findReserveByHints(reserves, XLM_HINTS) || reserves.find((reserve) => reserve.assetId !== usdcReserve?.assetId);
     const result: PoolInfoResult = {
-      poolId: net.pool,
+      poolId,
       network: net.label,
+      poolSource: source,
+      backstopId: net.backstop,
       reserves,
-      usdc: findReserveByHints(reserves, USDC_HINTS) || reserves[0],
-      xlm: reserves.length > 1 ? reserves[1] : undefined,
+      usdc: usdcReserve,
+      xlm: xlmReserve,
       timestamp: now,
     };
 
@@ -174,13 +243,14 @@ export const BlendService = {
   async getUserPosition(userAddress: string, network?: string) {
     const net = resolveNet(network);
     const blendNet = { rpc: net.rpc, passphrase: net.passphrase };
+    const { poolId } = await resolvePoolId(net);
 
     let pool: PoolV2;
     try {
-      pool = await PoolV2.load(blendNet, net.pool);
+      pool = await PoolV2.load(blendNet, poolId);
     } catch (e: any) {
       if (net.label === 'testnet') {
-        return { userAddress, poolId: net.pool, network: net.label, positions: [], note: 'testnet pool unavailable' };
+        return { userAddress, poolId, network: net.label, positions: [], note: 'testnet pool unavailable' };
       }
       throw new Error(`Failed to load Blend pool: ${e.message}`);
     }
@@ -195,7 +265,7 @@ export const BlendService = {
       positions.push({ assetId, supply, collateral, liability });
     });
 
-    return { userAddress, poolId: net.pool, network: net.label, positions };
+    return { userAddress, poolId, network: net.label, positions };
   },
 
   // ── Build supply XDR ─────────────────────────────────────────────────────
@@ -207,9 +277,10 @@ export const BlendService = {
   }) {
     const { userAddress, assetId, amount, network } = params;
     const net = resolveNet(network);
+    const { poolId } = await resolvePoolId(net);
     const amountBigInt = BigInt(amount);
 
-    const poolContract = new PoolContractV2(net.pool);
+    const poolContract = new PoolContractV2(poolId);
     const opXdr = poolContract.submit({
       from: userAddress,
       spender: userAddress,
@@ -238,7 +309,7 @@ export const BlendService = {
       xdr: assembled.toEnvelope().toXDR().toString('base64'),
       networkPassphrase: net.passphrase,
       network: net.label,
-      poolId: net.pool,
+      poolId,
       assetId,
       amountRaw: amount,
     };
@@ -253,9 +324,10 @@ export const BlendService = {
   }) {
     const { userAddress, assetId, amount, network } = params;
     const net = resolveNet(network);
+    const { poolId } = await resolvePoolId(net);
     const amountBigInt = BigInt(amount);
 
-    const poolContract = new PoolContractV2(net.pool);
+    const poolContract = new PoolContractV2(poolId);
     const opXdr = poolContract.submit({
       from: userAddress,
       spender: userAddress,
@@ -284,7 +356,7 @@ export const BlendService = {
       xdr: assembled.toEnvelope().toXDR().toString('base64'),
       networkPassphrase: net.passphrase,
       network: net.label,
-      poolId: net.pool,
+      poolId,
       assetId,
       amountRaw: amount,
     };

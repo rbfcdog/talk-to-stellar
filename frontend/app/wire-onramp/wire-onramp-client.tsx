@@ -507,8 +507,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           eyebrow="Bridge.xyz mainnet"
           title={L("Depositar em Dólar", "USD Deposit")}
           description={L(
-            "Entre com seu e-mail para ver as instruções wire/ACH da sua conta Bridge.",
-            "Enter your email to view your Bridge wire/ACH deposit instructions."
+            "Entre com o e-mail da conta Bridge que deve receber o depósito. Pode ser diferente do WhatsApp.",
+            "Enter the Bridge account email that should receive the deposit. It can be different from WhatsApp."
           )}
         />
         <OperationalCard>
@@ -585,7 +585,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
           <div className="flex flex-col gap-2">
             <Button
-              onClick={() => load(emailInput)}
+              onClick={() => load(emailInput, { forceEmail: Boolean(emailInput.trim()) })}
               className="w-full"
             >
               {L("Tentar novamente", "Try again")}
@@ -621,17 +621,37 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 <span className="block font-mono text-xs text-tts-deep/60 mb-2">{loggedEmail}</span>
               )}
               {L(
-                "Nenhuma conta de recebimento em dólar encontrada. Fale com a gente no WhatsApp para ativá-la.",
-                "No USD receiving account found for this email. Message us on WhatsApp to set one up."
+                "Não encontramos uma conta USD para esse e-mail. Digite o e-mail da conta Bridge que você quer usar; ele pode ser diferente do WhatsApp.",
+                "We did not find a USD account for this email. Enter the Bridge account email you want to use; it can be different from WhatsApp."
               )}
             </p>
           </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); load(emailInput, { forceEmail: true }); }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-2">
+                {L("E-mail da conta Bridge", "Bridge account email")}
+              </label>
+              <Input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="you@email.com"
+                className="text-center"
+              />
+            </div>
+            <Button type="submit" disabled={!emailInput.trim()} className="w-full">
+              {L("Buscar por este e-mail", "Check this email")}
+            </Button>
+          </form>
           <Button
             variant="outline"
             onClick={() => resetLogin(true)}
             className="w-full"
           >
-            {L("Tentar outro e-mail", "Try a different email")}
+            {L("Limpar e-mail salvo", "Clear saved email")}
           </Button>
         </OperationalCard>
       </OperationalPage>
@@ -751,7 +771,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         {/* Refresh */}
         <Button
           variant="outline"
-          onClick={() => load(loggedEmail || emailInput)}
+          onClick={() => load(loggedEmail || emailInput, { forceEmail: Boolean((loggedEmail || emailInput).trim()) })}
           className="w-full"
         >
           <RefreshCw className="h-3.5 w-3.5" />
