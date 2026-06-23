@@ -42,6 +42,9 @@ type UsdVA = {
   status: string;
   source_deposit_instructions?: DepositInstructions;
   total_received_usd?: number;
+  bridge_wallet_id?: string | null;
+  destination_chain?: string | null;
+  destination_address?: string | null;
 };
 
 type StellarWallet = {
@@ -326,6 +329,9 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
     (sum, w) => sum + w.balances.filter(b => b.currency === 'USDC').reduce((s, b) => s + Number(b.amount || 0), 0),
     0,
   );
+  // Also include VA total_received as available (funds may be in VA, not yet in wallet)
+  const vaAvailableBalance = activeVa?.total_received_usd ?? 0;
+  const totalAvailableBalance = bridgeUsdcBalance > 0 ? bridgeUsdcBalance : vaAvailableBalance;
 
   // Manual send state
   const [sendAmount, setSendAmount] = useState("");
@@ -335,13 +341,14 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
   const handleSendToStellar = useCallback(async () => {
     const amountNum = Number(sendAmount);
     if (!amountNum || amountNum <= 0) return;
-    const wallet = bridgeWallets[0];
-    if (!wallet || !data?.customer_id || !data?.stellar_wallet?.public_key) return;
+    // Prefer Bridge wallet, fallback to VA's bridge_wallet_id
+    const walletId = bridgeWallets[0]?.id || activeVa?.bridge_wallet_id;
+    if (!walletId || !data?.customer_id || !data?.stellar_wallet?.public_key) return;
     setSendStatus("sending");
     setSendError("");
     try {
       const res = await fetch(
-        `/api/bridge?_path=/customers/${encodeURIComponent(data.customer_id)}/wallets/${encodeURIComponent(wallet.id)}/transfer-to-stellar`,
+        `/api/bridge?_path=/customers/${encodeURIComponent(data.customer_id)}/wallets/${encodeURIComponent(walletId)}/transfer-to-stellar`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -360,7 +367,7 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, data, load, loggedEmail, emailInput]);
+  }, [sendAmount, bridgeWallets, activeVa, data, load, loggedEmail, emailInput]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -595,16 +602,21 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
                   </div>
                 </div>
 
-                {bridgeUsdcBalance > 0 ? (
+                {totalAvailableBalance > 0 ? (
                   <div className="mx-5 mt-4 rounded-lg bg-tts-bg/70 px-3 py-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-tts-muted">
-                        {L("Saldo disponível na Bridge", "Available Bridge balance")}
+                        {L("Saldo disponível", "Available balance")}
                       </span>
                       <span className="text-sm font-bold tabular-nums text-tts-deep">
-                        {fmt(bridgeUsdcBalance)} USDC
+                        {fmt(totalAvailableBalance)} USDC
                       </span>
                     </div>
+                    {bridgeUsdcBalance === 0 && vaAvailableBalance > 0 && (
+                      <p className="mt-1 text-[10px] text-tts-muted/60">
+                        {L("Saldo da conta virtual (pode precisar de sweep)", "Virtual account balance (may need sweep)")}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="mx-5 mt-4 rounded-lg bg-amber-50/40 dark:bg-amber-900/10 px-3 py-2">
@@ -617,7 +629,7 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
                   </div>
                 )}
 
-                {bridgeUsdcBalance > 0 && sendStatus !== "ok" && (
+                {totalAvailableBalance > 0 && sendStatus !== "ok" && (
                   <div className="px-5 py-4 space-y-3">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-1.5">
@@ -628,15 +640,15 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
                           type="number"
                           step="0.01"
                           min="0.01"
-                          max={bridgeUsdcBalance}
+                          max={totalAvailableBalance}
                           value={sendAmount}
                           onChange={(e) => setSendAmount(e.target.value)}
-                          placeholder={`Máx: ${fmt(bridgeUsdcBalance)}`}
+                          placeholder={`Máx: ${fmt(totalAvailableBalance)}`}
                           className="flex-1 rounded-xl border border-tts-border bg-tts-bg px-3 py-2 text-sm outline-none
                                      focus:border-tts-deep placeholder:text-tts-muted/40 transition-colors"
                         />
                         <button
-                          onClick={() => setSendAmount(String(bridgeUsdcBalance))}
+                          onClick={() => setSendAmount(String(totalAvailableBalance))}
                           className="shrink-0 rounded-xl border border-tts-border px-3 py-2 text-xs font-medium
                                      text-tts-muted hover:bg-tts-surface transition-colors"
                         >

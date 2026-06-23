@@ -62,6 +62,9 @@ type UsdVA = {
   }>;
   account_source?: string;
   activity_count?: number;
+  bridge_wallet_id?: string | null;
+  destination_chain?: string | null;
+  destination_address?: string | null;
 };
 
 type StellarWallet = {
@@ -465,6 +468,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     (sum, w) => sum + w.balances.filter(b => b.currency === 'USDC').reduce((s, b) => s + Number(b.amount || 0), 0),
     0,
   );
+  // Also include VA total_received as available (funds may be in VA, not yet in wallet)
+  const vaAvailableBalance = activeVa?.total_received_usd ?? 0;
+  const totalAvailableBalance = bridgeUsdcBalance > 0 ? bridgeUsdcBalance : vaAvailableBalance;
 
   // Manual send state
   const [sendAmount, setSendAmount] = useState("");
@@ -474,13 +480,14 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const handleSendToStellar = useCallback(async () => {
     const amountNum = Number(sendAmount);
     if (!amountNum || amountNum <= 0) return;
-    const wallet = bridgeWallets[0];
-    if (!wallet || !data?.customer_id || !data?.stellar_wallet?.public_key) return;
+    // Prefer Bridge wallet, fallback to VA's bridge_wallet_id
+    const walletId = bridgeWallets[0]?.id || activeVa?.bridge_wallet_id;
+    if (!walletId || !data?.customer_id || !data?.stellar_wallet?.public_key) return;
     setSendStatus("sending");
     setSendError("");
     try {
       const res = await fetch(
-        `/api/bridge?_path=/customers/${encodeURIComponent(data.customer_id)}/wallets/${encodeURIComponent(wallet.id)}/transfer-to-stellar`,
+        `/api/bridge?_path=/customers/${encodeURIComponent(data.customer_id)}/wallets/${encodeURIComponent(walletId)}/transfer-to-stellar`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -500,7 +507,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, data, load, loggedEmail, emailInput]);
+  }, [sendAmount, bridgeWallets, activeVa, data, load, loggedEmail, emailInput]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -817,14 +824,14 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 </div>
 
                 {/* Available balance */}
-                {bridgeUsdcBalance > 0 ? (
+                {totalAvailableBalance > 0 ? (
                   <div className="mb-4 rounded-lg bg-tts-bg/70 px-3 py-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-tts-muted">
-                        {L("Saldo disponível na Bridge", "Available Bridge balance")}
+                        {L("Saldo disponível", "Available balance")}
                       </span>
                       <span className="text-sm font-bold tabular-nums text-tts-deep">
-                        {fmt(bridgeUsdcBalance)} USDC
+                        {fmt(totalAvailableBalance)} USDC
                       </span>
                     </div>
                     {bridgeWallets.length > 0 && (
@@ -833,6 +840,11 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           `Carteira Bridge: ${bridgeWallets[0].id.slice(0, 10)}...${bridgeWallets[0].id.slice(-6)}`,
                           `Bridge wallet: ${bridgeWallets[0].id.slice(0, 10)}...${bridgeWallets[0].id.slice(-6)}`,
                         )}
+                      </p>
+                    )}
+                    {bridgeUsdcBalance === 0 && vaAvailableBalance > 0 && (
+                      <p className="mt-1 text-[10px] text-tts-muted/60">
+                        {L("Saldo da conta virtual (pode precisar de sweep)", "Virtual account balance (may need sweep)")}
                       </p>
                     )}
                   </div>
@@ -848,7 +860,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 )}
 
                 {/* Send form */}
-                {bridgeUsdcBalance > 0 && sendStatus !== "ok" && (
+                {totalAvailableBalance > 0 && sendStatus !== "ok" && (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-1.5">
@@ -859,16 +871,16 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           type="number"
                           step="0.01"
                           min="0.01"
-                          max={bridgeUsdcBalance}
+                          max={totalAvailableBalance}
                           value={sendAmount}
                           onChange={(e) => setSendAmount(e.target.value)}
-                          placeholder={`Máx: ${fmt(bridgeUsdcBalance)}`}
+                          placeholder={`Máx: ${fmt(totalAvailableBalance)}`}
                           className="flex-1"
                         />
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setSendAmount(String(bridgeUsdcBalance))}
+                          onClick={() => setSendAmount(String(totalAvailableBalance))}
                           className="shrink-0 text-xs"
                         >
                           {L("Tudo", "Max")}
