@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDownToLine,
+  ArrowRight,
   BadgeCheck,
   Building2,
   CheckCircle2,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   Search,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -42,6 +44,11 @@ type UsdVA = {
   total_received_usd?: number;
 };
 
+type StellarWallet = {
+  public_key: string;
+  usdc_balance: string | null;
+};
+
 type ApiResponse = {
   success: boolean;
   has_account?: boolean;
@@ -49,6 +56,7 @@ type ApiResponse = {
   customer_status?: string;
   email?: string;
   virtual_accounts?: UsdVA[];
+  stellar_wallet?: StellarWallet | null;
   message?: string;
 };
 
@@ -256,6 +264,80 @@ function VaCard({ va }: { va: UsdVA }) {
   );
 }
 
+// ── Stellar wallet destination card ───────────────────────────────────────────
+
+function StellarWalletCard({ wallet }: { wallet: StellarWallet }) {
+  const short = wallet.public_key.length > 12
+    ? `${wallet.public_key.slice(0, 6)}...${wallet.public_key.slice(-6)}`
+    : wallet.public_key;
+  const balance = wallet.usdc_balance !== null ? Number(wallet.usdc_balance) : null;
+
+  return (
+    <div className="rounded-2xl border border-tts-border bg-tts-surface overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+        <div className="flex items-center gap-2.5">
+          <Wallet className="h-5 w-5 text-tts-muted" />
+          <div>
+            <p className="text-sm font-bold text-tts-deep">Stellar Wallet</p>
+            <p className="text-[11px] text-tts-muted mt-0.5">USDC destination</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase px-2.5 py-1 rounded-full border border-tts-confirm/30 bg-tts-confirm/10 text-tts-confirm">
+          <ArrowRight className="h-3 w-3" />
+          Auto-routed
+        </span>
+      </div>
+
+      <div className="px-5 py-5 border-b border-tts-border/40">
+        {balance !== null && (
+          <div className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-1">
+              USDC balance
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold tabular-nums text-tts-deep">
+                {fmt(balance)}
+              </span>
+              <span className="text-base font-bold text-tts-muted">USDC</span>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-0.5">
+              Wallet address
+            </p>
+            <span className="text-sm font-mono font-semibold text-tts-deep">{short}</span>
+          </div>
+          <CopyBtn value={wallet.public_key} label="wallet address" />
+        </div>
+      </div>
+
+      <div className="px-5 py-4 bg-tts-bg/50">
+        <div className="flex items-start gap-2">
+          <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
+          <p className="text-xs text-tts-muted leading-relaxed">
+            When USD arrives via wire or ACH, it is automatically converted to USDC and credited to this wallet. No action needed.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Arrow divider ──────────────────────────────────────────────────────────────
+
+function FlowArrow() {
+  return (
+    <div className="flex items-center justify-center py-1">
+      <div className="flex flex-col items-center gap-0.5">
+        <div className="h-4 w-px bg-tts-border/60" />
+        <ArrowRight className="h-4 w-4 text-tts-muted rotate-90" />
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?: string }) {
@@ -423,11 +505,19 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         )}
 
-        {/* Ready — VA cards */}
+        {/* Ready — VA cards + Stellar wallet */}
         {status === "ready" && (
           <>
             {usdAccounts.length > 0 ? (
-              usdAccounts.map((va) => <VaCard key={va.id} va={va} />)
+              <>
+                {usdAccounts.map((va) => <VaCard key={va.id} va={va} />)}
+                {data?.stellar_wallet && (
+                  <>
+                    <FlowArrow />
+                    <StellarWalletCard wallet={data.stellar_wallet} />
+                  </>
+                )}
+              </>
             ) : (
               <div className="rounded-2xl border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-6 text-center space-y-3">
                 <Clock className="h-8 w-8 text-amber-500 mx-auto" />
