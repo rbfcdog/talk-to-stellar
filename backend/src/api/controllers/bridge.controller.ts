@@ -5,6 +5,7 @@ import { assertBridgeAmountInRange } from "../middlewares/bridge-mainnet.middlew
 import { mainnetServer } from "../../config/stellar";
 import { PUBLIC_USDC_ISSUER } from "../../config/assets";
 import { supabase } from "../../config/supabase";
+import { Keypair, Operation, TransactionBuilder, Networks } from "@stellar/stellar-sdk";
 
 function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
@@ -335,27 +336,72 @@ function collectActivityBalances(events: Array<Record<string, unknown>>): Virtua
   }));
 }
 
-/** Verify a Stellar address exists, is funded, and has the USDC trustline before sending to Bridge. */
-async function validateStellarDestination(address: string): Promise<{ ok: boolean; reason?: string }> {
+const SPONSOR_SECRET = process.env.STELLAR_WALLET_SPONSOR_SECRET;
+const MAINNET_PASSPHRASE = Networks.PUBLIC;
+const FUNDING_XLM = '5'; // Enough for base reserve + trustline reserve + fees
+
+/**
+ * Auto-fund a Stellar address on mainnet if it doesn't exist yet.
+ * Returns true if the account already existed or was successfully created.
+ */
+async function ensureMainnetAccount(address: string): Promise<{ ok: boolean; reason?: string }> {
   if (!address) return { ok: false, reason: "Stellar destination address is required." };
+
+  // Check if account already exists
   try {
-    // Bridge wallets live on mainnet even when the project runs on testnet
-    const account = await mainnetServer.loadAccount(address);
-    if (!account.balances.some(
-      (b: any) => b.asset_type === 'credit_alphanum4' && b.asset_code === 'USDC' && b.asset_issuer === PUBLIC_USDC_ISSUER,
-    )) {
-      return { ok: false, reason: `Stellar address ${address} exists but has no mainnet USDC trustline. Add it before using with Bridge.` };
-    }
-    return { ok: true };
+    await mainnetServer.loadAccount(address);
+    return { ok: true }; // Exists — no funding needed
   } catch (e: any) {
     const status = e?.response?.status ?? e?.status;
-    if (status === 404) {
-      return { ok: false, reason: `Stellar address ${address} does not exist on mainnet. Fund it with ≥2 XLM and add USDC trustline first.` };
+    if (status !== 404) {
+      logger.warn(`[bridge] Mainnet Horizon check failed for ${address}: ${e?.message}`);
+      return { ok: true }; // Non-404 error — let Bridge handle it
     }
-    logger.warn(`[bridge] Mainnet Horizon check failed for ${address}: ${e?.message}`);
-    // Don't block on Horizon errors — let Bridge validate
-    return { ok: true };
   }
+
+  // Account doesn't exist — fund it
+  if (!SPONSOR_SECRET) {
+    return { ok: false, reason: `Stellar address ${address} does not exist on mainnet and STELLAR_WALLET_SPONSOR_SECRET is not configured.` };
+  }
+
+  try {
+    const sponsorKeypair = Keypair.fromSecret(SPONSOR_SECRET);
+    const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
+
+    const createTx = new TransactionBuilder(sponsorAccount, {
+      fee: '100',
+      networkPassphrase: MAINNET_PASSPHRASE,
+    })
+      .addOperation(Operation.createAccount({ destination: address, startingBalance: FUNDING_XLM }))
+      .setTimeout(60)
+      .build();
+
+    createTx.sign(sponsorKeypair);
+    const result = await mainnetServer.submitTransaction(createTx);
+
+    if (!result.successful) {
+      return { ok: false, reason: `Failed to create mainnet account ${address}: transaction failed.` };
+    }
+
+    // Wait for account to appear
+    for (let i = 0; i < 10; i++) {
+      try { await mainnetServer.loadAccount(address); break; } catch { await new Promise(r => setTimeout(r, 500)); }
+    }
+
+    logger.info(`[bridge] Auto-funded mainnet account ${address} with ${FUNDING_XLM} XLM`);
+    return { ok: true };
+  } catch (e: any) {
+    const msg = e?.response?.data?.extras?.result_codes
+      ? JSON.stringify(e.response.data.extras.result_codes)
+      : String(e?.message || e);
+    return { ok: false, reason: `Failed to fund mainnet account ${address}: ${msg}` };
+  }
+}
+
+/** Verify a Stellar address exists on mainnet (auto-fund if needed). */
+async function validateStellarDestination(address: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!address) return { ok: false, reason: "Stellar destination address is required." };
+  return ensureMainnetAccount(address);
 }
 
 export class BridgeController {
@@ -2138,6 +2184,39 @@ export class BridgeController {
       });
 
       logger.info(`[bridge] bridge-wallet-to-stellar transfer created: ${transfer.id}`);
+
+      // Associate the destination wallet with the customer's session in stellar_mainnet_wallets
+      try {
+        const { data: custRow } = await supabase
+          .from('bridge_customers')
+          .select('email')
+          .eq('bridge_customer_id', customerId)
+          .maybeSingle();
+        if (custRow?.email) {
+          const { data: sessRow } = await supabase
+            .from('agent_sessions')
+            .select('session_id, user_id')
+            .eq('email', custRow.email)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (sessRow?.session_id && sessRow?.user_id) {
+            await supabase.from('stellar_mainnet_wallets').upsert({
+              session_id: sessRow.session_id,
+              user_id: sessRow.user_id,
+              public_key: destinationAddress,
+              label: 'Bridge-linked wallet',
+              wallet_kind: 'external_public_key',
+              is_primary: false,
+              metadata: { linked_from: 'bridge_transfer', transfer_id: transfer.id },
+            }, { onConflict: 'session_id,public_key' });
+            logger.info(`[bridge] Linked mainnet wallet ${destinationAddress} to session ${sessRow.session_id}`);
+          }
+        }
+      } catch (linkErr: any) {
+        logger.warn(`[bridge] Failed to link mainnet wallet: ${linkErr.message}`);
+      }
+
       res.status(201).json({ success: true, transfer });
     } catch (error: any) {
       logger.error(`[bridge] createBridgeWalletToStellarTransfer failed: ${error.message}`);
