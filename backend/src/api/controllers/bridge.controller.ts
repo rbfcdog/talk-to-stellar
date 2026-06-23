@@ -308,6 +308,42 @@ export class BridgeController {
         // non-fatal — return empty list
       }
 
+      // Look up the Stellar wallet linked to this email via agent_sessions → wallets
+      let stellarWallet: { public_key: string; usdc_balance: string | null } | null = null;
+      try {
+        const { data: sessionRow } = await supabase
+          .from('agent_sessions')
+          .select('session_id')
+          .eq('email', email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (sessionRow?.session_id) {
+          const { data: walletRow } = await supabase
+            .from('wallets')
+            .select('public_key')
+            .eq('session_id', sessionRow.session_id)
+            .maybeSingle();
+          if (walletRow?.public_key) {
+            // Fetch live USDC balance from Horizon
+            let usdcBalance: string | null = null;
+            try {
+              const account = await horizonServer.loadAccount(walletRow.public_key);
+              const usdcIssuer = stellarConfig.network === Networks.PUBLIC ? PUBLIC_USDC_ISSUER : TESTNET_USDC_ISSUER;
+              const usdcEntry = account.balances.find(
+                (b: any) => b.asset_type === 'credit_alphanum4' && b.asset_code === 'USDC' && b.asset_issuer === usdcIssuer,
+              );
+              usdcBalance = usdcEntry?.balance ?? '0';
+            } catch {
+              // Horizon unavailable — still return the address
+            }
+            stellarWallet = { public_key: walletRow.public_key, usdc_balance: usdcBalance };
+          }
+        }
+      } catch {
+        // non-fatal
+      }
+
       res.json({
         success: true,
         has_account: true,
@@ -315,6 +351,7 @@ export class BridgeController {
         customer_status: bridgeRow.status,
         email,
         virtual_accounts: virtualAccounts,
+        stellar_wallet: stellarWallet,
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || 'Failed to load account.' });
