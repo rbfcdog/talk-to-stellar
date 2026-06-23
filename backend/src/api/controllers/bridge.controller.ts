@@ -492,6 +492,86 @@ async function validateStellarDestination(address: string): Promise<{ ok: boolea
   return ensureMainnetAccount(address);
 }
 
+/**
+ * Generate a brand-new custodial Stellar wallet, fund it on mainnet via the
+ * sponsor key, and add the USDC trustline so it can immediately receive USDC.
+ * The secret is stored encrypted in the vault; only the public key is returned.
+ */
+async function createAndFundMainnetWallet(label: string): Promise<{
+  ok: boolean;
+  reason?: string;
+  public_key?: string;
+  vault_secret_id?: string;
+  funded?: boolean;
+  trustline?: boolean;
+}> {
+  const sponsorSecret = resolveSponsorSecret();
+  if (!sponsorSecret) {
+    return { ok: false, reason: "No funded sponsor key is configured to create a mainnet wallet." };
+  }
+
+  const keypair = Keypair.random();
+  const publicKey = keypair.publicKey();
+  const secret = keypair.secret();
+
+  // Store the signing key in the vault before any on-chain work, so a wallet is
+  // never funded with an unrecoverable secret.
+  let vaultSecretId: string;
+  try {
+    vaultSecretId = await vaultSecretService.storeSecret(
+      secret,
+      `bridge_stellar_${publicKey}`,
+      `Bridge destination wallet ${label}`.slice(0, 120),
+    );
+  } catch (e: any) {
+    return { ok: false, reason: `Could not store wallet key securely: ${e?.message || e}` };
+  }
+
+  let funded = false;
+  let trustline = false;
+  try {
+    const sponsorKeypair = Keypair.fromSecret(sponsorSecret);
+    const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
+    const createTx = new TransactionBuilder(sponsorAccount, {
+      fee: '100',
+      networkPassphrase: MAINNET_PASSPHRASE,
+    })
+      .addOperation(Operation.createAccount({ destination: publicKey, startingBalance: FUNDING_XLM }))
+      .setTimeout(60)
+      .build();
+    createTx.sign(sponsorKeypair);
+    await mainnetServer.submitTransaction(createTx);
+
+    for (let i = 0; i < 10; i++) {
+      try { await mainnetServer.loadAccount(publicKey); funded = true; break; }
+      catch { await new Promise((r) => setTimeout(r, 500)); }
+    }
+
+    if (funded) {
+      const newAccount = await mainnetServer.loadAccount(publicKey);
+      const trustTx = new TransactionBuilder(newAccount, {
+        fee: '100',
+        networkPassphrase: MAINNET_PASSPHRASE,
+      })
+        .addOperation(Operation.changeTrust({ asset: new Asset('USDC', PUBLIC_USDC_ISSUER) }))
+        .setTimeout(60)
+        .build();
+      trustTx.sign(keypair);
+      await mainnetServer.submitTransaction(trustTx);
+      trustline = true;
+    }
+  } catch (e: any) {
+    const msg = e?.response?.data?.extras?.result_codes
+      ? JSON.stringify(e.response.data.extras.result_codes)
+      : String(e?.message || e);
+    // Wallet+secret are persisted; surface partial state so the caller can retry trustline/funding.
+    return { ok: false, reason: `Wallet created but mainnet setup failed: ${msg}`, public_key: publicKey, vault_secret_id: vaultSecretId, funded, trustline };
+  }
+
+  logger.info(`[bridge] Generated mainnet wallet ${publicKey} (funded=${funded}, trustline=${trustline})`);
+  return { ok: true, public_key: publicKey, vault_secret_id: vaultSecretId, funded, trustline };
+}
+
 export class BridgeController {
   // ── Session-based helpers ──────────────────────────────────────
 
@@ -2412,6 +2492,116 @@ export class BridgeController {
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || "Failed to fetch balances." });
+    }
+  }
+
+  // ── Bridge destination wallets (stored by email) ──────────────────────
+
+  /** Resolve the Bridge customer email from session_id or email query/body. */
+  private static async resolveBridgeEmail(req: Request): Promise<string> {
+    const email = readText(req.query.email ?? req.body?.email).toLowerCase();
+    if (email) return email;
+    const sessionId = readText(req.query.session_id ?? req.body?.session_id ?? req.headers["x-session-id"]);
+    if (sessionId) {
+      const { data: session } = await supabase
+        .from("agent_sessions").select("email").eq("session_id", sessionId).maybeSingle();
+      if (session?.email) return String(session.email).toLowerCase();
+    }
+    return "";
+  }
+
+  /** List the custodial Stellar destination wallets stored for a Bridge email, with live balances. */
+  static async listStellarWallets(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      if (!email) {
+        res.status(400).json({ success: false, message: "session_id or email is required." });
+        return;
+      }
+
+      const { data: rows } = await supabase
+        .from("bridge_stellar_wallets")
+        .select("id, public_key, label, is_primary, is_funded, has_usdc_trustline, created_at")
+        .eq("email", email)
+        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      const wallets = await Promise.all((rows || []).map(async (w: any) => {
+        let usdc_balance: string | null = null;
+        let exists = false;
+        try {
+          const account = await mainnetServer.loadAccount(w.public_key);
+          exists = true;
+          const usdc = account.balances.find(
+            (b: any) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC" && b.asset_issuer === PUBLIC_USDC_ISSUER,
+          );
+          usdc_balance = usdc?.balance ?? "0";
+        } catch {
+          // not yet on-ledger
+        }
+        return { ...w, usdc_balance, exists_on_mainnet: exists };
+      }));
+
+      res.json({ success: true, email, wallets });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to list wallets." });
+    }
+  }
+
+  /** Generate + fund a new custodial Stellar wallet on mainnet, stored for the Bridge email. */
+  static async generateStellarWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      if (!email) {
+        res.status(400).json({ success: false, message: "session_id or email is required." });
+        return;
+      }
+
+      const label = readText(req.body?.label) || `Wallet for ${email}`;
+      const result = await createAndFundMainnetWallet(label);
+
+      if (!result.public_key) {
+        res.status(502).json({ success: false, message: result.reason || "Wallet generation failed." });
+        return;
+      }
+
+      // Whether or not on-chain setup fully succeeded, persist the wallet so it is recoverable.
+      const isFirst = !(await supabase
+        .from("bridge_stellar_wallets").select("id").eq("email", email).limit(1).maybeSingle()).data;
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("bridge_stellar_wallets")
+        .insert({
+          email,
+          public_key: result.public_key,
+          vault_secret_id: result.vault_secret_id ?? null,
+          label,
+          is_primary: isFirst,
+          is_funded: Boolean(result.funded),
+          has_usdc_trustline: Boolean(result.trustline),
+        })
+        .select("id, public_key, label, is_primary, is_funded, has_usdc_trustline, created_at")
+        .single();
+
+      if (insertError) throw insertError;
+
+      if (!result.ok) {
+        // Funded/trustline partially failed — return the wallet but flag the issue.
+        res.status(207).json({
+          success: true,
+          partial: true,
+          message: result.reason,
+          wallet: { ...inserted, usdc_balance: "0", exists_on_mainnet: Boolean(result.funded) },
+        });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        wallet: { ...inserted, usdc_balance: "0", exists_on_mainnet: true },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to generate wallet." });
     }
   }
 }

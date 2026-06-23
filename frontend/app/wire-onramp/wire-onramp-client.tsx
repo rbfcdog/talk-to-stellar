@@ -73,6 +73,17 @@ type StellarWallet = {
   usdc_balance: string | null;
 };
 
+type DestinationWallet = {
+  id: number;
+  public_key: string;
+  label: string | null;
+  is_primary: boolean;
+  is_funded: boolean;
+  has_usdc_trustline: boolean;
+  usdc_balance: string | null;
+  exists_on_mainnet: boolean;
+};
+
 type BridgeWallet = {
   id: string;
   chain: string | null;
@@ -400,6 +411,61 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [accountIndex, setAccountIndex] = useState(0);
   const didAuto = useRef(false);
 
+  // Destination wallets (generated + stored by Bridge email)
+  const [destWallets, setDestWallets] = useState<DestinationWallet[]>([]);
+  const [selectedWalletKey, setSelectedWalletKey] = useState("");
+  const [walletsLoading, setWalletsLoading] = useState(false);
+  const [genStatus, setGenStatus] = useState<"idle" | "generating" | "error">("idle");
+  const [genError, setGenError] = useState("");
+
+  const loadDestWallets = useCallback(async (email: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    setWalletsLoading(true);
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets?email=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const wallets: DestinationWallet[] = Array.isArray(json?.wallets) ? json.wallets : [];
+      setDestWallets(wallets);
+      setSelectedWalletKey((cur) => {
+        if (cur && wallets.some((w) => w.public_key === cur)) return cur;
+        const primary = wallets.find((w) => w.is_primary) || wallets[0];
+        return primary?.public_key || "";
+      });
+    } catch {
+      // non-critical
+    } finally {
+      setWalletsLoading(false);
+    }
+  }, []);
+
+  const generateDestWallet = useCallback(async (email: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    setGenStatus("generating");
+    setGenError("");
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) throw new Error(json.message || `HTTP ${res.status}`);
+      const wallet: DestinationWallet | undefined = json?.wallet;
+      if (wallet?.public_key) {
+        setDestWallets((cur) => [wallet, ...cur.filter((w) => w.public_key !== wallet.public_key)]);
+        setSelectedWalletKey(wallet.public_key);
+      }
+      setGenStatus("idle");
+      if (json?.partial && json?.message) setGenError(json.message);
+      await loadDestWallets(trimmed);
+    } catch (e: any) {
+      setGenStatus("error");
+      setGenError(e?.message ?? String(e));
+    }
+  }, [loadDestWallets]);
+
   const load = useCallback(async (email: string, options: { forceEmail?: boolean } = {}) => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed && !sessionId && !shortLinkCode) return;
@@ -428,13 +494,14 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         setEmailInput(nextEmail);
         setCachedEmail(nextEmail);
         writeCachedEmail(nextEmail);
+        loadDestWallets(nextEmail);
       }
       setStatus(json.has_account ? "ready" : "no_account");
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
       setStatus("error");
     }
-  }, [sessionId, shortLinkCode]);
+  }, [sessionId, shortLinkCode, loadDestWallets]);
 
   const resetLogin = useCallback((clearCache = false) => {
     if (clearCache) {
@@ -482,6 +549,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const vaAvailableBalance = activeVa?.total_received_usd ?? 0;
   const totalAvailableBalance = bridgeUsdcBalance > 0 ? bridgeUsdcBalance : vaAvailableBalance;
 
+  // Destination = selected generated wallet, else the session's linked wallet
+  const selectedDestWallet = destWallets.find((w) => w.public_key === selectedWalletKey) || null;
+  const destinationAddress = selectedWalletKey || data?.stellar_wallet?.public_key || "";
+
   // Manual send state
   const [sendAmount, setSendAmount] = useState("");
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");
@@ -494,9 +565,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendError(L("Informe um valor válido.", "Enter a valid amount."));
       return;
     }
-    if (!data?.customer_id || !data?.stellar_wallet?.public_key) {
+    if (!data?.customer_id || !destinationAddress) {
       setSendStatus("error");
-      setSendError(L("Carteira de destino não encontrada.", "Destination wallet not found."));
+      setSendError(L("Carteira de destino não encontrada. Gere uma carteira primeiro.", "Destination wallet not found. Generate a wallet first."));
       return;
     }
     // Prefer Bridge wallet, fallback to VA's bridge_wallet_id
@@ -528,7 +599,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             amount: String(amountNum),
-            stellar_address: data.stellar_wallet.public_key,
+            stellar_address: destinationAddress,
+            destination_wallet: destinationAddress,
           }),
         },
       );
@@ -537,12 +609,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendStatus("ok");
       setSendAmount("");
       // Refresh data after a short delay so balances update
-      setTimeout(() => load(loggedEmail || emailInput), 3000);
+      setTimeout(() => { load(loggedEmail || emailInput); loadDestWallets(loggedEmail || emailInput); }, 3000);
     } catch (e: any) {
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, activeVa, data, load, loggedEmail, emailInput, L]);
+  }, [sendAmount, bridgeWallets, activeVa, data, destinationAddress, load, loadDestWallets, loggedEmail, emailInput, L]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -907,7 +979,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
               </>
             )}
 
-            {data?.stellar_wallet && (
+            {status === "ready" && (
               <OperationalCard>
                 <div className="flex items-center gap-2.5 mb-4">
                   <Send className="h-5 w-5 text-tts-muted" />
@@ -919,6 +991,72 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                       {L("Envie manualmente os fundos da Bridge para sua carteira", "Manually send Bridge funds to your wallet")}
                     </p>
                   </div>
+                </div>
+
+                {/* Destination wallet selector + generator */}
+                <div className="mb-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">
+                      {L("Carteira de destino", "Destination wallet")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => generateDestWallet(loggedEmail || emailInput)}
+                      disabled={genStatus === "generating"}
+                      className="flex items-center gap-1 rounded-md border border-tts-border px-2 py-1 text-[11px] font-bold text-tts-deep hover:bg-tts-bg disabled:opacity-50 transition-colors"
+                    >
+                      {genStatus === "generating" ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Wallet className="h-3 w-3" />
+                      )}
+                      {genStatus === "generating" ? L("Gerando...", "Generating...") : L("Gerar carteira", "Generate wallet")}
+                    </button>
+                  </div>
+
+                  {walletsLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-tts-muted px-1 py-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {L("Carregando carteiras...", "Loading wallets...")}
+                    </div>
+                  ) : destWallets.length > 0 ? (
+                    <select
+                      value={selectedWalletKey}
+                      onChange={(e) => setSelectedWalletKey(e.target.value)}
+                      className="w-full rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-mono text-tts-deep outline-none focus:border-tts-deep"
+                    >
+                      {data?.stellar_wallet?.public_key &&
+                        !destWallets.some((w) => w.public_key === data.stellar_wallet!.public_key) && (
+                          <option value={data.stellar_wallet.public_key}>
+                            {`${data.stellar_wallet.public_key.slice(0, 6)}...${data.stellar_wallet.public_key.slice(-6)} · ${L("vinculada", "linked")}`}
+                          </option>
+                        )}
+                      {destWallets.map((w) => (
+                        <option key={w.public_key} value={w.public_key}>
+                          {`${w.public_key.slice(0, 6)}...${w.public_key.slice(-6)}`}
+                          {w.is_primary ? ` · ${L("principal", "primary")}` : ""}
+                          {w.usdc_balance !== null ? ` · ${fmt(Number(w.usdc_balance))} USDC` : ""}
+                          {!w.has_usdc_trustline ? ` · ${L("sem USDC", "no USDC")}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : data?.stellar_wallet?.public_key ? (
+                    <div className="rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-mono text-tts-deep">
+                      {`${data.stellar_wallet.public_key.slice(0, 6)}...${data.stellar_wallet.public_key.slice(-6)}`}
+                      <span className="ml-2 text-[10px] font-sans text-tts-muted">{L("vinculada", "linked")}</span>
+                    </div>
+                  ) : (
+                    <p className="rounded-lg bg-amber-50/40 dark:bg-amber-900/10 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+                      {L("Nenhuma carteira ainda. Gere uma para receber seus dólares.", "No wallet yet. Generate one to receive your dollars.")}
+                    </p>
+                  )}
+
+                  {genError && <p className="text-xs text-amber-600 dark:text-amber-400">{genError}</p>}
+                  {selectedDestWallet && !selectedDestWallet.has_usdc_trustline && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      {L("Esta carteira ainda não pode receber USDC. Gere uma nova se o envio falhar.", "This wallet can't receive USDC yet. Generate a new one if the transfer fails.")}
+                    </p>
+                  )}
                 </div>
 
                 {/* Available balance */}
@@ -1005,7 +1143,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
                     <Button
                       onClick={handleSendToStellar}
-                      disabled={sendStatus === "sending" || !sendAmount || Number(sendAmount) <= 0}
+                      disabled={sendStatus === "sending" || !sendAmount || Number(sendAmount) <= 0 || !destinationAddress}
                       className="w-full"
                     >
                       {sendStatus === "sending" ? (
@@ -1037,28 +1175,30 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 )}
 
                 {/* Destination */}
-                <div className="mt-4 pt-4 border-t border-tts-border/40 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-tts-muted">
-                      {L("Destino", "Destination")}
-                    </span>
-                    <span className="text-sm font-mono font-semibold text-tts-deep">
-                      {data.stellar_wallet.public_key.length > 12
-                        ? `${data.stellar_wallet.public_key.slice(0, 6)}...${data.stellar_wallet.public_key.slice(-6)}`
-                        : data.stellar_wallet.public_key}
-                    </span>
-                  </div>
-                  {data.stellar_wallet.usdc_balance !== null && (
+                {destinationAddress && (
+                  <div className="mt-4 pt-4 border-t border-tts-border/40 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-tts-muted">
-                        {L("Saldo Stellar atual", "Current Stellar balance")}
+                        {L("Destino", "Destination")}
                       </span>
-                      <span className="text-sm font-bold tabular-nums text-tts-deep">
-                        {fmt(Number(data.stellar_wallet.usdc_balance))} USDC
+                      <span className="text-sm font-mono font-semibold text-tts-deep">
+                        {destinationAddress.length > 12
+                          ? `${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-6)}`
+                          : destinationAddress}
                       </span>
                     </div>
-                  )}
-                </div>
+                    {(selectedDestWallet?.usdc_balance ?? data?.stellar_wallet?.usdc_balance) != null && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-tts-muted">
+                          {L("Saldo Stellar atual", "Current Stellar balance")}
+                        </span>
+                        <span className="text-sm font-bold tabular-nums text-tts-deep">
+                          {fmt(Number(selectedDestWallet?.usdc_balance ?? data?.stellar_wallet?.usdc_balance ?? 0))} USDC
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-4 pt-4 border-t border-tts-border/40">
                   <div className="flex items-start gap-2">
