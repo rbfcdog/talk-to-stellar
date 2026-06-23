@@ -53,31 +53,50 @@ On testnet these are not required — XDR is built but submission is testnet-saf
 
 ## Auto-Yield Sweep
 
-The sweep service runs in the background and auto-deposits idle USDC into DeFindex on behalf of custodial wallets (those with a `vault_secret_id`).
+Sweeps idle USDC (and XLM for LP) from all custodial wallets into DeFindex, Blend, and Soroswap every N hours.
 
 ```env
 # Master switch — must be true to activate
 AUTO_YIELD_ENABLED=true
 
+# Which protocols to use: defindex | blend | soroswap_lp | all
+# "all" splits USDC across all three simultaneously (default)
+AUTO_YIELD_STRATEGY=all
+
 # dry_run: logs what would happen without submitting
-# Defaults to true on testnet, false on mainnet
-# Set explicitly to override
+# Defaults to true on testnet, false on mainnet — set explicitly to override
 AUTO_YIELD_DRY_RUN=false
 
 # Minimum USDC balance to be eligible for a sweep
 AUTO_YIELD_MIN_USDC=2.0
 
-# How much USDC to keep liquid after depositing
+# USDC kept liquid in the wallet (not deposited)
 AUTO_YIELD_LIQUID_RESERVE_USDC=0.5
+
+# Soroswap LP: minimum available XLM to bother adding liquidity
+AUTO_YIELD_MIN_XLM_FOR_LP=5.0
+
+# Soroswap LP: XLM kept liquid (not added to pool)
+AUTO_YIELD_XLM_LP_RESERVE=2.0
 
 # How often the sweep runs (hours)
 AUTO_YIELD_INTERVAL_HOURS=6
 ```
 
-Manual trigger (admin only):
+### Allocation shares when `AUTO_YIELD_STRATEGY=all`
+
+Shares are percentages — normalized, don't need to sum to 100.
+
+```env
+AUTO_YIELD_DEFINDEX_SHARE=50    # 50% of idle USDC → DeFindex vault
+AUTO_YIELD_BLEND_SHARE=30       # 30% of idle USDC → Blend lending pool
+AUTO_YIELD_SOROSWAP_SHARE=20    # 20% of idle USDC → Soroswap LP (+ matching XLM from wallet)
+```
+
+Manual trigger (admin only, all body fields optional):
 ```
 POST /api/auto-yield/run
-{ "dry_run": true, "max_wallets": 10 }
+{ "dry_run": true, "max_wallets": 10, "strategy": "blend" }
 ```
 
 ---
