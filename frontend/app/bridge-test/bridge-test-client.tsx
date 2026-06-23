@@ -10,8 +10,10 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  Link2,
   Loader2,
   LogOut,
+  Send,
   Plus,
   RefreshCw,
   Search,
@@ -342,6 +344,17 @@ export default function BridgeTestClient() {
   // Bridge custodial wallet balances (base, ethereum, solana, tempo, tron)
   const [bridgeBalances, setBridgeBalances] = useState<Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>>([]);
   const [bridgeBalancesBusy, setBridgeBalancesBusy] = useState(false);
+  type VirtualAccountConnection = {
+    virtual_account?: VirtualAccountData;
+    destination?: { chain?: string | null; address?: string | null; bridge_wallet_id?: string | null; hints?: string[] };
+    bridge_wallet?: BridgeWalletData | null;
+    bridge_wallet_balances?: Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>;
+    stellar_wallet?: { address?: string; direct_destination?: boolean; connectable_from_bridge_wallet?: boolean } | null;
+  };
+  const [vaConnections, setVaConnections] = useState<VirtualAccountConnection[]>([]);
+  const [connectionsBusy, setConnectionsBusy] = useState(false);
+  const [bridgeToStellarAmount, setBridgeToStellarAmount] = useState("");
+  const [bridgeToStellarTransfer, setBridgeToStellarTransfer] = useState<TransferData | null>(null);
 
   // On-ramp tabs and static memos
   const [onRampTab, setOnRampTab] = useState<'virtual_account' | 'static_memo'>('virtual_account');
@@ -454,7 +467,9 @@ export default function BridgeTestClient() {
       runApi("GET", `/customers/${encodeURIComponent(customerId)}/external-accounts`)
         .then((p) => setExternalAccounts((p.external_accounts as ExternalAccountData[]) || []))
         .catch(() => {});
+      setTimeout(() => fetchVirtualAccountConnections().catch(() => {}), 1100);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, runApi]);
 
   // Pre-fill on-ramp dest wallet from saved key
@@ -691,11 +706,31 @@ export default function BridgeTestClient() {
     const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/${onRampCurrency}`, body);
     setNewVA(p.virtual_account as VirtualAccountData);
     setVirtualAccounts((prev) => [p.virtual_account, ...prev].filter(Boolean));
+    fetchVirtualAccountConnections().catch(() => {});
   }
 
   async function listVirtualAccounts() {
     const p = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/virtual-accounts`);
     setVirtualAccounts((p.virtual_accounts as VirtualAccountData[]) || []);
+    fetchVirtualAccountConnections().catch(() => {});
+  }
+
+  async function createStellarUsdVirtualAccount() {
+    if (!walletKey) {
+      setError("Select a Stellar wallet before creating a Stellar USD virtual account.");
+      return;
+    }
+    const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/usd`, {
+      destination_wallet: walletKey,
+      destination_chain: "stellar",
+      blockchain_memo: onRampMemo.trim() || undefined,
+      confirm_mainnet: true,
+    });
+    setNewVA(p.virtual_account as VirtualAccountData);
+    setVirtualAccounts((prev) => [p.virtual_account, ...prev].filter(Boolean));
+    setOnRampCurrency("usd");
+    setOnRampChain("stellar");
+    fetchVirtualAccountConnections().catch(() => {});
   }
 
   // ── Liquidation addresses (reusable USDC → fiat) ──────────────
@@ -782,6 +817,38 @@ export default function BridgeTestClient() {
     } finally {
       setBridgeBalancesBusy(false);
     }
+  }
+
+  async function fetchVirtualAccountConnections() {
+    if (!customerId) return;
+    setConnectionsBusy(true);
+    try {
+      const query = walletKey ? `?stellar_address=${encodeURIComponent(walletKey)}` : "";
+      const p = await runApi("GET", `/customers/${encodeURIComponent(customerId)}/virtual-accounts/connections${query}`);
+      setVaConnections((p.connections as VirtualAccountConnection[]) || []);
+      if (Array.isArray(p.virtual_accounts)) setVirtualAccounts(p.virtual_accounts as VirtualAccountData[]);
+      if (Array.isArray(p.bridge_wallets)) setBridgeWallets(p.bridge_wallets as BridgeWalletData[]);
+      if (Array.isArray(p.bridge_wallet_balances)) {
+        setBridgeBalances(p.bridge_wallet_balances as Array<{ chain?: string; currency?: string; amount?: string; wallet_id?: string }>);
+      }
+    } finally {
+      setConnectionsBusy(false);
+    }
+  }
+
+  async function moveBridgeWalletToStellar(walletId: string, amount: string) {
+    if (!walletKey) {
+      setError("Select a Stellar wallet before moving Bridge wallet funds.");
+      return;
+    }
+    const p = await runApi("POST", `/customers/${encodeURIComponent(customerId)}/wallets/${encodeURIComponent(walletId)}/transfer-to-stellar`, {
+      amount,
+      destination_wallet: walletKey,
+      confirm_mainnet: true,
+    });
+    setBridgeToStellarTransfer(p.transfer as TransferData);
+    setTransfers((prev) => [p.transfer, ...prev].filter(Boolean));
+    fetchVirtualAccountConnections().catch(() => {});
   }
 
   function selectBridgeWallet(w: BridgeWalletData) {
@@ -912,6 +979,21 @@ export default function BridgeTestClient() {
   }
 
   const offRail = OFFRAMP_RAILS.find((r) => r.id === offRailId)!;
+  const bridgeWalletBalanceTotal = bridgeBalances.reduce((sum, b) => sum + (parseFloat(b.amount || "0") || 0), 0);
+  const stellarUsdcBalance = walletBalances.find((b) => b.asset_code === "USDC")?.balance;
+  const connectionRows = vaConnections.length
+    ? vaConnections
+    : virtualAccounts.map((va) => ({
+        virtual_account: va,
+        destination: {
+          chain: String((va.destination as any)?.payment_rail || (va.destination as any)?.chain || va.destination_chain || ""),
+          address: String((va.destination as any)?.address || (va.destination as any)?.to_address || va.destination_address || ""),
+          bridge_wallet_id: String((va.destination as any)?.bridge_wallet_id || (va.destination as any)?.wallet_id || ""),
+        },
+        bridge_wallet: null,
+        bridge_wallet_balances: [],
+        stellar_wallet: walletKey ? { address: walletKey, direct_destination: false, connectable_from_bridge_wallet: false } : null,
+      } satisfies VirtualAccountConnection));
 
   // ── Main UI ───────────────────────────────────────────────────
 
@@ -937,7 +1019,7 @@ export default function BridgeTestClient() {
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
         <OperationalStat label="Customer" value={customer?.id?.slice(0, 10) || "-"} detail={customer?.status || customer?.kyc_status || "Not found"} tone={customer ? "confirm" : "default"} />
-        <OperationalStat label="Bridge wallets" value={String(bridgeWallets.length)} detail={bridgeBalances.length ? `${bridgeBalances.reduce((s, b) => s + parseFloat(b.amount || '0'), 0).toFixed(2)} total` : "0.00 total"} tone={bridgeBalances.length ? "confirm" : "default"} />
+        <OperationalStat label="Bridge wallets" value={String(bridgeWallets.length)} detail={bridgeBalances.length ? `${bridgeWalletBalanceTotal.toFixed(2)} total` : "0.00 total"} tone={bridgeBalances.length ? "confirm" : "default"} />
         <OperationalStat label="External accounts" value={String(externalAccounts.length)} detail={externalAccounts.length ? "Loaded" : "None yet"} tone={externalAccounts.length ? "confirm" : "default"} />
         <OperationalStat label="Transfers" value={String(transfers.length)} detail={transfers.length ? "Loaded" : "None yet"} tone={transfers.length ? "confirm" : "default"} />
       </div>
@@ -951,6 +1033,163 @@ export default function BridgeTestClient() {
         </OperationalCard>
       ) : null}
       {copied ? <div className="rounded-md border border-tts-confirm/25 bg-tts-confirm/10 p-2 text-sm font-semibold text-tts-confirm">Copied: {copied}</div> : null}
+
+      {/* ── Bridge → Stellar connection map ───────────────────── */}
+      <OperationalCard>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-tts-deep">
+              <Link2 className="h-4 w-4 text-tts-gold" />
+              Bridge to Stellar connection
+            </h2>
+            <p className="mt-1 text-xs text-tts-muted">
+              Mainnet view of each Bridge virtual account, its destination wallet, and the active Stellar wallet that can receive USDC.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={fetchVirtualAccountConnections} disabled={connectionsBusy || !customerId}>
+              {connectionsBusy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+              Refresh map
+            </Button>
+            <Button size="sm" onClick={createStellarUsdVirtualAccount} disabled={!!busy || !customerId || !walletKey || walletOnChain === false}>
+              {busy?.includes("/virtual-accounts/usd") ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Plus className="mr-1 h-3 w-3" />}
+              Create USD → Stellar VA
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">Bridge USD accounts</p>
+            <p className="mt-1 text-2xl font-bold text-tts-deep">{virtualAccounts.filter((va) => String(va.source_currency || va.source_deposit_instructions?.currency || "").toLowerCase() === "usd").length}</p>
+            <p className="mt-1 text-xs text-tts-muted">Wire/ACH virtual accounts loaded for this customer.</p>
+          </div>
+          <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">Bridge wallet funds</p>
+            <p className="mt-1 text-2xl font-bold text-tts-deep">{bridgeWalletBalanceTotal.toFixed(2)}</p>
+            <p className="mt-1 text-xs text-tts-muted">Provider-reported balances across Bridge custodial wallets.</p>
+          </div>
+          <div className="rounded-md border border-tts-border bg-tts-bg/50 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">Active Stellar wallet</p>
+            <p className="mt-1 truncate font-mono text-sm font-bold text-tts-deep">{walletKey ? `${walletKey.slice(0, 10)}…${walletKey.slice(-6)}` : "Not selected"}</p>
+            <p className="mt-1 text-xs text-tts-muted">USDC balance: {stellarUsdcBalance ? formatDecimal(stellarUsdcBalance, 2) : "not loaded"}</p>
+          </div>
+        </div>
+
+        {walletOnChain === false ? (
+          <div className="mt-4 rounded-md border border-tts-error/25 bg-tts-error/5 p-3 text-xs text-tts-error">
+            <p className="font-bold">The selected Stellar wallet is not ready on mainnet.</p>
+            <p className="mt-1">Fund it with XLM and add the Circle USDC trustline before using it as a Bridge destination.</p>
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-3">
+          {connectionRows.length === 0 ? (
+            <div className="rounded-md border border-dashed border-tts-border p-4 text-sm text-tts-muted">
+              No virtual accounts loaded yet. Create a USD virtual account or list existing accounts.
+            </div>
+          ) : (
+            connectionRows.map((connection, index) => {
+              const va = connection.virtual_account || {};
+              const destination = connection.destination || {};
+              const bridgeWallet = connection.bridge_wallet || null;
+              const balances = connection.bridge_wallet_balances || [];
+              const spendable = balances.find((b) => Number(b.amount || 0) > 0) || balances[0];
+              const destinationChain = destination.chain || "unknown";
+              const destinationAddress = destination.address || bridgeWallet?.address || "";
+              const directToStellar = destinationChain === "stellar";
+              const canMoveToStellar = Boolean(bridgeWallet?.id && walletKey && spendable && Number(spendable.amount || 0) > 0);
+              const amountForTransfer = bridgeToStellarAmount.trim() || spendable?.amount || "";
+
+              return (
+                <div key={va.id || index} className="rounded-md border border-tts-border bg-tts-bg/40 p-3">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr] lg:items-stretch">
+                    <div className="rounded-md border border-tts-border bg-white/50 p-3 dark:bg-black/10">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">Virtual account</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="truncate font-mono text-xs text-tts-deep">{va.id || "unknown"}</span>
+                        <StatusPill tone={va.status === "activated" ? "confirm" : "gold"}>{va.status || "unknown"}</StatusPill>
+                      </div>
+                      <p className="mt-1 text-xs text-tts-muted">{String(va.source_currency || va.source_deposit_instructions?.currency || "USD").toUpperCase()} deposit instructions</p>
+                    </div>
+
+                    <div className="hidden items-center justify-center text-tts-muted lg:flex">
+                      <ArrowDown className="h-4 w-4 rotate-[-90deg]" />
+                    </div>
+
+                    <div className={`rounded-md border p-3 ${directToStellar ? "border-tts-confirm/30 bg-tts-confirm/5" : "border-tts-border bg-white/50 dark:bg-black/10"}`}>
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">
+                        {directToStellar ? "Direct Stellar destination" : "Bridge destination wallet"}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="rounded bg-tts-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-tts-gold">{destinationChain}</span>
+                        {bridgeWallet?.id ? <span className="truncate font-mono text-[10px] text-tts-muted">{bridgeWallet.id}</span> : null}
+                      </div>
+                      <p className="mt-1 break-all font-mono text-xs font-semibold text-tts-deep">
+                        {destinationAddress || "No destination address returned"}
+                      </p>
+                      {balances.length > 0 ? (
+                        <div className="mt-2 grid gap-1">
+                          {balances.map((balance, bi) => (
+                            <div key={`${balance.wallet_id || bi}`} className="flex items-center justify-between rounded bg-tts-bg/70 px-2 py-1 text-xs">
+                              <span className="text-tts-muted">{balance.currency?.toUpperCase() || "USDC"}</span>
+                              <span className="font-mono font-bold text-tts-deep">{formatDecimal(balance.amount, 6)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-tts-muted">{directToStellar ? "Funds settle straight to Stellar." : "No wallet balance returned yet."}</p>
+                      )}
+                    </div>
+
+                    <div className="hidden items-center justify-center text-tts-muted lg:flex">
+                      <ArrowDown className="h-4 w-4 rotate-[-90deg]" />
+                    </div>
+
+                    <div className="rounded-md border border-tts-border bg-white/50 p-3 dark:bg-black/10">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">Stellar wallet</p>
+                      <p className="mt-2 break-all font-mono text-xs font-semibold text-tts-deep">{walletKey || "Select a Stellar wallet in Step 2"}</p>
+                      {directToStellar && connection.stellar_wallet?.direct_destination ? (
+                        <p className="mt-2 rounded bg-tts-confirm/10 px-2 py-1 text-xs font-semibold text-tts-confirm">Connected directly</p>
+                      ) : bridgeWallet?.id ? (
+                        <div className="mt-3 space-y-2">
+                          <Input
+                            value={bridgeToStellarAmount}
+                            onChange={(e) => setBridgeToStellarAmount(e.target.value)}
+                            placeholder={spendable?.amount ? `${formatDecimal(spendable.amount, 2)} ${spendable.currency?.toUpperCase()}` : "Amount"}
+                            className="h-8 text-xs"
+                          />
+                          <Button
+                            size="sm"
+                            className="w-full"
+                            disabled={!!busy || !canMoveToStellar || !amountForTransfer}
+                            onClick={() => moveBridgeWalletToStellar(bridgeWallet.id!, amountForTransfer)}
+                          >
+                            {busy?.includes("transfer-to-stellar") ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Send className="mr-1 h-3 w-3" />}
+                            Use in Stellar
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-tts-muted">No Bridge wallet linked to this VA.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {bridgeToStellarTransfer ? (
+          <div className="mt-4 rounded-md border border-tts-confirm/25 bg-tts-confirm/5 p-3 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-tts-confirm">Bridge → Stellar transfer created</span>
+              <StatusPill tone="confirm">{bridgeToStellarTransfer.state || "created"}</StatusPill>
+            </div>
+            <p className="mt-1 font-mono text-tts-muted">{bridgeToStellarTransfer.id}</p>
+          </div>
+        ) : null}
+      </OperationalCard>
 
       {/* ── Bridge Wallet Balances ────────────────────────────── */}
       <OperationalCard>

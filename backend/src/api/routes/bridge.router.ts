@@ -94,6 +94,10 @@ router.get(
   BridgeController.listVirtualAccountsFromDb,
 );
 router.get(
+  "/customers/:id/virtual-accounts/connections",
+  BridgeController.getVirtualAccountConnections,
+);
+router.get(
   "/virtual-accounts/:virtualAccountId",
   BridgeController.getVirtualAccount,
 );
@@ -230,6 +234,7 @@ router.delete("/static-memos/:memoId", BridgeController.deleteStaticMemo);
 router.post("/customers/:id/wallets", BridgeController.createWallet);
 router.get("/customers/:id/wallets", BridgeController.listWallets);
 router.get("/customers/:id/wallets/cached", BridgeController.listWalletsFromDb);
+router.post("/customers/:id/wallets/:walletId/transfer-to-stellar", BridgeController.createBridgeWalletToStellarTransfer);
 router.get("/customers/:id/wallets/:walletId", BridgeController.getWallet);
 
 // Global wallet endpoints (not scoped to customer)
