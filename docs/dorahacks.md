@@ -190,3 +190,10 @@ Solo project by **Rodrigo** — full-stack developer, building on Stellar since 
 ---
 
 *Built on Stellar. Powered by Soroswap, DeFindex, and Bridge. Delivered by chat.*
+
+
+**Rodrigo Banin** — Engineer and product builder at the intersection of applied AI and blockchain. Formerly at BTG Pactual, where he built production multi-agent systems, and now building TalkToStellar, a WhatsApp-based AI agent that makes Stellar wallets and transactions accessible through natural language.
+
+**André** — Software engineer and co-founder of EvidenceOne, an AI medical platform built from scratch and now used by 300+ doctors. Experienced in system architecture, LLMs, data pipelines, AWS infrastructure, and agentic coding workflows.
+
+**João Pedro** — Engineer and entrepreneur with experience across physical and digital businesses. Built projects that generated over R$100K in revenue at age 18, combining strategy, data-driven execution, AI, technology, and investments to create scalable financial solutions.
