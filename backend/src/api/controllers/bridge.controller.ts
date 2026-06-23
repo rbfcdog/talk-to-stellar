@@ -547,8 +547,29 @@ export class BridgeController {
       // Fetch Bridge custodial wallets so frontend can trigger manual sweeps
       let bridgeWallets: any[] = [];
       try {
-        const wallets = await service.listWallets(bridgeCustomerId);
-        const liveWallets = Array.isArray(wallets) ? wallets : [];
+        // Try Bridge API first
+        let liveWallets: any[] = [];
+        try {
+          const wallets = await service.listWallets(bridgeCustomerId);
+          liveWallets = Array.isArray(wallets) ? wallets : [];
+        } catch (walletErr: any) {
+          logger.warn(`[bridge] listWallets failed for getSessionUsdAccount: ${walletErr.message}`);
+        }
+        // Fallback to DB cache if Bridge API returned nothing
+        if (!liveWallets.length) {
+          const { data: dbWallets } = await supabase
+            .from('bridge_custodial_wallets')
+            .select('*')
+            .eq('customer_id', bridgeCustomerId)
+            .order('created_at', { ascending: false });
+          if (Array.isArray(dbWallets) && dbWallets.length) {
+            liveWallets = dbWallets.map((row: any) => ({
+              id: row.id,
+              chain: row.chain,
+              address: row.address,
+            }));
+          }
+        }
         let walletBalances: any[] = [];
         try {
           walletBalances = await service.getWalletBalances();
