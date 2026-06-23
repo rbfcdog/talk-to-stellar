@@ -3343,13 +3343,14 @@ async function executeGetYieldOptions(input: any): Promise<string> {
     const disclosure = language === 'en'
       ? (isTestnet ? 'Testnet environment.' : 'Application environment.')
       : (isTestnet ? 'Ambiente testnet.' : 'Ambiente de aplicação.');
+    const optionNames = availableOptions.map((o) => o.name).join(', ');
     const message = language === 'en'
       ? options.length
-        ? `Earnings options: ${availableOptions.map((option) => option.name).join(', ') || 'none available right now'}.\n${disclosure}\n\nOpen earnings:\n${frontendUrl}`
-        : `Earnings options are not configured yet.\n${disclosure}\n\nOpen earnings:\n${frontendUrl}`
+        ? `Earnings ready${optionNames ? ` (${optionNames})` : ''}. 👇\n${frontendUrl}`
+        : `Earnings not available right now. 👇\n${frontendUrl}`
       : options.length
-        ? `Opções de rendimentos: ${availableOptions.map((option) => option.name).join(', ') || 'nenhuma disponível agora'}.\n${disclosure}\n\nAbrir rendimentos:\n${frontendUrl}`
-        : `As opções de rendimentos ainda não foram configuradas.\n${disclosure}\n\nAbrir rendimentos:\n${frontendUrl}`;
+        ? `Rendimentos prontos${optionNames ? ` (${optionNames})` : ''}. 👇\n${frontendUrl}`
+        : `Rendimentos não disponíveis agora. 👇\n${frontendUrl}`;
 
     return JSON.stringify({
       success: true,
@@ -3410,12 +3411,16 @@ async function executeOpenAssetInterface(input: any): Promise<string> {
       post_conversion_asset_code: postConversionAsset && postConversionAsset !== displayAsset ? postConversionAsset : null,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? postConversionAsset && postConversionAsset !== displayAsset
-          ? `${actionLabel} is ready: receive ${displayAsset} first, then convert to ${postConversionAsset}.\n\nOpen:\n${frontendUrl}`
-          : `${actionLabel} is ready for ${displayAsset}.\n\nOpen:\n${frontendUrl}`
-        : postConversionAsset && postConversionAsset !== displayAsset
-          ? `${actionLabel}: receber ${displayAsset} primeiro e depois converter para ${postConversionAsset}.\n\nAbrir:\n${frontendUrl}`
-          : `${actionLabel} para ${displayAsset}.\n\nAbrir:\n${frontendUrl}`,
+        ? action === 'bring'
+          ? `PIX ready${input.amount ? ` for ${input.amount} ${displayAsset}` : ''}. 👇\n${frontendUrl}`
+          : action === 'send_out'
+          ? `Withdrawal ready${input.amount ? ` of ${input.amount} ${displayAsset}` : ''}. 👇\n${frontendUrl}`
+          : `Application ready${input.amount ? ` for ${input.amount} ${displayAsset}` : ''}. 👇\n${frontendUrl}`
+        : action === 'bring'
+          ? `PIX pronto${input.amount ? ` pra receber ${input.amount} ${displayAsset}` : ''}. 👇\n${frontendUrl}`
+          : action === 'send_out'
+          ? `Retirada pronta${input.amount ? ` de ${input.amount} ${displayAsset}` : ''}. 👇\n${frontendUrl}`
+          : `Aplicação pronta${input.amount ? ` de ${input.amount} ${displayAsset}` : ''}. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -3470,14 +3475,14 @@ async function executeOpenConversionInterface(input: any): Promise<string> {
       message: language === 'en'
         ? hasCompletePrefill
           ? amountMode === 'receive'
-            ? `Conversion is ready to review: receive ${destAmount} ${destDisplay} from ${sourceDisplay}.\n\nOpen:\n${frontendUrl}`
-            : `Conversion is ready to review: ${sourceAmount} ${sourceDisplay} to ${destDisplay}.\n\nOpen:\n${frontendUrl}`
-          : `Open the conversion screen to choose amount and assets.\n\nOpen:\n${frontendUrl}`
+            ? `Get ${destAmount} ${destDisplay} from ${sourceDisplay}. 👇\n${frontendUrl}`
+            : `${sourceAmount} ${sourceDisplay} → ${destDisplay} ready. 👇\n${frontendUrl}`
+          : `Pick amount and currencies. 👇\n${frontendUrl}`
         : hasCompletePrefill
           ? amountMode === 'receive'
-            ? `Conversão pronta para revisar: receber ${destAmount} ${destDisplay} usando ${sourceDisplay}.\n\nAbra:\n${frontendUrl}`
-            : `Conversão pronta para revisar: ${sourceAmount} ${sourceDisplay} para ${destDisplay}.\n\nAbra:\n${frontendUrl}`
-          : `Abra a tela de conversão para escolher valor e moedas.\n\nAbra:\n${frontendUrl}`,
+            ? `Receber ${destAmount} ${destDisplay} usando ${sourceDisplay}. 👇\n${frontendUrl}`
+            : `${sourceAmount} ${sourceDisplay} → ${destDisplay} pronto. 👇\n${frontendUrl}`
+          : `Escolha valor e moedas. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -3500,8 +3505,8 @@ async function executeGetYieldBalance(input: any): Promise<string> {
       success: true,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? `Open your investments here:\n\n${frontendUrl}\n\nThe page asks for your PIN before showing values.`
-        : `Abra seus rendimentos aqui:\n\n${frontendUrl}\n\nA página pede seu PIN antes de mostrar os valores.`,
+        ? `Your earnings. 👇\n${frontendUrl}`
+        : `Seus rendimentos. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -3545,9 +3550,9 @@ async function executePrepareYieldAction(input: any): Promise<string> {
         currency,
         name,
       },
-	      message: language === 'en'
-		        ? `Ready to confirm: ${actionText} ${amount} ${name}. Check amount and operation before PIN.\n\nOpen:\n${frontendUrl}`
-		        : `Pronto para confirmar: ${actionText} ${amount} ${name}. Confira valor e operação antes do PIN.\n\nAbrir:\n${frontendUrl}`,
+      message: language === 'en'
+        ? `${amount} ${currency} ready to ${action === 'deposit' ? 'earn' : 'withdraw'}. 👇\n${frontendUrl}`
+        : `${amount} ${currency} prontos pra ${action === 'deposit' ? 'render' : 'resgatar'}. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -3586,9 +3591,9 @@ async function executeConfirmYieldAction(input: any): Promise<string> {
       currency,
       amount,
 	      frontend_url: frontendUrl,
-	      message: language === 'en'
-	        ? `Application submitted for ${amount} ${name}. Your balances will update shortly.\n\nOpen:\n${frontendUrl}`
-	        : `Aplicação enviada para ${amount} ${name}. Seus saldos serão atualizados em instantes.\n\nAbrir:\n${frontendUrl}`,
+      message: language === 'en'
+        ? `${amount} ${currency} applied. Balance updates in a moment.`
+        : `${amount} ${currency} aplicados. Saldo atualiza em instantes.`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -3865,8 +3870,8 @@ async function executeOpenWireOnrampInterface(input: any): Promise<string> {
       success: true,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? `USD wire/ACH deposit is ready.\n\nOpen:\n${frontendUrl}`
-        : `Depósito em dólar via banco americano (wire/ACH) pronto.\n\nAbrir:\n${frontendUrl}`,
+        ? `Your USD bank account details${amount ? ` for $${amount}` : ''}. 👇\n${frontendUrl}`
+        : `Dados pra receber dólar${amount ? ` de US$ ${amount}` : ''} via banco americano. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
@@ -3907,8 +3912,8 @@ async function executeOpenSwapInterface(input: any): Promise<string> {
       trade_type: tradeType,
       frontend_url: frontendUrl,
       message: language === 'en'
-        ? `DEX swap ${pair} is ready.\n\nOpen:\n${frontendUrl}`
-        : `Swap ${pair} via DEX pronto.\n\nAbrir:\n${frontendUrl}`,
+        ? `Swap ${pair}${amount ? ` of ${amount}` : ''} ready. 👇\n${frontendUrl}`
+        : `Troca ${pair}${amount ? ` de ${amount}` : ''} pronta. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
