@@ -268,13 +268,54 @@ export class BridgeController {
         return;
       }
 
+      let bridgeCustomerId: string | null = null;
+      let bridgeKycStatus: string | null = null;
+      let bridgeStatus: string | null = null;
+
+      // Fast path: DB cache
       const { data: bridgeRow } = await supabase
         .from('bridge_customers')
         .select('bridge_customer_id, kyc_status, status')
         .eq('email', email)
         .maybeSingle();
 
-      if (!bridgeRow?.bridge_customer_id) {
+      if (bridgeRow?.bridge_customer_id) {
+        bridgeCustomerId = bridgeRow.bridge_customer_id;
+        bridgeKycStatus = bridgeRow.kyc_status;
+        bridgeStatus = bridgeRow.status;
+      } else {
+        // Slow path: search Bridge API directly (customer created before DB cache existed)
+        try {
+          const service = getBridgeService();
+          let startingAfter: string | undefined;
+          for (let page = 0; page < 20 && !bridgeCustomerId; page++) {
+            const batch: any[] = await service.listCustomers({ starting_after: startingAfter, limit: 100 }).catch(() => []);
+            if (!batch.length) break;
+            const found = batch.find((c: any) => (c.email || '').toLowerCase() === email);
+            if (found) {
+              bridgeCustomerId = found.id;
+              bridgeKycStatus = found.kyc_status ?? null;
+              bridgeStatus = found.status ?? null;
+              // Backfill DB cache so next lookup is instant
+              await supabase.from('bridge_customers').upsert({
+                bridge_customer_id: found.id,
+                email,
+                status: found.status ?? null,
+                kyc_status: found.kyc_status ?? null,
+                has_accepted_tos: found.has_accepted_tos ?? false,
+                raw_bridge_data: found,
+                last_synced_at: new Date().toISOString(),
+              }, { onConflict: 'bridge_customer_id' });
+            }
+            startingAfter = batch[batch.length - 1]?.id;
+            if (batch.length < 100) break;
+          }
+        } catch {
+          // Bridge unreachable — fall through to no_account
+        }
+      }
+
+      if (!bridgeCustomerId) {
         res.json({ success: true, has_account: false, kyc_status: null, virtual_accounts: [], email });
         return;
       }
@@ -282,16 +323,17 @@ export class BridgeController {
       const service = getBridgeService();
       let virtualAccounts: any[] = [];
       try {
-        const accounts = await service.listVirtualAccounts(bridgeRow.bridge_customer_id);
-        const usdAccounts = (Array.isArray(accounts) ? accounts : []).filter(
-          (va: any) => va.currency === 'usd' || va.currency === 'USD',
-        );
+        const accounts = await service.listVirtualAccounts(bridgeCustomerId);
+        const usdAccounts = (Array.isArray(accounts) ? accounts : []).filter((va: any) => {
+          const cur = (va.source_currency || va.currency || '').toLowerCase();
+          return cur === 'usd';
+        });
         // Enrich each VA with total funds received from activity history
         virtualAccounts = await Promise.all(
           usdAccounts.map(async (va: any) => {
             try {
               const events = await service.getVirtualAccountActivity(
-                bridgeRow.bridge_customer_id,
+                bridgeCustomerId!,
                 va.id,
                 { limit: 100 },
               );
@@ -347,8 +389,8 @@ export class BridgeController {
       res.json({
         success: true,
         has_account: true,
-        kyc_status: bridgeRow.kyc_status,
-        customer_status: bridgeRow.status,
+        kyc_status: bridgeKycStatus,
+        customer_status: bridgeStatus,
         email,
         virtual_accounts: virtualAccounts,
         stellar_wallet: stellarWallet,
