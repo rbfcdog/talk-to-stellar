@@ -450,13 +450,16 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const loadPipeline = useCallback(async (customerId: string) => {
     if (!customerId) return;
     setPipelineLoading(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
-      const res = await fetch(`/api/bridge/customers/${encodeURIComponent(customerId)}/transfer-pipeline`, { cache: "no-store" });
+      const res = await fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/transfer-pipeline`)}`, { cache: "no-store", signal: controller.signal });
       const json = await res.json().catch(() => ({}));
       if (json?.success) setPipeline({ wallets: json.wallets ?? [], virtual_account_routes: json.virtual_account_routes ?? [] });
     } catch {
       // non-critical
     } finally {
+      clearTimeout(timer);
       setPipelineLoading(false);
     }
   }, []);
@@ -465,19 +468,26 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     if (!customerId) return;
     setCreateWalletStatus("creating");
     setCreateWalletError("");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
-      const res = await fetch(`/api/bridge/customers/${encodeURIComponent(customerId)}/wallets`, {
+      // Use the dedicated bridge proxy (_path) — same route the transfer uses.
+      const res = await fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/wallets`)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chain }),
+        signal: controller.signal,
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
-      setCreateWalletStatus("idle");
       await loadPipeline(customerId);
     } catch (e: any) {
+      setCreateWalletError(e?.name === "AbortError" ? "Request timed out. Try again." : (e?.message ?? String(e)));
       setCreateWalletStatus("error");
-      setCreateWalletError(e?.message ?? String(e));
+    } finally {
+      clearTimeout(timer);
+      // Always leave the "creating" state so the button can't spin forever.
+      setCreateWalletStatus((s) => (s === "creating" ? "idle" : s));
     }
   }, [loadPipeline]);
 
