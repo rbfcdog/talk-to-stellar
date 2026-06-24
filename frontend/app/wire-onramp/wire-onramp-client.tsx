@@ -1524,15 +1524,31 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                     {sendStatus === "error" && (
                       <p className="text-xs text-red-500 text-center">{sendError}</p>
                     )}
+
+                    {/* Settlement-time disclaimer */}
+                    <p className="text-[11px] text-tts-muted/70 text-center leading-relaxed">
+                      {L(
+                        "A transferência pode levar de alguns minutos a algumas horas para chegar na carteira Stellar.",
+                        "Transfers can take from a few minutes up to a few hours to arrive in the Stellar wallet.",
+                      )}
+                    </p>
                   </div>
                 )}
 
                 {sendStatus === "ok" && (
-                  <div className="flex items-center gap-2 rounded-lg bg-tts-confirm/10 border border-tts-confirm/30 px-3 py-2">
-                    <CheckCircle2 className="h-4 w-4 text-tts-confirm shrink-0" />
-                    <p className="text-xs text-tts-confirm font-medium">
-                      {L("Transferência iniciada! Atualizando saldos...", "Transfer started! Refreshing balances...")}
-                    </p>
+                  <div className="flex items-start gap-2 rounded-lg bg-tts-confirm/10 border border-tts-confirm/30 px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-tts-confirm shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs text-tts-confirm font-medium">
+                        {L("Transferência iniciada!", "Transfer started!")}
+                      </p>
+                      <p className="text-[11px] text-tts-muted mt-0.5 leading-relaxed">
+                        {L(
+                          "Pode levar de alguns minutos a algumas horas para chegar. O saldo atualiza automaticamente — você pode fechar esta tela.",
+                          "It can take from a few minutes up to a few hours to arrive. The balance updates automatically — you can close this screen.",
+                        )}
+                      </p>
+                    </div>
                   </div>
                 )}
 
