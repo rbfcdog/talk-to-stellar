@@ -2495,8 +2495,9 @@ export class BridgeController {
       const routes = (Array.isArray(vas) ? vas : []).map((va: any) => ({
         id: va.id,
         status: va.status,
-        destination_chain: va.destination_chain ?? null,
-        destination_address: va.destination_address ?? null,
+        // Bridge stores the route under va.destination (a TransferEndpoint)
+        destination_chain: va.destination?.payment_rail ?? va.destination_chain ?? null,
+        destination_address: va.destination?.address ?? va.destination?.to_address ?? va.destination_address ?? null,
         source_currency: va.source_deposit_instructions?.currency ?? va.source_currency ?? null,
       }));
 
