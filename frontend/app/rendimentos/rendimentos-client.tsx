@@ -788,14 +788,12 @@ export default function RendimentosClient({
       fetchBridgeWalletBalances().catch(() => null);
       try {
         await refreshAccountBalances();
-        setApiState({ loading: false, message: "", error: "" });
       } catch {
-        setApiState({
-          loading: false,
-          message: "",
-          error: L("PIN validado. Não consegui atualizar os saldos agora; tente atualizar em alguns segundos.", "PIN validated. I could not refresh balances right now; try again in a few seconds."),
-        });
+        // Non-blocking: PIN is valid and the page works regardless. The
+        // mainnet wallet lookup and positions load independently, so don't
+        // surface this as a "needs attention" error.
       }
+      setApiState({ loading: false, message: "", error: "" });
     } catch (error) {
       setReturnsPinState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
     }
