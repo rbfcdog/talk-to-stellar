@@ -886,7 +886,7 @@ export default function RendimentosClient({
         {/* Network toggle */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            {isTestnetYield && (
+            {networkView === "testnet" && isTestnetYield && (
               <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
                 <AlertTriangle className="h-3 w-3" />
                 {L("Valores estimados", "Estimated values")}
@@ -987,7 +987,7 @@ export default function RendimentosClient({
                 </a>
               )}
             </div>
-            {testnetUsdcBalance !== null && (
+            {networkView === "testnet" && testnetUsdcBalance !== null && (
               <div className="px-5 py-3 border-t border-tts-border/40 bg-tts-bg/50 flex items-center justify-between">
                 <span className="text-xs text-tts-muted">{L("Testnet USDC", "Testnet USDC")}</span>
                 <span className="text-xs font-mono font-semibold text-tts-muted">
@@ -1009,11 +1009,24 @@ export default function RendimentosClient({
         ) : (
           <>
             {tab === "returns" && (
-              <CurrentInvestmentsPage
-                language={language} session={session} sessionLoading={sessionLoading} options={options}
-                positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={isTestnetYield}
-                onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
-              />
+              networkView === "mainnet" ? (
+                <div className="rounded-2xl border border-tts-border bg-tts-surface p-6 text-center space-y-2">
+                  <Coins className="mx-auto h-8 w-8 text-tts-muted" />
+                  <p className="font-bold text-tts-deep">{L("Carteira mainnet", "Mainnet wallet")}</p>
+                  <p className="text-sm text-tts-muted leading-relaxed max-w-md mx-auto">
+                    {L(
+                      "Seu saldo real em USDC aparece no cartão acima. As posições de rendimento rodam na rede de validação — troque para Testnet para vê-las.",
+                      "Your real USDC balance is in the card above. Yield positions run on the validation network — switch to Testnet to view them.",
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <CurrentInvestmentsPage
+                  language={language} session={session} sessionLoading={sessionLoading} options={options}
+                  positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={isTestnetYield}
+                  onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
+                />
+              )
             )}
 
             {tab === "apply" && (
