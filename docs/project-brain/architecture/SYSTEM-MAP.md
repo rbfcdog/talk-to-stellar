@@ -25,7 +25,7 @@ graph TD
         EARLY["/api/early-access<br/>early email list signup"]
         XFERS["/api/transfers<br/>international transfers"]
         OPS_HISTORY["/api/ops/history<br/>complete transaction history"]
-        WH["/api/webhooks<br/>Etherfuse, Bridge"]
+        WH["/api/webhooks<br/>Etherfuse, payout providers"]
     end
 
     subgraph "Orchestration (D1)"
@@ -58,7 +58,7 @@ graph TD
         OPENAI[OpenAI GPT-4o]
         DEFI[DeFindex Vaults]
         EVOAPI[Evolution API v2]
-        BRIDGE[Bridge.xyz PIX/ACH]
+        CIRCLE[Circle<br/>USD payout API]
         RESEND[Resend Email]
     end
 
@@ -96,6 +96,7 @@ graph TD
     STELLAR --> HORIZON
     QUOTE_SVC --> HORIZON
     DEFINDEX --> DEFI
+    PAYOUT --> CIRCLE
     RECEIPT --> RESEND
 
     EARLY_SVC --> DB
