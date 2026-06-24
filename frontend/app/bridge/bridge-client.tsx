@@ -394,7 +394,16 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
         },
       );
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const inv = (json as any)?.bridge_invalid_fields;
+        let detail = "";
+        if (inv?.key && typeof inv.key === "object") {
+          detail = " — " + Object.entries(inv.key).map(([k, v]) => `${k}: ${v}`).join("; ");
+        } else if (inv && typeof inv === "object") {
+          detail = ` (${Object.keys(inv).join(", ")})`;
+        }
+        throw new Error(`${json.message || `HTTP ${res.status}`}${detail}`);
+      }
       setSendStatus("ok");
       setSendAmount("");
       setTimeout(() => load(loggedEmail || emailInput), 3000);
