@@ -630,7 +630,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         },
       );
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const fields = json?.bridge_invalid_fields
+          ? ` (${Object.keys(json.bridge_invalid_fields).join(", ")})`
+          : "";
+        throw new Error(`${json.message || `HTTP ${res.status}`}${fields}`);
+      }
       setSendStatus("ok");
       setSendAmount("");
       // Refresh data after a short delay so balances update
