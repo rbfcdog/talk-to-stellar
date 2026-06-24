@@ -678,6 +678,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendError(L("Informe um valor válido.", "Enter a valid amount."));
       return;
     }
+    // Bridge requires a minimum of $1.00 per transfer.
+    if (amountNum < 1) {
+      setSendStatus("error");
+      setSendError(L("O valor mínimo é US$ 1,00.", "Minimum amount is $1.00."));
+      return;
+    }
     if (!data?.customer_id || !destinationAddress) {
       setSendStatus("error");
       setSendError(L("Carteira de destino não encontrada. Gere uma carteira primeiro.", "Destination wallet not found. Generate a wallet first."));
@@ -1465,17 +1471,17 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                   <div className="space-y-3">
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-1.5">
-                        {L("Valor (USDC)", "Amount (USDC)")}
+                        {L("Valor (USDC) · mín US$ 1,00", "Amount (USDC) · min $1.00")}
                       </label>
                       <div className="flex gap-2">
                         <Input
                           type="number"
                           step="0.01"
-                          min="0.01"
+                          min="1"
                           max={totalAvailableBalance}
                           value={sendAmount}
                           onChange={(e) => setSendAmount(e.target.value)}
-                          placeholder={`Máx: ${fmt(totalAvailableBalance)}`}
+                          placeholder={`Mín 1 · Máx ${fmt(totalAvailableBalance)}`}
                           className="flex-1"
                         />
                         <Button
