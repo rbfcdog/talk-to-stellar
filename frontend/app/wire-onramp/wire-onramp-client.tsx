@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -441,7 +441,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [activateStatus, setActivateStatus] = useState<"idle" | "activating" | "error">("idle");
   const [activateError, setActivateError] = useState("");
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(true);
   const [pipelineLoading, setPipelineLoading] = useState(false);
 
   const loadPipeline = useCallback(async (customerId: string) => {
@@ -1186,73 +1186,94 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                     {pipelineLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (pipelineOpen ? <ChevronLeft className="h-3.5 w-3.5 rotate-90" /> : <ChevronRight className="h-3.5 w-3.5 rotate-90" />)}
                   </button>
 
-                  {pipelineOpen && pipeline && (
-                    <div className="mt-2 space-y-3 rounded-lg border border-tts-border bg-tts-surface p-3">
-                      {/* Step 1: VA routes */}
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
-                          1 · {L("Conta virtual → chega como", "Virtual account → lands as")}
-                        </p>
-                        {pipeline.virtual_account_routes.length === 0 ? (
-                          <p className="text-[11px] text-tts-muted">—</p>
-                        ) : pipeline.virtual_account_routes.map((r) => (
-                          <p key={r.id} className="text-[11px] font-mono text-tts-deep">
-                            {(r.source_currency || "usd").toUpperCase()} → {(r.destination_chain || "?").toUpperCase()}
-                            {r.destination_address ? ` · ${r.destination_address.slice(0, 8)}...${r.destination_address.slice(-4)}` : ""}
-                          </p>
-                        ))}
-                      </div>
+                  {pipelineOpen && pipeline && (() => {
+                    const baseWalletUsdc = pipeline.wallets.reduce(
+                      (sum, w) => sum + w.balances.filter((b) => b.currency?.toLowerCase() === "usdc").reduce((s, b) => s + Number(b.amount || 0), 0),
+                      0,
+                    );
+                    const stellarUsdc = Number(selectedDestWallet?.usdc_balance ?? data?.stellar_wallet?.usdc_balance ?? 0);
+                    const settling = totalReceived > 0 && baseWalletUsdc <= 0.000001;
+                    const stage1Done = totalReceived > 0;
+                    const stage2Done = baseWalletUsdc > 0.000001;
+                    const stage3Done = stellarUsdc > 0.000001;
 
-                      {/* Step 2: Bridge wallets per chain */}
-                      <div className="border-t border-tts-border/40 pt-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
-                          2 · {L("Carteiras Bridge (por rede)", "Bridge wallets (per chain)")}
-                        </p>
-                        {pipeline.wallets.length === 0 ? (
-                          <p className="text-[11px] text-tts-muted">—</p>
-                        ) : pipeline.wallets.map((w) => {
-                          const usdc = w.balances.find((b) => b.currency?.toLowerCase() === "usdc");
-                          return (
-                            <div key={w.id} className="mb-1.5 last:mb-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-bold text-tts-deep uppercase">{w.chain}</span>
-                                <span className="text-[11px] font-bold tabular-nums text-tts-deep">
-                                  {usdc ? `${fmt(Number(usdc.amount))} USDC` : "0 USDC"}
-                                </span>
+                    const Stage = ({ n, title, done, active, children }: { n: number; title: string; done: boolean; active?: boolean; children: ReactNode }) => (
+                      <div className="flex gap-2.5">
+                        <div className="flex flex-col items-center">
+                          <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${done ? "bg-tts-confirm text-white" : active ? "bg-amber-400 text-white" : "border border-tts-border bg-tts-bg text-tts-muted"}`}>
+                            {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : n}
+                          </div>
+                          {n < 3 && <div className="my-0.5 h-full w-px flex-1 bg-tts-border/60" />}
+                        </div>
+                        <div className="flex-1 pb-3">
+                          <p className="text-[11px] font-bold text-tts-deep">{title}</p>
+                          <div className="mt-1">{children}</div>
+                        </div>
+                      </div>
+                    );
+
+                    return (
+                      <div className="mt-2 rounded-lg border border-tts-border bg-tts-surface p-3">
+                        <Stage n={1} title={L("Conta virtual · USD recebido", "Virtual account · USD received")} done={stage1Done} active={!stage1Done}>
+                          <p className="text-sm font-bold tabular-nums text-tts-deep">{fmt(totalReceived)} <span className="text-xs font-medium text-tts-muted">USD</span></p>
+                          {pipeline.virtual_account_routes.map((r) => (
+                            <p key={r.id} className="text-[10px] font-mono text-tts-muted">
+                              → {(r.destination_chain || "?").toUpperCase()}{r.destination_address ? ` · ${r.destination_address.slice(0, 6)}...${r.destination_address.slice(-4)}` : ""}
+                            </p>
+                          ))}
+                        </Stage>
+
+                        <Stage n={2} title={L("Carteira Base · USDC", "Base wallet · USDC")} done={stage2Done} active={settling}>
+                          {pipeline.wallets.length === 0 ? (
+                            <p className="text-[11px] text-tts-muted">—</p>
+                          ) : pipeline.wallets.map((w) => {
+                            const usdc = w.balances.find((b) => b.currency?.toLowerCase() === "usdc");
+                            return (
+                              <div key={w.id} className="mb-1 last:mb-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold uppercase text-tts-muted">{w.chain}</span>
+                                  <span className="text-sm font-bold tabular-nums text-tts-deep">{fmt(Number(usdc?.amount ?? 0))} USDC</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <code className="flex-1 truncate text-[10px] font-mono text-tts-muted">{w.address}</code>
+                                  <CopyBtn value={w.address} label="address" />
+                                </div>
+                                {w.initiation_required && (
+                                  <p className="text-[10px] text-amber-600 dark:text-amber-400">{L("⚠ requer initiation para enviar", "⚠ requires initiation to send")}</p>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                <code className="flex-1 truncate text-[10px] font-mono text-tts-muted">{w.address}</code>
-                                <CopyBtn value={w.address} label="address" />
-                              </div>
-                              {w.initiation_required && (
-                                <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                                  {L("⚠ requer aprovação (initiation) para enviar", "⚠ requires initiation to send")}
-                                </p>
-                              )}
+                            );
+                          })}
+                          {settling && (
+                            <div className="mt-1.5 flex items-center gap-2 rounded bg-amber-50/50 dark:bg-amber-900/10 px-2 py-1.5">
+                              <Clock className="h-3 w-3 text-amber-500 shrink-0" />
+                              <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                                {L("Convertendo de USD na conta virtual — pode levar 1–2 dias úteis. Atualize para verificar.", "Converting from USD in the virtual account — can take 1–2 business days. Refresh to check.")}
+                              </span>
                             </div>
-                          );
-                        })}
-                      </div>
+                          )}
+                        </Stage>
 
-                      {/* Step 3: Stellar destination */}
-                      <div className="border-t border-tts-border/40 pt-2">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
-                          3 · {L("Carteira Stellar (destino)", "Stellar wallet (destination)")}
-                        </p>
-                        <p className="text-[11px] font-mono text-tts-deep break-all">
-                          {destinationAddress || L("nenhuma selecionada", "none selected")}
-                        </p>
-                      </div>
+                        <Stage n={3} title={L("Carteira Stellar · USDC", "Stellar wallet · USDC")} done={stage3Done} active={stage2Done && !stage3Done}>
+                          <p className="text-sm font-bold tabular-nums text-tts-deep">{fmt(stellarUsdc)} <span className="text-xs font-medium text-tts-muted">USDC</span></p>
+                          <p className="text-[10px] font-mono text-tts-muted break-all">
+                            {destinationAddress ? `${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-6)}` : L("nenhuma selecionada", "none selected")}
+                          </p>
+                          {stage2Done && !stage3Done && (
+                            <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">{L("Use o botão Enviar abaixo para mover Base → Stellar.", "Use the Send button below to move Base → Stellar.")}</p>
+                          )}
+                        </Stage>
 
-                      <button
-                        type="button"
-                        onClick={() => data?.customer_id && loadPipeline(data.customer_id)}
-                        className="flex items-center gap-1 text-[11px] text-tts-muted hover:text-tts-deep"
-                      >
-                        <RefreshCw className="h-3 w-3" /> {L("Atualizar", "Refresh")}
-                      </button>
-                    </div>
-                  )}
+                        <button
+                          type="button"
+                          onClick={() => data?.customer_id && loadPipeline(data.customer_id)}
+                          className="flex items-center gap-1 text-[11px] text-tts-muted hover:text-tts-deep"
+                        >
+                          <RefreshCw className="h-3 w-3" /> {L("Atualizar fluxo", "Refresh flow")}
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Available balance */}
