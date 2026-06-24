@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import WireTestClient from "./wire-test-client";
 
 export const metadata: Metadata = {
-  title: "Wire payout test",
-  description: "Operator screen for validating Circle wire payout coordination.",
+  title: "USD Wire Payout",
+  description: "Operations console for sending USD wire payouts to the linked bank account.",
 };
 
 export default function WireTestPage() {
