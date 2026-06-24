@@ -1309,11 +1309,13 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                                 const selected = w.id === selectedSourceWalletId;
                                 const hasFunds = Number(w.usdc_balance) > 0;
                                 return (
-                                  <button
+                                  <div
                                     key={w.id}
-                                    type="button"
+                                    role="button"
+                                    tabIndex={0}
                                     onClick={() => setSelectedSourceWalletId(w.id)}
-                                    className={`w-full text-left rounded-lg border p-2.5 space-y-1.5 transition-colors ${selected ? "border-tts-deep bg-tts-deep/5 ring-1 ring-tts-deep" : "border-tts-border bg-tts-bg/60 hover:border-tts-deep/40"}`}
+                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedSourceWalletId(w.id); } }}
+                                    className={`w-full cursor-pointer text-left rounded-lg border p-2.5 space-y-1.5 transition-colors ${selected ? "border-tts-deep bg-tts-deep/5 ring-1 ring-tts-deep" : "border-tts-border bg-tts-bg/60 hover:border-tts-deep/40"}`}
                                   >
                                     {/* header: chain + selected + USDC balance */}
                                     <div className="flex items-center justify-between gap-2">
@@ -1332,7 +1334,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                                     {/* full address */}
                                     <div className="flex items-center gap-1">
                                       <code className="flex-1 truncate text-[10px] font-mono text-tts-muted" title={w.address}>{w.address}</code>
-                                      <CopyBtn value={w.address} label="address" />
+                                      <span onClick={(e) => e.stopPropagation()}>
+                                        <CopyBtn value={w.address} label="address" />
+                                      </span>
                                     </div>
                                     {/* all token balances */}
                                     {nonZero.length > 0 && (
@@ -1349,7 +1353,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                                       <span className="font-mono truncate">id {w.id.slice(0, 8)}</span>
                                       {w.created_at && <span>{new Date(w.created_at).toLocaleDateString()}</span>}
                                     </div>
-                                  </button>
+                                  </div>
                                 );
                               })}
                               {/* connect another wallet */}
