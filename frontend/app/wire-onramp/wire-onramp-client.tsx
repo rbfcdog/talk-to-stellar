@@ -417,6 +417,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [walletsLoading, setWalletsLoading] = useState(false);
   const [genStatus, setGenStatus] = useState<"idle" | "generating" | "error">("idle");
   const [genError, setGenError] = useState("");
+  const [activateStatus, setActivateStatus] = useState<"idle" | "activating" | "error">("idle");
+  const [activateError, setActivateError] = useState("");
 
   const loadDestWallets = useCallback(async (email: string) => {
     const trimmed = email.trim().toLowerCase();
@@ -465,6 +467,27 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     } catch (e: any) {
       setGenStatus("error");
       setGenError(e?.message ?? String(e));
+    }
+  }, [loadDestWallets]);
+
+  const activateDestWallet = useCallback(async (email: string, publicKey: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !publicKey) return;
+    setActivateStatus("activating");
+    setActivateError("");
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets/activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, public_key: publicKey }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+      setActivateStatus("idle");
+      await loadDestWallets(trimmed);
+    } catch (e: any) {
+      setActivateStatus("error");
+      setActivateError(e?.message ?? String(e));
     }
   }, [loadDestWallets]);
 
@@ -1055,31 +1078,53 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
                   {genError && <p className="text-xs text-amber-600 dark:text-amber-400">{genError}</p>}
 
-                  {/* When the selected wallet isn't on mainnet yet, show full address to fund */}
-                  {selectedDestWallet && !selectedDestWallet.exists_on_mainnet && (
-                    <div className="rounded-lg border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2">
+                  {/* When the selected wallet isn't fully ready, offer one-tap sponsored activation */}
+                  {selectedDestWallet && (!selectedDestWallet.exists_on_mainnet || !selectedDestWallet.has_usdc_trustline) && (
+                    <div className="rounded-lg border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2.5">
                       <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
                         {L("Carteira criada — falta ativar", "Wallet created — needs activation")}
                       </p>
                       <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed">
                         {L(
-                          "Envie um pouco de XLM (≈2) para este endereço para ativá-lo. Depois ele poderá receber USDC.",
-                          "Send a little XLM (≈2) to this address to activate it. Then it can receive USDC.",
+                          "Ative para receber USDC. A ativação é patrocinada — você não precisa de XLM.",
+                          "Activate to receive USDC. Activation is sponsored — you don't need any XLM.",
                         )}
                       </p>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 break-all rounded bg-tts-bg px-2 py-1.5 text-[11px] font-mono text-tts-deep">
-                          {selectedDestWallet.public_key}
-                        </code>
-                        <CopyBtn value={selectedDestWallet.public_key} label="address" />
-                      </div>
-                    </div>
-                  )}
 
-                  {selectedDestWallet && selectedDestWallet.exists_on_mainnet && !selectedDestWallet.has_usdc_trustline && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                      {L("Ativando recebimento de USDC nesta carteira no próximo envio.", "USDC receiving will be enabled on this wallet at the next transfer.")}
-                    </p>
+                      <Button
+                        onClick={() => activateDestWallet(loggedEmail || emailInput, selectedDestWallet.public_key)}
+                        disabled={activateStatus === "activating"}
+                        className="w-full"
+                      >
+                        {activateStatus === "activating" ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            {L("Ativando...", "Activating...")}
+                          </>
+                        ) : (
+                          <>
+                            <BadgeCheck className="h-4 w-4 mr-2" />
+                            {L("Ativar carteira (patrocinado)", "Activate wallet (sponsored)")}
+                          </>
+                        )}
+                      </Button>
+
+                      {activateError && <p className="text-[11px] text-red-500">{activateError}</p>}
+
+                      {/* Fallback: fund the address manually if no sponsor is available */}
+                      <details className="text-[11px] text-amber-700/70 dark:text-amber-400/70">
+                        <summary className="cursor-pointer">{L("Ativar manualmente", "Activate manually")}</summary>
+                        <p className="mt-1.5 leading-relaxed">
+                          {L("Envie ≈2 XLM para este endereço, depois toque em Ativar.", "Send ≈2 XLM to this address, then tap Activate.")}
+                        </p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <code className="flex-1 break-all rounded bg-tts-bg px-2 py-1.5 font-mono text-tts-deep">
+                            {selectedDestWallet.public_key}
+                          </code>
+                          <CopyBtn value={selectedDestWallet.public_key} label="address" />
+                        </div>
+                      </details>
+                    </div>
                   )}
                 </div>
 

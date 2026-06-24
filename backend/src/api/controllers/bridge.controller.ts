@@ -635,6 +635,92 @@ async function createAndFundMainnetWallet(label: string): Promise<{
   }
 }
 
+/**
+ * Activate an already-generated wallet via sponsored reserves. Brings the
+ * account on-ledger (createAccount, balance 0) and/or adds the USDC trustline,
+ * whatever is missing — all paid by the platform sponsor so the wallet holds
+ * 0 XLM. Signed by the sponsor + the wallet's own (vaulted) key.
+ */
+async function sponsorExistingWallet(publicKey: string, vaultSecretId: string): Promise<{
+  ok: boolean;
+  reason?: string;
+  funded: boolean;
+  trustline: boolean;
+}> {
+  const sponsorSecret = resolveSponsorSecret();
+  if (!sponsorSecret) {
+    return { ok: false, funded: false, trustline: false, reason: "No sponsor key is configured on the server." };
+  }
+
+  let secret = '';
+  try {
+    secret = await vaultSecretService.getSecret(vaultSecretId);
+  } catch (e: any) {
+    return { ok: false, funded: false, trustline: false, reason: `Could not load wallet key: ${e?.message || e}` };
+  }
+  if (!secret) return { ok: false, funded: false, trustline: false, reason: "Wallet signing key is unavailable." };
+
+  const walletKeypair = Keypair.fromSecret(secret);
+
+  // Inspect current on-chain state
+  let exists = false;
+  let hasTrust = false;
+  try {
+    const account = await mainnetServer.loadAccount(publicKey);
+    exists = true;
+    hasTrust = hasUsdcTrustline(account);
+  } catch (e: any) {
+    const status = e?.response?.status ?? e?.status;
+    if (status !== 404) {
+      return { ok: false, funded: false, trustline: false, reason: `Could not read account state: ${e?.message || e}` };
+    }
+  }
+
+  if (exists && hasTrust) {
+    return { ok: true, funded: true, trustline: true };
+  }
+
+  try {
+    const sponsorKeypair = Keypair.fromSecret(sponsorSecret);
+    const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
+
+    const builder = new TransactionBuilder(sponsorAccount, {
+      fee: '1000',
+      networkPassphrase: MAINNET_PASSPHRASE,
+    }).addOperation(Operation.beginSponsoringFutureReserves({
+      sponsoredId: publicKey,
+      source: sponsorKeypair.publicKey(),
+    }));
+
+    if (!exists) {
+      builder.addOperation(Operation.createAccount({
+        destination: publicKey,
+        startingBalance: '0',
+        source: sponsorKeypair.publicKey(),
+      }));
+    }
+    if (!hasTrust) {
+      builder.addOperation(Operation.changeTrust({
+        asset: new Asset('USDC', PUBLIC_USDC_ISSUER),
+        source: publicKey,
+      }));
+    }
+    builder.addOperation(Operation.endSponsoringFutureReserves({ source: publicKey }));
+
+    const tx = builder.setTimeout(120).build();
+    tx.sign(sponsorKeypair, walletKeypair);
+    await mainnetServer.submitTransaction(tx);
+
+    logger.info(`[bridge] Activated (sponsored) wallet ${publicKey}`);
+    return { ok: true, funded: true, trustline: true };
+  } catch (e: any) {
+    const msg = e?.response?.data?.extras?.result_codes
+      ? JSON.stringify(e.response.data.extras.result_codes)
+      : String(e?.message || e);
+    return { ok: false, funded: exists, trustline: hasTrust, reason: `Sponsored activation failed: ${msg}` };
+  }
+}
+
 export class BridgeController {
   // ── Session-based helpers ──────────────────────────────────────
 
@@ -2658,6 +2744,52 @@ export class BridgeController {
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || "Failed to generate wallet." });
+    }
+  }
+
+  /** Activate an existing generated wallet via sponsored reserves (0 XLM for the user). */
+  static async activateStellarWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.body?.public_key ?? req.body?.publicKey);
+      if (!email || !publicKey) {
+        res.status(400).json({ success: false, message: "email/session_id and public_key are required." });
+        return;
+      }
+
+      const { data: row } = await supabase
+        .from("bridge_stellar_wallets")
+        .select("vault_secret_id")
+        .eq("email", email)
+        .eq("public_key", publicKey)
+        .maybeSingle();
+
+      if (!row?.vault_secret_id) {
+        res.status(404).json({ success: false, message: "Wallet not found for this account." });
+        return;
+      }
+
+      const result = await sponsorExistingWallet(publicKey, String(row.vault_secret_id));
+
+      if (result.funded || result.trustline) {
+        await supabase
+          .from("bridge_stellar_wallets")
+          .update({ is_funded: result.funded, has_usdc_trustline: result.trustline })
+          .eq("public_key", publicKey);
+      }
+
+      if (!result.ok) {
+        res.status(502).json({ success: false, message: result.reason || "Activation failed.", funded: result.funded, trustline: result.trustline });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: "Wallet activated. It can now receive USDC.",
+        wallet: { public_key: publicKey, is_funded: result.funded, has_usdc_trustline: result.trustline, exists_on_mainnet: result.funded },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to activate wallet." });
     }
   }
 }
