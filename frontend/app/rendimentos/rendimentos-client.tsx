@@ -534,7 +534,9 @@ export default function RendimentosClient({
 
   // Network toggle: "auto" = use backend configured network, "mainnet" | "testnet" = override
   type NetworkView = "testnet" | "mainnet";
-  const [networkView, setNetworkView] = useState<NetworkView>("testnet");
+  // Default to mainnet on first open; the browser-cached choice (if any) is
+  // applied in an effect below to avoid a hydration mismatch.
+  const [networkView, setNetworkView] = useState<NetworkView>("mainnet");
   const [bridgeWalletBalances, setBridgeWalletBalances] = useState<{
     public_key: string | null;
     testnet: { usdc: string; xlm: string } | null;
@@ -572,6 +574,37 @@ export default function RendimentosClient({
       setEmailWalletsLoading(false);
     }
   }
+
+  // ── Browser-cached preferences (network + email + chosen wallet) ──────────
+  const NETWORK_KEY = "tts:rendimentos:network";
+  const EMAIL_KEY = "tts:rendimentos:wallet-email";
+  const WALLET_KEY = "tts:rendimentos:wallet-key";
+  const hydratedPrefs = useRef(false);
+
+  // Hydrate from localStorage once on mount, then auto-load the cached email's wallets.
+  useEffect(() => {
+    if (hydratedPrefs.current) return;
+    hydratedPrefs.current = true;
+    try {
+      const net = window.localStorage.getItem(NETWORK_KEY);
+      if (net === "testnet" || net === "mainnet") setNetworkView(net);
+      const savedKey = window.localStorage.getItem(WALLET_KEY);
+      if (savedKey) setSelectedWalletKey(savedKey);
+      const savedEmail = window.localStorage.getItem(EMAIL_KEY);
+      if (savedEmail) {
+        setWalletEmail(savedEmail);
+        loadEmailWallets(savedEmail);
+      }
+    } catch {
+      // localStorage may be unavailable; defaults stand.
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist preferences when they change.
+  useEffect(() => { try { window.localStorage.setItem(NETWORK_KEY, networkView); } catch {} }, [networkView]);
+  useEffect(() => { try { if (walletEmail.trim()) window.localStorage.setItem(EMAIL_KEY, walletEmail.trim().toLowerCase()); } catch {} }, [walletEmail]);
+  useEffect(() => { try { if (selectedWalletKey) window.localStorage.setItem(WALLET_KEY, selectedWalletKey); } catch {} }, [selectedWalletKey]);
 
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
   const sortedOptions = useMemo(() => [...options], [options]);
