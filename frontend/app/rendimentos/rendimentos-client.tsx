@@ -710,7 +710,7 @@ export default function RendimentosClient({
       setApiState({ loading: true, message: "", error: "" });
       setSession((c) => ({ ...c, loading: true }));
       try {
-        const statusPromise = yieldApi("defindex/yield/status", undefined, 12000).catch(() => ({ success: false, runtime: { configured: false, api_key_configured: false, execution_enabled: false }, vaults: [] }));
+        const statusPromise = yieldApi(`defindex/yield/status?network=${networkView}`, undefined, 12000).catch(() => ({ success: false, runtime: { configured: false, api_key_configured: false, execution_enabled: false }, vaults: [] }));
         const sessionPayload = await getClientSession();
         const nextSession = { ...sessionPayload, loading: false, checked: true };
         setSession(nextSession);
@@ -730,6 +730,16 @@ export default function RendimentosClient({
     })();
   }, []);
 
+  // Re-fetch yield status for the selected network when the toggle changes.
+  useEffect(() => {
+    if (!loadedDataRef.current) return;
+    let cancelled = false;
+    yieldApi(`defindex/yield/status?network=${networkView}`, undefined, 12000)
+      .then((s) => { if (!cancelled) setYieldStatus(s); })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, [networkView]);
+
   useEffect(() => {
     setReturnsPin("");
     setReturnsPinVerified(false);
@@ -747,7 +757,7 @@ export default function RendimentosClient({
     Promise.all(options.map(async (o) => {
       const code = optionCode(o);
       try {
-        const payload = await yieldApi(`defindex/yield/balance?asset_code=${encodeURIComponent(o.asset_code)}&vault_address=${encodeURIComponent(o.vault_address)}`, undefined, 22000, session.sessionSource);
+        const payload = await yieldApi(`defindex/yield/balance?asset_code=${encodeURIComponent(o.asset_code)}&vault_address=${encodeURIComponent(o.vault_address)}&network=${networkView}`, undefined, 22000, session.sessionSource);
         return [code, { loading: false, amount: extractDefindexPositionAmount(payload?.position || payload?.balance), error: "", raw: payload?.balance, source: String(payload?.balance_source || payload?.balance?.source || "") }] as const;
       } catch (error) {
         return [code, { loading: false, amount: "0", error: String(error instanceof Error ? error.message : error) }] as const;
@@ -803,7 +813,7 @@ export default function RendimentosClient({
     setApiState({ loading: true, message: "", error: "" });
     setYieldResult(null);
     try {
-      const payload = await yieldApi("defindex/yield/prepare", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps }) }, 18000, session.sessionSource);
+      const payload = await yieldApi("defindex/yield/prepare", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, network: networkView }) }, 18000, session.sessionSource);
       setYieldResult(payload);
       setActiveStep("review");
       setApiState({ loading: false, message: payload?.execution_ready === false ? (String(payload?.execution_blocked_code || "") ? String(payload?.execution_blocked_reason || "") : "") : "", error: "" });
@@ -838,7 +848,7 @@ export default function RendimentosClient({
     if (!actionableOption || !yieldResult) return;
     setApiState({ loading: true, message: "", error: "" });
     try {
-      const payload = await yieldApi("defindex/yield/execute", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, pin, wallet_pin: pin }) }, 60000, session.sessionSource);
+      const payload = await yieldApi("defindex/yield/execute", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, pin, wallet_pin: pin, network: networkView }) }, 60000, session.sessionSource);
       setYieldResult(payload);
       setPin("");
       setSuccessNotice({ action, reviewedAmount: amount, reviewedAsset: selectedProfile.short, vaultAmount: String(payload?.amount || "").trim(), vaultAsset: String(payload?.vault?.display_asset_code || payload?.vault?.asset_code || "").trim(), hash: String(payload?.hash || "").trim() });
@@ -1000,24 +1010,11 @@ export default function RendimentosClient({
         ) : (
           <>
             {tab === "returns" && (
-              networkView === "mainnet" ? (
-                <div className="rounded-2xl border border-tts-border bg-tts-surface p-6 text-center space-y-2">
-                  <Coins className="mx-auto h-8 w-8 text-tts-muted" />
-                  <p className="font-bold text-tts-deep">{L("Carteira mainnet", "Mainnet wallet")}</p>
-                  <p className="text-sm text-tts-muted leading-relaxed max-w-md mx-auto">
-                    {L(
-                      "Seu saldo real em USDC aparece no cartão acima. As posições de rendimento rodam na rede de validação — troque para Testnet para vê-las.",
-                      "Your real USDC balance is in the card above. Yield positions run on the validation network — switch to Testnet to view them.",
-                    )}
-                  </p>
-                </div>
-              ) : (
-                <CurrentInvestmentsPage
-                  language={language} session={session} sessionLoading={sessionLoading} options={options}
-                  positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={isTestnetYield}
-                  onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
-                />
-              )
+              <CurrentInvestmentsPage
+                language={language} session={session} sessionLoading={sessionLoading} options={options}
+                positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
+                onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
+              />
             )}
 
             {tab === "apply" && (

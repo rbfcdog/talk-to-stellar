@@ -6408,6 +6408,7 @@ export class AnchorService {
     assetCode?: string;
     vault_address?: string;
     vaultAddress?: string;
+    network?: string;
   }): Promise<{
     success: true;
     public_key: string;
@@ -6419,6 +6420,7 @@ export class AnchorService {
     const context = await this.resolveSessionWallet(input);
     const assetCode = coalesceString(input.asset_code, input.assetCode);
     const requestedVault = coalesceString(input.vault_address, input.vaultAddress);
+    const networkOverride = coalesceString(input.network) || undefined;
     logDefindex('info', 'balance_start', {
       request_id: defindexRequestId(input),
       session_id: maskLogValue(context.sessionId),
@@ -6430,6 +6432,7 @@ export class AnchorService {
     const vault = DefindexYieldService.requireVault(
       assetCode,
       requestedVault,
+      networkOverride,
     );
     let balance: unknown;
     try {
@@ -7009,6 +7012,7 @@ export class AnchorService {
     invest?: boolean;
     slippage_bps?: string | number;
     slippageBps?: string | number;
+    network?: string;
   }): Promise<{
     success: true;
     prepared: true;
@@ -7028,7 +7032,8 @@ export class AnchorService {
     xdr?: string;
     raw?: unknown;
   }> {
-    const runtime = DefindexYieldService.getRuntimeInfo();
+    const networkOverride = coalesceString(input.network) || undefined;
+    const runtime = DefindexYieldService.getRuntimeInfo(networkOverride);
     const context = await this.resolveSessionWallet(input);
     const action: DefindexYieldAction = String(input.action || 'deposit').trim().toLowerCase() === 'withdraw'
       ? 'withdraw'
@@ -7060,6 +7065,7 @@ export class AnchorService {
     const vault = DefindexYieldService.requireVault(
       assetCode,
       requestedVault,
+      networkOverride,
     );
     const amountUnits = DefindexYieldService.amountToContractUnits(amount);
     const slippageBps = Number(coalesceString(input.slippage_bps, input.slippageBps, 100));
@@ -7336,6 +7342,7 @@ export class AnchorService {
     slippageBps?: string | number;
     unsigned_xdr?: string;
     unsignedXdr?: string;
+    network?: string;
   }): Promise<{
     success: boolean;
     submitted: boolean;
@@ -7347,7 +7354,8 @@ export class AnchorService {
     hash?: string;
     raw?: unknown;
   }> {
-    const runtime = DefindexYieldService.getRuntimeInfo();
+    const networkOverride = coalesceString(input.network) || undefined;
+    const runtime = DefindexYieldService.getRuntimeInfo(networkOverride);
     logDefindex('info', 'execute_start', {
       request_id: defindexRequestId(input),
       action: String(input.action || 'deposit').trim().toLowerCase() === 'withdraw' ? 'withdraw' : 'deposit',
@@ -7395,6 +7403,7 @@ export class AnchorService {
     const vault = DefindexYieldService.requireVault(
       coalesceString(input.asset_code, input.assetCode),
       coalesceString(input.vault_address, input.vaultAddress),
+      networkOverride,
     );
     let secret: string | undefined;
     const readSigningSecret = async (): Promise<string> => {
