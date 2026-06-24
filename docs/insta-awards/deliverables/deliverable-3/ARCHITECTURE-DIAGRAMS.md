@@ -22,33 +22,26 @@ That evidence file contains the reviewer-ready Mermaid diagram set for the end-t
 
 ```mermaid
 sequenceDiagram
-    participant Reviewer
-    participant Frontend as /institution-settlement
-    participant API as Backend /api
-    participant Quote as BrlUsdQuoteService
-    participant Pix as PixFundingService/Etherfuse
-    participant Stellar as StellarSettlementService
-    participant Payout as USD Payout Adapter
-    participant Evidence as SettlementEvidenceService
+    actor User
+    participant Web
+    participant Backend
+    participant Etherfuse
+    participant Stellar
+    participant Circle
 
-    Reviewer->>Frontend: Start institutional route demo
-    Frontend->>API: POST /api/quotes/brl-usd
-    API->>Quote: Create BRL/USD quote
-    Quote-->>API: quote_id, BRL, USD, fees
-    Frontend->>API: POST /api/transfers
-    API-->>Frontend: transfer_id, initial state
-    Frontend->>API: POST /api/transfers/:id/pix-intent
-    API->>Pix: Create PIX funding intent
-    Pix-->>API: PIX order/reference
-    Pix-->>API: Webhook or sandbox funding confirmation
-    API->>Stellar: Settle USDC
-    Stellar-->>API: stellar_tx_hash and settlement evidence
-    Frontend->>API: POST /api/transfers/:id/payout-instruction
-    API->>Payout: Create Circle / Etherfuse payout instruction
-    Payout-->>API: payout_instruction_id and provider status
-    API->>Evidence: Build reconciliation and reviewer evidence
-    Frontend->>API: GET /api/transfers/:id/reviewer-evidence
-    API-->>Frontend: reviewer package
+    User->>Web: Start transfer
+    Web->>Backend: Quote BRL to USD
+    Backend-->>Web: Quote + fees
+    Web->>Backend: Create transfer + PIX intent
+    Backend->>Etherfuse: PIX funding intent
+    Etherfuse-->>Backend: Funding confirmed
+    Backend->>Stellar: Settle USDC
+    Stellar-->>Backend: tx hash + evidence
+    Web->>Backend: Payout instruction
+    Backend->>Circle: USD payout
+    Circle-->>Backend: Payout status
+    Backend->>Backend: Reconcile + build evidence
+    Backend-->>Web: Reviewer package
 ```
 
 Code references:
