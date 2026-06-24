@@ -7,6 +7,8 @@ import { PUBLIC_USDC_ISSUER } from "../../config/assets";
 import { supabase } from "../../config/supabase";
 import { Asset, Keypair, Operation, TransactionBuilder, Networks } from "@stellar/stellar-sdk";
 import { VaultService } from "../services/core/vault.service";
+import { DefindexYieldService } from "../services/defindex-yield.service";
+import { DEFINDEX_USDC_VAULT_MAINNET } from "../../integrations/defindex/config";
 
 function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
@@ -633,6 +635,41 @@ async function createAndFundMainnetWallet(label: string): Promise<{
       reason: `Wallet created. Sponsored funding unavailable (${msg}). Send XLM to this address to activate it.`,
     };
   }
+}
+
+/**
+ * Ensure a custodial wallet holds enough mainnet XLM to pay Soroban fees.
+ * Sponsored wallets hold 0 XLM, so top them up from the sponsor before a
+ * contract call (e.g. a DeFindex deposit). One top-up covers many txs.
+ */
+async function ensureWalletGasMainnet(address: string, minXlm = 1): Promise<void> {
+  const sponsorSecret = resolveSponsorSecret();
+  if (!sponsorSecret) throw new Error("No sponsor key configured to fund transaction fees.");
+  let xlm = 0;
+  try {
+    const account = await mainnetServer.loadAccount(address);
+    xlm = Number(account.balances.find((b: any) => b.asset_type === "native")?.balance ?? "0");
+  } catch {
+    throw new Error(`Wallet ${address} does not exist on mainnet.`);
+  }
+  if (xlm >= minXlm) return;
+
+  const sponsorKeypair = Keypair.fromSecret(sponsorSecret);
+  const sponsorAccount = await mainnetServer.loadAccount(sponsorKeypair.publicKey());
+  const tx = new TransactionBuilder(sponsorAccount, { fee: "1000", networkPassphrase: MAINNET_PASSPHRASE })
+    .addOperation(Operation.payment({ destination: address, asset: Asset.native(), amount: String(minXlm) }))
+    .setTimeout(60)
+    .build();
+  tx.sign(sponsorKeypair);
+  await mainnetServer.submitTransaction(tx);
+  for (let i = 0; i < 10; i++) {
+    try {
+      const a = await mainnetServer.loadAccount(address);
+      if (Number(a.balances.find((b: any) => b.asset_type === "native")?.balance ?? "0") >= minXlm) break;
+    } catch { /* keep waiting */ }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  logger.info(`[bridge] Topped up ${address} with ${minXlm} XLM for Soroban fees`);
 }
 
 /**
@@ -2862,6 +2899,85 @@ export class BridgeController {
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || "Failed to activate wallet." });
+    }
+  }
+
+  /**
+   * Invest a Bridge-linked Stellar wallet's USDC into the DeFindex MAINNET
+   * vault — a self-contained mainnet path that does not depend on the app's
+   * network. Resolves the wallet's vaulted key, tops up gas from the sponsor,
+   * builds + signs + submits the deposit on mainnet.
+   */
+  static async investStellarWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.body?.public_key ?? req.body?.publicKey);
+      const amount = readText(req.body?.amount);
+
+      if (!email || !publicKey) {
+        res.status(400).json({ success: false, message: "email/session_id and public_key are required." });
+        return;
+      }
+      const amountNum = Number(amount);
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        res.status(400).json({ success: false, message: "A positive amount is required." });
+        return;
+      }
+
+      // Resolve the wallet's vaulted signing key (must belong to this email).
+      const { data: row } = await supabase
+        .from("bridge_stellar_wallets")
+        .select("vault_secret_id")
+        .eq("email", email)
+        .eq("public_key", publicKey)
+        .maybeSingle();
+      if (!row?.vault_secret_id) {
+        res.status(404).json({ success: false, message: "Wallet not found for this account." });
+        return;
+      }
+      const secret = await new VaultService(supabase).getSecret(String(row.vault_secret_id));
+      if (!secret) {
+        res.status(500).json({ success: false, message: "Wallet signing key is unavailable." });
+        return;
+      }
+      const keypair = Keypair.fromSecret(secret);
+
+      // Make sure the wallet can pay Soroban fees.
+      await ensureWalletGasMainnet(publicKey, 1);
+
+      // Build the mainnet DeFindex USDC deposit, sign with the wallet, submit on mainnet.
+      const vaultAddress = (process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET;
+      const amountUnits = DefindexYieldService.amountToContractUnits(amount, 7);
+      const { xdr } = await DefindexYieldService.buildVaultAction({
+        action: "deposit",
+        vaultAddress,
+        caller: publicKey,
+        amountUnits,
+        network: "mainnet",
+        invest: true,
+      });
+
+      const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC);
+      tx.sign(keypair);
+      const signedXdr = tx.toXDR();
+
+      const result: any = await DefindexYieldService.sendSignedTransaction(signedXdr, "mainnet");
+      const hash = result?.hash || result?.txHash || result?.transactionHash || null;
+      logger.info(`[bridge] mainnet yield deposit ${amount} USDC from ${publicKey} -> ${vaultAddress} hash=${hash}`);
+
+      res.status(201).json({
+        success: true,
+        network: "mainnet",
+        vault: vaultAddress,
+        public_key: publicKey,
+        amount,
+        hash,
+        result,
+      });
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.message || "Failed to invest on mainnet.";
+      logger.error(`[bridge] investStellarWallet failed: ${msg}`);
+      res.status(statusFromError(error)).json({ success: false, message: msg });
     }
   }
 

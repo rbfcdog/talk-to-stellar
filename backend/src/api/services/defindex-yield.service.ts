@@ -568,6 +568,11 @@ export class DefindexYieldService {
     }
   }
 
+  /** Submit a signed transaction XDR through the DeFindex SDK on the given network. */
+  static async sendSignedTransaction(signedXdr: string, network: DefindexNetwork = defaultNetwork()): Promise<any> {
+    return this.sdk(network).sendTransaction(signedXdr, sdkNetwork(network));
+  }
+
   static async buildVaultAction(input: {
     action: DefindexYieldAction;
     vaultAddress: string;
