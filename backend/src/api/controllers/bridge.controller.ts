@@ -2559,7 +2559,11 @@ export class BridgeController {
           payment_rail: "stellar",
           currency: "usdc",
           to_address: destinationAddress,
-        },
+          // Bridge requires a blockchain_memo for Stellar destinations. The
+          // destination is the user's own dedicated account, so any valid memo
+          // works (funds land regardless of memo).
+          blockchain_memo: readText(req.body?.blockchain_memo) || String(Math.floor(Math.random() * 9_000_000) + 1_000_000),
+        } as any,
       });
 
       logger.info(`[bridge] bridge-wallet-to-stellar transfer created: ${transfer.id}`);
