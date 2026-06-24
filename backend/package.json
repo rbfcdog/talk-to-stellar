@@ -45,6 +45,7 @@
     "migrate:required": "ts-node scripts/run-required-migrations.ts",
     "ops:hash-password": "ts-node scripts/hash-ops-admin-password.ts",
     "circle:payout-readiness": "ts-node scripts/circle-payout-readiness.ts",
+    "circle:e2e": "ts-node scripts/circle-e2e-test.ts",
     "instawards:export-log": "ts-node scripts/export-transfer-log.ts",
     "instawards:export-record": "ts-node scripts/export-transfer-record.ts",
     "instawards:export-real-stellar-payment": "ts-node src/scripts/export-real-stellar-payment-evidence.ts"
