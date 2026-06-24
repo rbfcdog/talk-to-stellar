@@ -1,89 +1,99 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
-  <title id="title">TalkToStellar Third-Party Money Movement Flow of Funds</title>
-  <desc id="desc">A high contrast diagram showing customer BRL funds entering through PIX, conversion to USDC on Stellar, and payout through Bridge to an approved USD destination.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1080" viewBox="0 0 1800 1080" role="img" aria-labelledby="title desc">
+  <title id="title">TalkToStellar Flow of Funds</title>
+  <desc id="desc">A diagram showing customer BRL funds entering through PIX via Etherfuse, conversion to USDC settled on Stellar, and USD payout through Circle to an approved destination account.</desc>
   <defs>
-    <marker id="arrow" markerWidth="28" markerHeight="28" refX="26" refY="14" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 0 0 L 28 14 L 0 28 z" fill="#111827"/>
+    <marker id="arrow" markerWidth="20" markerHeight="20" refX="16" refY="10" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 20 10 L 0 20 z" fill="#0f172a"/>
     </marker>
     <style>
       .page { fill: #ffffff; }
       .title { font: 800 44px Arial, Helvetica, sans-serif; fill: #0f172a; }
-      .subtitle { font: 500 24px Arial, Helvetica, sans-serif; fill: #334155; }
-      .section { font: 800 25px Arial, Helvetica, sans-serif; fill: #0f172a; }
-      .box-title { font: 800 25px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .subtitle { font: 500 23px Arial, Helvetica, sans-serif; fill: #334155; }
+      .section { font: 800 24px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .step { font: 700 18px Arial, Helvetica, sans-serif; fill: #ffffff; opacity: 0.85; }
+      .box-title { font: 800 26px Arial, Helvetica, sans-serif; fill: #ffffff; }
       .box-line { font: 500 20px Arial, Helvetica, sans-serif; fill: #ffffff; }
-      .box-line-dark { font: 600 20px Arial, Helvetica, sans-serif; fill: #111827; }
-      .callout-title { font: 800 25px Arial, Helvetica, sans-serif; fill: #111827; }
+      .provider { font: 800 20px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .callout-title { font: 800 25px Arial, Helvetica, sans-serif; fill: #0f172a; }
       .callout-line { font: 600 20px Arial, Helvetica, sans-serif; fill: #111827; }
-      .label { font: 800 18px Arial, Helvetica, sans-serif; fill: #111827; }
-      .small { font: 600 17px Arial, Helvetica, sans-serif; fill: #334155; }
-      .arrow { stroke: #111827; stroke-width: 6; fill: none; marker-end: url(#arrow); }
-      .thin { stroke: #64748b; stroke-width: 3; fill: none; }
+      .stage-label { font: 800 18px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .arrow { stroke: #0f172a; stroke-width: 6; fill: none; marker-end: url(#arrow); }
     </style>
   </defs>
 
-  <rect class="page" x="0" y="0" width="1800" height="1200"/>
+  <rect class="page" x="0" y="0" width="1800" height="1080"/>
   <rect x="0" y="0" width="1800" height="142" fill="#e0f2fe"/>
-  <text class="title" x="70" y="62">TalkToStellar Third-Party Money Movement</text>
-  <text class="subtitle" x="70" y="105">Flow of funds for PIX-funded BRL conversion, Stellar USDC settlement, and Bridge payout to an approved USD destination.</text>
+  <text class="title" x="70" y="62">TalkToStellar — Flow of Funds</text>
+  <text class="subtitle" x="70" y="105">BRL funded by PIX (Etherfuse), converted to USDC and settled on Stellar, then paid out as USD through Circle.</text>
 
-  <text class="section" x="70" y="190">Main Flow</text>
+  <!-- Row 1 -->
+  <text class="section" x="70" y="200">Inbound: BRL to USDC</text>
 
-  <rect x="70" y="230" width="480" height="220" rx="22" fill="#0f766e"/>
-  <text class="box-title" x="105" y="278">1. Customer / Sender</text>
-  <text class="box-line" x="105" y="320">Starts in WhatsApp, Telegram, or web</text>
-  <text class="box-line" x="105" y="354">Approves quote and fees</text>
-  <text class="box-line" x="105" y="388">Pays BRL from own bank account</text>
-  <text class="box-line" x="105" y="422">Funding rail: PIX</text>
+  <rect x="70" y="230" width="500" height="230" rx="22" fill="#0f766e"/>
+  <text class="step" x="105" y="272">STEP 1</text>
+  <text class="box-title" x="105" y="305">Customer / Sender</text>
+  <text class="box-line" x="105" y="345">Starts in WhatsApp, Telegram, or web</text>
+  <text class="box-line" x="105" y="378">Approves quote and fees</text>
+  <text class="box-line" x="105" y="411">Pays BRL from their own bank</text>
+  <text class="provider" x="105" y="444">Funding rail: PIX</text>
 
-  <rect x="660" y="230" width="480" height="220" rx="22" fill="#1d4ed8"/>
-  <text class="box-title" x="695" y="278">2. PIX / Fiat Ramp Partner</text>
-  <text class="box-line" x="695" y="320">Receives BRL through PIX</text>
-  <text class="box-line" x="695" y="354">Bridge KYC/KYB where required</text>
-  <text class="box-line" x="695" y="388">Confirms payment by webhook/API</text>
-  <text class="box-line" x="695" y="422">Provider: Bridge</text>
+  <rect x="650" y="230" width="500" height="230" rx="22" fill="#1d4ed8"/>
+  <text class="step" x="685" y="272">STEP 2</text>
+  <text class="box-title" x="685" y="305">PIX Intake</text>
+  <text class="box-line" x="685" y="345">Receives BRL through PIX</text>
+  <text class="box-line" x="685" y="378">Identity checks where required</text>
+  <text class="box-line" x="685" y="411">Confirms funding by webhook/API</text>
+  <text class="provider" x="685" y="444">Provider: Etherfuse</text>
 
-  <rect x="1250" y="230" width="480" height="220" rx="22" fill="#6d28d9"/>
-  <text class="box-title" x="1285" y="278">3. TalkToStellar Orchestration</text>
-  <text class="box-line" x="1285" y="320">Records quote, fee, and status</text>
-  <text class="box-line" x="1285" y="354">Runs identity and payout controls</text>
-  <text class="box-line" x="1285" y="388">Customer funds are not operating capital</text>
-  <text class="box-line" x="1285" y="422">Stores reconciliation evidence</text>
+  <rect x="1230" y="230" width="500" height="230" rx="22" fill="#6d28d9"/>
+  <text class="step" x="1265" y="272">STEP 3</text>
+  <text class="box-title" x="1265" y="305">TalkToStellar Orchestration</text>
+  <text class="box-line" x="1265" y="345">Records quote, fee, and status</text>
+  <text class="box-line" x="1265" y="378">Runs identity and payout controls</text>
+  <text class="box-line" x="1265" y="411">Customer funds are not operating capital</text>
+  <text class="box-line" x="1265" y="444">Stores reconciliation evidence</text>
 
-  <path class="arrow" d="M 550 340 L 640 340"/>
-  <path class="arrow" d="M 1140 340 L 1230 340"/>
+  <path class="arrow" d="M 570 345 L 645 345"/>
+  <path class="arrow" d="M 1150 345 L 1225 345"/>
 
-  <rect x="70" y="590" width="480" height="220" rx="22" fill="#be6b00"/>
-  <text class="box-title" x="105" y="638">4. Exchange + Stellar Settlement</text>
-  <text class="box-line" x="105" y="680">BRL value is exchanged to USDC</text>
-  <text class="box-line" x="105" y="714">USDC settles on Stellar</text>
-  <text class="box-line" x="105" y="748">Transaction hash is recorded</text>
-  <text class="box-line" x="105" y="782">Fees and receipt evidence retained</text>
+  <!-- vertical connector 3 -> 4 -->
+  <path class="arrow" d="M 1480 460 L 1480 520 L 320 520 L 320 590"/>
+  <text class="stage-label" x="640" y="510">BRL is exchanged to USDC and settles on Stellar; value then pays out as USD.</text>
 
-  <rect x="660" y="590" width="480" height="220" rx="22" fill="#334155"/>
-  <text class="box-title" x="695" y="638">5. Payout / Off-Ramp Partner</text>
-  <text class="box-line" x="695" y="680">Bridge receives payout instruction</text>
-  <text class="box-line" x="695" y="714">Redeems or routes value to fiat</text>
-  <text class="box-line" x="695" y="748">Bridge compliance controls apply</text>
-  <text class="box-line" x="695" y="782">Provider: Bridge</text>
+  <!-- Row 2 -->
+  <text class="section" x="70" y="565">Outbound: USDC to USD</text>
 
-  <rect x="1250" y="590" width="480" height="220" rx="22" fill="#047857"/>
-  <text class="box-title" x="1285" y="638">6. Ultimate Destination</text>
-  <text class="box-line" x="1285" y="680">Customer's same-name US bank</text>
-  <text class="box-line" x="1285" y="714">Approved US recipient account</text>
-  <text class="box-line" x="1285" y="748">USD payout destination</text>
-  <text class="box-line" x="1285" y="782">Final status and receipt returned</text>
+  <rect x="70" y="590" width="500" height="230" rx="22" fill="#b45309"/>
+  <text class="step" x="105" y="632">STEP 4</text>
+  <text class="box-title" x="105" y="665">Exchange + Stellar Settlement</text>
+  <text class="box-line" x="105" y="705">BRL value is exchanged to USDC</text>
+  <text class="box-line" x="105" y="738">USDC settles on Stellar</text>
+  <text class="box-line" x="105" y="771">Transaction hash is recorded</text>
+  <text class="provider" x="105" y="804">Network: Stellar</text>
 
-  <path class="arrow" d="M 1490 450 L 1490 512 L 310 512 L 310 570"/>
-  <path class="arrow" d="M 550 700 L 640 700"/>
-  <path class="arrow" d="M 1140 700 L 1230 700"/>
-  <text class="label" x="705" y="500">Exchange occurs: BRL -&gt; USDC on Stellar; payout is intended as USD.</text>
+  <rect x="650" y="590" width="500" height="230" rx="22" fill="#0e7490"/>
+  <text class="step" x="685" y="632">STEP 5</text>
+  <text class="box-title" x="685" y="665">USD Payout</text>
+  <text class="box-line" x="685" y="705">Receives the payout instruction</text>
+  <text class="box-line" x="685" y="738">Redeems USDC and routes to USD</text>
+  <text class="box-line" x="685" y="771">Compliance controls apply</text>
+  <text class="provider" x="685" y="804">Provider: Circle</text>
 
-  <rect x="70" y="870" width="1660" height="260" rx="22" fill="#f8fafc" stroke="#cbd5e1" stroke-width="4"/>
-  <text class="callout-title" x="105" y="920">Controls, Review, and Exception Handling</text>
-  <text class="callout-line" x="105" y="962">Received funds exchanged? Yes. BRL received through PIX is converted to USDC on Stellar, then routed for USD payout.</text>
-  <text class="callout-line" x="105" y="1000">Where do funds ultimately go? Through Bridge to the customer's approved USD bank account or approved recipient account.</text>
-  <text class="callout-line" x="105" y="1038">KYC/KYB and sanctions/AML screening are required before live external payouts through Bridge and internal review controls.</text>
-  <text class="callout-line" x="105" y="1076">If same-name matching is required and not approved, payout is blocked for manual review.</text>
-  <text class="callout-line" x="105" y="1114">If compliance, exchange, settlement, or payout fails, funds enter review, refund, or cancellation handling.</text>
+  <rect x="1230" y="590" width="500" height="230" rx="22" fill="#047857"/>
+  <text class="step" x="1265" y="632">STEP 6</text>
+  <text class="box-title" x="1265" y="665">Destination Account</text>
+  <text class="box-line" x="1265" y="705">Approved US bank account</text>
+  <text class="box-line" x="1265" y="738">Same-name or approved recipient</text>
+  <text class="box-line" x="1265" y="771">USD payout destination</text>
+  <text class="box-line" x="1265" y="804">Final status and receipt returned</text>
+
+  <path class="arrow" d="M 570 705 L 645 705"/>
+  <path class="arrow" d="M 1150 705 L 1225 705"/>
+
+  <!-- Controls callout -->
+  <rect x="70" y="870" width="1660" height="170" rx="22" fill="#f8fafc" stroke="#cbd5e1" stroke-width="4"/>
+  <text class="callout-title" x="105" y="915">Controls and Exception Handling</text>
+  <text class="callout-line" x="105" y="955">BRL received through PIX (Etherfuse) is converted to USDC on Stellar, then routed for USD payout through Circle.</text>
+  <text class="callout-line" x="105" y="990">Identity (KYC/KYB) and sanctions/AML screening are required before live external payouts.</text>
+  <text class="callout-line" x="105" y="1025">If compliance, exchange, settlement, or payout fails, funds enter review, refund, or cancellation handling.</text>
 </svg>

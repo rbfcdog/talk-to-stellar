@@ -65,7 +65,6 @@ flowchart LR
         Etherfuse["Etherfuse PIX"]
         Horizon["Stellar Horizon"]
         Circle["Circle Payout API"]
-        Bridge["Bridge-compatible path"]
         MockProvider["Compatibility/mock provider"]
     end
 
@@ -87,7 +86,6 @@ flowchart LR
     TransferService --> StellarSettlement --> Horizon
     TransferService --> PayoutCoordination
     PayoutCoordination --> Circle
-    PayoutCoordination --> Bridge
     PayoutCoordination --> MockProvider
     TransferService --> EvidenceService
     TransferService --> Orchestrator

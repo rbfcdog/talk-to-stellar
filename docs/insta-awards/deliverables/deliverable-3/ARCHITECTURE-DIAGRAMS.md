@@ -36,7 +36,7 @@ sequenceDiagram
     API->>Stellar: Settle USDC
     Stellar-->>API: stellar_tx_hash and settlement evidence
     Frontend->>API: POST /api/transfers/:id/payout-instruction
-    API->>Payout: Create Circle/Bridge/Etherfuse/mock payout instruction
+    API->>Payout: Create Circle / Etherfuse payout instruction
     Payout-->>API: payout_instruction_id and provider status
     API->>Evidence: Build reconciliation and reviewer evidence
     Frontend->>API: GET /api/transfers/:id/reviewer-evidence
@@ -67,7 +67,7 @@ flowchart LR
     StellarSvc --> Horizon[Stellar Horizon]
     ITS --> Adapter[USD Payout Adapter]
     Adapter --> Circle[Circle Mint payout API]
-    Adapter --> Bridge[Bridge compatibility path]
+    Adapter --> EtherfuseProof[Etherfuse proof path]
     Adapter --> Mock[Ops mock path]
     ITS --> Evidence[SettlementEvidenceService]
     Evidence --> Reviewer[Reviewer evidence JSON]
@@ -109,7 +109,7 @@ Code references:
 - `backend/src/orchestration/stateMachine.ts`
 - `backend/src/orchestration/TransferOrchestrator.ts`
 
-Legacy international transfer states are mirrored into the normalized lifecycle. The bridge is implemented in `InternationalTransferService.syncOrchestration()` and `TransferOrchestrator.fromLegacyTransfer()`.
+Legacy international transfer states are mirrored into the normalized lifecycle. The connector is implemented in `InternationalTransferService.syncOrchestration()` and `TransferOrchestrator.fromLegacyTransfer()`.
 
 ## Evidence Model
 
