@@ -620,7 +620,6 @@ export default function RendimentosClient({
   const mainnetUsdcBalance = selectedEmailWallet
     ? (selectedEmailWallet.usdc_balance ?? "0")
     : (bridgeWalletBalances?.mainnet?.usdc ?? null);
-  const testnetUsdcBalance = bridgeWalletBalances?.testnet?.usdc ?? null;
 
   const safeSelectedCode = normalizeUiAssetCode(selectedCode) || optionCode(actionableOption) || selectedCode;
   const sessionLinkContext = useMemo(() => scopedLinkContext(initialQuery), [initialQuery]);
@@ -987,14 +986,6 @@ export default function RendimentosClient({
                 </a>
               )}
             </div>
-            {networkView === "testnet" && testnetUsdcBalance !== null && (
-              <div className="px-5 py-3 border-t border-tts-border/40 bg-tts-bg/50 flex items-center justify-between">
-                <span className="text-xs text-tts-muted">{L("Testnet USDC", "Testnet USDC")}</span>
-                <span className="text-xs font-mono font-semibold text-tts-muted">
-                  {Number(testnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
-                </span>
-              </div>
-            )}
           </div>
         )}
 
