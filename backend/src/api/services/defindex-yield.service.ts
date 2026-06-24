@@ -198,17 +198,26 @@ function parseVaultsFromJson(fallbackNetwork: DefindexNetwork): DefindexVaultCon
 }
 
 function parseVaultsFromEnv(fallbackNetwork: DefindexNetwork): DefindexVaultConfig[] {
-  const candidates: Array<{ asset: string; env: string; label: string }> = [
-    { asset: 'USDC', env: 'DEFINDEX_USDC_VAULT', label: 'USDC Yield Vault' },
-    { asset: 'CETES', env: 'DEFINDEX_CETES_VAULT', label: 'CETES Yield Vault' },
-    ...(fallbackNetwork === 'testnet' ? [] : [{ asset: 'EURC', env: 'DEFINDEX_EURC_VAULT', label: 'EUR Yield Vault' }]),
-    { asset: 'XLM', env: 'DEFINDEX_XLM_VAULT', label: 'XLM Yield Vault' },
-    { asset: 'TESOURO', env: 'DEFINDEX_TESOURO_VAULT', label: 'Real Yield Vault' },
+  // Per-network env vars win so the same asset can have a distinct vault on each
+  // network (e.g. mainnet USDC = DEFINDEX_USDC_VAULT_MAINNET). The generic vars
+  // (DEFINDEX_USDC_VAULT, ...) are treated as the testnet defaults.
+  const perNetwork = (base: string) =>
+    fallbackNetwork === 'mainnet'
+      ? coalesceString(process.env[`${base}_MAINNET`])
+      : coalesceString(process.env[`${base}_TESTNET`], process.env[base]);
+
+  const candidates: Array<{ asset: string; address: string; label: string }> = [
+    { asset: 'USDC', address: perNetwork('DEFINDEX_USDC_VAULT'), label: 'USDC Yield Vault' },
+    { asset: 'CETES', address: perNetwork('DEFINDEX_CETES_VAULT'), label: 'CETES Yield Vault' },
+    ...(fallbackNetwork === 'testnet' ? [] : [{ asset: 'EURC', address: perNetwork('DEFINDEX_EURC_VAULT'), label: 'EUR Yield Vault' }]),
+    { asset: 'XLM', address: perNetwork('DEFINDEX_XLM_VAULT'), label: 'XLM Yield Vault' },
+    { asset: 'TESOURO', address: perNetwork('DEFINDEX_TESOURO_VAULT'), label: 'Real Yield Vault' },
   ];
   return candidates
+    .filter((candidate) => candidate.address)
     .map((candidate) => parseVaultEntry({
       asset_code: candidate.asset,
-      vault_address: process.env[candidate.env],
+      vault_address: candidate.address,
       label: candidate.label,
     }, fallbackNetwork))
     .filter((entry): entry is DefindexVaultConfig => Boolean(entry));
