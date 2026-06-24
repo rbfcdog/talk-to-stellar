@@ -796,10 +796,17 @@ export class BridgeService {
   }
 
   async listWallets(customerId: string): Promise<BridgeWallet[]> {
-    const res = await this.client.get<{ wallets: BridgeWallet[] }>(
+    const res = await this.client.get<any>(
       `/customers/${encodeURIComponent(customerId)}/wallets`,
     );
-    return (res as any).wallets ?? (res as any) ?? [];
+    // Bridge wraps the list as { count, data: [...] }; older/other shapes use
+    // { wallets: [...] } or a bare array. Unwrap whichever is present.
+    const r = res as any;
+    if (Array.isArray(r)) return r;
+    if (Array.isArray(r?.data)) return r.data;
+    if (Array.isArray(r?.wallets)) return r.wallets;
+    if (Array.isArray(r?.wallets?.data)) return r.wallets.data;
+    return [];
   }
 
   async getWallet(customerId: string, walletId: string): Promise<BridgeWallet> {

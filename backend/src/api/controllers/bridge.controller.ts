@@ -2471,26 +2471,31 @@ export class BridgeController {
       const service = getBridgeService();
       const customerId = readText(req.params.id);
 
-      const [wallets, vas, allBalances] = await Promise.all([
+      const [wallets, vas] = await Promise.all([
         service.listWallets(customerId).catch(() => []),
         service.listVirtualAccounts(customerId).catch(() => []),
-        service.getWalletBalances().catch(() => []),
       ]);
 
-      const walletDetails = await Promise.all(
-        (Array.isArray(wallets) ? wallets : []).map(async (w: any) => {
-          const balances = (Array.isArray(allBalances) ? allBalances : []).filter(
-            (b: any) => b.wallet_id === w.id,
-          );
-          return {
-            id: w.id,
-            chain: w.chain,
-            address: w.address,
-            initiation_required: Boolean(w.initiation_required),
-            balances: balances.map((b: any) => ({ chain: b.chain, currency: b.currency, amount: b.amount })),
-          };
-        }),
-      );
+      // Each Bridge wallet already carries its own per-chain balances.
+      const walletDetails = (Array.isArray(wallets) ? wallets : []).map((w: any) => {
+        const balances = Array.isArray(w.balances) ? w.balances : [];
+        const usdc = balances.find((b: any) => String(b.currency).toLowerCase() === "usdc");
+        return {
+          id: w.id,
+          chain: w.chain,
+          address: w.address,
+          initiation_required: Boolean(w.initiation_required),
+          created_at: w.created_at ?? null,
+          tags: Array.isArray(w.tags) ? w.tags : [],
+          usdc_balance: usdc?.balance ?? "0",
+          balances: balances.map((b: any) => ({
+            chain: b.chain,
+            currency: b.currency,
+            amount: b.balance ?? b.amount ?? "0",
+            contract_address: b.contract_address ?? null,
+          })),
+        };
+      });
 
       const routes = (Array.isArray(vas) ? vas : []).map((va: any) => ({
         id: va.id,

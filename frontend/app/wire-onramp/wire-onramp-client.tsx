@@ -104,7 +104,10 @@ type PipelineWallet = {
   chain: string;
   address: string;
   initiation_required: boolean;
-  balances: Array<{ chain: string; currency: string; amount: string }>;
+  created_at: string | null;
+  tags: string[];
+  usdc_balance: string;
+  balances: Array<{ chain: string; currency: string; amount: string; contract_address: string | null }>;
 };
 
 type PipelineRoute = {
@@ -1279,24 +1282,64 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                               </Button>
                               {createWalletError && <p className="text-[10px] text-red-500">{createWalletError}</p>}
                             </div>
-                          ) : pipeline.wallets.map((w) => {
-                            const usdc = w.balances.find((b) => b.currency?.toLowerCase() === "usdc");
-                            return (
-                              <div key={w.id} className="mb-1 last:mb-0">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-bold uppercase text-tts-muted">{w.chain}</span>
-                                  <span className="text-sm font-bold tabular-nums text-tts-deep">{fmt(Number(usdc?.amount ?? 0))} USDC</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <code className="flex-1 truncate text-[10px] font-mono text-tts-muted">{w.address}</code>
-                                  <CopyBtn value={w.address} label="address" />
-                                </div>
-                                {w.initiation_required && (
-                                  <p className="text-[10px] text-amber-600 dark:text-amber-400">{L("⚠ requer initiation para enviar", "⚠ requires initiation to send")}</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted">
+                                {pipeline.wallets.length} {pipeline.wallets.length === 1 ? L("carteira", "wallet") : L("carteiras", "wallets")}
+                              </p>
+                              {pipeline.wallets.map((w) => {
+                                const nonZero = w.balances.filter((b) => Number(b.amount) > 0);
+                                return (
+                                  <div key={w.id} className="rounded-lg border border-tts-border bg-tts-bg/60 p-2.5 space-y-1.5">
+                                    {/* header: chain + USDC balance */}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="flex items-center gap-1.5">
+                                        <span className="rounded bg-tts-deep/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tts-deep">{w.chain}</span>
+                                        {w.initiation_required && (
+                                          <span className="rounded bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 dark:text-amber-400" title="requires initiation">init</span>
+                                        )}
+                                      </span>
+                                      <span className="text-sm font-bold tabular-nums text-tts-deep">{fmt(Number(w.usdc_balance))} USDC</span>
+                                    </div>
+                                    {/* full address */}
+                                    <div className="flex items-center gap-1">
+                                      <code className="flex-1 truncate text-[10px] font-mono text-tts-muted" title={w.address}>{w.address}</code>
+                                      <CopyBtn value={w.address} label="address" />
+                                    </div>
+                                    {/* all token balances */}
+                                    {nonZero.length > 0 && (
+                                      <div className="flex flex-wrap gap-1">
+                                        {nonZero.map((b) => (
+                                          <span key={b.currency} className="rounded bg-tts-surface border border-tts-border px-1.5 py-0.5 text-[9px] font-mono text-tts-deep">
+                                            {fmt(Number(b.amount))} {String(b.currency).toUpperCase()}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* meta: id + created */}
+                                    <div className="flex items-center justify-between gap-2 text-[9px] text-tts-muted/70">
+                                      <span className="font-mono truncate">id {w.id.slice(0, 8)}</span>
+                                      {w.created_at && <span>{new Date(w.created_at).toLocaleDateString()}</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {/* connect another wallet */}
+                              <button
+                                type="button"
+                                onClick={() => data?.customer_id && createBridgeWallet(data.customer_id, "base")}
+                                disabled={createWalletStatus === "creating"}
+                                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-tts-border py-2 text-[11px] font-bold text-tts-muted hover:bg-tts-bg disabled:opacity-50"
+                              >
+                                {createWalletStatus === "creating" ? (
+                                  <><Loader2 className="h-3 w-3 animate-spin" />{L("Conectando...", "Connecting...")}</>
+                                ) : (
+                                  <><Wallet className="h-3 w-3" />{L("Conectar outra carteira (Base)", "Connect another wallet (Base)")}</>
                                 )}
-                              </div>
-                            );
-                          })}
+                              </button>
+                              {createWalletError && <p className="text-[10px] text-red-500">{createWalletError}</p>}
+                            </div>
+                          )}
                           {settling && pipeline.wallets.length > 0 && (
                             <div className="mt-1.5 flex items-center gap-2 rounded bg-amber-50/50 dark:bg-amber-900/10 px-2 py-1.5">
                               <Clock className="h-3 w-3 text-amber-500 shrink-0" />
