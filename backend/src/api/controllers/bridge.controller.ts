@@ -2541,7 +2541,6 @@ export class BridgeController {
         return;
       }
 
-      const wallet = await service.getWallet(customerId, walletId) as unknown as Record<string, unknown>;
       // Bridge convention (matches every working off-ramp): amount lives on the
       // destination only, source carries no amount, and crypto destinations use
       // `to_address` (not `address`).
@@ -2549,10 +2548,11 @@ export class BridgeController {
         on_behalf_of: customerId,
         developer_fee_percent: readText(req.body?.developer_fee_percent || req.body?.developerFeePercent) || undefined,
         source: {
+          // For a bridge_wallet source, bridge_wallet_id identifies it.
+          // from_address is NOT supported here and Bridge rejects it.
           payment_rail: "bridge_wallet",
           currency: "usdc",
           bridge_wallet_id: walletId,
-          from_address: readText(wallet.address) || undefined,
         },
         destination: {
           amount,
