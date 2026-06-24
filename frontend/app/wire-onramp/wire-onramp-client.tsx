@@ -723,10 +723,16 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       );
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const fields = json?.bridge_invalid_fields
-          ? ` (${Object.keys(json.bridge_invalid_fields).join(", ")})`
-          : "";
-        throw new Error(`${json.message || `HTTP ${res.status}`}${fields}`);
+        // The real rejected field is nested under bridge_invalid_fields.key
+        // (e.g. { from_address: "..." } or { "destination.blockchain_memo": "..." }).
+        const inv = json?.bridge_invalid_fields;
+        let detail = "";
+        if (inv?.key && typeof inv.key === "object") {
+          detail = " — " + Object.entries(inv.key).map(([k, v]) => `${k}: ${v}`).join("; ");
+        } else if (inv && typeof inv === "object") {
+          detail = ` (${Object.keys(inv).join(", ")})`;
+        }
+        throw new Error(`${json.message || `HTTP ${res.status}`}${detail}`);
       }
       setSendStatus("ok");
       setSendAmount("");
