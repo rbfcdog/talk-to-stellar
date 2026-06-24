@@ -444,6 +444,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [pipelineOpen, setPipelineOpen] = useState(true);
   const [pipelineLoading, setPipelineLoading] = useState(false);
 
+  const [createWalletStatus, setCreateWalletStatus] = useState<"idle" | "creating" | "error">("idle");
+  const [createWalletError, setCreateWalletError] = useState("");
+
   const loadPipeline = useCallback(async (customerId: string) => {
     if (!customerId) return;
     setPipelineLoading(true);
@@ -457,6 +460,26 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setPipelineLoading(false);
     }
   }, []);
+
+  const createBridgeWallet = useCallback(async (customerId: string, chain = "base") => {
+    if (!customerId) return;
+    setCreateWalletStatus("creating");
+    setCreateWalletError("");
+    try {
+      const res = await fetch(`/api/bridge/customers/${encodeURIComponent(customerId)}/wallets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chain }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+      setCreateWalletStatus("idle");
+      await loadPipeline(customerId);
+    } catch (e: any) {
+      setCreateWalletStatus("error");
+      setCreateWalletError(e?.message ?? String(e));
+    }
+  }, [loadPipeline]);
 
   const loadDestWallets = useCallback(async (email: string) => {
     const trimmed = email.trim().toLowerCase();
@@ -634,8 +657,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendError(L("Carteira de destino não encontrada. Gere uma carteira primeiro.", "Destination wallet not found. Generate a wallet first."));
       return;
     }
-    // Prefer Bridge wallet, fallback to VA's bridge_wallet_id
-    const walletId = bridgeWallets[0]?.id || activeVa?.bridge_wallet_id;
+    // Prefer Bridge wallet, then the pipeline wallet (just connected), then VA's bridge_wallet_id
+    const walletId = bridgeWallets[0]?.id || pipeline?.wallets?.[0]?.id || activeVa?.bridge_wallet_id;
     if (!walletId) {
       const destChain = activeVa?.destination_chain || "";
       if (destChain === "stellar") {
@@ -683,7 +706,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, activeVa, data, destinationAddress, load, loadDestWallets, loggedEmail, emailInput, L]);
+  }, [sendAmount, bridgeWallets, pipeline, activeVa, data, destinationAddress, load, loadDestWallets, loggedEmail, emailInput, L]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -1225,7 +1248,27 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
                         <Stage n={2} title={L("Carteira Base · USDC", "Base wallet · USDC")} done={stage2Done} active={settling}>
                           {pipeline.wallets.length === 0 ? (
-                            <p className="text-[11px] text-tts-muted">—</p>
+                            <div className="rounded-lg border border-tts-border bg-tts-bg/60 p-2.5 space-y-2">
+                              <p className="text-[11px] text-tts-muted leading-relaxed">
+                                {L(
+                                  "Nenhuma carteira conectada à conta virtual. Crie uma carteira Base para receber os dólares convertidos.",
+                                  "No wallet connected to the virtual account. Create a Base wallet to receive the converted dollars.",
+                                )}
+                              </p>
+                              <Button
+                                onClick={() => data?.customer_id && createBridgeWallet(data.customer_id, "base")}
+                                disabled={createWalletStatus === "creating"}
+                                className="w-full"
+                                size="sm"
+                              >
+                                {createWalletStatus === "creating" ? (
+                                  <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />{L("Conectando...", "Connecting...")}</>
+                                ) : (
+                                  <><Wallet className="h-3.5 w-3.5 mr-2" />{L("Conectar carteira (Base)", "Connect wallet (Base)")}</>
+                                )}
+                              </Button>
+                              {createWalletError && <p className="text-[10px] text-red-500">{createWalletError}</p>}
+                            </div>
                           ) : pipeline.wallets.map((w) => {
                             const usdc = w.balances.find((b) => b.currency?.toLowerCase() === "usdc");
                             return (
@@ -1244,7 +1287,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                               </div>
                             );
                           })}
-                          {settling && (
+                          {settling && pipeline.wallets.length > 0 && (
                             <div className="mt-1.5 flex items-center gap-2 rounded bg-amber-50/50 dark:bg-amber-900/10 px-2 py-1.5">
                               <Clock className="h-3 w-3 text-amber-500 shrink-0" />
                               <span className="text-[10px] text-amber-700 dark:text-amber-400">
