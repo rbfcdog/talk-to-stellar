@@ -238,6 +238,7 @@ router.delete("/static-memos/:memoId", BridgeController.deleteStaticMemo);
 router.post("/customers/:id/wallets", BridgeController.createWallet);
 router.get("/customers/:id/wallets", BridgeController.listWallets);
 router.get("/customers/:id/wallets/cached", BridgeController.listWalletsFromDb);
+router.get("/customers/:id/transfer-pipeline", BridgeController.getTransferPipeline);
 router.post("/customers/:id/wallets/:walletId/transfer-to-stellar", BridgeController.createBridgeWalletToStellarTransfer);
 router.get("/customers/:id/wallets/:walletId", BridgeController.getWallet);
 

@@ -2461,6 +2461,60 @@ export class BridgeController {
     }
   }
 
+  /**
+   * Pipeline diagnostics: shows where the money actually is across the whole
+   * USD → Base USDC → Stellar flow, plus each Bridge wallet's chain/address and
+   * whether it needs an `initiation` object on transfer. Read-only.
+   */
+  static async getTransferPipeline(req: Request, res: Response): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const customerId = readText(req.params.id);
+
+      const [wallets, vas, allBalances] = await Promise.all([
+        service.listWallets(customerId).catch(() => []),
+        service.listVirtualAccounts(customerId).catch(() => []),
+        service.getWalletBalances().catch(() => []),
+      ]);
+
+      const walletDetails = await Promise.all(
+        (Array.isArray(wallets) ? wallets : []).map(async (w: any) => {
+          const balances = (Array.isArray(allBalances) ? allBalances : []).filter(
+            (b: any) => b.wallet_id === w.id,
+          );
+          return {
+            id: w.id,
+            chain: w.chain,
+            address: w.address,
+            initiation_required: Boolean(w.initiation_required),
+            balances: balances.map((b: any) => ({ chain: b.chain, currency: b.currency, amount: b.amount })),
+          };
+        }),
+      );
+
+      const routes = (Array.isArray(vas) ? vas : []).map((va: any) => ({
+        id: va.id,
+        status: va.status,
+        destination_chain: va.destination_chain ?? null,
+        destination_address: va.destination_address ?? null,
+        source_currency: va.source_deposit_instructions?.currency ?? va.source_currency ?? null,
+      }));
+
+      res.json({
+        success: true,
+        customer_id: customerId,
+        wallets: walletDetails,
+        virtual_account_routes: routes,
+      });
+    } catch (error: any) {
+      res.status(statusFromError(error)).json({
+        success: false,
+        message: error?.error || error?.message || "Failed to load pipeline.",
+        bridge_details: error?.response ?? null,
+      });
+    }
+  }
+
   static async createBridgeWalletToStellarTransfer(req: Request, res: Response): Promise<void> {
     try {
       const service = getBridgeService();
