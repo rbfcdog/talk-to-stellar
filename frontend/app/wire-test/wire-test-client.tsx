@@ -102,9 +102,9 @@ export default function WireTestClient() {
   return (
     <OperationalPage size="xl" frameClassName="max-w-3xl">
       <OperationalHeader
-        eyebrow="Circle sandbox"
-        title="Wire payout test"
-        description="Send a USD wire payout via Circle Mint sandbox. Credentials are hardcoded — just enter the ops secret and amount."
+        eyebrow="USD Payouts"
+        title="USD Wire Payout"
+        description="Send a USD wire payout to the linked bank account. Enter the operations secret and amount to authorize."
         actions={
           <StatusPill tone={wireSent ? "confirm" : "default"}>
             {wireSent ? "Wire sent" : "Ready"}
@@ -217,7 +217,7 @@ export default function WireTestClient() {
           </div>
           <details className="mt-4">
             <summary className="cursor-pointer text-xs font-bold text-tts-gold">
-              Raw Circle response
+              Response details
             </summary>
             <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-tts-border bg-tts-bg p-3 text-xs leading-5 text-tts-deep">
               {JSON.stringify(wireResult.circle_raw, null, 2)}
