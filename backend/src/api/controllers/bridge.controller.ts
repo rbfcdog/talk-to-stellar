@@ -2792,4 +2792,94 @@ export class BridgeController {
       res.status(500).json({ success: false, message: error?.message || "Failed to activate wallet." });
     }
   }
+
+  /**
+   * Admin: report the sponsor/treasury XLM balance and how many more wallet
+   * activations it can still cover (~1.5 XLM locked per sponsored USDC wallet).
+   * Guarded by INTERNAL_API_SECRET when that env var is set.
+   */
+  static async getSponsorStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const expected = String(process.env.INTERNAL_API_SECRET || process.env.RAMP_SANDBOX_INTERNAL_SECRET || "").trim();
+      if (expected) {
+        const auth = String(req.headers.authorization || "");
+        const provided = String(
+          req.headers["x-internal-api-secret"] ||
+          (auth.toLowerCase().startsWith("bearer ") ? auth.slice(7) : "") ||
+          req.query.secret ||
+          "",
+        ).trim();
+        if (provided !== expected) {
+          res.status(403).json({ success: false, message: "Unauthorized." });
+          return;
+        }
+      }
+
+      const sponsorSecret = resolveSponsorSecret();
+      if (!sponsorSecret) {
+        res.json({ success: true, configured: false, message: "No sponsor key configured (STELLAR_SPONSOR_SECRET)." });
+        return;
+      }
+
+      let sponsorPublic = "";
+      try {
+        sponsorPublic = Keypair.fromSecret(sponsorSecret).publicKey();
+      } catch {
+        res.status(500).json({ success: false, configured: true, message: "Sponsor secret is malformed." });
+        return;
+      }
+
+      const BASE_RESERVE = 0.5;        // XLM per reserve entry
+      const PER_WALLET_XLM = 1.5;      // 1 account (2 base) is shared; trustline +0.5 → ~1.5 locked per wallet
+      const FEE_BUFFER_XLM = 1;        // keep a little for tx fees
+
+      let account: Awaited<ReturnType<typeof mainnetServer.loadAccount>>;
+      try {
+        account = await mainnetServer.loadAccount(sponsorPublic);
+      } catch (e: any) {
+        const status = e?.response?.status ?? e?.status;
+        if (status === 404) {
+          res.json({
+            success: true, configured: true, sponsor_public_key: sponsorPublic,
+            funded: false, xlm_balance: "0", message: "Sponsor account is not funded on mainnet yet — send it XLM.",
+          });
+          return;
+        }
+        throw e;
+      }
+
+      const nativeBalance = account.balances.find((b: any) => b.asset_type === "native")?.balance ?? "0";
+      const subentryCount = Number((account as any).subentry_count ?? 0);
+      const numSponsoring = Number((account as any).num_sponsoring ?? 0);
+      const numSponsored = Number((account as any).num_sponsored ?? 0);
+
+      const xlm = Number(nativeBalance);
+      const minBalance = (2 + subentryCount + numSponsoring - numSponsored) * BASE_RESERVE;
+      const available = Math.max(0, xlm - minBalance - FEE_BUFFER_XLM);
+      const remainingCapacity = Math.floor(available / PER_WALLET_XLM);
+
+      // How many wallets we've already activated (locked reserves)
+      const { count: activatedCount } = await supabase
+        .from("bridge_stellar_wallets")
+        .select("id", { count: "exact", head: true })
+        .eq("is_funded", true);
+
+      res.json({
+        success: true,
+        configured: true,
+        funded: true,
+        sponsor_public_key: sponsorPublic,
+        xlm_balance: nativeBalance,
+        min_balance_xlm: minBalance.toFixed(4),
+        available_xlm: available.toFixed(4),
+        per_wallet_xlm: PER_WALLET_XLM,
+        remaining_activations: remainingCapacity,
+        currently_sponsoring: numSponsoring,
+        activated_wallets: activatedCount ?? null,
+        explorer_url: `https://stellar.expert/explorer/public/account/${sponsorPublic}`,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to read sponsor status." });
+    }
+  }
 }
