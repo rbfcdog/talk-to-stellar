@@ -742,13 +742,21 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       }
       setSendStatus("ok");
       setSendAmount("");
-      // Refresh data after a short delay so balances update
-      setTimeout(() => { load(loggedEmail || emailInput); loadDestWallets(loggedEmail || emailInput); }, 3000);
+      // Bridge settles Base -> Stellar asynchronously (not instant), so poll a
+      // few times over ~40s to catch the balance update without a manual refresh.
+      const email = loggedEmail || emailInput;
+      [3000, 8000, 15000, 25000, 40000].forEach((ms) =>
+        setTimeout(() => {
+          load(email);
+          loadDestWallets(email);
+          if (data?.customer_id) loadPipeline(data.customer_id);
+        }, ms),
+      );
     } catch (e: any) {
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, pipeline, selectedSourceWalletId, activeVa, data, destinationAddress, load, loadDestWallets, loggedEmail, emailInput, L]);
+  }, [sendAmount, bridgeWallets, pipeline, selectedSourceWalletId, activeVa, data, destinationAddress, load, loadDestWallets, loadPipeline, loggedEmail, emailInput, L]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
