@@ -632,7 +632,12 @@ export default function RendimentosClient({
   const requiresChannelPin = Boolean(session.authenticated);
   const channelPinUnlocked = !requiresChannelPin || returnsPinVerified;
   const canPrepare = Boolean(!sessionLoading && session.authenticated && channelPinUnlocked && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
-  const balanceForSelected = balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
+  // On mainnet, the spendable balance is the mainnet wallet's USDC (from the
+  // wallet lookup), not the testnet session-wallet balances.
+  const balanceForSelected: BalanceLine | undefined =
+    networkView === "mainnet" && safeSelectedCode === "USDC"
+      ? (mainnetUsdcBalance !== null ? { asset_code: "USDC", balance: String(mainnetUsdcBalance) } : undefined)
+      : balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const requestedAmount = normalizeDecimal(amount);
   const selectedBalanceAmount = normalizeDecimal(balanceForSelected?.balance || "0");
   const selectedBalanceInsufficient = Boolean(session.authenticated && requestedAmount > 0 && (!balanceForSelected || selectedBalanceAmount + 0.0000001 < requestedAmount));
