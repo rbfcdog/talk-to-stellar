@@ -2,6 +2,8 @@
 
 > **Living document.** Updated when modules are added, renamed, or restructured.
 
+Rendered PNG: [`diagrams/system-map.png`](./diagrams/system-map.png)
+
 ```mermaid
 graph TD
     subgraph Surfaces
@@ -9,7 +11,7 @@ graph TD
         TG[Telegram Bot]
         WEB[Web Frontend React/Next.js]
         LANDING[Landing Email List]
-        OPS[/ops Dashboard]
+        OPS["/ops Dashboard"]
         ADMIN[Admin Transactions Console]
         WIRE_TEST[Wire Payout Test Screen]
     end

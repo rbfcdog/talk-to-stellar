@@ -10,6 +10,14 @@ docs/insta-awards/deliverables/deliverable-3/evidence/diagramas-de-arquitetura.m
 
 That evidence file contains the reviewer-ready Mermaid diagram set for the end-to-end transfer routing demonstration.
 
+## Rendered PNGs
+
+- [End-to-end flow](./diagrams/01-end-to-end-flow.png)
+- [Service map](./diagrams/02-service-map.png)
+- [State model](./diagrams/03-state-model.png)
+- [Evidence model](./diagrams/04-evidence-model.png)
+- [Reviewer screens](./diagrams/05-reviewer-screens.png)
+
 ## End-To-End Flow
 
 ```mermaid
@@ -57,7 +65,7 @@ Code references:
 ```mermaid
 flowchart LR
     UI[Institution Settlement UI] --> QAPI[POST /api/quotes/brl-usd]
-    UI --> TAPI[/api/transfers routes]
+    UI --> TAPI["/api/transfers routes"]
     QAPI --> Quote[BrlUsdQuoteService]
     TAPI --> ITS[InternationalTransferService]
     ITS --> Pix[PixFundingService]
@@ -72,7 +80,7 @@ flowchart LR
     ITS --> Evidence[SettlementEvidenceService]
     Evidence --> Reviewer[Reviewer evidence JSON]
     ITS --> Orchestrator[TransferOrchestrator]
-    Orchestrator --> Ops[/ops dashboard]
+    Orchestrator --> Ops["/ops dashboard"]
 ```
 
 Code references:
@@ -123,7 +131,7 @@ flowchart TD
     Transfer --> Workflow[GET /api/transfers/:id/workflow]
     Transfer --> OpsTransfer[transfers normalized row]
     OpsTransfer --> OpsEvents[transfer_events]
-    OpsEvents --> OpsDashboard[/ops detail page]
+    OpsEvents --> OpsDashboard["/ops detail page"]
 ```
 
 Code references:
@@ -137,12 +145,12 @@ Code references:
 
 ```mermaid
 flowchart LR
-    Demo[/institution-settlement] --> EvidenceCards[Week 1 and Week 2 evidence cards]
+    Demo["/institution-settlement"] --> EvidenceCards[Week 1 and Week 2 evidence cards]
     Demo --> Lifecycle[Lifecycle timeline]
     Demo --> Payout[Payout coordination panel]
-    Ops[/ops?source=transfers] --> OpsList[Normalized transfer list]
+    Ops["/ops?source=transfers"] --> OpsList[Normalized transfer list]
     Ops --> OpsDetail[Timeline, reconciliation, raw record]
-    Admin[/admin/transactions] --> AdminList[Searchable transfer table]
+    Admin["/admin/transactions"] --> AdminList[Searchable transfer table]
     Admin --> AdminDetail[Detail drawer and JSON record]
 ```
 
