@@ -446,6 +446,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [pipelineOpen, setPipelineOpen] = useState(true);
   const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [selectedSourceWalletId, setSelectedSourceWalletId] = useState("");
 
   const [createWalletStatus, setCreateWalletStatus] = useState<"idle" | "creating" | "error">("idle");
   const [createWalletError, setCreateWalletError] = useState("");
@@ -458,7 +459,16 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     try {
       const res = await fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/transfer-pipeline`)}`, { cache: "no-store", signal: controller.signal });
       const json = await res.json().catch(() => ({}));
-      if (json?.success) setPipeline({ wallets: json.wallets ?? [], virtual_account_routes: json.virtual_account_routes ?? [] });
+      if (json?.success) {
+        const wallets: PipelineWallet[] = json.wallets ?? [];
+        setPipeline({ wallets, virtual_account_routes: json.virtual_account_routes ?? [] });
+        // Default the source to the wallet holding the most USDC (the funded one).
+        setSelectedSourceWalletId((cur) => {
+          if (cur && wallets.some((w) => w.id === cur)) return cur;
+          const funded = [...wallets].sort((a, b) => Number(b.usdc_balance) - Number(a.usdc_balance))[0];
+          return funded && Number(funded.usdc_balance) > 0 ? funded.id : (wallets[0]?.id ?? "");
+        });
+      }
     } catch {
       // non-critical
     } finally {
@@ -647,7 +657,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   );
   // Also include VA total_received as available (funds may be in VA, not yet in wallet)
   const vaAvailableBalance = activeVa?.total_received_usd ?? 0;
-  const totalAvailableBalance = bridgeUsdcBalance > 0 ? bridgeUsdcBalance : vaAvailableBalance;
+  // The selected source wallet's USDC drives the spendable amount.
+  const selectedSourceWallet = pipeline?.wallets.find((w) => w.id === selectedSourceWalletId) || null;
+  const sourceUsdcBalance = selectedSourceWallet ? Number(selectedSourceWallet.usdc_balance) : 0;
+  const totalAvailableBalance = sourceUsdcBalance > 0 ? sourceUsdcBalance : (bridgeUsdcBalance > 0 ? bridgeUsdcBalance : vaAvailableBalance);
 
   // Destination = selected generated wallet, else the session's linked wallet
   const selectedDestWallet = destWallets.find((w) => w.public_key === selectedWalletKey) || null;
@@ -670,8 +683,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendError(L("Carteira de destino não encontrada. Gere uma carteira primeiro.", "Destination wallet not found. Generate a wallet first."));
       return;
     }
-    // Prefer Bridge wallet, then the pipeline wallet (just connected), then VA's bridge_wallet_id
-    const walletId = bridgeWallets[0]?.id || pipeline?.wallets?.[0]?.id || activeVa?.bridge_wallet_id;
+    // Use the wallet the user selected as the source; fall back sensibly.
+    const fundedWallet = pipeline?.wallets ? [...pipeline.wallets].sort((a, b) => Number(b.usdc_balance) - Number(a.usdc_balance))[0] : undefined;
+    const walletId =
+      selectedSourceWalletId ||
+      (fundedWallet && Number(fundedWallet.usdc_balance) > 0 ? fundedWallet.id : undefined) ||
+      bridgeWallets[0]?.id || pipeline?.wallets?.[0]?.id || activeVa?.bridge_wallet_id;
     if (!walletId) {
       const destChain = activeVa?.destination_chain || "";
       if (destChain === "stellar") {
@@ -719,7 +736,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendStatus("error");
       setSendError(e?.message ?? String(e));
     }
-  }, [sendAmount, bridgeWallets, pipeline, activeVa, data, destinationAddress, load, loadDestWallets, loggedEmail, emailInput, L]);
+  }, [sendAmount, bridgeWallets, pipeline, selectedSourceWalletId, activeVa, data, destinationAddress, load, loadDestWallets, loggedEmail, emailInput, L]);
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
@@ -1285,21 +1302,32 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           ) : (
                             <div className="space-y-2">
                               <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted">
-                                {pipeline.wallets.length} {pipeline.wallets.length === 1 ? L("carteira", "wallet") : L("carteiras", "wallets")}
+                                {pipeline.wallets.length} {pipeline.wallets.length === 1 ? L("carteira", "wallet") : L("carteiras", "wallets")} · {L("toque para enviar desta", "tap to send from")}
                               </p>
                               {pipeline.wallets.map((w) => {
                                 const nonZero = w.balances.filter((b) => Number(b.amount) > 0);
+                                const selected = w.id === selectedSourceWalletId;
+                                const hasFunds = Number(w.usdc_balance) > 0;
                                 return (
-                                  <div key={w.id} className="rounded-lg border border-tts-border bg-tts-bg/60 p-2.5 space-y-1.5">
-                                    {/* header: chain + USDC balance */}
+                                  <button
+                                    key={w.id}
+                                    type="button"
+                                    onClick={() => setSelectedSourceWalletId(w.id)}
+                                    className={`w-full text-left rounded-lg border p-2.5 space-y-1.5 transition-colors ${selected ? "border-tts-deep bg-tts-deep/5 ring-1 ring-tts-deep" : "border-tts-border bg-tts-bg/60 hover:border-tts-deep/40"}`}
+                                  >
+                                    {/* header: chain + selected + USDC balance */}
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="flex items-center gap-1.5">
+                                        <span className={`grid h-3.5 w-3.5 place-items-center rounded-full border ${selected ? "border-tts-deep bg-tts-deep" : "border-tts-muted/40"}`}>
+                                          {selected && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                        </span>
                                         <span className="rounded bg-tts-deep/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tts-deep">{w.chain}</span>
                                         {w.initiation_required && (
                                           <span className="rounded bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 dark:text-amber-400" title="requires initiation">init</span>
                                         )}
+                                        {selected && <span className="text-[9px] font-bold text-tts-deep">{L("origem", "source")}</span>}
                                       </span>
-                                      <span className="text-sm font-bold tabular-nums text-tts-deep">{fmt(Number(w.usdc_balance))} USDC</span>
+                                      <span className={`text-sm font-bold tabular-nums ${hasFunds ? "text-tts-deep" : "text-tts-muted"}`}>{fmt(Number(w.usdc_balance))} USDC</span>
                                     </div>
                                     {/* full address */}
                                     <div className="flex items-center gap-1">
@@ -1321,7 +1349,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                                       <span className="font-mono truncate">id {w.id.slice(0, 8)}</span>
                                       {w.created_at && <span>{new Date(w.created_at).toLocaleDateString()}</span>}
                                     </div>
-                                  </div>
+                                  </button>
                                 );
                               })}
                               {/* connect another wallet */}
@@ -1383,12 +1411,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                         {fmt(totalAvailableBalance)} USDC
                       </span>
                     </div>
-                    {bridgeWallets.length > 0 && (
+                    {selectedSourceWallet && (
                       <p className="mt-1 text-[10px] text-tts-muted/60">
-                        {L(
-                          `Carteira Bridge: ${bridgeWallets[0].id.slice(0, 10)}...${bridgeWallets[0].id.slice(-6)}`,
-                          `Bridge wallet: ${bridgeWallets[0].id.slice(0, 10)}...${bridgeWallets[0].id.slice(-6)}`,
-                        )}
+                        {L("Enviando de", "Sending from")}: {selectedSourceWallet.address.slice(0, 8)}...{selectedSourceWallet.address.slice(-6)} ({selectedSourceWallet.chain})
                       </p>
                     )}
                     {bridgeUsdcBalance === 0 && vaAvailableBalance > 0 && (
