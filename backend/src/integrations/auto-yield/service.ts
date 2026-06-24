@@ -360,6 +360,19 @@ export async function runAutoYield(opts: { dryRun?: boolean; maxWallets?: number
 
   logger.info(`[auto-yield] run start strategy=${strategy} dry_run=${dryRun} maxWallets=${maxWallets}`);
 
+  // DeFindex/Blend/Soroswap are mainnet products. Live execution on testnet
+  // always fails (the testnet vault uses its own USDC issuance, so wallets that
+  // hold standard testnet USDC simulate as InsufficientBalance / MissingTrustline)
+  // and just spams errors every interval. Skip unless explicitly forced.
+  if (!dryRun && !isMainnet() && String(process.env.AUTO_YIELD_ALLOW_TESTNET || '').toLowerCase() !== 'true') {
+    logger.info('[auto-yield] skipped: live execution disabled on testnet (set AUTO_YIELD_DRY_RUN=true to simulate, or AUTO_YIELD_ALLOW_TESTNET=true to force)');
+    return {
+      dry_run: dryRun, strategy,
+      wallets_checked: 0, wallets_eligible: 0, wallets_processed: 0,
+      wallets_skipped: 0, wallets_failed: 0, total_usdc_deposited: 0, results: [],
+    };
+  }
+
   const allWallets = await walletRepo.getAllEligibleForAutoYield();
   const candidates = allWallets
     .filter((w) => w.vault_secret_id && w.public_key)
@@ -379,6 +392,8 @@ export async function runAutoYield(opts: { dryRun?: boolean; maxWallets?: number
         error: e instanceof Error ? e.message : String(e),
       }] });
     }
+    // Throttle between wallets so we don't trip the DeFindex API rate limit (429).
+    if (!dryRun) await new Promise((r) => setTimeout(r, 350));
   }
 
   const processed = results.filter((r) => r.total_usdc_deposited > 0);
