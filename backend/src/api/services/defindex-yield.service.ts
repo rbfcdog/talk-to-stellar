@@ -293,8 +293,13 @@ export class DefindexYieldService {
       all.findIndex((candidate) => candidate.asset_code === vault.asset_code && candidate.vault_address === vault.vault_address) === index
     ));
     const configured = Boolean(apiKey && vaults.length);
+    // A mainnet request is allowed even when the app runs on testnet, as long
+    // as mainnet execution is explicitly enabled — this is the "both networks
+    // exist" mode (per-call network from the frontend toggle).
+    const allowDespiteMismatch = network === 'mainnet' && mainnetExecutionAllowed;
+    const blockingMismatch = networkMismatch && !allowDespiteMismatch;
     const executionBlockedReason = executionRequested
-      ? networkMismatch
+      ? blockingMismatch
         ? `DEFINDEX_NETWORK=${network} must match STELLAR_NETWORK=${stellarNetwork} before executing review transactions.`
         : !complianceApproved
           ? 'Review execution requires DEFINDEX_COMPLIANCE_APPROVED=true after legal and compliance approval.'
@@ -309,7 +314,7 @@ export class DefindexYieldService {
     const executionEnabled = executionRequested &&
       complianceApproved &&
       configured &&
-      !networkMismatch &&
+      !blockingMismatch &&
       (network === 'testnet' || mainnetExecutionAllowed);
     return {
       provider: 'defindex',
@@ -347,8 +352,8 @@ export class DefindexYieldService {
     return parseAmountToContractUnits(value, decimals);
   }
 
-  static resolveVault(assetCode?: unknown, vaultAddress?: unknown): DefindexVaultConfig | undefined {
-    const runtime = this.getRuntimeInfo();
+  static resolveVault(assetCode?: unknown, vaultAddress?: unknown, networkOverride?: string): DefindexVaultConfig | undefined {
+    const runtime = this.getRuntimeInfo(networkOverride);
     const wantedVault = coalesceString(vaultAddress);
     const wantedAsset = normalizeVaultAsset(assetCode || 'USDC');
     return runtime.vaults.find((vault) => (
@@ -358,15 +363,17 @@ export class DefindexYieldService {
     ));
   }
 
-  static requireVault(assetCode?: unknown, vaultAddress?: unknown): DefindexVaultConfig {
-    const runtime = this.getRuntimeInfo();
+  static requireVault(assetCode?: unknown, vaultAddress?: unknown, networkOverride?: string): DefindexVaultConfig {
+    const runtime = this.getRuntimeInfo(networkOverride);
     if (!runtime.api_key_configured) {
       throw new Error('DEFINDEX_API_KEY is required for application operations.');
     }
-    if (runtime.network_mismatch) {
+    // Allow mainnet per-call when explicitly enabled, even if the app runs on testnet.
+    const blockingMismatch = runtime.network_mismatch && !(runtime.network === 'mainnet' && runtime.mainnet_execution_allowed);
+    if (blockingMismatch) {
       throw new Error(`DEFINDEX_NETWORK=${runtime.network} must match STELLAR_NETWORK=${runtime.stellar_network} before application operations.`);
     }
-    const vault = this.resolveVault(assetCode, vaultAddress);
+    const vault = this.resolveVault(assetCode, vaultAddress, networkOverride);
     if (!vault) {
       throw new Error(`No Defindex vault configured for ${userFacingAssetCode(assetCode || 'USDC')} on ${runtime.network}.`);
     }
