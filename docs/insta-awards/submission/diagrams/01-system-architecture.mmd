@@ -31,7 +31,6 @@ graph TD
     end
     subgraph Adapters["Payout Adapters"]
         CIRCLE["CircleCompatibilityAdapter"]
-        BRIDGE["BridgeCompatibilityAdapter"]
         ETHERFUSE["EtherfusePixOffRampAdapter"]
         MOCK["MockUsdPayoutAdapter"]
     end
@@ -68,11 +67,9 @@ graph TD
     STELLAR_SVC-->HORIZON
     QUOTE_SVC-->HORIZON
     PAYOUT_SVC-->CIRCLE
-    PAYOUT_SVC-->BRIDGE
     PAYOUT_SVC-->ETHERFUSE
     PAYOUT_SVC-->MOCK
     CIRCLE-->CIRCLE_API
-    BRIDGE-->BRIDGE
     TRANSFER_REPO-->PG
     OPS_REPO-->PG
     MIGRATIONS-->PG

@@ -26,12 +26,11 @@ sequenceDiagram
     DB-->>Orchestrator: state_version 9
 
     Note over PIX,DB: Webhook Authorization
-    participant Bridge as Bridge Webhook
-    Bridge->>Backend: POST /api/transfers/payout-events/bridge
+    Circle->>Backend: POST /api/transfers/payout-events/circle
     Backend->>Backend: Validate x-payout-webhook-secret header
     Backend->>Backend: timingSafeEqualString() check
     alt Secret matches
         Backend->>Orchestrator: handlePayoutProviderEvent()
     else Secret mismatch
-        Backend-->>Bridge: 401 Unauthorized
+        Backend-->>Circle: 401 Unauthorized
     end
