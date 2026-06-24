@@ -2,7 +2,6 @@ graph TD
     IFACE["PayoutProviderAdapter Interface"]
 
     IFACE --> CIRCLE["CircleCompatibilityAdapter"]
-    IFACE --> BRIDGE["BridgeCompatibilityAdapter"]
     IFACE --> ETHER["EtherfusePixOffRampAdapter"]
     IFACE --> MOCK["MockUsdPayoutAdapter"]
 
@@ -12,24 +11,19 @@ graph TD
     CIRCLE_API --> CIRCLE_POLL["Status Polling"]
     CIRCLE_API --> CIRCLE_WH["Webhook Normalizer"]
 
-    BRIDGE --> COMPAT2["Compatibility Mode"]
-    BRIDGE --> BRIDGE_PAYLOAD["Bridge Payload Builder"]
-
     ETHER --> ETHER_MODE["PIX Proof Mode"]
     ETHER --> ETHER_PAYLOAD["Etherfuse Metadata"]
 
     MOCK --> MOCK_MODE["Ops Mock Mode"]
     MOCK --> MOCK_PAYLOAD["Mock Evidence Builder"]
 
-    CIRCLE_PAYLOAD --> WIRE["Wire Payout → BANK OF AMERICA"]
-    BRIDGE_PAYLOAD --> BRIDGE_WIRE["Bridge Wire (pending)"]
+    CIRCLE_PAYLOAD --> WIRE["Wire Payout to US bank"]
     ETHER_PAYLOAD --> PIX_OFF["PIX Off-ramp Proof"]
     MOCK_PAYLOAD --> OPS_EVIDENCE["Ops Dashboard Evidence"]
 
     subgraph Factory["Adapter Factory"]
         FACTORY["getPayoutProviderAdapter(name)"]
         FACTORY --> CIRCLE
-        FACTORY --> BRIDGE
         FACTORY --> ETHER
         FACTORY --> MOCK
     end
@@ -37,7 +31,7 @@ graph TD
     subgraph Gates["Execution Gates"]
         GATE["ENABLE_REAL_PAYOUT_EXECUTION"]
         GATE --> CIRCLE_API
-        GATE --> BRIDGE
+        GATE --> ETHER
     end
 
     subgraph Coordination["Payout Coordination Service"]
