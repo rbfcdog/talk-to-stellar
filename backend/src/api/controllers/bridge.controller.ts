@@ -9,6 +9,7 @@ import { Asset, Keypair, Operation, TransactionBuilder, Networks } from "@stella
 import { VaultService } from "../services/core/vault.service";
 import { DefindexYieldService } from "../services/defindex-yield.service";
 import { DEFINDEX_USDC_VAULT_MAINNET } from "../../integrations/defindex/config";
+import { BlendService } from "../../integrations/blend/service";
 
 function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
@@ -2945,30 +2946,51 @@ export class BridgeController {
       // Make sure the wallet can pay Soroban fees.
       await ensureWalletGasMainnet(publicKey, 1);
 
-      // Build the mainnet DeFindex USDC deposit, sign with the wallet, submit on mainnet.
-      const vaultAddress = (process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET;
-      const amountUnits = DefindexYieldService.amountToContractUnits(amount, 7);
-      const { xdr } = await DefindexYieldService.buildVaultAction({
-        action: "deposit",
-        vaultAddress,
-        caller: publicKey,
-        amountUnits,
-        network: "mainnet",
-        invest: true,
-      });
+      // Protocol: "defindex" (vault, default) or "blend" (direct lending pool).
+      const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase();
 
-      const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC);
-      tx.sign(keypair);
-      const signedXdr = tx.toXDR();
+      let hash: string | null = null;
+      let result: any;
+      let target = "";
 
-      const result: any = await DefindexYieldService.sendSignedTransaction(signedXdr, "mainnet");
-      const hash = result?.hash || result?.txHash || result?.transactionHash || null;
-      logger.info(`[bridge] mainnet yield deposit ${amount} USDC from ${publicKey} -> ${vaultAddress} hash=${hash}`);
+      if (protocol === "blend") {
+        // Direct Blend supply on mainnet.
+        const pool = await BlendService.getPoolInfo("mainnet");
+        const assetId = pool.usdc?.assetId;
+        if (!assetId) throw new Error("Blend USDC reserve not available on mainnet.");
+        const amountStroops = String(Math.floor(amountNum * 1e7));
+        const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network: "mainnet" });
+        target = built.poolId;
+        const tx = TransactionBuilder.fromXDR(built.xdr, Networks.PUBLIC);
+        tx.sign(keypair);
+        const submit = await BlendService.submitSignedXdr(tx.toXDR(), "mainnet");
+        hash = submit.hash;
+        result = submit;
+        logger.info(`[bridge] mainnet Blend supply ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
+      } else {
+        // DeFindex vault deposit on mainnet.
+        target = (process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET;
+        const amountUnits = DefindexYieldService.amountToContractUnits(amount, 7);
+        const { xdr } = await DefindexYieldService.buildVaultAction({
+          action: "deposit",
+          vaultAddress: target,
+          caller: publicKey,
+          amountUnits,
+          network: "mainnet",
+          invest: true,
+        });
+        const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC);
+        tx.sign(keypair);
+        result = await DefindexYieldService.sendSignedTransaction(tx.toXDR(), "mainnet");
+        hash = result?.hash || result?.txHash || result?.transactionHash || null;
+        logger.info(`[bridge] mainnet DeFindex deposit ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
+      }
 
       res.status(201).json({
         success: true,
         network: "mainnet",
-        vault: vaultAddress,
+        protocol,
+        vault: target,
         public_key: publicKey,
         amount,
         hash,

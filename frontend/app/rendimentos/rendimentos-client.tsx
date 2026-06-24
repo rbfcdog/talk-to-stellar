@@ -551,13 +551,34 @@ export default function RendimentosClient({
   const [selectedWalletKey, setSelectedWalletKey] = useState("");
   const [emailWalletsLoading, setEmailWalletsLoading] = useState(false);
   const [emailWalletsError, setEmailWalletsError] = useState("");
-  // Mainnet invest (deposits the selected Bridge wallet's USDC into DeFindex mainnet)
+  // Mainnet invest (deposits the selected Bridge wallet's USDC into a protocol)
+  type MainnetProtocol = "defindex" | "blend";
   const [investAmount, setInvestAmount] = useState("");
   const [investStatus, setInvestStatus] = useState<"idle" | "investing" | "ok" | "error">("idle");
   const [investError, setInvestError] = useState("");
   const [investHash, setInvestHash] = useState("");
+  const [mainnetProtocol, setMainnetProtocol] = useState<MainnetProtocol>("defindex");
+  const [blendMainnetApy, setBlendMainnetApy] = useState<number | null>(null);
 
-  async function mainnetInvest(email: string, publicKey: string, amount: string) {
+  // Mainnet APYs: DeFindex from yield status, Blend from the pool info endpoint.
+  const defindexMainnetApy = useMemo(() => {
+    const v = (yieldStatus?.vaults || []).find((x) => optionCode(x) === "USDC");
+    const p = Number(String(v?.apy_percent || "").replace("%", "").replace(",", "."));
+    return Number.isFinite(p) && p > 0 ? p : null;
+  }, [yieldStatus]);
+
+  async function loadBlendMainnetApy() {
+    try {
+      const res = await fetch(`/api/blend/pool/info?network=mainnet`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const apy = json?.usdc?.supplyApy ?? json?.data?.usdc?.supplyApy;
+      if (Number.isFinite(Number(apy))) setBlendMainnetApy(Number(apy));
+    } catch {
+      // non-critical
+    }
+  }
+
+  async function mainnetInvest(email: string, publicKey: string, amount: string, protocol: MainnetProtocol) {
     if (!email || !publicKey) return;
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) { setInvestStatus("error"); setInvestError("Enter a valid amount."); return; }
@@ -568,7 +589,7 @@ export default function RendimentosClient({
       const res = await fetch(`/api/bridge/stellar-wallets/invest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, amount: String(amt) }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, amount: String(amt), protocol }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
@@ -773,6 +794,12 @@ export default function RendimentosClient({
       .then((s) => { if (!cancelled) setYieldStatus(s); })
       .catch(() => null);
     return () => { cancelled = true; };
+  }, [networkView]);
+
+  // Load the Blend mainnet APY when on the mainnet view.
+  useEffect(() => {
+    if (networkView === "mainnet") loadBlendMainnetApy();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkView]);
 
   useEffect(() => {
@@ -1014,43 +1041,96 @@ export default function RendimentosClient({
                 </div>
               )}
             </div>
-            <div className="px-5 py-4 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-3xl font-bold tabular-nums text-tts-deep">
+            {/* Balance */}
+            <div className="px-5 py-4 border-b border-tts-border/40">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Saldo na carteira", "Wallet balance")}</p>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className="text-3xl font-bold tabular-nums text-tts-deep">
                   {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
-                </p>
-                <p className="text-sm font-bold text-tts-muted mt-0.5">USDC</p>
+                </span>
+                <span className="text-sm font-bold text-tts-muted">USDC</span>
               </div>
-              {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
-                <div className="shrink-0 flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    max={Number(mainnetUsdcBalance)}
-                    value={investAmount}
-                    onChange={(e) => setInvestAmount(e.target.value)}
-                    placeholder={L("Valor", "Amount")}
-                    className="w-24 rounded-xl border border-tts-border bg-tts-bg px-3 py-2.5 text-sm outline-none focus:border-tts-deep text-right"
-                  />
+            </div>
+
+            {/* Earn — protocol choice + invest */}
+            {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && selectedWalletKey && (
+              <div className="px-5 py-4 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Render seu USDC", "Earn on your USDC")}</p>
+
+                {/* Protocol cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: "defindex" as MainnetProtocol, name: "DeFindex", desc: L("Cofre auto-otimizado", "Auto-optimized vault"), apy: defindexMainnetApy },
+                    { id: "blend" as MainnetProtocol, name: "Blend", desc: L("Pool de empréstimo", "Lending pool"), apy: blendMainnetApy },
+                  ]).map((p) => {
+                    const sel = mainnetProtocol === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setMainnetProtocol(p.id)}
+                        className={`text-left rounded-xl border p-3 transition-colors ${sel ? "border-tts-deep bg-tts-deep/5 ring-1 ring-tts-deep" : "border-tts-border bg-tts-bg/60 hover:border-tts-deep/40"}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-bold text-tts-deep">{p.name}</span>
+                          <span className="text-sm font-black text-tts-confirm">{p.apy !== null ? `${p.apy.toFixed(2)}%` : "—"}</span>
+                        </div>
+                        <p className="text-[10px] text-tts-muted mt-0.5">{p.desc}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-tts-muted/60 mt-1">APY</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Amount + invest */}
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-1 items-center rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-deep">
+                    <span className="px-3 text-xs font-bold text-tts-muted border-r border-tts-border">USDC</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      max={Number(mainnetUsdcBalance)}
+                      value={investAmount}
+                      onChange={(e) => setInvestAmount(e.target.value)}
+                      placeholder={`${L("máx", "max")} ${Number(mainnetUsdcBalance).toFixed(2)}`}
+                      className="flex-1 bg-transparent px-3 py-2.5 text-sm outline-none"
+                    />
+                    <button type="button" onClick={() => setInvestAmount(String(mainnetUsdcBalance))} className="px-3 text-[11px] font-bold text-tts-muted hover:text-tts-deep">{L("Tudo", "Max")}</button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => mainnetInvest(walletEmail, selectedWalletKey, investAmount)}
-                    disabled={investStatus === "investing" || !selectedWalletKey || !investAmount || Number(investAmount) <= 0}
-                    className="flex items-center gap-1.5 rounded-xl bg-tts-confirm/15 border border-tts-confirm/30 px-4 py-2.5 text-xs font-bold text-tts-confirm hover:bg-tts-confirm/25 disabled:opacity-40 transition-colors"
+                    onClick={() => mainnetInvest(walletEmail, selectedWalletKey, investAmount, mainnetProtocol)}
+                    disabled={investStatus === "investing" || !investAmount || Number(investAmount) <= 0}
+                    className="flex items-center gap-1.5 rounded-xl bg-tts-confirm px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
                   >
-                    {investStatus === "investing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     {investStatus === "investing" ? L("Investindo...", "Investing...") : L("Investir", "Invest")}
                   </button>
                 </div>
-              )}
-            </div>
+                <p className="text-[10px] text-tts-muted/70">
+                  {L(
+                    `Investe da carteira selecionada em ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} na mainnet. O gás é coberto automaticamente.`,
+                    `Invests from the selected wallet into ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} on mainnet. Gas is covered automatically.`,
+                  )}
+                </p>
+              </div>
+            )}
+
             {/* Invest result / error */}
             {(investStatus === "ok" || investStatus === "error") && (
               <div className={`px-5 py-3 border-t border-tts-border/40 text-xs ${investStatus === "ok" ? "text-tts-confirm" : "text-tts-error"}`}>
-                {investStatus === "ok"
-                  ? L(`Investido na mainnet! ${investHash ? "tx " + investHash.slice(0, 10) + "…" : ""}`, `Invested on mainnet! ${investHash ? "tx " + investHash.slice(0, 10) + "…" : ""}`)
-                  : investError}
+                {investStatus === "ok" ? (
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {L("Investido na mainnet!", "Invested on mainnet!")}
+                    {investHash && (
+                      <a href={`https://stellar.expert/explorer/public/tx/${investHash}`} target="_blank" rel="noreferrer" className="underline">
+                        tx {investHash.slice(0, 8)}…
+                      </a>
+                    )}
+                  </span>
+                ) : investError}
               </div>
             )}
           </div>
