@@ -20,7 +20,7 @@ export interface DefindexConfig {
 
 // Known mainnet USDC vault (DeFindex managed)
 // Source: https://defindex.io / verified on DefiLlama June 2026
-export const DEFINDEX_USDC_VAULT_MAINNET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYW';
+export const DEFINDEX_USDC_VAULT_MAINNET = 'CBNKCU3HGFKHFOF7JTGXQCNKE3G3DXS5RDBQUKQMIIECYKXPIOUGB2S3';
 export const DEFINDEX_USDC_VAULT_TESTNET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYW'; // use testnet if available
 
 export function loadDefindexConfig(): DefindexConfig {
