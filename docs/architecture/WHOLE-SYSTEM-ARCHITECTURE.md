@@ -14,6 +14,12 @@ Rendered PNGs:
 - [Custodial wallet lifecycle](./diagrams/03-wallet-lifecycle.png)
 - [Automated yield](./diagrams/04-auto-yield.png)
 - [Conversational agent](./diagrams/05-agent.png)
+- [API surface map](./diagrams/06-api-surface.png)
+- [Core data model](./diagrams/07-data-model.png)
+- [PIX on/off-ramp sequence](./diagrams/08-pix-sequence.png)
+- [USD deposit sequence](./diagrams/09-usd-deposit-sequence.png)
+- [Async confirmations](./diagrams/10-async-confirmations.png)
+- [Operation lifecycle & errors](./diagrams/11-operation-lifecycle.png)
 
 ---
 
@@ -206,6 +212,213 @@ flowchart LR
     T5 --> REPLY
     T6 --> REPLY
     REPLY --> USER
+```
+
+## 6. API Surface Map
+
+Every API route group across the whole product and where it lands.
+
+```mermaid
+flowchart LR
+    subgraph Clients["Clients"]
+        CHAT["Chat (WhatsApp / Telegram)"]
+        WEBUI["Web App"]
+        OPSUI["Ops / Admin Console"]
+    end
+
+    subgraph Proxy["Next.js"]
+        PROXY["/api proxy to backend"]
+    end
+
+    subgraph Routes["Backend API Routes"]
+        R_AGENT["Agent API"]
+        R_FIN["Financial API (send, convert)"]
+        R_RAMP["Ramp API (PIX)"]
+        R_USD["USD Deposit API (wire/ACH)"]
+        R_YIELD["Yield API (earn)"]
+        R_QUOTE["Quotes API"]
+        R_AUTH["Auth & Security API"]
+        R_WH["Webhooks API"]
+    end
+
+    subgraph Handlers["Services"]
+        H_AGENT["Agent + tools"]
+        H_STELLAR["StellarService"]
+        H_ANCHOR["AnchorService (Etherfuse)"]
+        H_PAYOUT["PayoutService (Circle)"]
+        H_WALLET["WalletService"]
+        H_YIELD["YieldService"]
+        H_QUOTE["QuoteService"]
+    end
+
+    CHAT --> PROXY
+    WEBUI --> PROXY
+    OPSUI --> PROXY
+    PROXY --> R_AGENT --> H_AGENT
+    PROXY --> R_FIN --> H_STELLAR
+    PROXY --> R_RAMP --> H_ANCHOR
+    PROXY --> R_USD --> H_PAYOUT
+    R_USD --> H_WALLET
+    PROXY --> R_YIELD --> H_YIELD
+    PROXY --> R_QUOTE --> H_QUOTE
+    PROXY --> R_AUTH
+    PROXY --> R_WH
+    R_WH --> H_ANCHOR
+    R_WH --> H_PAYOUT
+```
+
+## 7. Core Data Model
+
+The main entities behind every product, all anchored on the user's session
+and custodial wallet.
+
+```mermaid
+erDiagram
+    AGENT_SESSION ||--|| WALLET : "owns"
+    AGENT_SESSION ||--o{ OPERATION : "initiates"
+    WALLET ||--o{ YIELD_POSITION : "holds"
+    AGENT_SESSION ||--o{ USD_CUSTOMER : "links"
+    USD_CUSTOMER ||--o{ USD_DESTINATION_WALLET : "delivers to"
+    OPERATION ||--o{ OPERATION_EVENT : "audit trail"
+
+    AGENT_SESSION {
+        string session_id
+        string email
+        string channel
+    }
+    WALLET {
+        string public_key
+        string vault_secret_id
+        string balance
+    }
+    OPERATION {
+        string id
+        string type
+        string status
+        string amount
+    }
+    OPERATION_EVENT {
+        string operation_id
+        string event
+        string created_at
+    }
+    YIELD_POSITION {
+        string protocol
+        string asset
+        string amount
+    }
+    USD_CUSTOMER {
+        string email
+        string kyc_status
+    }
+    USD_DESTINATION_WALLET {
+        string public_key
+        bool is_funded
+        bool has_usdc_trustline
+    }
+```
+
+## 8. PIX On/Off-Ramp Sequence
+
+Brazilian reais in and out, with USDC on Stellar as the settlement layer.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Agent
+    participant AnchorService
+    participant Etherfuse
+    participant Stellar
+
+    Note over User,Stellar: On-ramp (BRL to USDC)
+    User->>Agent: "Add R$500"
+    Agent->>AnchorService: create PIX charge
+    AnchorService->>Etherfuse: request PIX QR
+    Etherfuse-->>User: PIX QR / code
+    User->>Etherfuse: pays PIX
+    Etherfuse-->>AnchorService: funding webhook
+    AnchorService->>Stellar: credit USDC to custodial wallet
+    Stellar-->>User: balance updated
+
+    Note over User,Stellar: Off-ramp (USDC to BRL)
+    User->>Agent: "Withdraw R$500 to my PIX key"
+    Agent->>AnchorService: create off-ramp
+    AnchorService->>Stellar: move USDC from wallet
+    AnchorService->>Etherfuse: payout BRL to PIX key
+    Etherfuse-->>User: BRL received
+```
+
+## 9. USD Deposit Sequence
+
+US dollars arrive by wire/ACH and land as USDC on the user's Stellar wallet.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App
+    participant PayoutService as USD Service
+    participant Circle
+    participant Stellar
+
+    User->>App: request USD deposit details
+    App->>PayoutService: get / create USD account
+    PayoutService-->>User: bank details (routing, account, memo)
+    User->>Circle: wire / ACH USD to the account
+    Circle-->>PayoutService: funds received, mint USDC
+    PayoutService->>Stellar: deliver USDC to custodial wallet
+    Stellar-->>User: USDC balance updated
+```
+
+## 10. Async Confirmations
+
+Money movement is confirmed asynchronously — by provider webhooks and by an
+on-chain settlement watcher.
+
+```mermaid
+flowchart LR
+    subgraph Providers["Providers"]
+        ETHER_WH["Etherfuse webhook<br/>(PIX funded)"]
+        CIRCLE_WH["Circle webhook<br/>(USD payout)"]
+    end
+
+    WH["Webhooks API"]
+    WATCH["Stellar Settlement Watcher<br/>(polls Horizon)"]
+    HORIZON["Stellar Horizon"]
+
+    STATE["Operation state update<br/>+ append event"]
+    NOTIFY["Notify user<br/>(WhatsApp / Telegram)"]
+
+    ETHER_WH --> WH
+    CIRCLE_WH --> WH
+    WH -->|"validate secret"| STATE
+    WATCH --> HORIZON
+    HORIZON -->|"tx confirmed"| WATCH
+    WATCH --> STATE
+    STATE --> NOTIFY
+```
+
+## 11. Operation Lifecycle & Errors
+
+The state machine every money-movement operation follows, with terminal and
+error branches.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created
+    Created --> Quoted: quote attached
+    Quoted --> Funding: funding requested
+    Funding --> Funded: provider confirms
+    Funded --> Settling: USDC on Stellar
+    Settling --> Settled: tx confirmed
+    Settled --> Completed: delivered / recorded
+    Completed --> [*]
+
+    Created --> Expired: quote / charge expired
+    Funding --> Failed: provider error
+    Settling --> Failed: settlement error
+    Failed --> RefundReview: refund required
+    Expired --> [*]
+    RefundReview --> [*]
 ```
 
 ---
