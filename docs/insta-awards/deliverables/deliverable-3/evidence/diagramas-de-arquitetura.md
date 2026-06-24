@@ -4,6 +4,16 @@
 
 Ready for reviewer submission. These Mermaid diagrams describe the complete transfer-routing demonstration from PIX intake through quote, Stellar settlement, payout instruction, evidence, and dashboard review.
 
+## Rendered PNGs
+
+Pre-rendered images of every diagram below (Etherfuse PIX intake, Stellar settlement, Circle USD payout):
+
+- [End-to-end reviewer flow](./diagrams/01-end-to-end-flow.png)
+- [Service architecture](./diagrams/02-service-architecture.png)
+- [Lifecycle state model](./diagrams/03-lifecycle-state-model.png)
+- [Evidence artifact model](./diagrams/04-evidence-artifact-model.png)
+- [API walkthrough](./diagrams/05-api-walkthrough.png)
+
 ## 1. End-to-End Reviewer Flow
 
 ```mermaid
