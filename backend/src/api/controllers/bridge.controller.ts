@@ -2482,21 +2482,23 @@ export class BridgeController {
       }
 
       const wallet = await service.getWallet(customerId, walletId) as unknown as Record<string, unknown>;
+      // Bridge convention (matches every working off-ramp): amount lives on the
+      // destination only, source carries no amount, and crypto destinations use
+      // `to_address` (not `address`).
       const transfer = await service.createTransfer({
         on_behalf_of: customerId,
         developer_fee_percent: readText(req.body?.developer_fee_percent || req.body?.developerFeePercent) || undefined,
         source: {
           payment_rail: "bridge_wallet",
           currency: "usdc",
-          amount,
           bridge_wallet_id: walletId,
           from_address: readText(wallet.address) || undefined,
         },
         destination: {
+          amount,
           payment_rail: "stellar",
           currency: "usdc",
-          amount,
-          address: destinationAddress,
+          to_address: destinationAddress,
         },
       });
 
@@ -2536,8 +2538,14 @@ export class BridgeController {
 
       res.status(201).json({ success: true, transfer });
     } catch (error: any) {
-      logger.error(`[bridge] createBridgeWalletToStellarTransfer failed: ${error.message}`);
-      res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to create Bridge wallet to Stellar transfer." });
+      // Bridge attaches the exact invalid fields under `source` / `response`.
+      logger.error(`[bridge] createBridgeWalletToStellarTransfer failed: ${error?.message} ${JSON.stringify({ source: error?.source, response: error?.response })}`);
+      res.status(statusFromError(error)).json({
+        success: false,
+        message: error?.error || error?.message || "Failed to create Bridge wallet to Stellar transfer.",
+        bridge_invalid_fields: error?.source ?? null,
+        bridge_details: error?.response ?? null,
+      });
     }
   }
 
