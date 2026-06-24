@@ -99,6 +99,27 @@ type MainnetWallet = {
   last_balance?: Array<{ asset_code: string; balance: string; asset_type: string }>;
 };
 
+type PipelineWallet = {
+  id: string;
+  chain: string;
+  address: string;
+  initiation_required: boolean;
+  balances: Array<{ chain: string; currency: string; amount: string }>;
+};
+
+type PipelineRoute = {
+  id: string;
+  status: string;
+  destination_chain: string | null;
+  destination_address: string | null;
+  source_currency: string | null;
+};
+
+type Pipeline = {
+  wallets: PipelineWallet[];
+  virtual_account_routes: PipelineRoute[];
+};
+
 type ApiResponse = {
   success: boolean;
   has_account?: boolean;
@@ -419,6 +440,23 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [genError, setGenError] = useState("");
   const [activateStatus, setActivateStatus] = useState<"idle" | "activating" | "error">("idle");
   const [activateError, setActivateError] = useState("");
+  const [pipeline, setPipeline] = useState<Pipeline | null>(null);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+
+  const loadPipeline = useCallback(async (customerId: string) => {
+    if (!customerId) return;
+    setPipelineLoading(true);
+    try {
+      const res = await fetch(`/api/bridge/customers/${encodeURIComponent(customerId)}/transfer-pipeline`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (json?.success) setPipeline({ wallets: json.wallets ?? [], virtual_account_routes: json.virtual_account_routes ?? [] });
+    } catch {
+      // non-critical
+    } finally {
+      setPipelineLoading(false);
+    }
+  }, []);
 
   const loadDestWallets = useCallback(async (email: string) => {
     const trimmed = email.trim().toLowerCase();
@@ -521,12 +559,13 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         writeCachedEmail(nextEmail);
         loadDestWallets(nextEmail);
       }
+      if (json.customer_id) loadPipeline(json.customer_id);
       setStatus(json.has_account ? "ready" : "no_account");
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
       setStatus("error");
     }
-  }, [sessionId, shortLinkCode, loadDestWallets]);
+  }, [sessionId, shortLinkCode, loadDestWallets, loadPipeline]);
 
   const resetLogin = useCallback((clearCache = false) => {
     if (clearCache) {
@@ -1129,6 +1168,89 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           <CopyBtn value={selectedDestWallet.public_key} label="address" />
                         </div>
                       </details>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pipeline diagnostics — where the money actually is */}
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() => { setPipelineOpen((o) => !o); if (!pipeline && data?.customer_id) loadPipeline(data.customer_id); }}
+                    className="flex w-full items-center justify-between rounded-lg border border-tts-border bg-tts-bg/60 px-3 py-2 text-xs font-bold text-tts-deep hover:bg-tts-bg"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5 text-tts-muted" />
+                      {L("Fluxo do dinheiro (diagnóstico)", "Money flow (pipeline)")}
+                    </span>
+                    {pipelineLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (pipelineOpen ? <ChevronLeft className="h-3.5 w-3.5 rotate-90" /> : <ChevronRight className="h-3.5 w-3.5 rotate-90" />)}
+                  </button>
+
+                  {pipelineOpen && pipeline && (
+                    <div className="mt-2 space-y-3 rounded-lg border border-tts-border bg-tts-surface p-3">
+                      {/* Step 1: VA routes */}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
+                          1 · {L("Conta virtual → chega como", "Virtual account → lands as")}
+                        </p>
+                        {pipeline.virtual_account_routes.length === 0 ? (
+                          <p className="text-[11px] text-tts-muted">—</p>
+                        ) : pipeline.virtual_account_routes.map((r) => (
+                          <p key={r.id} className="text-[11px] font-mono text-tts-deep">
+                            {(r.source_currency || "usd").toUpperCase()} → {(r.destination_chain || "?").toUpperCase()}
+                            {r.destination_address ? ` · ${r.destination_address.slice(0, 8)}...${r.destination_address.slice(-4)}` : ""}
+                          </p>
+                        ))}
+                      </div>
+
+                      {/* Step 2: Bridge wallets per chain */}
+                      <div className="border-t border-tts-border/40 pt-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
+                          2 · {L("Carteiras Bridge (por rede)", "Bridge wallets (per chain)")}
+                        </p>
+                        {pipeline.wallets.length === 0 ? (
+                          <p className="text-[11px] text-tts-muted">—</p>
+                        ) : pipeline.wallets.map((w) => {
+                          const usdc = w.balances.find((b) => b.currency?.toLowerCase() === "usdc");
+                          return (
+                            <div key={w.id} className="mb-1.5 last:mb-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-tts-deep uppercase">{w.chain}</span>
+                                <span className="text-[11px] font-bold tabular-nums text-tts-deep">
+                                  {usdc ? `${fmt(Number(usdc.amount))} USDC` : "0 USDC"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <code className="flex-1 truncate text-[10px] font-mono text-tts-muted">{w.address}</code>
+                                <CopyBtn value={w.address} label="address" />
+                              </div>
+                              {w.initiation_required && (
+                                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                                  {L("⚠ requer aprovação (initiation) para enviar", "⚠ requires initiation to send")}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Step 3: Stellar destination */}
+                      <div className="border-t border-tts-border/40 pt-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
+                          3 · {L("Carteira Stellar (destino)", "Stellar wallet (destination)")}
+                        </p>
+                        <p className="text-[11px] font-mono text-tts-deep break-all">
+                          {destinationAddress || L("nenhuma selecionada", "none selected")}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => data?.customer_id && loadPipeline(data.customer_id)}
+                        className="flex items-center gap-1 text-[11px] text-tts-muted hover:text-tts-deep"
+                      >
+                        <RefreshCw className="h-3 w-3" /> {L("Atualizar", "Refresh")}
+                      </button>
                     </div>
                   )}
                 </div>
