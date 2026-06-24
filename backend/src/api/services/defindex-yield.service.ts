@@ -206,12 +206,10 @@ function parseVaultsFromEnv(fallbackNetwork: DefindexNetwork): DefindexVaultConf
       ? coalesceString(process.env[`${base}_MAINNET`])
       : coalesceString(process.env[`${base}_TESTNET`], process.env[base]);
 
+  // Only USDC is offered. DeFindex has a live mainnet USDC vault; there is no
+  // public mainnet XLM/CETES vault, so those are not configured.
   const candidates: Array<{ asset: string; address: string; label: string }> = [
     { asset: 'USDC', address: perNetwork('DEFINDEX_USDC_VAULT'), label: 'USDC Yield Vault' },
-    { asset: 'CETES', address: perNetwork('DEFINDEX_CETES_VAULT'), label: 'CETES Yield Vault' },
-    ...(fallbackNetwork === 'testnet' ? [] : [{ asset: 'EURC', address: perNetwork('DEFINDEX_EURC_VAULT'), label: 'EUR Yield Vault' }]),
-    { asset: 'XLM', address: perNetwork('DEFINDEX_XLM_VAULT'), label: 'XLM Yield Vault' },
-    { asset: 'TESOURO', address: perNetwork('DEFINDEX_TESOURO_VAULT'), label: 'Real Yield Vault' },
   ];
   return candidates
     .filter((candidate) => candidate.address)
