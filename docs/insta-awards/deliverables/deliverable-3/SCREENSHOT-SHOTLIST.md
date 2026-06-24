@@ -2,6 +2,14 @@
 
 All final screenshots must reference the same transfer. Use `evidence/screenshots/` for final image files.
 
+## Visual Guides (3 images)
+
+Drop these three into the screenshot section — one explains the flow, two show exactly what to capture:
+
+1. [Full flow diagram](./diagrams/00-full-flow.png) — the end-to-end story (intake → quote → PIX → Stellar → payout → evidence), all stages + providers in one frame.
+2. [Screens to capture](./diagrams/01-screens-to-capture.png) — a 3×3 map of which app screens to screenshot and what each must show.
+3. [Evidence to capture](./diagrams/02-evidence-to-capture.png) — the explorer / Circle / JSON artifacts to attach alongside the screenshots.
+
 ## Required Screenshots
 
 | File | Screen | What reviewers should see |
