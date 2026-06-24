@@ -542,6 +542,37 @@ export default function RendimentosClient({
   } | null>(null);
   const [bridgeWalletLoading, setBridgeWalletLoading] = useState(false);
 
+  // Email-based Stellar wallet lookup (mainnet) — pick one when several exist.
+  type EmailWallet = { public_key: string; label: string | null; usdc_balance: string | null; is_primary?: boolean; is_funded?: boolean; exists_on_mainnet?: boolean };
+  const [walletEmail, setWalletEmail] = useState("");
+  const [emailWallets, setEmailWallets] = useState<EmailWallet[]>([]);
+  const [selectedWalletKey, setSelectedWalletKey] = useState("");
+  const [emailWalletsLoading, setEmailWalletsLoading] = useState(false);
+  const [emailWalletsError, setEmailWalletsError] = useState("");
+
+  async function loadEmailWallets(email: string) {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    setEmailWalletsLoading(true);
+    setEmailWalletsError("");
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets?email=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const wallets: EmailWallet[] = Array.isArray(json?.wallets) ? json.wallets : [];
+      setEmailWallets(wallets);
+      setSelectedWalletKey((cur) => {
+        if (cur && wallets.some((w) => w.public_key === cur)) return cur;
+        const primary = wallets.find((w) => w.is_primary) || wallets.find((w) => Number(w.usdc_balance) > 0) || wallets[0];
+        return primary?.public_key || "";
+      });
+      if (!wallets.length) setEmailWalletsError(L("Nenhuma carteira encontrada para este e-mail.", "No wallets found for this email."));
+    } catch (e: any) {
+      setEmailWalletsError(e?.message ?? String(e));
+    } finally {
+      setEmailWalletsLoading(false);
+    }
+  }
+
   const options = useMemo(() => Array.isArray(yieldStatus?.vaults) ? yieldStatus.vaults : [], [yieldStatus]);
   const sortedOptions = useMemo(() => [...options], [options]);
   const bestOption = sortedOptions[0] || null;
@@ -551,7 +582,11 @@ export default function RendimentosClient({
   const confirmationEnabled = Boolean(yieldStatus?.runtime?.execution_enabled);
   const yieldNetwork = String(yieldStatus?.runtime?.network || "").toLowerCase();
   const isTestnetYield = yieldNetwork === "testnet" || Boolean(yieldStatus?.runtime?.disclosure?.testnet);
-  const mainnetUsdcBalance = bridgeWalletBalances?.mainnet?.usdc ?? null;
+  // Prefer the wallet chosen from the email lookup; fall back to the session wallet.
+  const selectedEmailWallet = emailWallets.find((w) => w.public_key === selectedWalletKey) || null;
+  const mainnetUsdcBalance = selectedEmailWallet
+    ? (selectedEmailWallet.usdc_balance ?? "0")
+    : (bridgeWalletBalances?.mainnet?.usdc ?? null);
   const testnetUsdcBalance = bridgeWalletBalances?.testnet?.usdc ?? null;
 
   const safeSelectedCode = normalizeUiAssetCode(selectedCode) || optionCode(actionableOption) || selectedCode;
@@ -853,7 +888,56 @@ export default function RendimentosClient({
                 <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Carteira Stellar · Mainnet", "Stellar Wallet · Mainnet")}</p>
                 <p className="text-sm font-bold text-tts-deep mt-0.5">{L("Saldo real USDC", "Real USDC balance")}</p>
               </div>
-              {bridgeWalletLoading && <Loader2 className="h-4 w-4 animate-spin text-tts-muted" />}
+              {(bridgeWalletLoading || emailWalletsLoading) && <Loader2 className="h-4 w-4 animate-spin text-tts-muted" />}
+            </div>
+
+            {/* Email lookup + wallet chooser */}
+            <div className="px-5 py-4 border-b border-tts-border/40 space-y-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted">
+                {L("Buscar carteiras por e-mail", "Find wallets by email")}
+              </p>
+              <form onSubmit={(e) => { e.preventDefault(); loadEmailWallets(walletEmail); }} className="flex gap-2">
+                <input
+                  type="email"
+                  value={walletEmail}
+                  onChange={(e) => setWalletEmail(e.target.value)}
+                  placeholder="you@email.com"
+                  className="flex-1 rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-sm outline-none focus:border-tts-deep placeholder:text-tts-muted/40"
+                />
+                <button
+                  type="submit"
+                  disabled={!walletEmail.trim() || emailWalletsLoading}
+                  className="rounded-lg bg-tts-deep px-4 py-2 text-sm font-bold text-white disabled:opacity-40 hover:opacity-90"
+                >
+                  {emailWalletsLoading ? L("Buscando...", "Loading...") : L("Buscar", "Find")}
+                </button>
+              </form>
+
+              {emailWalletsError && <p className="text-[11px] text-tts-error">{emailWalletsError}</p>}
+
+              {emailWallets.length > 0 && (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
+                    {emailWallets.length === 1 ? L("Carteira", "Wallet") : L("Escolha a carteira", "Choose a wallet")}
+                  </label>
+                  <select
+                    value={selectedWalletKey}
+                    onChange={(e) => setSelectedWalletKey(e.target.value)}
+                    className="w-full rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-mono text-tts-deep outline-none focus:border-tts-deep"
+                  >
+                    {emailWallets.map((w) => (
+                      <option key={w.public_key} value={w.public_key}>
+                        {`${w.public_key.slice(0, 6)}...${w.public_key.slice(-6)}`}
+                        {w.is_primary ? ` · ${L("principal", "primary")}` : ""}
+                        {w.usdc_balance !== null ? ` · ${Number(w.usdc_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedEmailWallet && (
+                    <p className="mt-1 text-[10px] font-mono text-tts-muted/70 break-all">{selectedEmailWallet.public_key}</p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="px-5 py-4 flex items-center justify-between gap-4">
               <div>
