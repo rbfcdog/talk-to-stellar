@@ -551,6 +551,36 @@ export default function RendimentosClient({
   const [selectedWalletKey, setSelectedWalletKey] = useState("");
   const [emailWalletsLoading, setEmailWalletsLoading] = useState(false);
   const [emailWalletsError, setEmailWalletsError] = useState("");
+  // Mainnet invest (deposits the selected Bridge wallet's USDC into DeFindex mainnet)
+  const [investAmount, setInvestAmount] = useState("");
+  const [investStatus, setInvestStatus] = useState<"idle" | "investing" | "ok" | "error">("idle");
+  const [investError, setInvestError] = useState("");
+  const [investHash, setInvestHash] = useState("");
+
+  async function mainnetInvest(email: string, publicKey: string, amount: string) {
+    if (!email || !publicKey) return;
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) { setInvestStatus("error"); setInvestError("Enter a valid amount."); return; }
+    setInvestStatus("investing");
+    setInvestError("");
+    setInvestHash("");
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets/invest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, amount: String(amt) }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
+      setInvestStatus("ok");
+      setInvestHash(json.hash || "");
+      setInvestAmount("");
+      setTimeout(() => loadEmailWallets(email), 4000);
+    } catch (e: any) {
+      setInvestStatus("error");
+      setInvestError(e?.message ?? String(e));
+    }
+  }
 
   async function loadEmailWallets(email: string) {
     const trimmed = email.trim().toLowerCase();
@@ -992,15 +1022,37 @@ export default function RendimentosClient({
                 <p className="text-sm font-bold text-tts-muted mt-0.5">USDC</p>
               </div>
               {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
-                <a
-                  href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: "USDC", amount: Math.floor(Number(mainnetUsdcBalance)).toString(), ...sessionLinkContext, lang: language })}
-                  className="shrink-0 flex items-center gap-1.5 rounded-xl bg-tts-confirm/15 border border-tts-confirm/30 px-4 py-2.5 text-xs font-bold text-tts-confirm hover:bg-tts-confirm/25 transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  {L("Investir", "Invest")}
-                </a>
+                <div className="shrink-0 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    max={Number(mainnetUsdcBalance)}
+                    value={investAmount}
+                    onChange={(e) => setInvestAmount(e.target.value)}
+                    placeholder={L("Valor", "Amount")}
+                    className="w-24 rounded-xl border border-tts-border bg-tts-bg px-3 py-2.5 text-sm outline-none focus:border-tts-deep text-right"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => mainnetInvest(walletEmail, selectedWalletKey, investAmount)}
+                    disabled={investStatus === "investing" || !selectedWalletKey || !investAmount || Number(investAmount) <= 0}
+                    className="flex items-center gap-1.5 rounded-xl bg-tts-confirm/15 border border-tts-confirm/30 px-4 py-2.5 text-xs font-bold text-tts-confirm hover:bg-tts-confirm/25 disabled:opacity-40 transition-colors"
+                  >
+                    {investStatus === "investing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    {investStatus === "investing" ? L("Investindo...", "Investing...") : L("Investir", "Invest")}
+                  </button>
+                </div>
               )}
             </div>
+            {/* Invest result / error */}
+            {(investStatus === "ok" || investStatus === "error") && (
+              <div className={`px-5 py-3 border-t border-tts-border/40 text-xs ${investStatus === "ok" ? "text-tts-confirm" : "text-tts-error"}`}>
+                {investStatus === "ok"
+                  ? L(`Investido na mainnet! ${investHash ? "tx " + investHash.slice(0, 10) + "…" : ""}`, `Invested on mainnet! ${investHash ? "tx " + investHash.slice(0, 10) + "…" : ""}`)
+                  : investError}
+              </div>
+            )}
           </div>
         )}
 
