@@ -93,7 +93,7 @@ export const SoroswapController = {
         ? 'https://horizon.stellar.org'
         : 'https://horizon-testnet.stellar.org';
       const usdcIssuer = useMainnet
-        ? 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7EJJUD'
+        ? 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75'
         : 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
 
       const qs = new URLSearchParams({ reserves: `native,USDC:${usdcIssuer}`, order: 'desc', limit: '5' });
