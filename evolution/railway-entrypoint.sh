@@ -18,4 +18,8 @@ if [ -n "${DATABASE_URL:-}" ] && [ -z "${DATABASE_CONNECTION_URI:-}" ]; then
   export DATABASE_CONNECTION_URI="$DATABASE_URL"
 fi
 
-exec /bin/bash -c '. ./Docker/scripts/deploy_database.sh && npm run start:prod'
+# Run the DB migration/generate step, then hand the process directly to node
+# via `exec` so node becomes PID 1 and receives SIGTERM directly on the next
+# deploy. Going through `npm run start:prod` makes npm forward SIGTERM but exit
+# non-zero ("signal SIGTERM"), which Railway reports as a crash.
+exec /bin/bash -c '. ./Docker/scripts/deploy_database.sh && exec node dist/main'
