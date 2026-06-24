@@ -371,4 +371,25 @@ export const BlendService = {
       amountRaw: amount,
     };
   },
+
+  // ── Submit a signed Blend transaction on the given network ───────────────
+  async submitSignedXdr(signedXdr: string, network?: string): Promise<{ hash: string; status: string }> {
+    const net = resolveNet(network);
+    const rpc = getRpcServer(net);
+    const tx = TransactionBuilder.fromXDR(signedXdr, net.passphrase);
+    const send = await rpc.sendTransaction(tx);
+    if (send.status === 'ERROR') {
+      throw new Error(`Blend submit failed: ${stringifyWithBigInt((send as any).errorResult ?? send)}`);
+    }
+    const hash = send.hash;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const res = await rpc.getTransaction(hash);
+      if (res.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) return { hash, status: 'SUCCESS' };
+      if (res.status === SorobanRpc.Api.GetTransactionStatus.FAILED) {
+        throw new Error(`Blend tx failed: ${stringifyWithBigInt(res)}`);
+      }
+    }
+    return { hash, status: 'PENDING' };
+  },
 };
