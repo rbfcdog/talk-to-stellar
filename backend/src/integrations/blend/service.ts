@@ -42,6 +42,15 @@ const NETWORKS = {
 type NetKey = 'mainnet' | 'testnet';
 type NetConfig = (typeof NETWORKS)[NetKey];
 
+/** JSON.stringify that won't crash on BigInt values (Soroban sim results carry them). */
+function stringifyWithBigInt(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    return String(value);
+  }
+}
+
 function resolveNet(network?: string): NetConfig {
   if (network === 'mainnet' || network === 'public') return NETWORKS.mainnet;
   if (network === 'testnet') return NETWORKS.testnet;
@@ -70,8 +79,9 @@ export interface ReserveInfo {
   assetId: string;
   supplyApy: number;
   borrowApy: number;
-  supplied: bigint;
-  liabilities: bigint;
+  // Stringified token amounts — bigint can't be JSON-serialized in API responses.
+  supplied: string;
+  liabilities: string;
   utilization: number;
 }
 
@@ -215,8 +225,8 @@ export const BlendService = {
         assetId,
         supplyApy: parseFloat((reserve.estSupplyApy * 100).toFixed(2)),
         borrowApy: parseFloat((reserve.estBorrowApy * 100).toFixed(2)),
-        supplied: reserve.data.dSupply,
-        liabilities: reserve.data.bSupply,
+        supplied: reserve.data.dSupply?.toString() ?? '0',
+        liabilities: reserve.data.bSupply?.toString() ?? '0',
         utilization: parseFloat((reserve.getUtilizationFloat() * 100).toFixed(2)),
       });
     });
@@ -299,7 +309,7 @@ export const BlendService = {
 
     const simResult = await rpc.simulateTransaction(tx);
     if (!SorobanRpc.Api.isSimulationSuccess(simResult)) {
-      const msg = (simResult as any).error || JSON.stringify(simResult);
+      const msg = (simResult as any).error || stringifyWithBigInt(simResult);
       throw new Error(`Blend supply simulation failed: ${msg}`);
     }
 
@@ -346,7 +356,7 @@ export const BlendService = {
 
     const simResult = await rpc.simulateTransaction(tx);
     if (!SorobanRpc.Api.isSimulationSuccess(simResult)) {
-      const msg = (simResult as any).error || JSON.stringify(simResult);
+      const msg = (simResult as any).error || stringifyWithBigInt(simResult);
       throw new Error(`Blend withdraw simulation failed: ${msg}`);
     }
 
