@@ -3039,15 +3039,81 @@ export class BridgeController {
         logger.warn(`[bridge] blend position fetch failed: ${e?.message || e}`);
       }
 
+      const totalUsdc = defindexUsdc + blendUsdc;
+
+      // Best-effort: persist today's snapshot so the balance chart has real
+      // per-day history. One row per (public_key, day); same day upserts in
+      // place. Never let a snapshot failure (e.g. table not migrated) break
+      // the positions read.
+      try {
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        await supabase
+          .from("bridge_position_snapshots")
+          .upsert(
+            {
+              public_key: publicKey,
+              email,
+              snapshot_date: today,
+              defindex_usdc: defindexUsdc,
+              blend_usdc: blendUsdc,
+              total_usdc: totalUsdc,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "public_key,snapshot_date" },
+          );
+      } catch (e: any) {
+        logger.warn(`[bridge] position snapshot upsert failed: ${e?.message || e}`);
+      }
+
       res.json({
         success: true,
         public_key: publicKey,
         defindex_usdc: defindexUsdc,
         blend_usdc: blendUsdc,
-        total_invested_usdc: defindexUsdc + blendUsdc,
+        total_invested_usdc: totalUsdc,
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || "Failed to load positions." });
+    }
+  }
+
+  /**
+   * GET /api/bridge/stellar-wallets/position-history — daily snapshot series of
+   * a custodial wallet's invested USDC (DeFindex + Blend), for the balance chart.
+   * Points are stored by getStellarWalletPositions; returns [] until enough days
+   * have accumulated (or the snapshots table has been migrated).
+   */
+  static async getStellarWalletPositionHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.query.public_key ?? req.body?.public_key);
+      if (!publicKey) {
+        res.status(400).json({ success: false, message: "public_key is required." });
+        return;
+      }
+
+      let points: Array<{ date: string; amount: string; defindex_usdc: number; blend_usdc: number }> = [];
+      try {
+        const { data, error } = await supabase
+          .from("bridge_position_snapshots")
+          .select("snapshot_date, total_usdc, defindex_usdc, blend_usdc")
+          .eq("public_key", publicKey)
+          .order("snapshot_date", { ascending: true })
+          .limit(400);
+        if (error) throw error;
+        points = (data || []).map((r: any) => ({
+          date: String(r.snapshot_date),
+          amount: String(r.total_usdc ?? 0),
+          defindex_usdc: Number(r.defindex_usdc) || 0,
+          blend_usdc: Number(r.blend_usdc) || 0,
+        }));
+      } catch (e: any) {
+        logger.warn(`[bridge] position history fetch failed: ${e?.message || e}`);
+      }
+
+      res.json({ success: true, public_key: publicKey, email, points, source: "daily_snapshots" });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to load position history." });
     }
   }
 

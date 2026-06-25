@@ -567,13 +567,27 @@ export default function RendimentosClient({
   const [mainnetProtocol, setMainnetProtocol] = useState<MainnetProtocol>("defindex");
   const [blendMainnetApy, setBlendMainnetApy] = useState<number | null>(null);
   const [positions, setPositions] = useState<{ defindex_usdc: number; blend_usdc: number; total_invested_usdc: number } | null>(null);
+  // Daily snapshot series of the mainnet wallet's invested USDC, for the balance chart.
+  const [mainnetHistory, setMainnetHistory] = useState<PositionHistoryState | null>(null);
 
   async function loadPositions(email: string, publicKey: string) {
     if (!email || !publicKey) return;
+    const e = email.trim().toLowerCase();
     try {
-      const res = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(email.trim().toLowerCase())}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
+      const res = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
       if (json?.success) setPositions({ defindex_usdc: Number(json.defindex_usdc) || 0, blend_usdc: Number(json.blend_usdc) || 0, total_invested_usdc: Number(json.total_invested_usdc) || 0 });
+    } catch {
+      // non-critical
+    }
+    // Load the persisted daily history (best-effort; reading positions above
+    // also writes today's snapshot, so the series grows one point per day).
+    try {
+      const hr = await fetch(`/api/bridge/stellar-wallets/position-history?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
+      const hj = await hr.json().catch(() => ({}));
+      if (hj?.success) {
+        setMainnetHistory({ loading: false, points: Array.isArray(hj.points) ? hj.points : [], error: "", source: String(hj.source || "") });
+      }
     } catch {
       // non-critical
     }
@@ -824,7 +838,7 @@ export default function RendimentosClient({
   // Load the selected wallet's invested positions (DeFindex + Blend) on mainnet.
   useEffect(() => {
     if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey);
-    else setPositions(null);
+    else { setPositions(null); setMainnetHistory(null); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkView, selectedWalletKey, walletEmail]);
 
@@ -1203,6 +1217,7 @@ export default function RendimentosClient({
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
                 positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
                 mainnetInvested={networkView === "mainnet" ? positions?.total_invested_usdc ?? null : null}
+                mainnetHistory={networkView === "mainnet" ? mainnetHistory : null}
                 onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
               />
             )}
@@ -1284,11 +1299,12 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, onRefresh, sessionLinkContext }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, onRefresh, sessionLinkContext }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
   positionHistories: Record<string, PositionHistoryState>;
-  isTestnet: boolean; mainnetInvested: number | null; onRefresh: () => void; sessionLinkContext: Record<string, string>;
+  isTestnet: boolean; mainnetInvested: number | null; mainnetHistory: PositionHistoryState | null;
+  onRefresh: () => void; sessionLinkContext: Record<string, string>;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const rows = options.filter((o) => String(o.vault_address || "").trim()).map((o) => {
@@ -1307,7 +1323,9 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
       error: useMainnet ? "" : String(pos?.error || ""),
       source: useMainnet ? "bridge_wallet_position" : String(pos?.source || ""),
       rate: optionRatePercent(o),
-      history: positionHistories[code] || { loading: false, points: [], error: "" },
+      // On mainnet use the persisted daily snapshots so the balance line reflects
+      // the real value at each day instead of a flat line.
+      history: useMainnet && mainnetHistory ? mainnetHistory : (positionHistories[code] || { loading: false, points: [], error: "" }),
     };
   });
   return (
