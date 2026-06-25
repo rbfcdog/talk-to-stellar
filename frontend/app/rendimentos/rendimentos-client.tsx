@@ -584,6 +584,21 @@ export default function RendimentosClient({
   const [positions, setPositions] = useState<{ defindex_usdc: number; blend_usdc: number; total_invested_usdc: number } | null>(null);
   // Daily snapshot series of the mainnet wallet's invested USDC, for the balance chart.
   const [mainnetHistory, setMainnetHistory] = useState<PositionHistoryState | null>(null);
+  // The user's login/session wallet (used for testnet yield — distinct from the
+  // Bridge email wallet used on mainnet).
+  const [sessionWallet, setSessionWallet] = useState<{ public_key: string } | null>(null);
+
+  async function loadSessionWallet() {
+    try {
+      const params = new URLSearchParams();
+      if (session.sessionId) params.set("session_id", session.sessionId);
+      if (walletEmail.trim()) params.set("email", walletEmail.trim().toLowerCase());
+      if (![...params].length) return;
+      const res = await fetch(`/api/bridge/session/stellar-balances?${params.toString()}`, { cache: "no-store" });
+      const j = await res.json().catch(() => ({}));
+      if (j?.success && j.public_key) setSessionWallet({ public_key: String(j.public_key) });
+    } catch { /* non-critical */ }
+  }
 
   async function loadPositions(email: string, publicKey: string) {
     if (!email || !publicKey) return;
@@ -862,6 +877,9 @@ export default function RendimentosClient({
     setReturnsPinVerified(false);
     setReturnsPinState({ loading: false, message: "", error: "" });
   }, [session.sessionId, session.sessionSource]);
+
+  // Resolve the login/session wallet (for testnet yield).
+  useEffect(() => { if (session.authenticated) loadSessionWallet(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [session.authenticated, session.sessionId, walletEmail]);
 
   useEffect(() => { setYieldResult(null); setPin(""); }, [action, amount, actionableOption?.vault_address, safeSelectedCode]);
   useEffect(() => {
@@ -1266,6 +1284,7 @@ export default function RendimentosClient({
                     onLoadWallets={loadEmailWallets}
                     onEmailChange={setWalletEmail}
                     onSelectWallet={setSelectedWalletKey}
+                    sessionWalletKey={sessionWallet?.public_key || ""}
                   />
                 </div>
               </>
@@ -2201,7 +2220,7 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
 }
 
 // ── Blend v2 Lending Panel ─────────────────────────────────────────────────
-function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet }: {
+function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey }: {
   language: AppLanguage;
   email: string;
   wallets: Array<{ public_key: string; usdc_balance: string | null; is_primary?: boolean }>;
@@ -2210,6 +2229,7 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   onLoadWallets: (email: string) => void;
   onEmailChange: (value: string) => void;
   onSelectWallet: (publicKey: string) => void;
+  sessionWalletKey: string;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
@@ -2238,7 +2258,8 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   const [emailInput, setEmailInput] = useState(email || "");
   useEffect(() => { if (email) setEmailInput(email); }, [email]);
 
-  const walletAddress = defaultWallet;
+  // Mainnet uses the Bridge email wallet; testnet uses the login/session wallet.
+  const walletAddress = network === "testnet" ? sessionWalletKey : defaultWallet;
   const idleUsdc = netBalance ? netBalance.usdc : null;
 
   function reserveLabel(r: any): string {
@@ -2290,14 +2311,14 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   useEffect(() => { loadPosition(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [walletAddress, network]);
 
   async function supply() {
-    if (!email || !walletAddress) return;
+    if (!walletAddress) return;
     const assetId = selectedAssetId || poolInfo?.usdc?.assetId;
     setSubmitting(true); setErrSubmit(null); setResult(null);
     try {
       const res = await fetch("/api/bridge/stellar-wallets/invest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: walletAddress, amount: String(amount), protocol: "blend", asset_id: assetId, network }),
+        body: JSON.stringify({ email: (email || "").trim().toLowerCase(), public_key: walletAddress, amount: String(amount), protocol: "blend", asset_id: assetId, network }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.message || data.error || `HTTP ${res.status}`);
@@ -2313,7 +2334,7 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   const supplyFor = (assetId: string) => position?.positions?.find((p: any) => p.assetId === assetId)?.supply ?? null;
   const amtNum = Number(amount);
   const overBalance = idleUsdc !== null && Number.isFinite(amtNum) && amtNum > idleUsdc;
-  const canSupply = Boolean(email && walletAddress && Number.isFinite(amtNum) && amtNum > 0 && !overBalance && !submitting);
+  const canSupply = Boolean(walletAddress && Number.isFinite(amtNum) && amtNum > 0 && !overBalance && !submitting);
 
   return (
     <div className="space-y-4">
@@ -2388,10 +2409,32 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
           </div>
         )}
 
-        {/* Account (custodial Bridge wallet) */}
+        {/* Account — testnet uses the login/session wallet; mainnet the Bridge wallet */}
         <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-3">
-          <p className="text-xs font-bold text-stone-400 uppercase tracking-wide mb-2">{L("Sua conta", "Your account")}</p>
-          {wallets.length === 0 ? (
+          <p className="text-xs font-bold text-stone-400 uppercase tracking-wide mb-2">
+            {network === "testnet" ? L("Carteira da conta (login)", "Account wallet (login)") : L("Carteira (Bridge)", "Bridge wallet")}
+          </p>
+          {network === "testnet" ? (
+            walletAddress ? (
+              <div className="space-y-2">
+                <p className="font-mono text-xs text-stone-300 break-all">{walletAddress}</p>
+                {idleUsdc !== null && (
+                  <p className="text-xs font-bold text-stone-200">
+                    {L("Disponível: ", "Available: ")}<span className="text-emerald-400">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span>
+                    <span className="ml-1 text-[10px] font-bold uppercase text-stone-400">testnet</span>
+                  </p>
+                )}
+                {netBalance && !netBalance.exists && (
+                  <p className="text-[11px] text-stone-400">{L("Conta ainda não existe na testnet — será criada (friendbot) ao aplicar.", "Account not on testnet yet — it'll be created (friendbot) on first supply.")}</p>
+                )}
+                {netBalance?.exists && idleUsdc === 0 && (
+                  <p className="text-[11px] text-amber-300">{L("Sem USDC de testnet nesta carteira.", "No testnet USDC in this wallet.")}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-stone-400">{L("Entre na sua conta para usar a carteira de testnet.", "Sign in to use your testnet account wallet.")}</p>
+            )
+          ) : wallets.length === 0 ? (
             <form onSubmit={(e) => { e.preventDefault(); onEmailChange(emailInput); onLoadWallets(emailInput); }} className="flex gap-2">
               <input type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder={L("seu@email.com", "you@email.com")}
                 className="flex-1 rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2 text-sm font-bold text-white outline-none focus:border-amber-400" />
@@ -2414,14 +2457,8 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
               {idleUsdc !== null && (
                 <p className="text-xs font-bold text-stone-200">
                   {L("Disponível: ", "Available: ")}<span className="text-emerald-400">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span>
-                  <span className="ml-1 text-[10px] font-bold uppercase text-stone-400">{network === "testnet" ? "testnet" : "mainnet"}</span>
+                  <span className="ml-1 text-[10px] font-bold uppercase text-stone-400">mainnet</span>
                 </p>
-              )}
-              {network === "testnet" && netBalance && !netBalance.exists && (
-                <p className="text-[11px] text-stone-400">{L("Conta ainda não existe na testnet — será criada (friendbot) ao aplicar.", "Account not on testnet yet — it'll be created (friendbot) on first supply.")}</p>
-              )}
-              {network === "testnet" && netBalance?.exists && idleUsdc === 0 && (
-                <p className="text-[11px] text-amber-300">{L("Sem USDC de testnet nesta carteira. Adicione USDC de teste para aplicar.", "No testnet USDC in this wallet. Add test USDC to supply.")}</p>
               )}
               {loadingPos && <Loader2 className="h-3 w-3 animate-spin text-stone-400" />}
             </div>
