@@ -2931,8 +2931,8 @@ export class BridgeController {
       const publicKey = readText(req.body?.public_key ?? req.body?.publicKey);
       const amount = readText(req.body?.amount);
 
-      if (!email || !publicKey) {
-        res.status(400).json({ success: false, message: "email/session_id and public_key are required." });
+      if (!publicKey) {
+        res.status(400).json({ success: false, message: "public_key is required." });
         return;
       }
       const amountNum = Number(amount);
@@ -2941,18 +2941,33 @@ export class BridgeController {
         return;
       }
 
-      // Resolve the wallet's vaulted signing key (must belong to this email).
-      const { data: row } = await supabase
-        .from("bridge_stellar_wallets")
-        .select("vault_secret_id")
-        .eq("email", email)
-        .eq("public_key", publicKey)
-        .maybeSingle();
-      if (!row?.vault_secret_id) {
+      // Resolve the wallet's vaulted signing key. Mainnet uses the Bridge email
+      // wallet; testnet (and any session/login wallet) lives in `wallets`. Try the
+      // Bridge wallet first (scoped to email), then fall back to the session wallet
+      // by public_key. Supply-only here, so resolving by public_key is low-risk.
+      let vaultSecretId = "";
+      if (email) {
+        const { data: bridgeRow } = await supabase
+          .from("bridge_stellar_wallets")
+          .select("vault_secret_id")
+          .eq("email", email)
+          .eq("public_key", publicKey)
+          .maybeSingle();
+        if (bridgeRow?.vault_secret_id) vaultSecretId = String(bridgeRow.vault_secret_id);
+      }
+      if (!vaultSecretId) {
+        const { data: sessionWalletRow } = await supabase
+          .from("wallets")
+          .select("vault_secret_id")
+          .eq("public_key", publicKey)
+          .maybeSingle();
+        if (sessionWalletRow?.vault_secret_id) vaultSecretId = String(sessionWalletRow.vault_secret_id);
+      }
+      if (!vaultSecretId) {
         res.status(404).json({ success: false, message: "Wallet not found for this account." });
         return;
       }
-      const secret = await new VaultService(supabase).getSecret(String(row.vault_secret_id));
+      const secret = await new VaultService(supabase).getSecret(vaultSecretId);
       if (!secret) {
         res.status(500).json({ success: false, message: "Wallet signing key is unavailable." });
         return;
