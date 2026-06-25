@@ -3033,7 +3033,7 @@ export class BridgeController {
       // Blend position (supplied USDC)
       let blendUsdc = 0;
       try {
-        const pos: any = await BlendService.getUserPositions(publicKey, "mainnet");
+        const pos: any = await BlendService.getUserPosition(publicKey, "mainnet");
         blendUsdc = (pos?.positions || []).reduce((s: number, p: any) => s + (Number(p.supply) || 0), 0);
       } catch (e: any) {
         logger.warn(`[bridge] blend position fetch failed: ${e?.message || e}`);
