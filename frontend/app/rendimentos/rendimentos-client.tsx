@@ -559,6 +559,18 @@ export default function RendimentosClient({
   const [investHash, setInvestHash] = useState("");
   const [mainnetProtocol, setMainnetProtocol] = useState<MainnetProtocol>("defindex");
   const [blendMainnetApy, setBlendMainnetApy] = useState<number | null>(null);
+  const [positions, setPositions] = useState<{ defindex_usdc: number; blend_usdc: number; total_invested_usdc: number } | null>(null);
+
+  async function loadPositions(email: string, publicKey: string) {
+    if (!email || !publicKey) return;
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(email.trim().toLowerCase())}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (json?.success) setPositions({ defindex_usdc: Number(json.defindex_usdc) || 0, blend_usdc: Number(json.blend_usdc) || 0, total_invested_usdc: Number(json.total_invested_usdc) || 0 });
+    } catch {
+      // non-critical
+    }
+  }
 
   // Mainnet APYs: DeFindex from yield status, Blend from the pool info endpoint.
   const defindexMainnetApy = useMemo(() => {
@@ -596,7 +608,7 @@ export default function RendimentosClient({
       setInvestStatus("ok");
       setInvestHash(json.hash || "");
       setInvestAmount("");
-      setTimeout(() => loadEmailWallets(email), 4000);
+      setTimeout(() => { loadEmailWallets(email); loadPositions(email, publicKey); }, 4000);
     } catch (e: any) {
       setInvestStatus("error");
       setInvestError(e?.message ?? String(e));
@@ -801,6 +813,13 @@ export default function RendimentosClient({
     if (networkView === "mainnet") loadBlendMainnetApy();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkView]);
+
+  // Load the selected wallet's invested positions (DeFindex + Blend) on mainnet.
+  useEffect(() => {
+    if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey);
+    else setPositions(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [networkView, selectedWalletKey, walletEmail]);
 
   useEffect(() => {
     setReturnsPin("");
@@ -1041,27 +1060,38 @@ export default function RendimentosClient({
                 </div>
               )}
             </div>
-            {/* Balance */}
-            <div className="px-5 py-4 border-b border-tts-border/40">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Saldo na carteira", "Wallet balance")}</p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-3xl font-bold tabular-nums text-tts-deep">
-                  {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
-                </span>
-                <span className="text-sm font-bold text-tts-muted">USDC</span>
+            {/* Balance: wallet (idle) + invested */}
+            <div className="px-5 py-4 border-b border-tts-border/40 grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Na carteira", "In wallet")}</p>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-2xl font-bold tabular-nums text-tts-deep">
+                    {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                  </span>
+                  <span className="text-xs font-bold text-tts-muted">USDC</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-confirm">{L("Investido", "Invested")}</p>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-2xl font-bold tabular-nums text-tts-confirm">
+                    {positions ? positions.total_invested_usdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                  </span>
+                  <span className="text-xs font-bold text-tts-muted">USDC</span>
+                </div>
               </div>
             </div>
 
-            {/* Earn — protocol choice + invest */}
-            {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && selectedWalletKey && (
+            {/* Earn — protocol choice (+ invest when funds are idle) */}
+            {selectedWalletKey && (
               <div className="px-5 py-4 space-y-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Render seu USDC", "Earn on your USDC")}</p>
 
-                {/* Protocol cards */}
+                {/* Protocol cards — APY + your position */}
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { id: "defindex" as MainnetProtocol, name: "DeFindex", desc: L("Cofre auto-otimizado", "Auto-optimized vault"), apy: defindexMainnetApy },
-                    { id: "blend" as MainnetProtocol, name: "Blend", desc: L("Pool de empréstimo", "Lending pool"), apy: blendMainnetApy },
+                    { id: "defindex" as MainnetProtocol, name: "DeFindex", desc: L("Cofre auto-otimizado", "Auto-optimized vault"), apy: defindexMainnetApy, pos: positions?.defindex_usdc ?? null },
+                    { id: "blend" as MainnetProtocol, name: "Blend", desc: L("Pool de empréstimo", "Lending pool"), apy: blendMainnetApy, pos: positions?.blend_usdc ?? null },
                   ]).map((p) => {
                     const sel = mainnetProtocol === p.id;
                     return (
@@ -1076,44 +1106,59 @@ export default function RendimentosClient({
                           <span className="text-sm font-black text-tts-confirm">{p.apy !== null ? `${p.apy.toFixed(2)}%` : "—"}</span>
                         </div>
                         <p className="text-[10px] text-tts-muted mt-0.5">{p.desc}</p>
-                        <p className="text-[9px] font-bold uppercase tracking-wide text-tts-muted/60 mt-1">APY</p>
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-tts-muted/60">APY</span>
+                          {p.pos !== null && p.pos > 0 && (
+                            <span className="text-[10px] font-bold text-tts-deep">{p.pos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {L("investido", "invested")}</span>
+                          )}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Amount + invest */}
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-1 items-center rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-deep">
-                    <span className="px-3 text-xs font-bold text-tts-muted border-r border-tts-border">USDC</span>
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      max={Number(mainnetUsdcBalance)}
-                      value={investAmount}
-                      onChange={(e) => setInvestAmount(e.target.value)}
-                      placeholder={`${L("máx", "max")} ${Number(mainnetUsdcBalance).toFixed(2)}`}
-                      className="flex-1 bg-transparent px-3 py-2.5 text-sm outline-none"
-                    />
-                    <button type="button" onClick={() => setInvestAmount(String(mainnetUsdcBalance))} className="px-3 text-[11px] font-bold text-tts-muted hover:text-tts-deep">{L("Tudo", "Max")}</button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => mainnetInvest(walletEmail, selectedWalletKey, investAmount, mainnetProtocol)}
-                    disabled={investStatus === "investing" || !investAmount || Number(investAmount) <= 0}
-                    className="flex items-center gap-1.5 rounded-xl bg-tts-confirm px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-                  >
-                    {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    {investStatus === "investing" ? L("Investindo...", "Investing...") : L("Investir", "Invest")}
-                  </button>
-                </div>
-                <p className="text-[10px] text-tts-muted/70">
-                  {L(
-                    `Investe da carteira selecionada em ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} na mainnet. O gás é coberto automaticamente.`,
-                    `Invests from the selected wallet into ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} on mainnet. Gas is covered automatically.`,
-                  )}
-                </p>
+                {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) <= 0 && (
+                  <p className="text-[11px] text-tts-muted">
+                    {L("Sem USDC livre na carteira para investir. Seus fundos investidos aparecem acima.", "No idle USDC in the wallet to invest. Your invested funds are shown above.")}
+                  </p>
+                )}
+
+                {/* Amount + invest (only when there's idle USDC) */}
+                {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-1 items-center rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-deep">
+                        <span className="px-3 text-xs font-bold text-tts-muted border-r border-tts-border">USDC</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          max={Number(mainnetUsdcBalance)}
+                          value={investAmount}
+                          onChange={(e) => setInvestAmount(e.target.value)}
+                          placeholder={`${L("máx", "max")} ${Number(mainnetUsdcBalance).toFixed(2)}`}
+                          className="flex-1 bg-transparent px-3 py-2.5 text-sm outline-none"
+                        />
+                        <button type="button" onClick={() => setInvestAmount(String(mainnetUsdcBalance))} className="px-3 text-[11px] font-bold text-tts-muted hover:text-tts-deep">{L("Tudo", "Max")}</button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => mainnetInvest(walletEmail, selectedWalletKey, investAmount, mainnetProtocol)}
+                        disabled={investStatus === "investing" || !investAmount || Number(investAmount) <= 0}
+                        className="flex items-center gap-1.5 rounded-xl bg-tts-confirm px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+                      >
+                        {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        {investStatus === "investing" ? L("Investindo...", "Investing...") : L("Investir", "Invest")}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-tts-muted/70">
+                      {L(
+                        `Investe da carteira selecionada em ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} na mainnet. O gás é coberto automaticamente.`,
+                        `Invests from the selected wallet into ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} on mainnet. Gas is covered automatically.`,
+                      )}
+                    </p>
+                  </>
+                )}
               </div>
             )}
 

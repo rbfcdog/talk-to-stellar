@@ -3004,6 +3004,54 @@ export class BridgeController {
   }
 
   /**
+   * Mainnet yield positions for a Bridge wallet: how much USDC it currently
+   * has working in DeFindex and Blend (so the UI can show invested funds, not
+   * just the idle wallet balance).
+   */
+  static async getStellarWalletPositions(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.query.public_key ?? req.body?.public_key);
+      if (!email || !publicKey) {
+        res.status(400).json({ success: false, message: "email/session_id and public_key are required." });
+        return;
+      }
+
+      const vault = (process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET;
+
+      // DeFindex vault position (underlying USDC)
+      let defindexUsdc = 0;
+      try {
+        const bal: any = await DefindexYieldService.getVaultBalance(vault, publicKey, "mainnet");
+        const underlying = bal?.balance?.underlyingBalance ?? bal?.underlyingBalance ?? bal?.balance?.underlying ?? null;
+        const raw = Array.isArray(underlying) ? underlying[0] : underlying;
+        if (raw != null) defindexUsdc = Number(raw) / 1e7;
+      } catch (e: any) {
+        logger.warn(`[bridge] defindex position fetch failed: ${e?.message || e}`);
+      }
+
+      // Blend position (supplied USDC)
+      let blendUsdc = 0;
+      try {
+        const pos: any = await BlendService.getUserPositions(publicKey, "mainnet");
+        blendUsdc = (pos?.positions || []).reduce((s: number, p: any) => s + (Number(p.supply) || 0), 0);
+      } catch (e: any) {
+        logger.warn(`[bridge] blend position fetch failed: ${e?.message || e}`);
+      }
+
+      res.json({
+        success: true,
+        public_key: publicKey,
+        defindex_usdc: defindexUsdc,
+        blend_usdc: blendUsdc,
+        total_invested_usdc: defindexUsdc + blendUsdc,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to load positions." });
+    }
+  }
+
+  /**
    * Admin: report the sponsor/treasury XLM balance and how many more wallet
    * activations it can still cover (~1.5 XLM locked per sponsored USDC wallet).
    * Guarded by INTERNAL_API_SECRET when that env var is set.
