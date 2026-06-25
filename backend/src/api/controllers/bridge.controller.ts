@@ -3125,9 +3125,9 @@ export class BridgeController {
       }
       const network = (readText(req.query.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
       const horizon = network === "testnet" ? "https://horizon-testnet.stellar.org" : "https://horizon.stellar.org";
-      const usdcIssuer = network === "testnet"
-        ? "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
-        : "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+      // Mainnet USDC has one canonical issuer; testnet has several (friendbot/SAC/
+      // Blend/DeFindex variants), so on testnet we sum ANY USDC-coded balance.
+      const MAINNET_USDC_ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
 
       let usdc = "0", xlm = "0", exists = false;
       try {
@@ -3136,7 +3136,11 @@ export class BridgeController {
           exists = true;
           const acct: any = await r.json();
           const balances: any[] = Array.isArray(acct.balances) ? acct.balances : [];
-          usdc = balances.find((b) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC" && b.asset_issuer === usdcIssuer)?.balance ?? "0";
+          const isUsdc = (b: any) =>
+            (b.asset_type === "credit_alphanum4" || b.asset_type === "credit_alphanum12") &&
+            String(b.asset_code).toUpperCase() === "USDC" &&
+            (network === "testnet" || b.asset_issuer === MAINNET_USDC_ISSUER);
+          usdc = String(balances.filter(isUsdc).reduce((s: number, b: any) => s + (Number(b.balance) || 0), 0));
           xlm = balances.find((b) => b.asset_type === "native")?.balance ?? "0";
         }
       } catch { /* treat as not found */ }

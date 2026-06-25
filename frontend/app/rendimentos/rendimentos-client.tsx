@@ -97,21 +97,20 @@ function moneyProfile(code?: string) {
 }
 function optionCode(option?: YieldOption | null) { return String(option?.display_asset_code || option?.asset_code || "").trim().toUpperCase(); }
 
-// ── Bulletproof selectable styling ───────────────────────────────────────────
-// The custom `tts-*` theme tokens have repeatedly rendered white-on-white on the
-// selected state, so interactive cards/pills in the yield panels use the standard
-// Tailwind palette (stone/amber/emerald) with explicit contrast that can't fail.
+// ── Bulletproof selectable styling (DARK) ────────────────────────────────────
+// The yield panels run on a dark background, so interactive cards/pills use a
+// dark stone palette with light text + an amber accent for the selected state.
 const SELECT_CARD = "w-full text-left rounded-xl border-2 p-3 transition-all duration-150";
-const SELECT_CARD_OFF = "border-stone-200 bg-white text-stone-900 hover:border-amber-300 hover:bg-amber-50/60";
-const SELECT_CARD_ON = "border-amber-500 bg-amber-50 text-stone-900 ring-2 ring-amber-400/40 shadow-sm";
+const SELECT_CARD_OFF = "border-stone-700 bg-stone-800 text-stone-100 hover:border-amber-400/60 hover:bg-stone-700/70";
+const SELECT_CARD_ON = "border-amber-500 bg-amber-500/15 text-white ring-2 ring-amber-500/40 shadow-lg";
 const selectCard = (on: boolean) => `${SELECT_CARD} ${on ? SELECT_CARD_ON : SELECT_CARD_OFF}`;
 const PILL = "rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors duration-150";
-const PILL_OFF = "border-stone-200 bg-white text-stone-600 hover:border-stone-400 hover:text-stone-900";
-const PILL_ON = "border-stone-900 bg-stone-900 text-white shadow-sm";
+const PILL_OFF = "border-stone-700 bg-stone-800 text-stone-300 hover:border-stone-500 hover:text-white";
+const PILL_ON = "border-amber-500 bg-amber-500 text-stone-950 shadow-sm";
 const pill = (on: boolean) => `${PILL} ${on ? PILL_ON : PILL_OFF}`;
-// Primary action button (always high-contrast).
-const BTN_PRIMARY = "flex w-full items-center justify-center gap-2 rounded-lg bg-stone-900 py-3 text-sm font-bold text-white transition-colors hover:bg-stone-800 disabled:opacity-40 disabled:hover:bg-stone-900";
-const BTN_SECONDARY = "flex items-center justify-center gap-2 rounded-lg border-2 border-stone-200 bg-white py-3 text-sm font-bold text-stone-900 transition-colors hover:border-stone-400 disabled:opacity-40";
+// Primary action button — amber on dark; secondary — outlined stone.
+const BTN_PRIMARY = "flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 py-3 text-sm font-bold text-stone-950 transition-colors hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500";
+const BTN_SECONDARY = "flex items-center justify-center gap-2 rounded-lg border-2 border-stone-700 bg-stone-800 py-3 text-sm font-bold text-white transition-colors hover:border-stone-500 disabled:opacity-40";
 function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   const p = Number(String(value || "0").replace(",", "."));
   if (!Number.isFinite(p)) return String(value || "0");
@@ -1014,7 +1013,7 @@ export default function RendimentosClient({
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             {networkView === "testnet" && isTestnetYield && (
-              <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+              <span className="flex items-center gap-1 text-[11px] font-bold text-amber-400 dark:text-amber-400">
                 <AlertTriangle className="h-3 w-3" />
                 {L("Valores estimados", "Estimated values")}
               </span>
@@ -1139,14 +1138,14 @@ export default function RendimentosClient({
                         className={selectCard(sel)}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-stone-900">{p.name}</span>
-                          <span className="text-sm font-black text-emerald-600">{p.apy !== null ? `${p.apy.toFixed(2)}%` : "—"}</span>
+                          <span className="text-sm font-bold text-white">{p.name}</span>
+                          <span className="text-sm font-black text-emerald-400">{p.apy !== null ? `${p.apy.toFixed(2)}%` : "—"}</span>
                         </div>
-                        <p className="text-[10px] text-stone-500 mt-0.5">{p.desc}</p>
+                        <p className="text-[10px] text-stone-400 mt-0.5">{p.desc}</p>
                         <div className="mt-1.5 flex items-center justify-between">
                           <span className="text-[9px] font-bold uppercase tracking-wide text-stone-400">APY</span>
                           {p.pos !== null && p.pos > 0 && (
-                            <span className="text-[10px] font-bold text-stone-900">{p.pos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} {L("investido", "invested")}</span>
+                            <span className="text-[10px] font-bold text-white">{p.pos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} {L("investido", "invested")}</span>
                           )}
                         </div>
                       </button>
@@ -1989,13 +1988,13 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border-2 border-stone-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600">{L("Trocar tokens", "Swap tokens")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-stone-900">{L("Swap via DEX", "Swap via DEX")}</h3>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Trocar tokens", "Swap tokens")}</p>
+            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Swap via DEX", "Swap via DEX")}</h3>
           </div>
-          <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-bold uppercase text-stone-500">{swapNetwork}</span>
+          <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[10px] font-bold uppercase text-stone-400">{swapNetwork}</span>
         </div>
 
         {/* Pair quick-select */}
@@ -2014,16 +2013,16 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
         {/* Inputs */}
         <div className="grid grid-cols-3 gap-3 mb-3">
           <div>
-            <label className="block mb-1 text-xs font-bold text-stone-500 uppercase tracking-wide">{L("De", "From")}</label>
-            <input value={assetIn} onChange={(e) => { setAssetIn(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
+            <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("De", "From")}</label>
+            <input value={assetIn} onChange={(e) => { setAssetIn(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
           </div>
           <div>
-            <label className="block mb-1 text-xs font-bold text-stone-500 uppercase tracking-wide">{L("Para", "To")}</label>
-            <input value={assetOut} onChange={(e) => { setAssetOut(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
+            <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Para", "To")}</label>
+            <input value={assetOut} onChange={(e) => { setAssetOut(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
           </div>
           <div>
-            <label className="block mb-1 text-xs font-bold text-stone-500 uppercase tracking-wide">{L("Valor", "Amount")}</label>
-            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
+            <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Valor", "Amount")}</label>
+            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
           </div>
         </div>
 
@@ -2037,23 +2036,23 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
         </div>
 
         {/* Freighter Wallet — always visible so user can connect before getting a quote */}
-        <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 mb-3">
+        <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-3">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold text-stone-500 uppercase tracking-wide">{L("Carteira Freighter", "Freighter Wallet")}</p>
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Carteira Freighter", "Freighter Wallet")}</p>
             {walletAddress
-              ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{walletNetwork || L("Conectada", "Connected")}</span>
-              : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">{L("Não conectada", "Not connected")}</span>}
+              ? <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">{walletNetwork || L("Conectada", "Connected")}</span>
+              : <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">{L("Não conectada", "Not connected")}</span>}
           </div>
           {walletAddress ? (
-            <p className="font-mono text-xs text-stone-500 break-all">{walletAddress}</p>
+            <p className="font-mono text-xs text-stone-400 break-all">{walletAddress}</p>
           ) : (
             <button onClick={connectFreighter} disabled={connecting} className={BTN_SECONDARY + " w-full !py-2 text-xs"}>
               {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
               {L("Conectar Freighter", "Connect Freighter")}
             </button>
           )}
-          {errWallet && <p className="mt-2 text-xs text-red-600">{errWallet}</p>}
-          {!walletNetOk && <p className="mt-2 text-xs font-semibold text-amber-700">{L(`Freighter está na rede ${walletNetwork}; mude para ${swapNetwork}.`, `Freighter is on ${walletNetwork}; switch to ${swapNetwork}.`)}</p>}
+          {errWallet && <p className="mt-2 text-xs text-red-300">{errWallet}</p>}
+          {!walletNetOk && <p className="mt-2 text-xs font-semibold text-amber-300">{L(`Freighter está na rede ${walletNetwork}; mude para ${swapNetwork}.`, `Freighter is on ${walletNetwork}; switch to ${swapNetwork}.`)}</p>}
         </div>
 
         {/* Step 1: Quote */}
@@ -2063,17 +2062,17 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
         </button>
 
         {errQuote && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 mb-3">
+          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300 mb-3">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {errQuote}
           </div>
         )}
 
         {quote && (
-          <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 mb-4 space-y-1">
-            <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Você envia", "You send")}</span><span className="font-bold text-stone-900">{quote.amountIn} {quote.assetIn || assetIn}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Você recebe", "You receive")}</span><span className="font-bold text-emerald-600">{quote.amountOut} {quote.assetOut || assetOut}</span></div>
-            {quote.priceImpact != null && <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Impacto", "Impact")}</span><span className="font-bold text-stone-900">{Number(quote.priceImpact).toFixed(4)}%</span></div>}
-            {quote.protocols && <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Protocolos", "Protocols")}</span><span className="font-bold text-stone-900">{Array.isArray(quote.protocols) ? quote.protocols.join(", ") : quote.protocols}</span></div>}
+          <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-4 space-y-1">
+            <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Você envia", "You send")}</span><span className="font-bold text-white">{quote.amountIn} {quote.assetIn || assetIn}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Você recebe", "You receive")}</span><span className="font-bold text-emerald-400">{quote.amountOut} {quote.assetOut || assetOut}</span></div>
+            {quote.priceImpact != null && <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Impacto", "Impact")}</span><span className="font-bold text-white">{Number(quote.priceImpact).toFixed(4)}%</span></div>}
+            {quote.protocols && <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Protocolos", "Protocols")}</span><span className="font-bold text-white">{Array.isArray(quote.protocols) ? quote.protocols.join(", ") : quote.protocols}</span></div>}
             {quote.warning && <p className="text-xs text-stone-400 pt-1">ℹ️ {quote.warning}</p>}
           </div>
         )}
@@ -2085,18 +2084,18 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
               {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {L(`2 — Preparar transação (${shortAddr(walletAddress)})`, `2 — Build XDR (${shortAddr(walletAddress)})`)}
             </button>
-            {errXdr && <p className="text-xs text-red-600">{errXdr}</p>}
+            {errXdr && <p className="text-xs text-red-300">{errXdr}</p>}
           </div>
         )}
         {quote && !walletAddress && (
-          <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">{L("Conecte o Freighter acima para continuar.", "Connect Freighter above to continue.")}</p>
+          <p className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300">{L("Conecte o Freighter acima para continuar.", "Connect Freighter above to continue.")}</p>
         )}
 
         {/* Step 3: Sign */}
         {xdrResult?.xdr && (
           <div className="space-y-3 mt-3">
-            <div className="rounded-lg border-2 border-stone-200 bg-stone-50 p-3">
-              <p className="text-xs font-bold text-stone-500 mb-1">{L("XDR não assinado", "Unsigned XDR")}</p>
+            <div className="rounded-lg border-2 border-stone-700 bg-stone-800/60 p-3">
+              <p className="text-xs font-bold text-stone-400 mb-1">{L("XDR não assinado", "Unsigned XDR")}</p>
               <p className="max-h-14 overflow-y-auto break-all font-mono text-[10px] text-stone-400">{xdrResult.xdr}</p>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -2109,10 +2108,10 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
                 <ExternalLink className="h-4 w-4" /> {L("Stellar Lab", "Stellar Lab")}
               </a>
             </div>
-            {errSign && <p className="text-xs text-red-600">{errSign}</p>}
+            {errSign && <p className="text-xs text-red-300">{errSign}</p>}
             {signedXdr && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-300">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                 {L(`Assinado por ${shortAddr(walletAddress)}`, `Signed by ${shortAddr(walletAddress)}`)}
               </div>
             )}
@@ -2126,15 +2125,15 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {L("4 — Enviar para Stellar", "4 — Submit to Stellar")}
             </button>
-            {errSubmit && <p className="text-xs text-red-600">{errSubmit}</p>}
+            {errSubmit && <p className="text-xs text-red-300">{errSubmit}</p>}
             {submitResult && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1">
-                <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Status", "Status")}</span><span className="font-bold text-emerald-700">{submitResult.successful ? L("✓ Sucesso", "✓ Success") : L("Falha", "Failed")}</span></div>
-                {submitResult.hash && <div className="flex justify-between text-xs"><span className="text-stone-500">Hash</span><span className="font-mono font-bold text-stone-900">{submitResult.hash.slice(0, 16)}…</span></div>}
-                {submitResult.ledger && <div className="flex justify-between text-xs"><span className="text-stone-500">Ledger</span><span className="font-bold text-stone-900">{submitResult.ledger}</span></div>}
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
+                <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Status", "Status")}</span><span className="font-bold text-emerald-300">{submitResult.successful ? L("✓ Sucesso", "✓ Success") : L("Falha", "Failed")}</span></div>
+                {submitResult.hash && <div className="flex justify-between text-xs"><span className="text-stone-400">Hash</span><span className="font-mono font-bold text-white">{submitResult.hash.slice(0, 16)}…</span></div>}
+                {submitResult.ledger && <div className="flex justify-between text-xs"><span className="text-stone-400">Ledger</span><span className="font-bold text-white">{submitResult.ledger}</span></div>}
                 {submitResult.hash && (
                   <a href={`https://stellar.expert/explorer/testnet/tx/${submitResult.hash}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:underline mt-1">
+                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:underline mt-1">
                     <ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}
                   </a>
                 )}
@@ -2145,16 +2144,16 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
       </div>
 
       {/* LP Yield */}
-      <div className="rounded-2xl border-2 border-stone-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600">{L("Rendimento via liquidez", "Liquidity yield")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-stone-900">{L("Fornecer Liquidez", "Provide Liquidity")}</h3>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Rendimento via liquidez", "Liquidity yield")}</p>
+            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Fornecer Liquidez", "Provide Liquidity")}</h3>
           </div>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-700">{L("Avançado", "Advanced")}</span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-300">{L("Avançado", "Advanced")}</span>
         </div>
 
-        <p className="text-xs text-stone-500 mb-3">
+        <p className="text-xs text-stone-400 mb-3">
           {L(
             `Além de trocar, você pode fornecer liquidez no par ${assetIn}/${assetOut} e ganhar uma parte das taxas de cada swap realizado.`,
             `Beyond swapping, you can provide ${assetIn}/${assetOut} liquidity and earn a share of fees from every trade.`
@@ -2162,23 +2161,23 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
         </p>
 
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 text-center">
+          <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 text-center">
             <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Taxa por swap", "Fee per swap")}</p>
-            <p className="text-xl font-bold text-emerald-600">{((lpPool?.fee_bp ?? 30) / 100).toFixed(1)}%</p>
+            <p className="text-xl font-bold text-emerald-400">{((lpPool?.fee_bp ?? 30) / 100).toFixed(1)}%</p>
           </div>
           {lpPool?.reserves?.length ? (
-            <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 text-center">
+            <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Liquidez (mainnet)", "Liquidity (mainnet)")}</p>
               {lpPool.reserves.map((r) => (
-                <p key={r.asset} className="text-xs font-bold text-stone-900">
+                <p key={r.asset} className="text-xs font-bold text-white">
                   {parseFloat(r.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })} {r.asset === "native" ? "XLM" : r.asset.split(":")[0]}
                 </p>
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 text-center">
+            <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Rendimento", "Return")}</p>
-              <p className="text-xs text-stone-500">{L("Proporcional ao volume", "Proportional to volume")}</p>
+              <p className="text-xs text-stone-400">{L("Proporcional ao volume", "Proportional to volume")}</p>
             </div>
           )}
         </div>
@@ -2319,44 +2318,44 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="rounded-2xl border-2 border-stone-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600">{L("Empréstimos & Rendimentos", "Lending & Yield")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-stone-900">{L("Aplicar no Blend", "Supply to Blend")}</h3>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Empréstimos & Rendimentos", "Lending & Yield")}</p>
+            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Aplicar no Blend", "Supply to Blend")}</h3>
             <p className="mt-0.5 text-[11px] text-stone-400">{L("Direto da sua carteira — sem extensões.", "Straight from your wallet — no extensions.")}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
             {usdcApy !== null ? (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">USDC {usdcApy.toFixed(2)}% APY</span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300">USDC {usdcApy.toFixed(2)}% APY</span>
             ) : loadingPool ? <Loader2 className="h-4 w-4 animate-spin text-stone-400" /> : (
-              <button onClick={loadPool} className="text-xs font-bold text-amber-700 hover:underline">{L("Ver APY", "View APY")}</button>
+              <button onClick={loadPool} className="text-xs font-bold text-amber-300 hover:underline">{L("Ver APY", "View APY")}</button>
             )}
           </div>
         </div>
 
         {/* Network toggle */}
-        <div className="mb-4 inline-flex rounded-lg border-2 border-stone-200 bg-stone-50 p-0.5">
+        <div className="mb-4 inline-flex rounded-lg border-2 border-stone-700 bg-stone-800/60 p-0.5">
           {(["mainnet", "testnet"] as const).map((n) => (
             <button key={n} type="button" onClick={() => { setNetwork(n); setResult(null); setErrSubmit(null); }}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${network === n ? "bg-stone-900 text-white shadow-sm" : "text-stone-500 hover:text-stone-900"}`}>
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${network === n ? "bg-amber-500 text-stone-950 shadow-sm" : "text-stone-400 hover:text-white"}`}>
               {n === "mainnet" ? L("Rede principal", "Mainnet") : "Testnet"}
             </button>
           ))}
         </div>
 
         {loadingPool && !poolInfo && (
-          <div className="flex items-center gap-2 rounded-lg bg-stone-50 p-3 text-xs text-stone-500 mb-3"><Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> {L("Carregando mercados…", "Loading markets…")}</div>
+          <div className="flex items-center gap-2 rounded-lg bg-stone-800/60 p-3 text-xs text-stone-400 mb-3"><Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> {L("Carregando mercados…", "Loading markets…")}</div>
         )}
         {errPool && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600 mb-3"><AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}</div>
+          <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300 mb-3"><AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}</div>
         )}
 
         {/* Markets */}
         {reserves.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500">{L(`Mercados (${reserves.length})`, `Markets (${reserves.length})`)}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">{L(`Mercados (${reserves.length})`, `Markets (${reserves.length})`)}</p>
               <p className="text-[10px] text-stone-400">{L("Toque para escolher", "Tap to choose")}</p>
             </div>
             <div className="space-y-2">
@@ -2367,20 +2366,20 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
                   <button key={r.assetId} type="button" onClick={() => { setSelectedAssetId(r.assetId); setResult(null); setErrSubmit(null); }} className={selectCard(sel)}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-stone-900">{reserveLabel(r)}</span>
-                        {sel && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">{L("selecionado", "selected")}</span>}
+                        <span className="text-sm font-bold text-white">{reserveLabel(r)}</span>
+                        {sel && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-stone-950">{L("selecionado", "selected")}</span>}
                       </div>
-                      <span className="text-base font-black text-emerald-600">{r.supplyApy.toFixed(2)}%<span className="ml-1 text-[9px] font-bold text-stone-400">{L("ganho", "earn")}</span></span>
+                      <span className="text-base font-black text-emerald-400">{r.supplyApy.toFixed(2)}%<span className="ml-1 text-[9px] font-bold text-stone-400">{L("ganho", "earn")}</span></span>
                     </div>
                     <p className="mt-0.5 font-mono text-[9px] text-stone-400 break-all">{r.assetId}</p>
                     <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
-                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Empréstimo", "Borrow")}</p><p className="text-[11px] font-bold text-stone-900">{r.borrowApy.toFixed(2)}%</p></div>
-                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p><p className="text-[11px] font-bold text-stone-900">{r.utilization.toFixed(1)}%</p></div>
-                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p><p className="text-[11px] font-bold text-stone-900">{fmtToken(r.supplied)}</p></div>
-                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p><p className="text-[11px] font-bold text-stone-900">{fmtToken(r.liabilities)}</p></div>
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Empréstimo", "Borrow")}</p><p className="text-[11px] font-bold text-white">{r.borrowApy.toFixed(2)}%</p></div>
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p><p className="text-[11px] font-bold text-white">{r.utilization.toFixed(1)}%</p></div>
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p><p className="text-[11px] font-bold text-white">{fmtToken(r.supplied)}</p></div>
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p><p className="text-[11px] font-bold text-white">{fmtToken(r.liabilities)}</p></div>
                     </div>
                     {mySupply !== null && mySupply > 0 && (
-                      <p className="mt-2 rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">{L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}</p>
+                      <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">{L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}</p>
                     )}
                   </button>
                 );
@@ -2390,12 +2389,12 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
         )}
 
         {/* Account (custodial Bridge wallet) */}
-        <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 mb-3">
-          <p className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-2">{L("Sua conta", "Your account")}</p>
+        <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-3">
+          <p className="text-xs font-bold text-stone-400 uppercase tracking-wide mb-2">{L("Sua conta", "Your account")}</p>
           {wallets.length === 0 ? (
             <form onSubmit={(e) => { e.preventDefault(); onEmailChange(emailInput); onLoadWallets(emailInput); }} className="flex gap-2">
               <input type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder={L("seu@email.com", "you@email.com")}
-                className="flex-1 rounded-lg border-2 border-stone-200 bg-white px-3 py-2 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
+                className="flex-1 rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2 text-sm font-bold text-white outline-none focus:border-amber-400" />
               <button type="submit" disabled={!emailInput.trim() || walletsLoading} className={BTN_PRIMARY + " !w-auto px-4"}>
                 {walletsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : L("Buscar", "Find")}
               </button>
@@ -2403,7 +2402,7 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
           ) : (
             <div className="space-y-2">
               <select value={walletAddress} onChange={(e) => onSelectWallet(e.target.value)}
-                className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 text-sm font-mono text-stone-900 outline-none focus:border-amber-400">
+                className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-mono text-white outline-none focus:border-amber-400">
                 {wallets.map((w) => (
                   <option key={w.public_key} value={w.public_key}>
                     {`${w.public_key.slice(0, 6)}…${w.public_key.slice(-6)}`}
@@ -2413,8 +2412,8 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
                 ))}
               </select>
               {idleUsdc !== null && (
-                <p className="text-xs font-bold text-stone-700">
-                  {L("Disponível: ", "Available: ")}<span className="text-emerald-600">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span>
+                <p className="text-xs font-bold text-stone-200">
+                  {L("Disponível: ", "Available: ")}<span className="text-emerald-400">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span>
                   <span className="ml-1 text-[10px] font-bold uppercase text-stone-400">{network === "testnet" ? "testnet" : "mainnet"}</span>
                 </p>
               )}
@@ -2422,7 +2421,7 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
                 <p className="text-[11px] text-stone-400">{L("Conta ainda não existe na testnet — será criada (friendbot) ao aplicar.", "Account not on testnet yet — it'll be created (friendbot) on first supply.")}</p>
               )}
               {network === "testnet" && netBalance?.exists && idleUsdc === 0 && (
-                <p className="text-[11px] text-amber-700">{L("Sem USDC de testnet nesta carteira. Adicione USDC de teste para aplicar.", "No testnet USDC in this wallet. Add test USDC to supply.")}</p>
+                <p className="text-[11px] text-amber-300">{L("Sem USDC de testnet nesta carteira. Adicione USDC de teste para aplicar.", "No testnet USDC in this wallet. Add test USDC to supply.")}</p>
               )}
               {loadingPos && <Loader2 className="h-3 w-3 animate-spin text-stone-400" />}
             </div>
@@ -2431,24 +2430,24 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
 
         {/* Amount */}
         <div className="mb-3">
-          <label className="block mb-1 text-xs font-bold text-stone-500 uppercase tracking-wide">
+          <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">
             {L("Aplicar em", "Supply to")} {reserveLabel(selectedReserve)}
-            {selectedReserve?.supplyApy != null && <span className="ml-1 text-emerald-600">· {selectedReserve.supplyApy.toFixed(2)}% APY</span>}
+            {selectedReserve?.supplyApy != null && <span className="ml-1 text-emerald-400">· {selectedReserve.supplyApy.toFixed(2)}% APY</span>}
           </label>
           <div className="relative">
             <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setResult(null); setErrSubmit(null); }}
-              className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 pr-16 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
+              className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 pr-16 text-sm font-bold text-white outline-none focus:border-amber-400" />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400">{reserveLabel(selectedReserve)}</span>
           </div>
           {idleUsdc !== null && (
             <div className="mt-1 flex gap-1.5">
               {[25, 50, 100].map((pct) => (
                 <button key={pct} type="button" onClick={() => { setAmount(String((idleUsdc * pct / 100).toFixed(2))); setResult(null); }}
-                  className="rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 hover:border-amber-400">{pct === 100 ? L("Tudo", "Max") : `${pct}%`}</button>
+                  className="rounded-md border border-stone-700 bg-stone-900 px-2 py-0.5 text-[10px] font-bold text-stone-300 hover:border-amber-400">{pct === 100 ? L("Tudo", "Max") : `${pct}%`}</button>
               ))}
             </div>
           )}
-          {overBalance && <p className="mt-1 text-[11px] font-semibold text-amber-700">{L("Valor acima do saldo disponível.", "Amount exceeds available balance.")}</p>}
+          {overBalance && <p className="mt-1 text-[11px] font-semibold text-amber-300">{L("Valor acima do saldo disponível.", "Amount exceeds available balance.")}</p>}
         </div>
 
         {/* Supply (custodial — one tap, no Freighter) */}
@@ -2458,16 +2457,16 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
         </button>
         {!email && !wallets.length && <p className="mt-2 text-[11px] text-stone-400">{L("Informe seu e-mail acima para carregar sua carteira.", "Enter your email above to load your wallet.")}</p>}
         {errSubmit && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errSubmit}</div>
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errSubmit}</div>
         )}
         {result?.success && (
-          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1">
-            <div className="flex justify-between text-xs"><span className="text-stone-500">Status</span><span className="font-bold text-emerald-700">{L("✓ Aplicado", "✓ Supplied")}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Valor", "Amount")}</span><span className="font-bold text-stone-900">{result.amount} USDC</span></div>
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
+            <div className="flex justify-between text-xs"><span className="text-stone-400">Status</span><span className="font-bold text-emerald-300">{L("✓ Aplicado", "✓ Supplied")}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Valor", "Amount")}</span><span className="font-bold text-white">{result.amount} USDC</span></div>
             {result.hash && (
               <>
-                <div className="flex justify-between text-xs"><span className="text-stone-500">Hash</span><span className="font-mono font-bold text-stone-900">{String(result.hash).slice(0, 16)}…</span></div>
-                <a href={`https://stellar.expert/explorer/${network === "testnet" ? "testnet" : "public"}/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}</a>
+                <div className="flex justify-between text-xs"><span className="text-stone-400">Hash</span><span className="font-mono font-bold text-white">{String(result.hash).slice(0, 16)}…</span></div>
+                <a href={`https://stellar.expert/explorer/${network === "testnet" ? "testnet" : "public"}/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}</a>
               </>
             )}
           </div>
