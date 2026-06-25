@@ -2954,9 +2954,13 @@ export class BridgeController {
       let target = "";
 
       if (protocol === "blend") {
-        // Direct Blend supply on mainnet.
+        // Direct Blend supply on mainnet. Caller may target a specific reserve
+        // via asset_id; otherwise default to the USDC reserve.
         const pool = await BlendService.getPoolInfo("mainnet");
-        const assetId = pool.usdc?.assetId;
+        const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId);
+        const assetId = requestedAsset
+          ? (pool.reserves?.find((r: any) => r.assetId === requestedAsset)?.assetId || requestedAsset)
+          : pool.usdc?.assetId;
         if (!assetId) throw new Error("Blend USDC reserve not available on mainnet.");
         const amountStroops = String(Math.floor(amountNum * 1e7));
         const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network: "mainnet" });
