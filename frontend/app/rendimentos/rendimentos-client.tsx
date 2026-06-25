@@ -1258,7 +1258,16 @@ export default function RendimentosClient({
                   convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
                 />
                 <div className="mt-8">
-                  <BlendInlinePanel language={language} />
+                  <BlendInlinePanel
+                    language={language}
+                    email={walletEmail}
+                    wallets={emailWallets}
+                    defaultWallet={selectedWalletKey}
+                    walletsLoading={emailWalletsLoading}
+                    onLoadWallets={loadEmailWallets}
+                    onEmailChange={setWalletEmail}
+                    onSelectWallet={setSelectedWalletKey}
+                  />
                 </div>
               </>
             )}
@@ -2193,23 +2202,46 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
 }
 
 // ── Blend v2 Lending Panel ─────────────────────────────────────────────────
-function BlendInlinePanel({ language }: { language: AppLanguage }) {
+function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet }: {
+  language: AppLanguage;
+  email: string;
+  wallets: Array<{ public_key: string; usdc_balance: string | null; is_primary?: boolean }>;
+  defaultWallet: string;
+  walletsLoading: boolean;
+  onLoadWallets: (email: string) => void;
+  onEmailChange: (value: string) => void;
+  onSelectWallet: (publicKey: string) => void;
+}) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
-  // Pool / APY
+  // Mainnet Blend pool — markets the custodial Bridge wallet can supply to.
   const [poolInfo, setPoolInfo] = useState<any>(null);
   const [loadingPool, setLoadingPool] = useState(false);
   const [errPool, setErrPool] = useState<string | null>(null);
-  // Which reserve the user is supplying/withdrawing (assetId). Defaults to USDC.
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
 
-  // Human label for a reserve: backend symbol → known hint → short contract id.
+  // Custodial supply
+  const [amount, setAmount] = useState("10");
+  const [submitting, setSubmitting] = useState(false);
+  const [errSubmit, setErrSubmit] = useState<string | null>(null);
+  const [result, setResult] = useState<any>(null);
+
+  // User position in the pool (per reserve)
+  const [position, setPosition] = useState<any>(null);
+  const [loadingPos, setLoadingPos] = useState(false);
+
+  const [emailInput, setEmailInput] = useState(email || "");
+  useEffect(() => { if (email) setEmailInput(email); }, [email]);
+
+  const walletAddress = defaultWallet;
+  const selectedWallet = wallets.find((w) => w.public_key === walletAddress) || null;
+  const idleUsdc = selectedWallet ? Number(selectedWallet.usdc_balance) : null;
+
   function reserveLabel(r: any): string {
     if (r?.symbol) return String(r.symbol);
     const id = String(r?.assetId || "");
     return id ? `${id.slice(0, 4)}…${id.slice(-4)}` : "—";
   }
-  // Blend token amounts are 7-decimal raw units; show a compact figure.
   function fmtToken(raw: unknown): string {
     const n = Number(raw) / 1e7;
     if (!Number.isFinite(n)) return "0";
@@ -2217,154 +2249,45 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
-
-  // Freighter wallet
-  const [walletAddress, setWalletAddress] = useState("");
-  const [walletNetwork, setWalletNetwork] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [errWallet, setErrWallet] = useState<string | null>(null);
-
-  // User position
-  const [position, setPosition] = useState<any>(null);
-  const [loadingPos, setLoadingPos] = useState(false);
-
-  // Supply / Withdraw
-  const [mode, setMode] = useState<"supply" | "withdraw">("supply");
-  const [supplyAmount, setSupplyAmount] = useState("10");
-  const [xdrResult, setXdrResult] = useState<any>(null);
-  const [loadingXdr, setLoadingXdr] = useState(false);
-  const [errXdr, setErrXdr] = useState<string | null>(null);
-
-  const [signedXdr, setSignedXdr] = useState("");
-  const [signing, setSigning] = useState(false);
-  const [errSign, setErrSign] = useState<string | null>(null);
-
-  const [submitResult, setSubmitResult] = useState<any>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [errSubmit, setErrSubmit] = useState<string | null>(null);
-
-  // Auto-apply preference
-  const [autoApply, setAutoApply] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("blend_auto_apply") === "1";
-  });
-
-  function toggleAutoApply() {
-    const next = !autoApply;
-    setAutoApply(next);
-    if (typeof window !== "undefined") localStorage.setItem("blend_auto_apply", next ? "1" : "0");
-  }
-
-  function resetBuild() {
-    setXdrResult(null); setSignedXdr(""); setSubmitResult(null);
-    setErrXdr(null); setErrSign(null); setErrSubmit(null);
-  }
-
-  function shortAddr(addr: string) { return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : ""; }
-
-  // ── Load pool APY ──────────────────────────────────────────────────────
   async function loadPool() {
     setLoadingPool(true); setErrPool(null);
     try {
-      const res = await fetch("/api/blend/pool/info");
+      const res = await fetch("/api/blend/pool/info?network=mainnet", { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
       setPoolInfo(data);
-      // Default the supply target to USDC (or the first reserve) once we have one.
       setSelectedAssetId((prev) => prev || data?.usdc?.assetId || data?.reserves?.[0]?.assetId || "");
-    } catch (e: any) {
-      setErrPool(e.message);
-    } finally { setLoadingPool(false); }
+    } catch (e: any) { setErrPool(e.message); }
+    finally { setLoadingPool(false); }
   }
-
   useEffect(() => { loadPool(); }, []);
 
-  // ── Connect Freighter ──────────────────────────────────────────────────
-  async function connectFreighter() {
-    setConnecting(true); setErrWallet(null);
-    try {
-      const f = (window as any).freighterApi || (await import("@stellar/freighter-api").catch(() => null));
-      if (!f) throw new Error("Freighter não instalado.");
-      const conn = await f.requestAccess();
-      if (conn.error) throw new Error(conn.error);
-      const net = await f.getNetwork();
-      const addr = conn.address || (await f.getPublicKey?.()) || "";
-      setWalletAddress(addr);
-      setWalletNetwork(String(net.network || net || "").toUpperCase());
-    } catch (e: any) { setErrWallet(e.message); }
-    finally { setConnecting(false); }
-  }
-
-  // ── Load user position ─────────────────────────────────────────────────
   async function loadPosition() {
-    if (!walletAddress) return;
+    if (!walletAddress) { setPosition(null); return; }
     setLoadingPos(true);
     try {
-      const network = walletNetwork.includes("TEST") ? "testnet" : "mainnet";
-      const res = await fetch(`/api/blend/pool/position?address=${walletAddress}&network=${network}`);
+      const res = await fetch(`/api/blend/pool/position?address=${walletAddress}&network=mainnet`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
       if (res.ok && !data.error) setPosition(data);
     } catch { /* silent */ }
     finally { setLoadingPos(false); }
   }
+  useEffect(() => { loadPosition(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [walletAddress]);
 
-  useEffect(() => { if (walletAddress) loadPosition(); }, [walletAddress]);
-
-  // ── Build XDR ─────────────────────────────────────────────────────────
-  async function buildXdr() {
+  async function supply() {
+    if (!email || !walletAddress) return;
     const assetId = selectedAssetId || poolInfo?.usdc?.assetId;
-    if (!walletAddress || !assetId) return;
-    resetBuild(); setLoadingXdr(true); setErrXdr(null);
+    setSubmitting(true); setErrSubmit(null); setResult(null);
     try {
-      const amountStroops = Math.round(parseFloat(supplyAmount) * 1e7).toString();
-      const network = walletNetwork.includes("TEST") ? "testnet" : "mainnet";
-      const endpoint = mode === "supply" ? "/api/blend/pool/supply" : "/api/blend/pool/withdraw";
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/bridge/stellar-wallets/invest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_address: walletAddress,
-          asset_id: assetId,
-          amount: amountStroops,
-          network,
-        }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: walletAddress, amount: String(amount), protocol: "blend", asset_id: assetId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-      setXdrResult(data);
-    } catch (e: any) { setErrXdr(e.message); }
-    finally { setLoadingXdr(false); }
-  }
-
-  // ── Sign with Freighter ────────────────────────────────────────────────
-  async function signWithFreighter() {
-    if (!xdrResult?.xdr) return;
-    setSigning(true); setErrSign(null);
-    try {
-      const f = (window as any).freighterApi || (await import("@stellar/freighter-api").catch(() => null));
-      if (!f) throw new Error("Freighter não disponível.");
-      const pass = xdrResult.networkPassphrase;
-      const result = await f.signTransaction(xdrResult.xdr, { networkPassphrase: pass, address: walletAddress });
-      if (!result.signedTxXdr) throw new Error("Freighter não retornou XDR assinado.");
-      setSignedXdr(result.signedTxXdr);
-    } catch (e: any) { setErrSign(e.message); }
-    finally { setSigning(false); }
-  }
-
-  // ── Submit ─────────────────────────────────────────────────────────────
-  async function submitTx() {
-    if (!signedXdr) return;
-    setSubmitting(true); setErrSubmit(null); setSubmitResult(null);
-    try {
-      const res = await fetch("/api/swap/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signedXdr }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-      setSubmitResult(data);
-      await loadPosition();
+      if (!res.ok || !data.success) throw new Error(data.message || data.error || `HTTP ${res.status}`);
+      setResult(data);
+      loadPosition();
     } catch (e: any) { setErrSubmit(e.message); }
     finally { setSubmitting(false); }
   }
@@ -2373,8 +2296,9 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
   const reserves: any[] = Array.isArray(poolInfo?.reserves) ? poolInfo.reserves : [];
   const selectedReserve = reserves.find((r) => r.assetId === selectedAssetId) || poolInfo?.usdc || null;
   const supplyFor = (assetId: string) => position?.positions?.find((p: any) => p.assetId === assetId)?.supply ?? null;
-  const userSupply = supplyFor(selectedReserve?.assetId);
-  const explorerNet = (walletNetwork || "PUBLIC").includes("TEST") ? "testnet" : "public";
+  const amtNum = Number(amount);
+  const overBalance = idleUsdc !== null && Number.isFinite(amtNum) && amtNum > idleUsdc;
+  const canSupply = Boolean(email && walletAddress && Number.isFinite(amtNum) && amtNum > 0 && !overBalance && !submitting);
 
   return (
     <div className="space-y-4">
@@ -2383,42 +2307,31 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600">{L("Empréstimos & Rendimentos", "Lending & Yield")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-stone-900">{L("Aplicar no Blend v2", "Supply to Blend v2")}</h3>
+            <h3 className="text-lg font-bold mt-0.5 text-stone-900">{L("Aplicar no Blend", "Supply to Blend")}</h3>
+            <p className="mt-0.5 text-[11px] text-stone-400">{L("Direto da sua carteira — sem extensões.", "Straight from your wallet — no extensions.")}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
             {usdcApy !== null ? (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                USDC {usdcApy.toFixed(2)}% APY
-              </span>
-            ) : loadingPool ? (
-              <Loader2 className="h-4 w-4 animate-spin text-stone-400" />
-            ) : (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">USDC {usdcApy.toFixed(2)}% APY</span>
+            ) : loadingPool ? <Loader2 className="h-4 w-4 animate-spin text-stone-400" /> : (
               <button onClick={loadPool} className="text-xs font-bold text-amber-700 hover:underline">{L("Ver APY", "View APY")}</button>
             )}
-            {poolInfo?.network && (
-              <span className="text-[10px] font-bold uppercase text-stone-400">{poolInfo.network}</span>
-            )}
+            <span className="rounded-full bg-stone-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Mainnet</span>
           </div>
         </div>
 
         {loadingPool && !poolInfo && (
-          <div className="flex items-center gap-2 rounded-lg bg-stone-50 p-3 text-xs text-stone-500 mb-3">
-            <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> {L("Carregando mercados…", "Loading markets…")}
-          </div>
+          <div className="flex items-center gap-2 rounded-lg bg-stone-50 p-3 text-xs text-stone-500 mb-3"><Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> {L("Carregando mercados…", "Loading markets…")}</div>
         )}
         {errPool && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600 mb-3">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}
-          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600 mb-3"><AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}</div>
         )}
 
-        {/* Reserves — full list, each selectable as the supply/withdraw target */}
+        {/* Markets */}
         {reserves.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
-                {L(`Mercados (${reserves.length})`, `Markets (${reserves.length})`)}
-              </p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500">{L(`Mercados (${reserves.length})`, `Markets (${reserves.length})`)}</p>
               <p className="text-[10px] text-stone-400">{L("Toque para escolher", "Tap to choose")}</p>
             </div>
             <div className="space-y-2">
@@ -2426,12 +2339,7 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
                 const sel = r.assetId === selectedAssetId;
                 const mySupply = supplyFor(r.assetId);
                 return (
-                  <button
-                    key={r.assetId}
-                    type="button"
-                    onClick={() => { setSelectedAssetId(r.assetId); resetBuild(); }}
-                    className={selectCard(sel)}
-                  >
+                  <button key={r.assetId} type="button" onClick={() => { setSelectedAssetId(r.assetId); setResult(null); setErrSubmit(null); }} className={selectCard(sel)}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-stone-900">{reserveLabel(r)}</span>
@@ -2441,27 +2349,13 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
                     </div>
                     <p className="mt-0.5 font-mono text-[9px] text-stone-400 break-all">{r.assetId}</p>
                     <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
-                      <div className="rounded-lg bg-stone-100 py-1.5">
-                        <p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Empréstimo", "Borrow")}</p>
-                        <p className="text-[11px] font-bold text-stone-900">{r.borrowApy.toFixed(2)}%</p>
-                      </div>
-                      <div className="rounded-lg bg-stone-100 py-1.5">
-                        <p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p>
-                        <p className="text-[11px] font-bold text-stone-900">{r.utilization.toFixed(1)}%</p>
-                      </div>
-                      <div className="rounded-lg bg-stone-100 py-1.5">
-                        <p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p>
-                        <p className="text-[11px] font-bold text-stone-900">{fmtToken(r.supplied)}</p>
-                      </div>
-                      <div className="rounded-lg bg-stone-100 py-1.5">
-                        <p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p>
-                        <p className="text-[11px] font-bold text-stone-900">{fmtToken(r.liabilities)}</p>
-                      </div>
+                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Empréstimo", "Borrow")}</p><p className="text-[11px] font-bold text-stone-900">{r.borrowApy.toFixed(2)}%</p></div>
+                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p><p className="text-[11px] font-bold text-stone-900">{r.utilization.toFixed(1)}%</p></div>
+                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p><p className="text-[11px] font-bold text-stone-900">{fmtToken(r.supplied)}</p></div>
+                      <div className="rounded-lg bg-stone-100 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p><p className="text-[11px] font-bold text-stone-900">{fmtToken(r.liabilities)}</p></div>
                     </div>
                     {mySupply !== null && mySupply > 0 && (
-                      <p className="mt-2 rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
-                        {L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}
-                      </p>
+                      <p className="mt-2 rounded-lg bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">{L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}</p>
                     )}
                   </button>
                 );
@@ -2470,150 +2364,84 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
           </div>
         )}
 
-        {/* Freighter */}
+        {/* Account (custodial Bridge wallet) */}
         <div className="rounded-xl border-2 border-stone-200 bg-stone-50 p-3 mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold text-stone-500 uppercase tracking-wide">{L("Carteira Freighter", "Freighter Wallet")}</p>
-            {walletAddress
-              ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{walletNetwork || L("Conectada", "Connected")}</span>
-              : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">{L("Não conectada", "Not connected")}</span>}
-          </div>
-          {walletAddress ? (
-            <div className="space-y-1">
-              <p className="font-mono text-xs text-stone-500 break-all">{walletAddress}</p>
-              {userSupply !== null && (
-                <p className="text-xs font-bold text-stone-700">
-                  {L("Aplicado: ", "Supplied: ")}
-                  <span className="text-emerald-600">{userSupply.toFixed(4)} {reserveLabel(selectedReserve)}</span>
-                </p>
+          <p className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-2">{L("Sua conta", "Your account")}</p>
+          {wallets.length === 0 ? (
+            <form onSubmit={(e) => { e.preventDefault(); onEmailChange(emailInput); onLoadWallets(emailInput); }} className="flex gap-2">
+              <input type="email" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder={L("seu@email.com", "you@email.com")}
+                className="flex-1 rounded-lg border-2 border-stone-200 bg-white px-3 py-2 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
+              <button type="submit" disabled={!emailInput.trim() || walletsLoading} className={BTN_PRIMARY + " !w-auto px-4"}>
+                {walletsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : L("Buscar", "Find")}
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-2">
+              <select value={walletAddress} onChange={(e) => onSelectWallet(e.target.value)}
+                className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 text-sm font-mono text-stone-900 outline-none focus:border-amber-400">
+                {wallets.map((w) => (
+                  <option key={w.public_key} value={w.public_key}>
+                    {`${w.public_key.slice(0, 6)}…${w.public_key.slice(-6)}`}
+                    {w.is_primary ? ` · ${L("principal", "primary")}` : ""}
+                    {w.usdc_balance !== null ? ` · ${Number(w.usdc_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC` : ""}
+                  </option>
+                ))}
+              </select>
+              {idleUsdc !== null && (
+                <p className="text-xs font-bold text-stone-700">{L("Disponível: ", "Available: ")}<span className="text-emerald-600">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span></p>
               )}
               {loadingPos && <Loader2 className="h-3 w-3 animate-spin text-stone-400" />}
             </div>
-          ) : (
-            <button onClick={connectFreighter} disabled={connecting} className={BTN_SECONDARY + " w-full !py-2 text-xs"}>
-              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
-              {L("Conectar Freighter", "Connect Freighter")}
-            </button>
           )}
-          {errWallet && <p className="mt-2 text-xs text-red-600">{errWallet}</p>}
-        </div>
-
-        {/* Mode toggle */}
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          {(["supply", "withdraw"] as const).map((m) => (
-            <button key={m} onClick={() => { setMode(m); resetBuild(); }} className={pill(mode === m) + " !py-2"}>
-              {m === "supply" ? L("Aplicar", "Supply") : L("Retirar", "Withdraw")}
-            </button>
-          ))}
         </div>
 
         {/* Amount */}
         <div className="mb-3">
           <label className="block mb-1 text-xs font-bold text-stone-500 uppercase tracking-wide">
-            {mode === "supply" ? L("Aplicar em", "Supply to") : L("Retirar de", "Withdraw from")} {reserveLabel(selectedReserve)}
+            {L("Aplicar em", "Supply to")} {reserveLabel(selectedReserve)}
             {selectedReserve?.supplyApy != null && <span className="ml-1 text-emerald-600">· {selectedReserve.supplyApy.toFixed(2)}% APY</span>}
           </label>
           <div className="relative">
-            <input type="number" value={supplyAmount} onChange={(e) => { setSupplyAmount(e.target.value); resetBuild(); }}
+            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setResult(null); setErrSubmit(null); }}
               className="w-full rounded-lg border-2 border-stone-200 bg-white px-3 py-2.5 pr-16 text-sm font-bold text-stone-900 outline-none focus:border-amber-400" />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400">{reserveLabel(selectedReserve)}</span>
           </div>
+          {idleUsdc !== null && (
+            <div className="mt-1 flex gap-1.5">
+              {[25, 50, 100].map((pct) => (
+                <button key={pct} type="button" onClick={() => { setAmount(String((idleUsdc * pct / 100).toFixed(2))); setResult(null); }}
+                  className="rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[10px] font-bold text-stone-600 hover:border-amber-400">{pct === 100 ? L("Tudo", "Max") : `${pct}%`}</button>
+              ))}
+            </div>
+          )}
+          {overBalance && <p className="mt-1 text-[11px] font-semibold text-amber-700">{L("Valor acima do saldo disponível.", "Amount exceeds available balance.")}</p>}
         </div>
 
-        {/* Auto-apply toggle */}
-        <label className="flex items-center gap-3 cursor-pointer mb-4 select-none">
-          <div className={`relative w-10 h-5 rounded-full transition ${autoApply ? "bg-stone-900" : "bg-stone-300"}`}
-            onClick={toggleAutoApply}>
-            <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${autoApply ? "translate-x-5" : ""}`} />
-          </div>
-          <span className="text-xs font-bold text-stone-500">
-            {L("Aplicar automaticamente ao receber USDC", "Auto-apply on USDC deposit")}
-          </span>
-        </label>
-
-        {/* Step 1: Build XDR */}
-        {!walletAddress && (
-          <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-            {L("Conecte a Freighter acima para continuar.", "Connect Freighter above to continue.")}
-          </p>
+        {/* Supply (custodial — one tap, no Freighter) */}
+        <button onClick={supply} disabled={!canSupply} className={BTN_PRIMARY}>
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
+          {submitting ? L("Aplicando…", "Supplying…") : L(`Aplicar ${amount || ""} no Blend`, `Supply ${amount || ""} to Blend`)}
+        </button>
+        {!email && !wallets.length && <p className="mt-2 text-[11px] text-stone-400">{L("Informe seu e-mail acima para carregar sua carteira.", "Enter your email above to load your wallet.")}</p>}
+        {errSubmit && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errSubmit}</div>
         )}
-        {walletAddress && (
-          <button onClick={buildXdr} disabled={loadingXdr || !supplyAmount} className={BTN_PRIMARY + " mb-3"}>
-            {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
-            {L(`1 — Preparar ${mode === "supply" ? "aplicação" : "retirada"}`, `1 — Build ${mode === "supply" ? "supply" : "withdraw"}`)}
-          </button>
-        )}
-        {errXdr && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600 mb-3">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errXdr}
-          </div>
-        )}
-
-        {/* XDR preview */}
-        {xdrResult?.xdr && (
-          <div className="space-y-3 mb-3">
-            <div className="rounded-lg border-2 border-stone-200 bg-stone-50 p-2">
-              <p className="text-[10px] font-bold uppercase text-stone-500 mb-1">{L("Transação pronta", "Transaction ready")} · {xdrResult.network}</p>
-              <p className="max-h-12 overflow-y-auto break-all font-mono text-[9px] text-stone-400">{xdrResult.xdr.slice(0, 120)}…</p>
-            </div>
-
-            {/* Step 2: Sign */}
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={signWithFreighter} disabled={signing} className={BTN_PRIMARY}>
-                {signing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                {L("2 — Assinar", "2 — Sign")}
-              </button>
-              <a href={`https://lab.stellar.org/transaction/sign?xdr=${encodeURIComponent(xdrResult.xdr)}&networkPassphrase=${encodeURIComponent(xdrResult.networkPassphrase || "")}`}
-                target="_blank" rel="noopener noreferrer" className={BTN_SECONDARY}>
-                <ExternalLink className="h-4 w-4" /> Stellar Lab
-              </a>
-            </div>
-            {errSign && <p className="text-xs text-red-600">{errSign}</p>}
-
-            {signedXdr && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                {L(`Assinado por ${shortAddr(walletAddress)}`, `Signed by ${shortAddr(walletAddress)}`)}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Step 3: Submit */}
-        {signedXdr && (
-          <div className="space-y-2">
-            <button onClick={submitTx} disabled={submitting} className={BTN_PRIMARY}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
-              {L("3 — Enviar para Blend", "3 — Submit to Blend")}
-            </button>
-            {errSubmit && <p className="text-xs text-red-400">{errSubmit}</p>}
-            {submitResult && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-stone-500">Status</span>
-                  <span className="font-bold text-emerald-700">{submitResult.successful ? L("✓ Confirmado", "✓ Confirmed") : L("Falhou", "Failed")}</span>
-                </div>
-                {submitResult.hash && (
-                  <>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-stone-500">Hash</span>
-                      <span className="font-mono font-bold text-stone-900">{submitResult.hash.slice(0, 16)}…</span>
-                    </div>
-                    <a href={`https://stellar.expert/explorer/${explorerNet}/tx/${submitResult.hash}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:underline mt-1">
-                      <ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}
-                    </a>
-                  </>
-                )}
-              </div>
+        {result?.success && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1">
+            <div className="flex justify-between text-xs"><span className="text-stone-500">Status</span><span className="font-bold text-emerald-700">{L("✓ Aplicado", "✓ Supplied")}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-stone-500">{L("Valor", "Amount")}</span><span className="font-bold text-stone-900">{result.amount} USDC</span></div>
+            {result.hash && (
+              <>
+                <div className="flex justify-between text-xs"><span className="text-stone-500">Hash</span><span className="font-mono font-bold text-stone-900">{String(result.hash).slice(0, 16)}…</span></div>
+                <a href={`https://stellar.expert/explorer/public/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}</a>
+              </>
             )}
           </div>
         )}
       </div>
 
       <p className="text-center text-xs text-stone-400">
-        {L("Blend v2 — protocolo de empréstimos na Stellar. APY variável baseado na demanda de empréstimos.", "Blend v2 — lending protocol on Stellar. Variable APY based on borrower demand.")}
+        {L("Blend — protocolo de empréstimos na Stellar. Execução custodial pela sua carteira; APY variável conforme a demanda.", "Blend — lending protocol on Stellar. Custodial execution from your wallet; variable APY based on demand.")}
       </p>
     </div>
   );
