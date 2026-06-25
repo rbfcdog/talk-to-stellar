@@ -1099,7 +1099,7 @@ export default function RendimentosClient({
                         key={p.id}
                         type="button"
                         onClick={() => setMainnetProtocol(p.id)}
-                        className={`text-left rounded-xl border p-3 transition-colors ${sel ? "border-tts-deep bg-tts-deep/5 ring-1 ring-tts-deep" : "border-tts-border bg-tts-bg/60 hover:border-tts-deep/40"}`}
+                        className={`text-left rounded-xl border p-3 transition-colors ${sel ? "border-tts-gold bg-tts-gold-bg ring-1 ring-tts-gold" : "border-tts-border bg-tts-surface hover:border-tts-gold/50"}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-bold text-tts-deep">{p.name}</span>
@@ -1195,6 +1195,7 @@ export default function RendimentosClient({
               <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
                 positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
+                mainnetInvested={networkView === "mainnet" ? positions?.total_invested_usdc ?? null : null}
                 onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
               />
             )}
@@ -1276,25 +1277,28 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, onRefresh, sessionLinkContext }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, onRefresh, sessionLinkContext }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
   positionHistories: Record<string, PositionHistoryState>;
-  isTestnet: boolean; onRefresh: () => void; sessionLinkContext: Record<string, string>;
+  isTestnet: boolean; mainnetInvested: number | null; onRefresh: () => void; sessionLinkContext: Record<string, string>;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const rows = options.filter((o) => String(o.vault_address || "").trim()).map((o) => {
     const code = optionCode(o);
     const pos = positionBalances[code];
-    const amt = normalizeDecimal(pos?.amount || "0");
+    // On mainnet the real invested position lives in the Bridge email wallet
+    // (positions endpoint), not the channel wallet — override the USDC row with it.
+    const useMainnet = mainnetInvested !== null && code === "USDC";
+    const amt = useMainnet ? mainnetInvested : normalizeDecimal(pos?.amount || "0");
     return {
       option: o,
       code,
       profile: moneyProfile(code),
       amount: amt,
-      loading: Boolean(!pos || pos.loading),
-      error: String(pos?.error || ""),
-      source: String(pos?.source || ""),
+      loading: useMainnet ? false : Boolean(!pos || pos.loading),
+      error: useMainnet ? "" : String(pos?.error || ""),
+      source: useMainnet ? "bridge_wallet_position" : String(pos?.source || ""),
       rate: optionRatePercent(o),
       history: positionHistories[code] || { loading: false, points: [], error: "" },
     };
