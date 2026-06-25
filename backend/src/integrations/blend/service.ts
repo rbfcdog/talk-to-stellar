@@ -77,6 +77,7 @@ const poolIdCache: Record<string, PoolIdCache> = {};
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface ReserveInfo {
   assetId: string;
+  symbol?: string;       // best-effort human label (USDC / XLM) from known asset hints
   supplyApy: number;
   borrowApy: number;
   // Stringified token amounts — bigint can't be JSON-serialized in API responses.
@@ -113,6 +114,14 @@ function findReserveByHints(reserves: ReserveInfo[], hints: string[]) {
     const r = reserves.find((res) => res.assetId.toUpperCase() === hint.toUpperCase());
     if (r) return r;
   }
+  return undefined;
+}
+
+// Best-effort human label for a reserve's contract assetId.
+function symbolForAssetId(assetId: string): string | undefined {
+  const up = String(assetId || '').toUpperCase();
+  if (USDC_HINTS.some((h) => h.toUpperCase() === up)) return 'USDC';
+  if (XLM_HINTS.some((h) => h.toUpperCase() === up)) return 'XLM';
   return undefined;
 }
 
@@ -223,6 +232,7 @@ export const BlendService = {
     pool.reserves.forEach((reserve, assetId) => {
       reserves.push({
         assetId,
+        symbol: symbolForAssetId(assetId),
         supplyApy: parseFloat((reserve.estSupplyApy * 100).toFixed(2)),
         borrowApy: parseFloat((reserve.estBorrowApy * 100).toFixed(2)),
         supplied: reserve.data.dSupply?.toString() ?? '0',
