@@ -673,6 +673,22 @@ async function ensureWalletGasMainnet(address: string, minXlm = 1): Promise<void
   logger.info(`[bridge] Topped up ${address} with ${minXlm} XLM for Soroban fees`);
 }
 
+// Testnet equivalent: create + fund the wallet's testnet account via friendbot
+// (free) so it can pay Soroban fees. No sponsor key needed on testnet.
+async function ensureWalletGasTestnet(address: string): Promise<void> {
+  const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
+  try {
+    const r = await fetch(`${TESTNET_HORIZON}/accounts/${address}`);
+    if (r.ok) return; // already exists & funded (friendbot accounts hold ~10k XLM)
+  } catch { /* fall through to fund */ }
+  const fb = await fetch(`https://friendbot.stellar.org/?addr=${encodeURIComponent(address)}`);
+  if (!fb.ok) throw new Error("Friendbot could not fund the testnet wallet. Try again shortly.");
+  for (let i = 0; i < 12; i++) {
+    try { const r = await fetch(`${TESTNET_HORIZON}/accounts/${address}`); if (r.ok) { logger.info(`[bridge] Created+funded testnet account ${address} via friendbot`); return; } } catch { /* keep waiting */ }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
 /**
  * Activate an already-generated wallet via sponsored reserves. Brings the
  * account on-ledger (createAccount, balance 0) and/or adds the USDC trustline,
@@ -2943,8 +2959,13 @@ export class BridgeController {
       }
       const keypair = Keypair.fromSecret(secret);
 
-      // Make sure the wallet can pay Soroban fees.
-      await ensureWalletGasMainnet(publicKey, 1);
+      // Network: "mainnet" (default, Path B custodial) or "testnet".
+      const network = (readText(req.body?.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
+      const passphrase = network === "testnet" ? Networks.TESTNET : Networks.PUBLIC;
+
+      // Make sure the wallet can pay Soroban fees on the chosen network.
+      if (network === "testnet") await ensureWalletGasTestnet(publicKey);
+      else await ensureWalletGasMainnet(publicKey, 1);
 
       // Protocol: "defindex" (vault, default) or "blend" (direct lending pool).
       const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase();
@@ -2954,45 +2975,48 @@ export class BridgeController {
       let target = "";
 
       if (protocol === "blend") {
-        // Direct Blend supply on mainnet. Caller may target a specific reserve
-        // via asset_id; otherwise default to the USDC reserve.
-        const pool = await BlendService.getPoolInfo("mainnet");
+        // Direct Blend supply. Caller may target a specific reserve via asset_id;
+        // otherwise default to the USDC reserve.
+        const pool = await BlendService.getPoolInfo(network);
         const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId);
         const assetId = requestedAsset
           ? (pool.reserves?.find((r: any) => r.assetId === requestedAsset)?.assetId || requestedAsset)
           : pool.usdc?.assetId;
-        if (!assetId) throw new Error("Blend USDC reserve not available on mainnet.");
+        if (!assetId) throw new Error(`Blend USDC reserve not available on ${network}.`);
         const amountStroops = String(Math.floor(amountNum * 1e7));
-        const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network: "mainnet" });
+        const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network });
         target = built.poolId;
-        const tx = TransactionBuilder.fromXDR(built.xdr, Networks.PUBLIC);
+        const tx = TransactionBuilder.fromXDR(built.xdr, passphrase);
         tx.sign(keypair);
-        const submit = await BlendService.submitSignedXdr(tx.toXDR(), "mainnet");
+        const submit = await BlendService.submitSignedXdr(tx.toXDR(), network);
         hash = submit.hash;
         result = submit;
-        logger.info(`[bridge] mainnet Blend supply ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
+        logger.info(`[bridge] ${network} Blend supply ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
       } else {
-        // DeFindex vault deposit on mainnet.
-        target = (process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET;
+        // DeFindex vault deposit.
+        target = network === "testnet"
+          ? ((process.env.DEFINDEX_USDC_VAULT_TESTNET || "").trim())
+          : ((process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET);
+        if (!target) throw new Error(`No DeFindex USDC vault configured for ${network}.`);
         const amountUnits = DefindexYieldService.amountToContractUnits(amount, 7);
         const { xdr } = await DefindexYieldService.buildVaultAction({
           action: "deposit",
           vaultAddress: target,
           caller: publicKey,
           amountUnits,
-          network: "mainnet",
+          network,
           invest: true,
         });
-        const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC);
+        const tx = TransactionBuilder.fromXDR(xdr, passphrase);
         tx.sign(keypair);
-        result = await DefindexYieldService.sendSignedTransaction(tx.toXDR(), "mainnet");
+        result = await DefindexYieldService.sendSignedTransaction(tx.toXDR(), network);
         hash = result?.hash || result?.txHash || result?.transactionHash || null;
-        logger.info(`[bridge] mainnet DeFindex deposit ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
+        logger.info(`[bridge] ${network} DeFindex deposit ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
       }
 
       res.status(201).json({
         success: true,
-        network: "mainnet",
+        network,
         protocol,
         vault: target,
         public_key: publicKey,
@@ -3087,6 +3111,42 @@ export class BridgeController {
    * Points are stored by getStellarWalletPositions; returns [] until enough days
    * have accumulated (or the snapshots table has been migrated).
    */
+  /**
+   * GET /api/bridge/stellar-wallets/balance — idle USDC/XLM for a wallet on a
+   * specific network (testnet|mainnet). Lets the yield UI show the right
+   * available balance when the user switches networks.
+   */
+  static async getStellarWalletBalance(req: Request, res: Response): Promise<void> {
+    try {
+      const publicKey = readText(req.query.public_key ?? req.body?.public_key);
+      if (!publicKey) {
+        res.status(400).json({ success: false, message: "public_key is required." });
+        return;
+      }
+      const network = (readText(req.query.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
+      const horizon = network === "testnet" ? "https://horizon-testnet.stellar.org" : "https://horizon.stellar.org";
+      const usdcIssuer = network === "testnet"
+        ? "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+        : "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+
+      let usdc = "0", xlm = "0", exists = false;
+      try {
+        const r = await fetch(`${horizon}/accounts/${publicKey}`);
+        if (r.ok) {
+          exists = true;
+          const acct: any = await r.json();
+          const balances: any[] = Array.isArray(acct.balances) ? acct.balances : [];
+          usdc = balances.find((b) => b.asset_type === "credit_alphanum4" && b.asset_code === "USDC" && b.asset_issuer === usdcIssuer)?.balance ?? "0";
+          xlm = balances.find((b) => b.asset_type === "native")?.balance ?? "0";
+        }
+      } catch { /* treat as not found */ }
+
+      res.json({ success: true, public_key: publicKey, network, exists, usdc, xlm });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to load balance." });
+    }
+  }
+
   static async getStellarWalletPositionHistory(req: Request, res: Response): Promise<void> {
     try {
       const email = await BridgeController.resolveBridgeEmail(req);

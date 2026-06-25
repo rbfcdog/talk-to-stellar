@@ -2214,7 +2214,10 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
-  // Mainnet Blend pool — markets the custodial Bridge wallet can supply to.
+  // Network: custodial supply runs on mainnet (Path B) or testnet (friendbot-funded).
+  const [network, setNetwork] = useState<"mainnet" | "testnet">("mainnet");
+
+  // Blend pool — markets the custodial Bridge wallet can supply to.
   const [poolInfo, setPoolInfo] = useState<any>(null);
   const [loadingPool, setLoadingPool] = useState(false);
   const [errPool, setErrPool] = useState<string | null>(null);
@@ -2230,12 +2233,14 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   const [position, setPosition] = useState<any>(null);
   const [loadingPos, setLoadingPos] = useState(false);
 
+  // Idle balance for the selected wallet on the selected network.
+  const [netBalance, setNetBalance] = useState<{ usdc: number; exists: boolean } | null>(null);
+
   const [emailInput, setEmailInput] = useState(email || "");
   useEffect(() => { if (email) setEmailInput(email); }, [email]);
 
   const walletAddress = defaultWallet;
-  const selectedWallet = wallets.find((w) => w.public_key === walletAddress) || null;
-  const idleUsdc = selectedWallet ? Number(selectedWallet.usdc_balance) : null;
+  const idleUsdc = netBalance ? netBalance.usdc : null;
 
   function reserveLabel(r: any): string {
     if (r?.symbol) return String(r.symbol);
@@ -2250,9 +2255,9 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
     return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
   async function loadPool() {
-    setLoadingPool(true); setErrPool(null);
+    setLoadingPool(true); setErrPool(null); setPoolInfo(null); setSelectedAssetId("");
     try {
-      const res = await fetch("/api/blend/pool/info?network=mainnet", { cache: "no-store" });
+      const res = await fetch(`/api/blend/pool/info?network=${network}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
       setPoolInfo(data);
@@ -2260,19 +2265,30 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
     } catch (e: any) { setErrPool(e.message); }
     finally { setLoadingPool(false); }
   }
-  useEffect(() => { loadPool(); }, []);
+  useEffect(() => { loadPool(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [network]);
 
   async function loadPosition() {
     if (!walletAddress) { setPosition(null); return; }
     setLoadingPos(true);
     try {
-      const res = await fetch(`/api/blend/pool/position?address=${walletAddress}&network=mainnet`, { cache: "no-store" });
+      const res = await fetch(`/api/blend/pool/position?address=${walletAddress}&network=${network}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
       if (res.ok && !data.error) setPosition(data);
     } catch { /* silent */ }
     finally { setLoadingPos(false); }
   }
-  useEffect(() => { loadPosition(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [walletAddress]);
+
+  // Idle USDC for the selected wallet on the selected network.
+  async function loadBalance() {
+    if (!walletAddress) { setNetBalance(null); return; }
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets/balance?public_key=${walletAddress}&network=${network}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (data?.success) setNetBalance({ usdc: Number(data.usdc) || 0, exists: Boolean(data.exists) });
+    } catch { /* non-critical */ }
+  }
+  useEffect(() => { loadBalance(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [walletAddress, network]);
+  useEffect(() => { loadPosition(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [walletAddress, network]);
 
   async function supply() {
     if (!email || !walletAddress) return;
@@ -2282,12 +2298,12 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
       const res = await fetch("/api/bridge/stellar-wallets/invest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: walletAddress, amount: String(amount), protocol: "blend", asset_id: assetId }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: walletAddress, amount: String(amount), protocol: "blend", asset_id: assetId, network }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.message || data.error || `HTTP ${res.status}`);
       setResult(data);
-      loadPosition();
+      loadPosition(); loadBalance();
     } catch (e: any) { setErrSubmit(e.message); }
     finally { setSubmitting(false); }
   }
@@ -2316,8 +2332,17 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
             ) : loadingPool ? <Loader2 className="h-4 w-4 animate-spin text-stone-400" /> : (
               <button onClick={loadPool} className="text-xs font-bold text-amber-700 hover:underline">{L("Ver APY", "View APY")}</button>
             )}
-            <span className="rounded-full bg-stone-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Mainnet</span>
           </div>
+        </div>
+
+        {/* Network toggle */}
+        <div className="mb-4 inline-flex rounded-lg border-2 border-stone-200 bg-stone-50 p-0.5">
+          {(["mainnet", "testnet"] as const).map((n) => (
+            <button key={n} type="button" onClick={() => { setNetwork(n); setResult(null); setErrSubmit(null); }}
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${network === n ? "bg-stone-900 text-white shadow-sm" : "text-stone-500 hover:text-stone-900"}`}>
+              {n === "mainnet" ? L("Rede principal", "Mainnet") : "Testnet"}
+            </button>
+          ))}
         </div>
 
         {loadingPool && !poolInfo && (
@@ -2388,7 +2413,16 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
                 ))}
               </select>
               {idleUsdc !== null && (
-                <p className="text-xs font-bold text-stone-700">{L("Disponível: ", "Available: ")}<span className="text-emerald-600">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span></p>
+                <p className="text-xs font-bold text-stone-700">
+                  {L("Disponível: ", "Available: ")}<span className="text-emerald-600">{idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC</span>
+                  <span className="ml-1 text-[10px] font-bold uppercase text-stone-400">{network === "testnet" ? "testnet" : "mainnet"}</span>
+                </p>
+              )}
+              {network === "testnet" && netBalance && !netBalance.exists && (
+                <p className="text-[11px] text-stone-400">{L("Conta ainda não existe na testnet — será criada (friendbot) ao aplicar.", "Account not on testnet yet — it'll be created (friendbot) on first supply.")}</p>
+              )}
+              {network === "testnet" && netBalance?.exists && idleUsdc === 0 && (
+                <p className="text-[11px] text-amber-700">{L("Sem USDC de testnet nesta carteira. Adicione USDC de teste para aplicar.", "No testnet USDC in this wallet. Add test USDC to supply.")}</p>
               )}
               {loadingPos && <Loader2 className="h-3 w-3 animate-spin text-stone-400" />}
             </div>
@@ -2433,7 +2467,7 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
             {result.hash && (
               <>
                 <div className="flex justify-between text-xs"><span className="text-stone-500">Hash</span><span className="font-mono font-bold text-stone-900">{String(result.hash).slice(0, 16)}…</span></div>
-                <a href={`https://stellar.expert/explorer/public/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}</a>
+                <a href={`https://stellar.expert/explorer/${network === "testnet" ? "testnet" : "public"}/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}</a>
               </>
             )}
           </div>
