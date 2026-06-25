@@ -2191,6 +2191,23 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
   const [poolInfo, setPoolInfo] = useState<any>(null);
   const [loadingPool, setLoadingPool] = useState(false);
   const [errPool, setErrPool] = useState<string | null>(null);
+  // Which reserve the user is supplying/withdrawing (assetId). Defaults to USDC.
+  const [selectedAssetId, setSelectedAssetId] = useState<string>("");
+
+  // Human label for a reserve: backend symbol → known hint → short contract id.
+  function reserveLabel(r: any): string {
+    if (r?.symbol) return String(r.symbol);
+    const id = String(r?.assetId || "");
+    return id ? `${id.slice(0, 4)}…${id.slice(-4)}` : "—";
+  }
+  // Blend token amounts are 7-decimal raw units; show a compact figure.
+  function fmtToken(raw: unknown): string {
+    const n = Number(raw) / 1e7;
+    if (!Number.isFinite(n)) return "0";
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
 
   // Freighter wallet
   const [walletAddress, setWalletAddress] = useState("");
@@ -2244,6 +2261,8 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
       setPoolInfo(data);
+      // Default the supply target to USDC (or the first reserve) once we have one.
+      setSelectedAssetId((prev) => prev || data?.usdc?.assetId || data?.reserves?.[0]?.assetId || "");
     } catch (e: any) {
       setErrPool(e.message);
     } finally { setLoadingPool(false); }
@@ -2284,7 +2303,8 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
 
   // ── Build XDR ─────────────────────────────────────────────────────────
   async function buildXdr() {
-    if (!walletAddress || !poolInfo?.usdc?.assetId) return;
+    const assetId = selectedAssetId || poolInfo?.usdc?.assetId;
+    if (!walletAddress || !assetId) return;
     resetBuild(); setLoadingXdr(true); setErrXdr(null);
     try {
       const amountStroops = Math.round(parseFloat(supplyAmount) * 1e7).toString();
@@ -2295,7 +2315,7 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_address: walletAddress,
-          asset_id: poolInfo.usdc.assetId,
+          asset_id: assetId,
           amount: amountStroops,
           network,
         }),
@@ -2341,7 +2361,10 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
   }
 
   const usdcApy = poolInfo?.usdc?.supplyApy ?? null;
-  const userSupply = position?.positions?.find((p: any) => p.assetId === poolInfo?.usdc?.assetId)?.supply ?? null;
+  const reserves: any[] = Array.isArray(poolInfo?.reserves) ? poolInfo.reserves : [];
+  const selectedReserve = reserves.find((r) => r.assetId === selectedAssetId) || poolInfo?.usdc || null;
+  const supplyFor = (assetId: string) => position?.positions?.find((p: any) => p.assetId === assetId)?.supply ?? null;
+  const userSupply = supplyFor(selectedReserve?.assetId);
   const explorerNet = (walletNetwork || "PUBLIC").includes("TEST") ? "testnet" : "public";
 
   return (
@@ -2375,16 +2398,61 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
           </div>
         )}
 
-        {/* Reserves summary */}
-        {poolInfo?.reserves && poolInfo.reserves.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {poolInfo.reserves.slice(0, 4).map((r: any) => (
-              <div key={r.assetId} className="rounded border border-tts-border bg-tts-bg p-2">
-                <p className="text-[10px] font-bold uppercase text-tts-muted mb-0.5">{r.assetId.slice(0, 8)}…</p>
-                <p className="text-sm font-bold text-tts-confirm">{r.supplyApy.toFixed(2)}% <span className="text-tts-muted font-normal text-[10px]">APY</span></p>
-                <p className="text-[10px] text-tts-muted">{L(`Util. ${r.utilization.toFixed(1)}%`, `Util. ${r.utilization.toFixed(1)}%`)}</p>
-              </div>
-            ))}
+        {/* Reserves — full list, each selectable as the supply/withdraw target */}
+        {reserves.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">
+                {L(`Mercados (${reserves.length})`, `Markets (${reserves.length})`)}
+              </p>
+              <p className="text-[10px] text-tts-muted">{L("Toque para escolher onde aplicar", "Tap to choose where to supply")}</p>
+            </div>
+            <div className="space-y-2">
+              {reserves.map((r: any) => {
+                const sel = r.assetId === selectedAssetId;
+                const mySupply = supplyFor(r.assetId);
+                return (
+                  <button
+                    key={r.assetId}
+                    type="button"
+                    onClick={() => { setSelectedAssetId(r.assetId); resetBuild(); }}
+                    className={`w-full text-left rounded-xl border-2 p-3 transition-colors text-tts-deep ${sel ? "border-tts-gold bg-tts-gold-bg ring-2 ring-tts-gold" : "border-tts-border2 bg-tts-bg hover:border-tts-gold"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-tts-deep">{reserveLabel(r)}</span>
+                        {sel && <span className="rounded bg-tts-gold/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tts-gold">{L("selecionado", "selected")}</span>}
+                      </div>
+                      <span className="text-base font-black text-tts-confirm">{r.supplyApy.toFixed(2)}%<span className="ml-1 text-[9px] font-bold text-tts-muted">{L("ganho", "earn")}</span></span>
+                    </div>
+                    <p className="mt-0.5 font-mono text-[9px] text-tts-muted break-all">{r.assetId}</p>
+                    <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
+                      <div className="rounded bg-tts-surface/70 py-1">
+                        <p className="text-[8px] font-bold uppercase tracking-wide text-tts-muted">{L("Empréstimo", "Borrow")}</p>
+                        <p className="text-[11px] font-bold text-tts-deep">{r.borrowApy.toFixed(2)}%</p>
+                      </div>
+                      <div className="rounded bg-tts-surface/70 py-1">
+                        <p className="text-[8px] font-bold uppercase tracking-wide text-tts-muted">{L("Uso", "Util.")}</p>
+                        <p className="text-[11px] font-bold text-tts-deep">{r.utilization.toFixed(1)}%</p>
+                      </div>
+                      <div className="rounded bg-tts-surface/70 py-1">
+                        <p className="text-[8px] font-bold uppercase tracking-wide text-tts-muted">{L("Ofertado", "Supplied")}</p>
+                        <p className="text-[11px] font-bold text-tts-deep">{fmtToken(r.supplied)}</p>
+                      </div>
+                      <div className="rounded bg-tts-surface/70 py-1">
+                        <p className="text-[8px] font-bold uppercase tracking-wide text-tts-muted">{L("Tomado", "Borrowed")}</p>
+                        <p className="text-[11px] font-bold text-tts-deep">{fmtToken(r.liabilities)}</p>
+                      </div>
+                    </div>
+                    {mySupply !== null && mySupply > 0 && (
+                      <p className="mt-2 text-[10px] font-bold text-tts-confirm">
+                        {L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -2402,7 +2470,7 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
               {userSupply !== null && (
                 <p className="text-xs font-bold">
                   {L("Aplicado: ", "Supplied: ")}
-                  <span className="text-tts-confirm">{userSupply.toFixed(4)} USDC</span>
+                  <span className="text-tts-confirm">{userSupply.toFixed(4)} {reserveLabel(selectedReserve)}</span>
                 </p>
               )}
               {loadingPos && <Loader2 className="h-3 w-3 animate-spin text-tts-muted" />}
@@ -2429,9 +2497,15 @@ function BlendInlinePanel({ language }: { language: AppLanguage }) {
 
         {/* Amount */}
         <div className="mb-3">
-          <label className="block mb-1 text-xs font-bold text-tts-muted uppercase">{L("Valor USDC", "USDC Amount")}</label>
-          <input type="number" value={supplyAmount} onChange={(e) => { setSupplyAmount(e.target.value); resetBuild(); }}
-            className="w-full border border-tts-border bg-tts-bg px-3 py-2 text-sm font-bold outline-none focus:border-tts-deep" />
+          <label className="block mb-1 text-xs font-bold text-tts-muted uppercase">
+            {mode === "supply" ? L("Aplicar em", "Supply to") : L("Retirar de", "Withdraw from")} {reserveLabel(selectedReserve)}
+            {selectedReserve?.supplyApy != null && <span className="ml-1 text-tts-confirm">· {selectedReserve.supplyApy.toFixed(2)}% APY</span>}
+          </label>
+          <div className="relative">
+            <input type="number" value={supplyAmount} onChange={(e) => { setSupplyAmount(e.target.value); resetBuild(); }}
+              className="w-full border border-tts-border bg-tts-bg px-3 py-2 pr-16 text-sm font-bold outline-none focus:border-tts-deep" />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-tts-muted">{reserveLabel(selectedReserve)}</span>
+          </div>
         </div>
 
         {/* Auto-apply toggle */}
