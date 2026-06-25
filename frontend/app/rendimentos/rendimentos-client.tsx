@@ -101,10 +101,17 @@ function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   if (!Number.isFinite(p)) return String(value || "0");
   return formatCustomerNumber(p, isPortuguese(language) ? "pt-BR" : "en-US");
 }
+// Full-precision formatter — keeps every cent/decimal (up to 7) instead of
+// rounding to 2, so accrued yield like 3.0004691 is visible.
+function formatPrecise(value: unknown, language: AppLanguage = "pt-BR") {
+  const p = Number(String(value ?? "0").replace(",", "."));
+  if (!Number.isFinite(p)) return "0";
+  return p.toLocaleString(isPortuguese(language) ? "pt-BR" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 });
+}
 function formatPositionAmount(value: unknown, profile: { short: string }, language: AppLanguage = "pt-BR") {
   const amount = normalizeDecimal(value);
   if (amount <= 0) return `0 ${profile.short}`;
-  return `${formatAmount(amount, language)} ${profile.short}`;
+  return `${formatPrecise(amount, language)} ${profile.short}`;
 }
 function optionExecutionBlocked(option: YieldOption | null | undefined) { return Boolean(option && (option.execution_available === false || option.execution_blocked_code)); }
 function normalizeDecimal(value: unknown) {
@@ -204,7 +211,7 @@ function formatChartDate(value: unknown, language: AppLanguage) {
 }
 
 function formatChartAmount(value: unknown, profile: { short: string }, language: AppLanguage) {
-  return `${formatAmount(value, language)} ${profile.short}`;
+  return `${formatPrecise(value, language)} ${profile.short}`;
 }
 
 function shiftDate(daysAgo: number) {
@@ -1066,7 +1073,7 @@ export default function RendimentosClient({
                 <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Na carteira", "In wallet")}</p>
                 <div className="flex items-baseline gap-1.5 mt-0.5">
                   <span className="text-2xl font-bold tabular-nums text-tts-deep">
-                    {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                    {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 }) : "—"}
                   </span>
                   <span className="text-xs font-bold text-tts-muted">USDC</span>
                 </div>
@@ -1075,7 +1082,7 @@ export default function RendimentosClient({
                 <p className="text-[10px] font-bold uppercase tracking-widest text-tts-confirm">{L("Investido", "Invested")}</p>
                 <div className="flex items-baseline gap-1.5 mt-0.5">
                   <span className="text-2xl font-bold tabular-nums text-tts-confirm">
-                    {positions ? positions.total_invested_usdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                    {positions ? positions.total_invested_usdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 }) : "—"}
                   </span>
                   <span className="text-xs font-bold text-tts-muted">USDC</span>
                 </div>
@@ -1099,7 +1106,7 @@ export default function RendimentosClient({
                         key={p.id}
                         type="button"
                         onClick={() => setMainnetProtocol(p.id)}
-                        className={`text-left rounded-xl border p-3 transition-colors ${sel ? "border-tts-gold bg-tts-gold-bg ring-1 ring-tts-gold" : "border-tts-border bg-tts-surface hover:border-tts-gold/50"}`}
+                        className={`text-left rounded-xl border-2 p-3 transition-colors text-tts-deep ${sel ? "border-tts-gold bg-tts-gold-bg ring-2 ring-tts-gold" : "border-tts-border2 bg-tts-bg hover:border-tts-gold"}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-bold text-tts-deep">{p.name}</span>
@@ -1107,9 +1114,9 @@ export default function RendimentosClient({
                         </div>
                         <p className="text-[10px] text-tts-muted mt-0.5">{p.desc}</p>
                         <div className="mt-1.5 flex items-center justify-between">
-                          <span className="text-[9px] font-bold uppercase tracking-wide text-tts-muted/60">APY</span>
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-tts-muted">APY</span>
                           {p.pos !== null && p.pos > 0 && (
-                            <span className="text-[10px] font-bold text-tts-deep">{p.pos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {L("investido", "invested")}</span>
+                            <span className="text-[10px] font-bold text-tts-deep">{p.pos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} {L("investido", "invested")}</span>
                           )}
                         </div>
                       </button>
