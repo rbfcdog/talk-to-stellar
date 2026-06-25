@@ -19,6 +19,7 @@ router.post("/stellar-wallets/activate", BridgeController.activateStellarWallet)
 router.post("/stellar-wallets/invest", BridgeController.investStellarWallet);
 router.get("/stellar-wallets/positions", BridgeController.getStellarWalletPositions);
 router.get("/stellar-wallets/position-history", BridgeController.getStellarWalletPositionHistory);
+router.get("/stellar-wallets/balance", BridgeController.getStellarWalletBalance);
 router.get("/sponsor/status", BridgeController.getSponsorStatus);
 
 // ── Customers ───────────────────────────────────────────
