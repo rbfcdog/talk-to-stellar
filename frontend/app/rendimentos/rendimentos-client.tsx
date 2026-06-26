@@ -232,56 +232,70 @@ function formatChartAmount(value: unknown, profile: { short: string }, language:
   return `${formatPrecise(value, language)} ${profile.short}`;
 }
 
-function shiftDate(daysAgo: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  return date.toISOString();
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+
+// Timestamp label including the hour, so the 4-hour cadence reads clearly in the
+// tooltip (the X axis itself is hidden).
+function formatChartStamp(value: unknown, language: AppLanguage) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return localCopy(language, "Agora", "Now");
+  return new Intl.DateTimeFormat(isPortuguese(language) ? "pt-BR" : "en-US", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
-function buildGrowthPathPoints(amount: number, ratePercent: number, language: AppLanguage, days: number): ChartPoint[] {
-  const base = Math.max(0, amount);
-  const annualRate = Math.max(0, ratePercent) / 100;
-  const offsets = days <= 7 ? [0, 1, 2, 4, 7] : [0, 7, 14, 21, 30];
-  const labels = offsets.map((offset) => ({
-    days: offset,
-    label: offset === 0 ? localCopy(language, "Hoje", "Today") : `${offset}d`,
-  }));
-  return labels.map((item) => ({
-    label: item.label,
-    value: annualRate > 0 ? base * Math.pow(1 + annualRate, item.days / 365) : base,
-  }));
+// Percentage change across the plotted balance line (last vs first non-zero value).
+function seriesChangePercent(points: ChartPoint[]): number {
+  const first = points.find((point) => point.value > 0)?.value ?? points[0]?.value ?? 0;
+  const last = points[points.length - 1]?.value ?? 0;
+  if (!first) return 0;
+  return ((last - first) / first) * 100;
 }
 
+// Plot the real balance on a 4-hour grid across the window. Snapshots are
+// forward-filled (the balance holds until the next movement), so the line gets a
+// point every 4h regardless of how sparse the underlying history is.
 function buildPositionLinePoints(history: PositionHistoryState | undefined, currentAmount: number, language: AppLanguage, days: number): ChartPoint[] {
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const start = now - days * 24 * 60 * 60 * 1000;
+
   const sorted = [...(history?.points || [])]
     .filter((point) => Number.isFinite(Date.parse(String(point.date || ""))))
     .sort((a, b) => Date.parse(String(a.date || "")) - Date.parse(String(b.date || "")));
-  const previousPoint = [...sorted].reverse().find((point) => Date.parse(String(point.date || "")) < cutoff);
-  const scoped = sorted.filter((point) => Date.parse(String(point.date || "")) >= cutoff);
-  const displayPoints = scoped.length && previousPoint ? [previousPoint, ...scoped] : scoped;
 
-  const points: ChartPoint[] = displayPoints.map((point) => ({
-    label: formatChartDate(point.date, language),
-    date: point.date,
-    value: normalizeDecimal(point.amount),
-    action: point.action,
-  }));
+  // Seed the forward-fill with the latest balance known at or before the window.
+  let lastKnown = currentAmount;
+  const beforeStart = [...sorted].reverse().find((point) => Date.parse(String(point.date || "")) <= start);
+  if (beforeStart) lastKnown = normalizeDecimal(beforeStart.amount);
+  else if (sorted.length) lastKnown = normalizeDecimal(sorted[0].amount);
 
-  if (points.length) {
-    const last = points[points.length - 1];
-    if (Math.abs(last.value - currentAmount) > 0.0000001) {
-      points.push({ label: localCopy(language, "Agora", "Now"), date: new Date().toISOString(), value: Math.max(0, currentAmount) });
+  let idx = 0;
+  const points: ChartPoint[] = [];
+  for (let t = start; t <= now; t += FOUR_HOURS_MS) {
+    while (idx < sorted.length && Date.parse(String(sorted[idx].date || "")) <= t) {
+      lastKnown = normalizeDecimal(sorted[idx].amount);
+      idx += 1;
     }
-    return points;
+    const iso = new Date(t).toISOString();
+    points.push({ label: formatChartStamp(iso, language), date: iso, value: Math.max(0, lastKnown) });
   }
 
-  const fallbackDays = days <= 7 ? [7, 4, 2, 0] : [30, 21, 14, 7, 0];
-  return fallbackDays.map((daysAgo) => ({
-    label: daysAgo === 0 ? localCopy(language, "Hoje", "Today") : formatChartDate(shiftDate(daysAgo), language),
-    date: shiftDate(daysAgo),
-    value: Math.max(0, currentAmount),
-  }));
+  // The final slot reflects the live balance "now".
+  while (idx < sorted.length) {
+    lastKnown = normalizeDecimal(sorted[idx].amount);
+    idx += 1;
+  }
+  const liveValue = Math.max(0, currentAmount || lastKnown);
+  const nowIso = new Date(now).toISOString();
+  if (points.length) {
+    points[points.length - 1] = { label: localCopy(language, "Agora", "Now"), date: nowIso, value: liveValue };
+  } else {
+    points.push({ label: localCopy(language, "Agora", "Now"), date: nowIso, value: liveValue });
+  }
+  return points;
 }
 
 function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
@@ -331,10 +345,8 @@ function InvestmentGraphs({ language, row }: { language: AppLanguage; row: Inves
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const [chartWindow, setChartWindow] = useState<ChartWindow>("weekly");
   const activeWindow = CHART_WINDOWS.find((item) => item.key === chartWindow) || CHART_WINDOWS[0];
-  const growthPoints = buildGrowthPathPoints(row.amount, row.rate, language, activeWindow.days);
   const historyPoints = buildPositionLinePoints(row.history, row.amount, language, activeWindow.days);
-  const growthValue = growthPoints[growthPoints.length - 1]?.value || row.amount;
-  const hasMovements = Boolean(row.history.points.length);
+  const changePct = seriesChangePercent(historyPoints);
 
   return (
     <div className="space-y-3">
@@ -366,32 +378,17 @@ function InvestmentGraphs({ language, row }: { language: AppLanguage; row: Inves
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Caminho estimado", "Growth path")}</p>
-              <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(growthValue, row.profile, language)}</p>
-            </div>
-            <span className="text-xs font-black text-tts-confirm">
-              {formatReturnPercent(periodReturnPercent(row.rate, activeWindow.days / 365), language)}
-            </span>
+      <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha de saldo", "Balance line")}</p>
+            <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
           </div>
-          <InvestmentLineChart data={growthPoints} profile={row.profile} language={language} tone="muted" />
+          <span className={["text-xs font-black", changePct >= 0 ? "text-tts-confirm" : "text-tts-error"].join(" ")}>
+            {row.history.loading ? L("Carregando", "Loading") : formatSignedPercent(changePct, language)}
+          </span>
         </div>
-
-        <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha real", "Real balance line")}</p>
-              <p className="mt-1 text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
-            </div>
-            <span className="text-[11px] font-bold text-tts-muted">
-              {row.history.loading ? L("Carregando", "Loading") : hasMovements ? L("Movimentos", "Movements") : L("Atual", "Current")}
-            </span>
-          </div>
-          <InvestmentLineChart data={historyPoints} profile={row.profile} language={language} />
-        </div>
+        <InvestmentLineChart data={historyPoints} profile={row.profile} language={language} />
       </div>
     </div>
   );
@@ -541,7 +538,7 @@ export default function RendimentosClient({
   }, [initialView]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
   // Inline gate for the mainnet bridge wallet part (testnet/returns stay open).
-  const { unlocked: bridgeUnlocked, unlock: unlockBridge } = useBridgeAccess();
+  const { unlocked: bridgeUnlocked, unlock: unlockBridge, relock: relockBridge } = useBridgeAccess();
   // Nubank-grade default: keep the screen calm. Power features (per-asset
   // lending, liquidity) live behind one disclosure.
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -761,6 +758,14 @@ export default function RendimentosClient({
     try {
       const res = await fetch(`/api/bridge/stellar-wallets?email=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
+      // A 401 means the access password is missing/expired — re-prompt instead of
+      // mislabeling it "no wallets found" (the 401 body has no wallets array).
+      if (res.status === 401 || json?.code === "bridge_auth_required") {
+        relockBridge();
+        setEmailWallets([]);
+        setEmailWalletsError(L("Sessão expirada. Digite a senha de acesso novamente.", "Session expired. Enter the access password again."));
+        return;
+      }
       const wallets: EmailWallet[] = Array.isArray(json?.wallets) ? json.wallets : [];
       setEmailWallets(wallets);
       setSelectedWalletKey((cur) => {
@@ -1202,7 +1207,7 @@ export default function RendimentosClient({
         {networkView === "mainnet" && returnsPinVerified && !bridgeUnlocked && (
           <BridgeAccessField
             className="mb-5"
-            onUnlock={unlockBridge}
+            onUnlock={() => { unlockBridge(); if (walletEmail.trim()) loadEmailWallets(walletEmail); }}
             title={L("Carteira em dólar — restrita", "USD wallet — restricted")}
             description={L("Senha de acesso necessária para gerenciar esta carteira.", "Access password required to manage this wallet.")}
           />
