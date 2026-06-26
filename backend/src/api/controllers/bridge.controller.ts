@@ -793,6 +793,25 @@ async function sweepXlmToUsdc(keypair: Keypair, publicKey: string, xlmToSwap: nu
   }
 }
 
+// Swap an exact USDC amount into XLM via Soroswap (signed with the wallet's key).
+async function swapUsdcToXlm(keypair: Keypair, publicKey: string, usdcToSwap: number): Promise<{ ok: boolean; hash?: string; note?: string }> {
+  if (usdcToSwap <= 0) return { ok: false, note: "no USDC to swap" };
+  try {
+    const quote = await SoroswapService.getQuote({ assetIn: "USDC", assetOut: "XLM", amount: usdcToSwap.toFixed(7), tradeType: "EXACT_IN" } as any);
+    const built = await SoroswapService.buildSwapXdr({ quote, senderAddress: publicKey } as any);
+    const tx = TransactionBuilder.fromXDR(built.xdr, built.networkPassphrase);
+    tx.sign(keypair);
+    const sent = await SoroswapService.sendSignedXdr(tx.toXDR());
+    return { ok: true, hash: (sent as any)?.hash };
+  } catch (e: any) {
+    return { ok: false, note: e?.message || String(e) };
+  }
+}
+
+// Mainnet SAC contract addresses for the only on-chain pool we provide into.
+const SAC_USDC_MAINNET = "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75";
+const SAC_XLM_MAINNET = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA";
+
 /**
  * Activate an already-generated wallet via sponsored reserves. Brings the
  * account on-ledger (createAccount, balance 0) and/or adds the USDC trustline,
@@ -3306,6 +3325,90 @@ export class BridgeController {
     } catch (error: any) {
       const msg = error?.response?.data?.error || error?.message || "Failed to invest on mainnet.";
       logger.error(`[bridge] investStellarWallet failed: ${msg}`);
+      res.status(statusFromError(error)).json({ success: false, message: msg });
+    }
+  }
+
+  /**
+   * POST /api/bridge/stellar-wallets/add-liquidity — provide liquidity into the
+   * XLM/USDC Soroswap pool from a Bridge-linked Stellar wallet. The user deploys
+   * a single USDC amount; we "zap" it: keep half as USDC, swap the other half to
+   * XLM, then add balanced liquidity. Signed with the wallet's vaulted key.
+   * Body: { email?, public_key, amount (USDC) }. Mainnet only (the only live pool).
+   */
+  static async addLiquidityWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.body?.public_key ?? req.body?.publicKey);
+      const amount = readText(req.body?.amount);
+      const amountNum = Number(amount);
+
+      if (!publicKey) {
+        res.status(400).json({ success: false, message: "public_key is required." });
+        return;
+      }
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        res.status(400).json({ success: false, message: "A positive USDC amount is required." });
+        return;
+      }
+
+      const keypair = await resolveWalletKeypair(email, publicKey);
+      if (!keypair) {
+        res.status(404).json({ success: false, message: "Wallet not found for this account." });
+        return;
+      }
+
+      // Make sure the wallet can pay Soroban fees, then confirm it holds the USDC.
+      await ensureWalletGasMainnet(publicKey, 1);
+      const before = await readWalletBalances(publicKey, "mainnet");
+      if (before.usdc + 1e-7 < amountNum) {
+        res.status(400).json({ success: false, message: `Insufficient USDC. Wallet holds ${before.usdc.toFixed(2)}, needs ${amountNum.toFixed(2)}.` });
+        return;
+      }
+
+      // Zap: swap half the deposit into XLM so both legs are funded.
+      const half = amountNum / 2;
+      const swap = await swapUsdcToXlm(keypair, publicKey, half);
+      if (!swap.ok) {
+        res.status(502).json({ success: false, message: `Could not swap USDC→XLM to balance the pair: ${swap.note || "swap failed"}.` });
+        return;
+      }
+      // Measure the XLM actually gained so we add only what the swap produced.
+      const after = await readWalletBalances(publicKey, "mainnet");
+      const xlmGained = Math.max(0, after.xlm - before.xlm);
+      const usdcLeg = Math.min(half, after.usdc);
+      if (xlmGained <= 0 || usdcLeg <= 0) {
+        res.status(502).json({ success: false, message: "Swap settled but balanced amounts are unavailable; try again in a moment.", swap_hash: swap.hash ?? null });
+        return;
+      }
+
+      const toStroops = (n: number) => String(Math.floor(n * 1e7));
+      const built = await SoroswapService.buildAddLiquidityXdr({
+        tokenA: SAC_USDC_MAINNET,
+        tokenB: SAC_XLM_MAINNET,
+        amountADesired: toStroops(usdcLeg),
+        amountBDesired: toStroops(xlmGained),
+        senderAddress: publicKey,
+      });
+      const tx = TransactionBuilder.fromXDR(built.xdr, MAINNET_PASSPHRASE);
+      tx.sign(keypair);
+      const sent = await SoroswapService.sendSignedXdr(tx.toXDR());
+      const hash = (sent as any)?.hash ?? null;
+      logger.info(`[bridge] add-liquidity XLM/USDC from ${publicKey}: usdc=${usdcLeg} xlm=${xlmGained} pool=${built.pool} hash=${hash}`);
+
+      res.status(201).json({
+        success: true,
+        pool: built.pool ?? null,
+        public_key: publicKey,
+        usdc_added: usdcLeg,
+        xlm_added: xlmGained,
+        swap_hash: swap.hash ?? null,
+        hash,
+        result: sent,
+      });
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.message || "Failed to add liquidity.";
+      logger.error(`[bridge] addLiquidityWallet failed: ${msg}`);
       res.status(statusFromError(error)).json({ success: false, message: msg });
     }
   }

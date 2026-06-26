@@ -1186,7 +1186,7 @@ export default function RendimentosClient({
                       eyebrow={L("Ganhe com taxas", "Earn on fees")}
                       title={L("Liquidez", "Liquidity")}
                     />
-                    <SwapInlinePanel language={language} />
+                    <SwapInlinePanel language={language} email={walletEmail} walletKey={selectedWalletKey} />
                   </div>
                 </div>
               )}
@@ -1962,11 +1962,20 @@ type LpPool = {
   network?: string;
 };
 
-function SwapInlinePanel({ language }: { language: AppLanguage }) {
+function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: AppLanguage; email?: string; walletKey?: string }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
   const [pool, setPool] = useState<LpPool | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Which pool is selected (drives the simulator + provide-liquidity form).
+  const [selectedPair, setSelectedPair] = useState("XLM / USDC");
+
+  // Provide-liquidity (custodial) form.
+  const [lpAmount, setLpAmount] = useState("");
+  const [lpBusy, setLpBusy] = useState(false);
+  const [lpErr, setLpErr] = useState("");
+  const [lpOk, setLpOk] = useState<{ hash?: string | null } | null>(null);
 
   // LP yield simulator inputs.
   const [deposit, setDeposit] = useState("1000");
@@ -2012,6 +2021,29 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
     { pair: "USDC / BRZ", note: L("Camada de liquidez BRL", "BRL liquidity layer"), tvl: null, fee: 0.3, live: false },
     { pair: "USDC / BRLT", note: L("Camada de liquidez BRL", "BRL liquidity layer"), tvl: null, fee: 0.3, live: false },
   ];
+  const selectedPool = pairs.find((p) => p.pair === selectedPair) || pairs[0];
+  const canProvide = Boolean(selectedPool.live && walletKey);
+
+  async function provideLiquidity() {
+    const amt = Number(lpAmount);
+    if (!canProvide || !(amt > 0) || lpBusy) return;
+    setLpBusy(true); setLpErr(""); setLpOk(null);
+    try {
+      const res = await fetch("/api/bridge/stellar-wallets/add-liquidity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, public_key: walletKey, amount: String(amt) }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) throw new Error(json.message || `HTTP ${res.status}`);
+      setLpOk({ hash: json.hash ?? json.swap_hash ?? null });
+      setLpAmount("");
+    } catch (e: any) {
+      setLpErr(e?.message ?? String(e));
+    } finally {
+      setLpBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -2139,41 +2171,100 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
       {/* Available pools */}
       <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-3">{L("Pools disponíveis", "Available pools")}</p>
+        <p className="mb-2 text-[10px] text-stone-500">{L("Toque em uma pool para investir.", "Tap a pool to invest.")}</p>
         <div className="space-y-2">
-          {pairs.map((p) => (
-            <div key={p.pair} className="flex items-center justify-between rounded-xl border border-stone-700 bg-stone-950/60 px-3.5 py-2.5">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-                  <Droplets className="h-3.5 w-3.5" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-white">{p.pair}</p>
-                  <p className="text-[10px] text-stone-500">{p.note}</p>
+          {pairs.map((p) => {
+            const sel = p.pair === selectedPair;
+            return (
+              <button
+                key={p.pair}
+                type="button"
+                onClick={() => { setSelectedPair(p.pair); setLpErr(""); setLpOk(null); }}
+                className={`flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition ${sel ? "border-emerald-500 bg-emerald-500/10" : "border-stone-700 bg-stone-950/60 hover:border-stone-500"}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                    <Droplets className="h-3.5 w-3.5" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold text-white">{p.pair}</p>
+                    <p className="text-[10px] text-stone-500">{p.note}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                {p.live ? (
-                  <>
-                    <p className="text-xs font-bold text-white tabular-nums">{fmtUsd(p.tvl)}</p>
-                    <p className="text-[10px] font-bold text-emerald-400">{p.fee.toFixed(2)}% {L("taxa", "fee")}</p>
-                  </>
-                ) : (
-                  <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-400">{L("Soroswap", "Soroswap")}</span>
-                )}
-              </div>
-            </div>
-          ))}
+                <div className="text-right">
+                  {p.live ? (
+                    <>
+                      <p className="text-xs font-bold text-white tabular-nums">{fmtUsd(p.tvl)}</p>
+                      <p className="text-[10px] font-bold text-emerald-400">{p.fee.toFixed(2)}% {L("taxa", "fee")}</p>
+                    </>
+                  ) : (
+                    <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-400">{L("Soroswap", "Soroswap")}</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        <a
-          href="https://app.soroswap.finance"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={BTN_PRIMARY + " mt-4 w-full"}
-        >
-          <Plus className="h-4 w-4" />
-          {L("Fornecer liquidez na Soroswap →", "Provide liquidity on Soroswap →")}
-        </a>
+        {/* Provide liquidity into the selected pool */}
+        <div className="mt-4 rounded-xl border border-stone-700 bg-stone-950/60 p-3.5">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-amber-400">
+            {L("Investir em", "Invest in")} {selectedPool.pair}
+          </p>
+          {selectedPool.live ? (
+            <>
+              {!walletKey && (
+                <p className="mb-2 text-[11px] text-stone-400">{L("Selecione sua carteira em dólar acima para investir.", "Select your dollar wallet above to invest.")}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="flex flex-1 items-center rounded-lg border border-stone-700 bg-stone-900">
+                  <span className="border-r border-stone-700 px-3 text-xs font-bold text-stone-400">USDC</span>
+                  <input
+                    type="number" min="0" step="0.01" inputMode="decimal"
+                    value={lpAmount}
+                    onChange={(e) => setLpAmount(e.target.value)}
+                    placeholder="0.00"
+                    disabled={!canProvide}
+                    className="flex-1 bg-transparent px-3 py-2.5 text-sm font-bold text-white outline-none disabled:opacity-50"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={provideLiquidity}
+                  disabled={!canProvide || !(Number(lpAmount) > 0) || lpBusy}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-bold text-stone-950 transition-colors hover:bg-emerald-400 disabled:opacity-40"
+                >
+                  {lpBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {lpBusy ? L("Investindo...", "Investing...") : L("Investir", "Invest")}
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-stone-500">
+                {L(
+                  "Metade do valor é convertida em XLM e ambas as pernas entram na pool. O gás é coberto automaticamente.",
+                  "Half is converted to XLM and both legs enter the pool. Gas is covered automatically.",
+                )}
+              </p>
+              {lpErr && <p className="mt-2 text-[11px] font-semibold text-tts-error">{lpErr}</p>}
+              {lpOk && (
+                <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {L("Liquidez adicionada!", "Liquidity added!")}
+                  {lpOk.hash && (
+                    <a href={`https://stellar.expert/explorer/public/tx/${lpOk.hash}`} target="_blank" rel="noreferrer" className="underline">tx {lpOk.hash.slice(0, 8)}…</a>
+                  )}
+                </p>
+              )}
+            </>
+          ) : (
+            <div>
+              <p className="text-[11px] text-stone-400">
+                {L("Esta pool BRL é roteada pela Soroswap.", "This BRL pool is routed via Soroswap.")}
+              </p>
+              <a href="https://app.soroswap.finance" target="_blank" rel="noopener noreferrer" className={BTN_PRIMARY + " mt-3 w-full"}>
+                <Plus className="h-4 w-4" /> {L("Abrir na Soroswap →", "Open on Soroswap →")}
+              </a>
+            </div>
+          )}
+        </div>
         <p className="mt-2 text-center text-[11px] text-stone-500">
           {L("Rotas agregadas: Soroswap · Aqua · Phoenix · SDEX", "Aggregated routes: Soroswap · Aqua · Phoenix · SDEX")}
         </p>
