@@ -277,9 +277,12 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
       {/* Full account suite — VAs + custodial + the Bridge Stellar wallets (by email) */}
       <WalletsSuiteCard
         isEn={isEn}
+        customerId={customerId}
+        email={loggedEmail}
         virtualAccounts={data?.virtual_accounts ?? []}
         custodial={data?.bridge_wallets ?? []}
         stellar={bridgeWallets.map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, usdc_balance: w.usdc_balance }))}
+        onTransferDone={() => { if (loggedEmail) { load(loggedEmail); loadBridgeWallets(loggedEmail); } }}
       />
 
       {result ? (
