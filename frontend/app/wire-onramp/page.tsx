@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import WireOnrampClient from "./wire-onramp-client";
-import { BridgeAuthGate } from "@/components/shared/bridge-auth-gate";
 
 export const metadata: Metadata = {
   title: "Depositar em Dólar | TalkToStellar",
@@ -31,9 +30,5 @@ export default async function WireOnrampPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await resolveSearchParams(searchParams);
-  return (
-    <BridgeAuthGate>
-      <WireOnrampClient initialQuery={serializeSearchParams(resolved)} />
-    </BridgeAuthGate>
-  );
+  return <WireOnrampClient initialQuery={serializeSearchParams(resolved)} />;
 }

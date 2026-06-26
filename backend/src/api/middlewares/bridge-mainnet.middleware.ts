@@ -26,6 +26,23 @@ export function requireBridgePassword(
     return;
   }
 
+  // The password only protects the mainnet bridge WALLET. The user's own
+  // login/session wallet and any testnet operation stay open so the rest of the
+  // yield screen works without the gate.
+  if (req.path.startsWith("/session")) {
+    next();
+    return;
+  }
+  const network = String(
+    (req.query && (req.query as Record<string, unknown>).network) ||
+    (req.body && (req.body as Record<string, unknown>).network) ||
+    "",
+  ).trim().toLowerCase();
+  if (network === "testnet") {
+    next();
+    return;
+  }
+
   const expected = String(process.env.BRIDGE_ACCESS_PASSWORD || "").trim();
   // No password configured → gate is disabled (set BRIDGE_ACCESS_PASSWORD to enable).
   if (!expected) {

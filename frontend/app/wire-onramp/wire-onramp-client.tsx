@@ -30,6 +30,7 @@ import {
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BridgeAccessField, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -441,6 +442,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const isEn = lang === "en";
   const L = (pt: string, en: string) => (isEn ? en : pt);
 
+  const { unlocked: bridgeUnlocked, checked: bridgeChecked, unlock: unlockBridge } = useBridgeAccess();
+
   type Status = "login" | "loading" | "ready" | "no_account" | "error";
   const [status, setStatus] = useState<Status>("login");
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -643,7 +646,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
   // Auto-load when session_id/email/short-link is in the URL, or when the browser has a cached email.
   useEffect(() => {
-    if (didAuto.current) return;
+    // Wait until the bridge access password is entered — every load() hits
+    // gated mainnet bridge endpoints.
+    if (!bridgeUnlocked || didAuto.current) return;
     const stored = readCachedEmail();
     if (!emailParam && stored) {
       setEmailInput(stored);
@@ -654,7 +659,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       load(emailParam || stored);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bridgeUnlocked]);
 
   // Show all VAs returned by backend (already filtered to USD server-side)
   const usdAccounts = data?.virtual_accounts ?? [];
@@ -773,6 +778,29 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       setSendError(e?.message ?? String(e));
     }
   }, [sendAmount, bridgeWallets, pipeline, selectedSourceWalletId, activeVa, data, destinationAddress, load, loadDestWallets, loadPipeline, loggedEmail, emailInput, L]);
+
+  // ── Bridge access gate ─────────────────────────────────────────────────────
+  // The mainnet bridge wallet is password-protected. Show the access field
+  // inside the normal page shell (not a full-screen wall) before anything loads.
+  if (bridgeChecked && !bridgeUnlocked) {
+    return (
+      <OperationalPage size="sm" centered>
+        <OperationalHeader
+          eyebrow="Bridge.xyz mainnet"
+          title={L("Depositar em Dólar", "USD Deposit")}
+          description={L(
+            "Esta carteira é protegida. Entre com a senha de acesso para continuar.",
+            "This wallet is protected. Enter the access password to continue."
+          )}
+        />
+        <BridgeAccessField
+          onUnlock={unlockBridge}
+          title={L("Carteira Bridge — restrita", "Bridge wallet — restricted")}
+          description={L("Senha de acesso necessária.", "Access password required.")}
+        />
+      </OperationalPage>
+    );
+  }
 
   // ── Login gate ─────────────────────────────────────────────────────────────
 
