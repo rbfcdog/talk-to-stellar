@@ -529,11 +529,13 @@ export default function RendimentosClient({
 } = {}) {
   const { language } = useLanguage();
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const [tab, setTab] = useState<"returns" | "apply" | "swap">(initialView === "application" ? "apply" : "returns");
 
+  // Unified investment suite — everything on one page. `initialView` only decides
+  // which section we auto-scroll to on load.
   useEffect(() => {
-    const next = initialView === "application" ? "apply" : "returns";
-    if (tab !== next) setTab(next);
+    if (initialView !== "application") return;
+    const el = typeof document !== "undefined" ? document.getElementById("invest") : null;
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [initialView]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
   // Inline gate for the mainnet bridge wallet part (testnet/returns stay open).
@@ -929,7 +931,7 @@ export default function RendimentosClient({
 
   useEffect(() => { setYieldResult(null); setPin(""); }, [action, amount, actionableOption?.vault_address, safeSelectedCode]);
   useEffect(() => {
-    if (tab !== "returns" || !session.authenticated || !options.length || !channelPinUnlocked) return;
+    if (!session.authenticated || !options.length || !channelPinUnlocked) return;
     let cancelled = false;
     const initial = Object.fromEntries(options.map((o) => [optionCode(o), { loading: true, amount: "0", error: "" }]));
     const initialHistories = Object.fromEntries(options.map((o) => [optionCode(o), { loading: true, points: [], error: "" }]));
@@ -959,7 +961,7 @@ export default function RendimentosClient({
       }
     })).then((entries) => { if (!cancelled) setPositionHistories(Object.fromEntries(entries)); });
     return () => { cancelled = true; };
-  }, [tab, session.authenticated, session.sessionSource, options, language, channelPinUnlocked]);
+  }, [session.authenticated, session.sessionSource, options, language, channelPinUnlocked]);
 
   async function unlockChannelReturns() {
     const nextPin = returnsPin.replace(/\D/g, "").slice(0, 8);
@@ -1061,10 +1063,26 @@ export default function RendimentosClient({
       {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }} />}
 
       <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-8">
-        <div className="tts-stage-strip mb-5 grid-cols-3">
-          <button type="button" className="tts-stage-button" data-active={tab === "returns"} onClick={() => setTab("returns")}>{L("Rendimentos", "Returns")}</button>
-          <button type="button" className="tts-stage-button" data-active={tab === "apply"} onClick={() => setTab("apply")}>{L("Aplicar", "Apply")}</button>
-          <button type="button" className="tts-stage-button" data-active={tab === "swap"} onClick={() => setTab("swap")}>{L("Trocar", "Swap")}</button>
+        {/* Unified suite header + quick-jump nav (single page, no tabs) */}
+        <div className="mb-5">
+          <h1 className="text-xl font-bold text-tts-deep">{L("Suíte de Investimentos", "Investment Suite")}</h1>
+          <p className="text-sm text-tts-muted">{L("Carteira, aplicações e liquidez — tudo em um só lugar.", "Portfolio, deposits and liquidity — all in one place.")}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              { id: "portfolio", label: L("Carteira", "Portfolio") },
+              { id: "invest", label: L("Aplicar", "Invest") },
+              { id: "liquidity", label: L("Liquidez", "Liquidity") },
+            ].map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="rounded-full border border-tts-border bg-tts-surface px-3.5 py-1.5 text-xs font-bold text-tts-deep transition-colors hover:border-tts-deep"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {apiState.error && (
@@ -1343,8 +1361,12 @@ export default function RendimentosClient({
             state={returnsPinState}
           />
         ) : (
-          <>
-            {tab === "returns" && (
+          <div className="space-y-12">
+            <section id="portfolio" className="scroll-mt-4">
+              <SuiteSectionHeader
+                eyebrow={L("Sua carteira", "Your portfolio")}
+                title={L("Rendimentos", "Returns")}
+              />
               <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
                 positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
@@ -1352,47 +1374,53 @@ export default function RendimentosClient({
                 mainnetHistory={networkView === "mainnet" ? mainnetHistory : null}
                 onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
               />
-            )}
+            </section>
 
-            {tab === "apply" && (
-              <>
-                <ApplyTab
-                  language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
-                  amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
-                  action={action} onActionChange={setAction}
-                  selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
-                  options={options} onSelectCode={setSelectedCode}
-                  selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
-                  selectedBalanceInsufficient={selectedBalanceInsufficient}
-                  balanceForSelected={balanceForSelected}
-                  alternativeConversionCode={alternativeConversionCode}
-                  activeStep={activeStep} setActiveStep={setActiveStep}
-                  yieldResult={yieldResult} canPrepare={canPrepare}
-                  confirmationEnabled={confirmationEnabled} configured={configured}
-                  pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
-                  onPrepare={prepareYield} onConfirm={confirmYield}
-                  convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
+            <section id="invest" className="scroll-mt-4">
+              <SuiteSectionHeader
+                eyebrow={L("Coloque para render", "Put it to work")}
+                title={L("Aplicar", "Invest")}
+              />
+              <ApplyTab
+                language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
+                amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
+                action={action} onActionChange={setAction}
+                selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
+                options={options} onSelectCode={setSelectedCode}
+                selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
+                selectedBalanceInsufficient={selectedBalanceInsufficient}
+                balanceForSelected={balanceForSelected}
+                alternativeConversionCode={alternativeConversionCode}
+                activeStep={activeStep} setActiveStep={setActiveStep}
+                yieldResult={yieldResult} canPrepare={canPrepare}
+                confirmationEnabled={confirmationEnabled} configured={configured}
+                pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
+                onPrepare={prepareYield} onConfirm={confirmYield}
+                convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
+              />
+              <div className="mt-8">
+                <BlendInlinePanel
+                  language={language}
+                  email={walletEmail}
+                  wallets={emailWallets}
+                  defaultWallet={selectedWalletKey}
+                  walletsLoading={emailWalletsLoading}
+                  onLoadWallets={loadEmailWallets}
+                  onEmailChange={setWalletEmail}
+                  onSelectWallet={setSelectedWalletKey}
+                  sessionWalletKey={sessionWallet?.public_key || ""}
                 />
-                <div className="mt-8">
-                  <BlendInlinePanel
-                    language={language}
-                    email={walletEmail}
-                    wallets={emailWallets}
-                    defaultWallet={selectedWalletKey}
-                    walletsLoading={emailWalletsLoading}
-                    onLoadWallets={loadEmailWallets}
-                    onEmailChange={setWalletEmail}
-                    onSelectWallet={setSelectedWalletKey}
-                    sessionWalletKey={sessionWallet?.public_key || ""}
-                  />
-                </div>
-              </>
-            )}
+              </div>
+            </section>
 
-            {tab === "swap" && (
+            <section id="liquidity" className="scroll-mt-4">
+              <SuiteSectionHeader
+                eyebrow={L("Ganhe com taxas", "Earn on fees")}
+                title={L("Liquidez", "Liquidity")}
+              />
               <SwapInlinePanel language={language} />
-            )}
-          </>
+            </section>
+          </div>
         )}
       </div>
     </main>
@@ -1931,6 +1959,19 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
       <p className="text-xl font-bold mt-1">{value}</p>
       {sub && <p className="text-xs text-tts-muted mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Unified-suite section header ─────────────────────────────────────────────
+function SuiteSectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      <div className="h-8 w-1 rounded-full bg-amber-500" />
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-500">{eyebrow}</p>
+        <h2 className="text-lg font-bold text-tts-deep">{title}</h2>
+      </div>
     </div>
   );
 }
