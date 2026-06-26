@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-23. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-26. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-61 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+62 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -346,7 +346,7 @@
 
 ---
 
-## Cluster G — Visual Polish (7 incidents, SEVERITY: MEDIUM)
+## Cluster G — Visual Polish (8 incidents, SEVERITY: MEDIUM)
 
 ### #1 — PIX Confirmation Pop-Up Aesthetics
 > **Quote**: "fazer tela de confirmação pix ser um pop-up mais bonitinho, melhorar a estetica final"
@@ -410,6 +410,15 @@
 - **Root cause**: `dashboardMetrics()` filtered records through `isSameLocalDate()` before rendering the first card and BRL-to-USDC volume card, so the dashboard reported "Transfers today" and "BRL to USDC today" even though the operator wanted the full ledger.
 - **Status**: **Fixed by `fe90af9`**. `dashboardMetrics()` now uses all loaded ledger records, labels the first card "All transfers", labels the volume card "BRL to USDC total", and the route test asserts the old "today" copy is absent.
 - **Lesson**: **Ops hero metrics must match the ledger scope shown on screen**. If the table is a full-ledger console, the summary cards should not silently narrow to a daily slice.
+
+### #65 — Ramp Dark-Mode Form Contrast
+> **Quote**: "adjust the dark mode on onramp, offramp so that when there is white overlay background dont colide with the text boxes, like rn the letters are not appearing because of it"
+> **Gloss**: On the USD onramp/offramp pages, dark mode left some light overlay backgrounds behind form controls, making input text hard or impossible to read.
+
+- **Where**: `frontend/app/globals.css`, affecting the shared operational shell used by `frontend/app/wire-onramp/wire-onramp-client.tsx`, `frontend/app/usd-withdraw/usd-withdraw-client.tsx`, and `frontend/components/shared/wallets-suite-card.tsx`.
+- **Root cause**: Dark-mode compatibility CSS remapped exact `bg-tts-bg` and a few opacity variants, but the ramp surfaces use additional translucent utilities such as `bg-tts-bg/50`, `bg-tts-bg/70`, `bg-white/70`, amber highlights, and browser-controlled select/autofill/input backgrounds. The remaining light overlays could sit behind text that had already been remapped to dark-mode colors.
+- **Status**: **Fixed by `8122ee8b`**. The `.dark .tts-op-page` rules now explicitly darken ramp overlay utilities and set readable input, textarea, select, placeholder, option, focus, caret, and autofill colors.
+- **Lesson**: **Operational dark mode must treat form controls and translucent panels as one system**. Test on both `/wire-onramp` and `/usd-withdraw` whenever adding light background utilities to operational pages.
 
 ---
 
@@ -642,7 +651,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 61 documented incidents:
+Ranked by frequency × severity across the 62 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -651,18 +660,18 @@ Ranked by frequency × severity across the 61 documented incidents:
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 8 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility, provider-path drift, Bridge-to-Stellar wallet linkage |
 | 5 | **H — Reliability** | 19 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, Blend pool discovery, investments fail, payment links unreliable, login redirects wrong |
-| 6 | **G — Visual Polish** | 7 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness |
+| 6 | **G — Visual Polish** | 8 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness, ramp contrast |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 36 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64)
+- **Confirmed fixed**: 37 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 36 of 61 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 37 of 62 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -706,3 +715,4 @@ Fixing commits verified in codebase:
 | #62 | `008da16` | Let `/wire-onramp` search a manually entered Bridge account email even when it differs from WhatsApp/session context |
 | #63 | `008da16` | Validate Blend pool contract ids and discover current v2 pools from the backstop reward zone |
 | #64 | `34b27a7` | Add Bridge virtual-account connection map, direct USD-to-Stellar VA creation, and Bridge-wallet-to-Stellar transfer route |
+| #65 | `8122ee8b` | Darken operational ramp overlays and form controls so `/wire-onramp` and `/usd-withdraw` remain readable in dark mode |

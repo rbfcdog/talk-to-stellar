@@ -378,3 +378,20 @@
 
 **Files**: `backend/src/api/controllers/bridge.controller.ts`, `backend/src/api/routes/bridge.router.ts`, `backend/tests/bridge.routes.test.ts`, `frontend/app/bridge-test/bridge-test-client.tsx`, `docs/project-brain/product/surfaces/bridge-test.md`
 **Related**: Pain point #64
+
+## 22. Ramp Dark Mode Makes Form Text Unreadable (FIXED)
+
+**Symptom**: `/wire-onramp` or `/usd-withdraw` in dark mode shows light/white overlay panels behind form controls, while the input/select text is dark-mode remapped and becomes hard to read or invisible.
+
+**Status**: Fixed by `8122ee8b`. The shared `.dark .tts-op-page` rules now darken the ramp overlay utilities and form-control browser states.
+
+**Diagnosis steps**:
+1. Open `/wire-onramp` and `/usd-withdraw` with the root `html` element using the `dark` class.
+2. Inspect any unreadable field and check for light utility classes such as `bg-tts-bg/50`, `bg-tts-bg/70`, `bg-white/70`, `bg-amber-50/30`, or browser autofill/select styling.
+3. Confirm the element is inside `.tts-op-page`; operational screens should inherit the shared dark compatibility rules from `frontend/app/globals.css`.
+4. If a new translucent background utility is introduced, add it to the `.dark .tts-op-page` overlay remap and verify both ramp routes.
+
+**Fix**: `frontend/app/globals.css` remaps operational ramp overlays and sets explicit input, textarea, select, option, placeholder, focus, caret, and autofill colors in dark mode.
+
+**Files**: `frontend/app/globals.css`, `frontend/app/wire-onramp/wire-onramp-client.tsx`, `frontend/app/usd-withdraw/usd-withdraw-client.tsx`, `frontend/components/shared/wallets-suite-card.tsx`
+**Related**: Pain point #65
