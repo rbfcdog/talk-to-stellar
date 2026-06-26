@@ -32,6 +32,7 @@ User opens /wire-onramp from WhatsApp or web
 - **Short-link page showed processing despite existing account** (#61): Fixed by `f1229d9`. The backend now resolves `short_link_code` through `short_links` and `agent_sessions`, then loads the Bridge customer and falls back to cached USD VAs when the live Bridge VA list is empty or unavailable. The page no longer shows a generic pending message when cached instructions exist.
 - **Login email not remembered** (#61): Fixed by `f1229d9`. Successful account loads persist the normalized email in browser localStorage and the Change action can clear it.
 - **Manual Bridge email override missing in no-account state** (#62): Fixed by `008da16`. The empty state now explains that the Bridge email can differ from WhatsApp, shows an inline email form, and calls the account loader with `forceEmail` so typed addresses are searched directly.
+- **Dark-mode form contrast on ramp pages** (#65): Fixed by `8122ee8b`. The shared `.tts-op-page` dark-mode CSS now remaps ramp overlay utilities plus input, textarea, select, option, placeholder, focus, caret, and autofill colors so `/wire-onramp` and `/usd-withdraw` remain readable.
 
 ### Still Open
 
@@ -41,6 +42,8 @@ User opens /wire-onramp from WhatsApp or web
 
 - `frontend/app/wire-onramp/page.tsx` — route entry point.
 - `frontend/app/wire-onramp/wire-onramp-client.tsx` — deposit-instruction UI, short-link forwarding, cached email behavior, and VA render.
+- `frontend/app/usd-withdraw/usd-withdraw-client.tsx` — withdrawal/offramp flow using the same operational shell and form-control styling.
+- `frontend/app/globals.css` — shared operational shell and dark-mode compatibility rules.
 - `frontend/app/api/[...path]/route.ts` — same-origin API proxy used by `/api/bridge/session/usd-account`.
 - `backend/src/api/routes/bridge.router.ts` — maps `/api/bridge/session/usd-account`.
 - `backend/src/api/controllers/bridge.controller.ts` — short-link/session/email resolution and Bridge USD VA loading.
@@ -56,6 +59,12 @@ User opens /wire-onramp from WhatsApp or web
 | Short-link USD account | GET | `/api/bridge/session/usd-account?short_link_code=...` | `/api/bridge/session/usd-account` |
 
 ## Latest Verification
+
+2026-06-26:
+
+- `git diff --check` passed.
+- Playwright forced dark mode on `/wire-onramp` and `/usd-withdraw`; login controls measured 18.59:1 contrast and mocked loaded-state controls rendered with dark backgrounds and light text.
+- `npm --prefix frontend run build -- --debug-build-paths "app/wire-onramp/**,app/usd-withdraw/**"` passed and listed `/wire-onramp` plus `/usd-withdraw`.
 
 2026-06-23:
 
