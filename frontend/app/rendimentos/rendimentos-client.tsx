@@ -33,6 +33,7 @@ import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { analyzePortfolioPeriod } from "@/lib/portfolio-period-analysis";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
+import { BridgeAccessField, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
 
 type ApiState = { loading: boolean; message: string; error: string };
 type YieldApiError = Error & { code?: string; requestId?: string; supportCode?: string };
@@ -537,6 +538,8 @@ export default function RendimentosClient({
     if (tab !== next) setTab(next);
   }, [initialView]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
+  // Inline gate for the mainnet bridge wallet part (testnet/returns stay open).
+  const { unlocked: bridgeUnlocked, unlock: unlockBridge } = useBridgeAccess();
   const [returnsPin, setReturnsPin] = useState("");
   const [returnsPinVerified, setReturnsPinVerified] = useState(false);
   const [returnsPinState, setReturnsPinState] = useState<ApiState>({ loading: false, message: "", error: "" });
@@ -1104,8 +1107,19 @@ export default function RendimentosClient({
           </div>
         </div>
 
+        {/* Bridge wallet — access gate (mainnet only). The real-money wallet is
+            password-protected; testnet and the returns view stay open. */}
+        {networkView === "mainnet" && returnsPinVerified && !bridgeUnlocked && (
+          <BridgeAccessField
+            className="mb-5"
+            onUnlock={unlockBridge}
+            title={L("Carteira Stellar · Mainnet — restrita", "Stellar Wallet · Mainnet — restricted")}
+            description={L("Senha de acesso necessária para gerenciar esta carteira.", "Access password required to manage this wallet.")}
+          />
+        )}
+
         {/* Bridge wallet balance banner (mainnet) */}
-        {networkView === "mainnet" && returnsPinVerified && (
+        {networkView === "mainnet" && returnsPinVerified && bridgeUnlocked && (
           <div className="mb-5 rounded-2xl border border-tts-border bg-tts-surface overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
               <div>

@@ -40,6 +40,107 @@ async function verifyPassword(pw: string): Promise<boolean> {
 }
 
 /**
+ * Hook: tracks whether the bridge access password has been entered this browser
+ * session. `unlock()` flips it on and persists the flag.
+ */
+export function useBridgeAccess() {
+  const [unlocked, setUnlocked] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(FLAG_KEY) === "1") setUnlocked(true);
+    } catch {
+      /* ignore */
+    }
+    setChecked(true);
+  }, []);
+
+  function unlock() {
+    try {
+      sessionStorage.setItem(FLAG_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setUnlocked(true);
+  }
+
+  return { unlocked, checked, unlock };
+}
+
+/**
+ * Inline password field — drop it in front of the bridge-wallet part of a screen
+ * (instead of blocking the whole page). Calls `onUnlock` once the backend accepts
+ * the password. Styled with tts tokens to blend into the surrounding card.
+ */
+export function BridgeAccessField({
+  onUnlock,
+  title = "Bridge wallet — restricted",
+  description = "Enter the access password to manage this wallet.",
+  className = "",
+}: {
+  onUnlock: () => void;
+  title?: string;
+  description?: string;
+  className?: string;
+}) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const pw = value.trim();
+    if (!pw || submitting) return;
+    setSubmitting(true);
+    setError("");
+    const ok = await verifyPassword(pw);
+    if (ok) {
+      onUnlock();
+    } else {
+      clearCookie();
+      setError("Incorrect password.");
+    }
+    setSubmitting(false);
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className={`rounded-2xl border border-tts-border bg-tts-surface p-5 ${className}`}
+    >
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-confirm/15 text-tts-confirm">
+          <Lock className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-bold text-tts-deep">{title}</p>
+          <p className="text-xs text-tts-muted">{description}</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="password"
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setError(""); }}
+          placeholder="Access password"
+          className="flex-1 rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-bold text-tts-deep outline-none focus:border-tts-deep placeholder:text-tts-muted/40"
+        />
+        <button
+          type="submit"
+          disabled={!value.trim() || submitting}
+          className="flex items-center justify-center gap-2 rounded-lg bg-tts-deep px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {submitting ? "…" : "Unlock"}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-xs font-semibold text-tts-error">{error}</p>}
+    </form>
+  );
+}
+
+/**
  * Wraps a page behind a shared password prompt. Renders children only once the
  * correct password has been entered (per browser session).
  */
