@@ -343,9 +343,25 @@ function VaCard({ va }: { va: UsdVA }) {
       {/* Instructions */}
       {instr && (
         <div>
-          <p className="px-5 pt-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-            Wire / ACH details
-          </p>
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+              Wire / ACH details
+            </p>
+            <CopyBtn
+              label="all details"
+              value={[
+                instr.bank_name && `Bank: ${instr.bank_name}`,
+                instr.bank_routing_number && `Routing number: ${instr.bank_routing_number}`,
+                instr.bank_account_number && `Account number: ${instr.bank_account_number}`,
+                instr.bank_beneficiary_name && `Beneficiary: ${dedupName(instr.bank_beneficiary_name)}`,
+                instr.bank_beneficiary_address && `Beneficiary address: ${instr.bank_beneficiary_address}`,
+                instr.iban && `IBAN: ${instr.iban}`,
+                instr.bic && `BIC / SWIFT: ${instr.bic}`,
+                reference && `Reference / Memo: ${reference}`,
+                instr.bank_address && `Bank address: ${instr.bank_address}`,
+              ].filter(Boolean).join("\n")}
+            />
+          </div>
 
           {instr.bank_name && (
             <Field label="Bank" value={instr.bank_name} mono={false} />
@@ -821,11 +837,39 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
   if (status === "loading") {
     return (
-      <OperationalPage size="sm" centered>
-        <OperationalCard className="flex flex-col items-center gap-3 text-center text-tts-muted">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">{L("Carregando sua conta...", "Loading your account...")}</p>
-        </OperationalCard>
+      <OperationalPage size="lg" frameClassName="max-w-4xl">
+        <div className="space-y-4">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="h-3 w-28 animate-pulse rounded bg-tts-border/50" />
+              <div className="h-6 w-48 animate-pulse rounded bg-tts-border/60" />
+            </div>
+            <div className="h-8 w-24 animate-pulse rounded bg-tts-border/40" />
+          </div>
+          {/* Card skeleton mirroring the VA card */}
+          <div className="overflow-hidden rounded-lg border border-tts-border bg-tts-surface shadow-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
+              <div className="h-5 w-40 animate-pulse rounded bg-tts-border/50" />
+              <div className="h-6 w-16 animate-pulse rounded-full bg-tts-border/40" />
+            </div>
+            <div className="px-5 py-5 border-b border-tts-border/40 space-y-2">
+              <div className="h-3 w-24 animate-pulse rounded bg-tts-border/40" />
+              <div className="h-8 w-36 animate-pulse rounded bg-tts-border/60" />
+            </div>
+            <div className="divide-y divide-tts-border/40">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center justify-between px-5 py-3">
+                  <div className="h-3 w-28 animate-pulse rounded bg-tts-border/40" />
+                  <div className="h-4 w-40 animate-pulse rounded bg-tts-border/50" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-xs text-tts-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> {L("Carregando sua conta...", "Loading your account...")}
+          </div>
+        </div>
       </OperationalPage>
     );
   }
