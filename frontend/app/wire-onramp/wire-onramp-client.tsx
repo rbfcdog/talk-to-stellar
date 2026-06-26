@@ -1007,17 +1007,13 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         </OperationalCard>
       )}
 
-      {/* Full account suite — VAs + custodial + Stellar (where the dollars land) */}
+      {/* Full account suite — VAs + custodial + the Bridge Stellar wallets for
+          this email (the associated mainnet wallets, where the dollars land). */}
       <WalletsSuiteCard
         isEn={isEn}
         virtualAccounts={(data?.virtual_accounts ?? []).map((v) => ({ id: v.id, status: v.status, currency: v.currency, total_received_usd: v.total_received_usd }))}
         custodial={data?.bridge_wallets ?? []}
-        stellar={[
-          ...(data?.mainnet_wallets ?? []).map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, last_balance: w.last_balance })),
-          ...(data?.stellar_wallet?.public_key && !(data?.mainnet_wallets ?? []).some((m) => m.public_key === data!.stellar_wallet!.public_key)
-            ? [{ public_key: data.stellar_wallet.public_key, label: "Stellar USDC", usdc_balance: data.stellar_wallet.usdc_balance }]
-            : []),
-        ]}
+        stellar={destWallets.map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, usdc_balance: w.usdc_balance }))}
       />
 
       <div className="flex justify-center">
