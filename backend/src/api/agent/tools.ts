@@ -1517,6 +1517,34 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "open_usd_withdraw_interface",
+    description: "Return the frontend URL for the USD withdrawal (off-ramp) screen. Use when the user wants to CASH OUT / send dollars OUT of their account to a US bank account via ACH or wire. Examples: 'sacar dólar pra minha conta americana', 'withdraw 200 dollars to my US bank', 'mandar dólar pro meu banco nos EUA', 'cash out to my US bank'. This is the opposite of open_wire_onramp_interface (which brings money IN).",
+    parameters: {
+      type: "object",
+      properties: {
+        amount: {
+          type: "string",
+          description: "Optional USD amount the user wants to withdraw.",
+        },
+        session_id: {
+          type: "string",
+          description: "Current chat session ID, when available.",
+        },
+        session_scope: {
+          type: "string",
+          enum: ["whatsapp", "telegram", ""],
+          description: "Preserve the originating external session scope.",
+        },
+        language: {
+          type: "string",
+          enum: ["pt-BR", "en"],
+          description: "Response language for the user-facing message.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "open_swap_interface",
     description: "Return the frontend URL for the DEX token swap screen (Soroswap/Phoenix). Use when the user wants to swap tokens directly: XLM↔USDC, USDC↔BRZ, BRZ↔XLM, etc. Does not involve PIX.",
     parameters: {
@@ -2500,6 +2528,8 @@ export async function executeTool(
         return await executeCreateUsdBankTransferIntent(toolInput);
       case "open_wire_onramp_interface":
         return await executeOpenWireOnrampInterface(toolInput);
+      case "open_usd_withdraw_interface":
+        return await executeOpenUsdWithdrawInterface(toolInput);
       case "open_swap_interface":
         return await executeOpenSwapInterface(toolInput);
       case "send_receipt_image":
@@ -3872,6 +3902,38 @@ async function executeOpenWireOnrampInterface(input: any): Promise<string> {
       message: language === 'en'
         ? `Your USD bank account details${amount ? ` for $${amount}` : ''}. 👇\n${frontendUrl}`
         : `Dados pra receber dólar${amount ? ` de US$ ${amount}` : ''} via banco americano. 👇\n${frontendUrl}`,
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function executeOpenUsdWithdrawInterface(input: any): Promise<string> {
+  const language = normalizeToolLanguage(input.language || input.lang || input.locale);
+  try {
+    const amount = String(input.amount || '').trim();
+    const sessionId = String(input.session_id || '').trim() || undefined;
+    const sessionScope = normalizeToolSessionScope(input.session_scope || input.sessionScope || input.source || input.provider || '');
+    const rawUrl = buildFrontendInterfaceUrl({
+      path: '/usd-withdraw',
+      params: {
+        amount,
+        currency: 'USD',
+        from: 'chat',
+        session_scope: sessionScope,
+        lang: language,
+      },
+    });
+    const frontendUrl = await shortenYieldUrl(rawUrl, 'usd_withdraw', sessionId);
+    return JSON.stringify({
+      success: true,
+      frontend_url: frontendUrl,
+      message: language === 'en'
+        ? `Withdraw${amount ? ` $${amount}` : ''} to your US bank. 👇\n${frontendUrl}`
+        : `Sacar${amount ? ` US$ ${amount}` : ''} para seu banco americano. 👇\n${frontendUrl}`,
     });
   } catch (error) {
     return JSON.stringify({
