@@ -41,6 +41,19 @@ function resolveStellarMemo(chain: string, provided?: string): string | undefine
   return provided?.trim() || String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
 }
 
+// Bridge's exchange-rate API is denominated in fiat. Map each stablecoin to the
+// fiat it settles in so off-ramp callers can quote with the token they hold.
+const STABLECOIN_FIAT: Record<string, string> = {
+  usdc: 'usd', usdt: 'usd', usdp: 'usd', pyusd: 'usd', dai: 'usd', usdb: 'usd',
+  eurc: 'eur',
+  brz: 'brl', brla: 'brl', brlt: 'brl',
+  mxnb: 'mxn',
+};
+export function normalizeRateCurrency(currency: string): string {
+  const c = String(currency || '').trim().toLowerCase();
+  return STABLECOIN_FIAT[c] || c;
+}
+
 export class BridgeService {
   private client: BridgeClient;
   config: BridgeConfig;
@@ -313,8 +326,13 @@ export class BridgeService {
     from: string,
     to: string,
   ): Promise<Record<string, unknown>> {
+    // Bridge's /exchange_rates speaks fiat (usd, brl, eur…), not crypto tickers.
+    // Off-ramp callers naturally pass the stablecoin they hold (usdc), so map
+    // each stablecoin to the fiat it settles in before the lookup.
+    const f = normalizeRateCurrency(from);
+    const t = normalizeRateCurrency(to);
     return this.client.get(
-      `/exchange_rates?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      `/exchange_rates?from=${encodeURIComponent(f)}&to=${encodeURIComponent(t)}`,
     );
   }
 

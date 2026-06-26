@@ -1689,8 +1689,12 @@ export class BridgeController {
       );
 
       const rate = await service.getExchangeRate(from, to);
+      // Bridge returns { midmarket_rate, buy_rate, sell_rate } — there is no
+      // bare `rate` field, so the old lookup always yielded 0. Prefer the
+      // midmarket rate, falling back across the spread fields.
+      const r = rate as Record<string, unknown>;
       const rateValue = parseFloat(
-        (rate as Record<string, unknown>)?.rate?.toString() || "0",
+        String(r?.midmarket_rate ?? r?.sell_rate ?? r?.buy_rate ?? r?.rate ?? "0"),
       );
       const estimated = (parseFloat(amount) * rateValue).toFixed(2);
 
@@ -1701,6 +1705,7 @@ export class BridgeController {
           source_currency: from,
           destination_amount: estimated,
           destination_currency: to,
+          rate_used: Number.isFinite(rateValue) ? rateValue : null,
           rate,
           is_estimate: true,
         },
