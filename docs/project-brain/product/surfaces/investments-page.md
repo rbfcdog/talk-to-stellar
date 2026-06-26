@@ -18,7 +18,7 @@ User opens investments page (web)
 - **Performance math wrong** (#11): ✅ Fixed by `dcec791` — `analyzePortfolioPeriod` subtracts `cashflowChange` from raw change (deposits/withdrawals excluded)
 - **Charts need work** (#12): ✅ Fixed by `d4b1d98` — weekly/monthly toggle added, `ChartWindow` type with 7d/30d options
 - **Blend v2 pool load failed with unsupported address type** (#63): ✅ Fixed by `008da16` — invalid configured pool ids are ignored, current Blend v2 pools are discovered from the backstop reward zone, and USDC/XLM reserve hints were refreshed for mainnet/testnet
-- **Overview still showed invest controls** (#66): ✅ Fixed in current working tree; commit pending — `/rendimentos` now defaults to total graph + yield cards only. Product details and invest/withdraw controls mount only after tapping a yield card or opening an application deep link.
+- **Overview still showed invest controls** (#66): ✅ Fixed by `c8ac9783` — `/rendimentos` now defaults to total graph + yield cards only. Product details and invest/withdraw controls mount only after tapping a yield card or opening an application deep link.
 
 ### Still Open
 - **Page failing** (#13): Needs retry + backoff for DeFindex API calls
