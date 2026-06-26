@@ -141,6 +141,98 @@ export function BridgeAccessField({
 }
 
 /**
+ * Combined Bridge-account login: email + access password in one form. Verifies
+ * the password against the backend (probe) and, on success, persists the unlock
+ * flag and hands the email to the parent to load the account.
+ */
+export function BridgeAccountLogin({
+  onAuthenticated,
+  defaultEmail = "",
+  title = "Bridge account",
+  description = "Enter your account email and access password.",
+  emailLabel = "Account email",
+  passwordLabel = "Access password",
+  submitLabel = "Continue",
+}: {
+  onAuthenticated: (email: string) => void;
+  defaultEmail?: string;
+  title?: string;
+  description?: string;
+  emailLabel?: string;
+  passwordLabel?: string;
+  submitLabel?: string;
+}) {
+  const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const pw = password.trim();
+    const em = email.trim().toLowerCase();
+    if (!em || !pw || submitting) return;
+    setSubmitting(true);
+    setError("");
+    const ok = await verifyPassword(pw);
+    if (ok) {
+      try { sessionStorage.setItem(FLAG_KEY, "1"); } catch { /* ignore */ }
+      onAuthenticated(em);
+    } else {
+      clearCookie();
+      setError("Incorrect access password.");
+    }
+    setSubmitting(false);
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-tts-border bg-tts-surface p-5">
+      <div className="mb-4 flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-confirm/15 text-tts-confirm">
+          <Lock className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-bold text-tts-deep">{title}</p>
+          <p className="text-xs text-tts-muted">{description}</p>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        <div>
+          <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-tts-muted">{emailLabel}</label>
+          <input
+            type="email"
+            autoFocus
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(""); }}
+            placeholder="you@email.com"
+            className="w-full rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-bold text-tts-deep outline-none focus:border-tts-deep placeholder:text-tts-muted/40"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-tts-muted">{passwordLabel}</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(""); }}
+            placeholder="••••••••"
+            className="w-full rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-bold text-tts-deep outline-none focus:border-tts-deep placeholder:text-tts-muted/40"
+          />
+        </div>
+      </div>
+      {error && <p className="mt-2 text-xs font-semibold text-tts-error">{error}</p>}
+      <button
+        type="submit"
+        disabled={!email.trim() || !password.trim() || submitting}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-tts-deep py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+      >
+        {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+        {submitting ? "…" : submitLabel}
+      </button>
+    </form>
+  );
+}
+
+/**
  * Wraps a page behind a shared password prompt. Renders children only once the
  * correct password has been entered (per browser session).
  */
