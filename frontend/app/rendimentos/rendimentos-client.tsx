@@ -11,6 +11,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   Coins,
   Droplets,
   ExternalLink,
@@ -533,9 +534,17 @@ export default function RendimentosClient({
   // which section we auto-scroll to on load.
   useEffect(() => {
     if (initialView !== "application") return;
+    // Deep links (?view=application&action=…&asset=…) open the invest form
+    // directly on the requested asset/action, then scroll it into view.
+    const params = new URLSearchParams(initialQuery || "");
+    const qAction = params.get("action");
+    const qAsset = params.get("asset");
+    if (qAction === "withdraw" || qAction === "deposit") setAction(qAction);
+    if (qAsset) { const a = qAsset.trim().toUpperCase(); requestedAssetRef.current = a; setSelectedCode(a); }
+    setInvestView("form");
     const el = typeof document !== "undefined" ? document.getElementById("invest") : null;
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [initialView]);
+  }, [initialView, initialQuery]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
   // Inline gate for the mainnet bridge wallet part (testnet/returns stay open).
   const { unlocked: bridgeUnlocked, unlock: unlockBridge, relock: relockBridge } = useBridgeAccess();
@@ -550,6 +559,9 @@ export default function RendimentosClient({
   const [selectedCode, setSelectedCode] = useState("USDC");
   const [amount, setAmount] = useState("100");
   const [action, setAction] = useState<"deposit" | "withdraw">("deposit");
+  // Invest section navigation: "list" = browse investments + their yields,
+  // "form" = the chosen investment's invest/withdraw detail (ApplyTab).
+  const [investView, setInvestView] = useState<"list" | "form">("list");
   const [activeStep, setActiveStep] = useState<YieldStep>("plan");
   const [variationBps, setVariationBps] = useState("100");
   const [pin, setPin] = useState("");
@@ -1457,26 +1469,46 @@ export default function RendimentosClient({
 
             <section id="invest" className="scroll-mt-4">
               <SuiteSectionHeader
-                eyebrow={L("Coloque para render", "Put it to work")}
-                title={L("Aplicar", "Invest")}
+                eyebrow={investView === "form" && action === "withdraw" ? L("Resgate seu dinheiro", "Cash out") : L("Coloque para render", "Put it to work")}
+                title={investView === "form" ? (action === "withdraw" ? L("Retirar", "Withdraw") : L("Investir", "Invest")) : L("Aplicar", "Invest")}
               />
-              <ApplyTab
-                language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
-                amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
-                action={action} onActionChange={setAction}
-                selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
-                options={options} onSelectCode={setSelectedCode}
-                selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
-                selectedBalanceInsufficient={selectedBalanceInsufficient}
-                balanceForSelected={balanceForSelected}
-                alternativeConversionCode={alternativeConversionCode}
-                activeStep={activeStep} setActiveStep={setActiveStep}
-                yieldResult={yieldResult} canPrepare={canPrepare}
-                confirmationEnabled={confirmationEnabled} configured={configured}
-                pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
-                onPrepare={prepareYield} onConfirm={confirmYield}
-                convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
-              />
+              {investView === "list" ? (
+                <InvestList
+                  language={language}
+                  options={options}
+                  positionBalances={positionBalances}
+                  mainnetInvested={networkView === "mainnet" ? positions?.total_invested_usdc ?? null : null}
+                  onInvest={(code) => { setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); }}
+                  onWithdraw={(code) => { setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); }}
+                />
+              ) : (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setInvestView("list")}
+                    className="inline-flex items-center gap-1.5 text-sm font-bold text-tts-muted transition hover:text-tts-deep"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> {L("Voltar aos investimentos", "Back to investments")}
+                  </button>
+                  <ApplyTab
+                    language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
+                    amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
+                    action={action} onActionChange={setAction}
+                    selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
+                    options={options} onSelectCode={setSelectedCode}
+                    selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
+                    selectedBalanceInsufficient={selectedBalanceInsufficient}
+                    balanceForSelected={balanceForSelected}
+                    alternativeConversionCode={alternativeConversionCode}
+                    activeStep={activeStep} setActiveStep={setActiveStep}
+                    yieldResult={yieldResult} canPrepare={canPrepare}
+                    confirmationEnabled={confirmationEnabled} configured={configured}
+                    pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
+                    onPrepare={prepareYield} onConfirm={confirmYield}
+                    convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
+                  />
+                </div>
+              )}
             </section>
 
             {/* Advanced — hidden by default to keep the home calm and Nubank-clean */}
@@ -1785,6 +1817,101 @@ function PortfolioOverview({ language, rows, isTestnet }: {
         </div>
       </div>
     </section>
+  );
+}
+
+// ── Invest overview — lead with each investment and its rentability, then drill
+// into the chosen one (invest) or cash out (withdraw). ─────────────────────────
+function InvestList({ language, options, positionBalances, mainnetInvested, onInvest, onWithdraw }: {
+  language: AppLanguage;
+  options: YieldOption[];
+  positionBalances: Record<string, PositionState>;
+  mainnetInvested: number | null;
+  onInvest: (code: string) => void;
+  onWithdraw: (code: string) => void;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const rows = options
+    .filter((o) => String(o.vault_address || "").trim())
+    .map((o) => {
+      const code = optionCode(o);
+      // On mainnet the real USDC position lives in the Bridge wallet (positions endpoint).
+      const useMainnet = mainnetInvested !== null && code === "USDC";
+      const invested = useMainnet ? mainnetInvested : normalizeDecimal(positionBalances[code]?.amount || "0");
+      return { code, profile: moneyProfile(code), rate: optionRatePercent(o), invested };
+    });
+  const investedRows = rows.filter((r) => r.invested > 0);
+
+  return (
+    <div className="space-y-8">
+      {/* Browse — possible investments, each with its rentability */}
+      <div className="space-y-3">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Escolha onde investir", "Choose where to invest")}</p>
+        {rows.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {rows.map((r) => (
+              <div key={r.code} className="flex flex-col rounded-2xl border border-tts-border bg-tts-surface p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{r.profile.short}</span>
+                    <h3 className="mt-0.5 text-lg font-bold text-tts-deep">{profileName(r.profile, language)}</h3>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-black tabular-nums text-tts-confirm">{r.rate > 0 ? `${r.rate.toFixed(2)}%` : "—"}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">{L("ao ano", "per year")}</p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <ReturnPeriodGrid language={language} rate={r.rate} />
+                </div>
+                {r.invested > 0 && (
+                  <p className="mt-3 text-xs font-bold text-tts-muted">
+                    {L("Já investido", "Already invested")}: <span className="text-tts-deep">{formatPositionAmount(r.invested, r.profile, language)}</span>
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onInvest(r.code)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-deep py-3 text-sm font-bold text-tts-surface transition hover:opacity-90"
+                >
+                  <Plus className="h-4 w-4" /> {L("Investir", "Invest")}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-tts-border bg-tts-surface py-10 text-center">
+            <p className="text-sm text-tts-muted">{L("Nenhuma opção disponível.", "No options available.")}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Withdraw — money currently invested */}
+      <div className="rounded-2xl border border-tts-border bg-tts-surface p-5">
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Resgatar dinheiro investido", "Withdraw invested money")}</p>
+        {investedRows.length ? (
+          <div className="space-y-2">
+            {investedRows.map((r) => (
+              <div key={r.code} className="flex items-center justify-between rounded-xl border border-tts-border bg-tts-bg px-4 py-3">
+                <div>
+                  <p className="text-sm font-bold text-tts-deep">{profileName(r.profile, language)}</p>
+                  <p className="text-xs text-tts-muted">{L("Investido", "Invested")}: {formatPositionAmount(r.invested, r.profile, language)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onWithdraw(r.code)}
+                  className="flex items-center gap-1.5 rounded-xl border border-tts-border px-4 py-2 text-sm font-bold text-tts-deep transition hover:bg-tts-surface"
+                >
+                  <ArrowUpFromLine className="h-4 w-4" /> {L("Retirar", "Withdraw")}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-tts-muted">{L("Você ainda não tem dinheiro investido aqui.", "You have no invested money here yet.")}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -2391,7 +2518,7 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
         </div>
 
         <a
-          href="https://app.soroswap.finance/liquidity"
+          href="https://app.soroswap.finance"
           target="_blank"
           rel="noopener noreferrer"
           className={BTN_PRIMARY + " mt-4 w-full"}
