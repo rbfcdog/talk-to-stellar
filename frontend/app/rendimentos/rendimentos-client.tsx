@@ -580,6 +580,7 @@ export default function RendimentosClient({
   const [investAmount, setInvestAmount] = useState("");
   const investBusyRef = useRef(false); // synchronous guard against double-submit
   const yieldBusyRef = useRef(false); // guards the custodial confirmYield deposit
+  const [autoDefindexPct, setAutoDefindexPct] = useState(80); // auto-invest split (DeFindex %)
   const [investStatus, setInvestStatus] = useState<"idle" | "investing" | "ok" | "error">("idle");
   const [investError, setInvestError] = useState("");
   const [investHash, setInvestHash] = useState("");
@@ -680,10 +681,11 @@ export default function RendimentosClient({
     }
   }
 
-  // Auto-yield: sweep the wallet's idle USDC into DeFindex (bulk) + Blend (slice).
-  async function autoYield(email: string, publicKey: string) {
+  // Auto-yield: sweep the wallet's idle USDC into DeFindex + Blend by the chosen split.
+  async function autoYield(email: string, publicKey: string, defindexPct: number) {
     if (investBusyRef.current) return; // re-entrancy guard
     if (!publicKey) return;
+    const dPct = Math.min(100, Math.max(0, Math.round(defindexPct)));
     investBusyRef.current = true;
     setInvestStatus("investing");
     setInvestError("");
@@ -692,7 +694,7 @@ export default function RendimentosClient({
       const res = await fetch(`/api/bridge/stellar-wallets/auto-yield`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, network: "mainnet", defindex_pct: 80, blend_pct: 20 }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, network: "mainnet", defindex_pct: dPct, blend_pct: 100 - dPct }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) throw new Error(json.message || `HTTP ${res.status}`);
@@ -1218,17 +1220,42 @@ export default function RendimentosClient({
                   })}
                 </div>
 
-                {/* Auto-invest: one tap to deploy everything (80% DeFindex / 20% Blend) */}
+                {/* Auto-invest: interactive split slider + one-tap deploy */}
                 {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => autoYield(walletEmail, selectedWalletKey)}
-                    disabled={investStatus === "investing"}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-stone-950 hover:bg-amber-400 disabled:opacity-40 transition-colors"
-                  >
-                    {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    {L("Auto-investir tudo (80% DeFindex · 20% Blend)", "Auto-invest everything (80% DeFindex · 20% Blend)")}
-                  </button>
+                  <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wide">
+                      <span className="text-emerald-400">DeFindex {autoDefindexPct}%</span>
+                      <span className="text-stone-400">{L("Divisão automática", "Auto split")}</span>
+                      <span className="text-amber-400">Blend {100 - autoDefindexPct}%</span>
+                    </div>
+                    <input
+                      type="range" min={0} max={100} step={5}
+                      value={autoDefindexPct}
+                      onChange={(e) => setAutoDefindexPct(Number(e.target.value))}
+                      className="w-full accent-amber-500"
+                    />
+                    <div className="flex gap-1.5">
+                      {[
+                        { label: "100/0", v: 100 }, { label: "80/20", v: 80 }, { label: "50/50", v: 50 }, { label: "0/100", v: 0 },
+                      ].map((p) => (
+                        <button key={p.v} type="button" onClick={() => setAutoDefindexPct(p.v)}
+                          className={`flex-1 rounded-md border px-2 py-1 text-[10px] font-bold transition-colors ${autoDefindexPct === p.v ? "border-amber-500 bg-amber-500 text-stone-950" : "border-stone-700 bg-stone-900 text-stone-300 hover:border-stone-500"}`}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => autoYield(walletEmail, selectedWalletKey, autoDefindexPct)}
+                      disabled={investStatus === "investing"}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-stone-950 hover:bg-amber-400 disabled:opacity-40 transition-colors"
+                    >
+                      {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      {investStatus === "investing"
+                        ? L("Investindo...", "Investing...")
+                        : L(`Auto-investir tudo (${autoDefindexPct}% / ${100 - autoDefindexPct}%)`, `Auto-invest everything (${autoDefindexPct}% / ${100 - autoDefindexPct}%)`)}
+                    </button>
+                  </div>
                 )}
 
                 {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) <= 0 && (
@@ -2076,8 +2103,19 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
           <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[10px] font-bold uppercase text-stone-400">{swapNetwork}</span>
         </div>
 
+        {/* What you can do with Soroswap */}
+        <div className="mb-4 rounded-xl border border-stone-800 bg-stone-950/60 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-400 mb-1.5">{L("O que dá pra fazer com a Soroswap", "What you can do with Soroswap")}</p>
+          <ul className="grid grid-cols-1 gap-1 text-[11px] text-stone-300 sm:grid-cols-2">
+            <li className="flex items-center gap-1.5"><ArrowRightLeft className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Trocar qualquer token", "Swap any token")}</li>
+            <li className="flex items-center gap-1.5"><BarChart3 className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Melhor preço agregado", "Best aggregated price")}</li>
+            <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Rotas via Soroswap, Aqua, Phoenix, SDEX", "Routes across Soroswap, Aqua, Phoenix, SDEX")}</li>
+            <li className="flex items-center gap-1.5"><Plus className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Fornecer liquidez e ganhar taxas", "Provide liquidity, earn fees")}</li>
+          </ul>
+        </div>
+
         {/* Pair quick-select */}
-        <div className="flex gap-2 mb-3">
+        <div className="flex flex-wrap gap-2 mb-3">
           {PAIRS.map((p) => (
             <button
               key={`${p.from}-${p.to}`}
@@ -2089,20 +2127,38 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
           ))}
         </div>
 
-        {/* Inputs */}
-        <div className="grid grid-cols-3 gap-3 mb-3">
+        {/* Inputs (with a direction-flip button) */}
+        <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-end gap-2 mb-3">
           <div>
             <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("De", "From")}</label>
             <input value={assetIn} onChange={(e) => { setAssetIn(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
           </div>
+          <button
+            type="button"
+            title={L("Inverter", "Flip")}
+            onClick={() => { const a = assetIn, b = assetOut; setAssetIn(b); setAssetOut(a); resetBuild(); setQuote(null); }}
+            className="mb-0.5 flex h-10 w-9 items-center justify-center rounded-lg border-2 border-stone-700 bg-stone-800 text-amber-400 hover:border-amber-400 transition-colors"
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+          </button>
           <div>
             <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Para", "To")}</label>
             <input value={assetOut} onChange={(e) => { setAssetOut(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
           </div>
           <div>
             <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Valor", "Amount")}</label>
-            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
+            <input type="number" min="0" step="0.01" value={amount} onChange={(e) => { setAmount(e.target.value); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
           </div>
+        </div>
+
+        {/* Quick amounts */}
+        <div className="flex gap-1.5 mb-3">
+          {["10", "50", "100", "500"].map((q) => (
+            <button key={q} type="button" onClick={() => { setAmount(q); resetBuild(); setQuote(null); }}
+              className={`flex-1 rounded-md border px-2 py-1 text-[11px] font-bold transition-colors ${amount === q ? "border-amber-500 bg-amber-500 text-stone-950" : "border-stone-700 bg-stone-900 text-stone-300 hover:border-stone-500"}`}>
+              {q}
+            </button>
+          ))}
         </div>
 
         {/* Trade type */}
