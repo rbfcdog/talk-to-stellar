@@ -10,6 +10,7 @@ import { VaultService } from "../services/core/vault.service";
 import { DefindexYieldService } from "../services/defindex-yield.service";
 import { DEFINDEX_USDC_VAULT_MAINNET } from "../../integrations/defindex/config";
 import { BlendService } from "../../integrations/blend/service";
+import { SoroswapService } from "../../integrations/soroswap/service";
 
 function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
@@ -686,6 +687,110 @@ async function ensureWalletGasTestnet(address: string): Promise<void> {
   for (let i = 0; i < 12; i++) {
     try { const r = await fetch(`${TESTNET_HORIZON}/accounts/${address}`); if (r.ok) { logger.info(`[bridge] Created+funded testnet account ${address} via friendbot`); return; } } catch { /* keep waiting */ }
     await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+// ── Custodial yield helpers (shared by invest + auto-yield) ──────────────────
+
+const NETWORK_USDC_ISSUER: Record<string, string> = {
+  mainnet: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+};
+
+// Resolve the vaulted signing key for a wallet: the Bridge email wallet (mainnet
+// custodial) or the session/login wallet in `wallets` (testnet). Supply-only
+// callers, so resolving by public_key is acceptable.
+async function resolveWalletKeypair(email: string, publicKey: string): Promise<Keypair | null> {
+  let vaultSecretId = "";
+  if (email) {
+    const { data } = await supabase
+      .from("bridge_stellar_wallets").select("vault_secret_id")
+      .eq("email", email).eq("public_key", publicKey).maybeSingle();
+    if (data?.vault_secret_id) vaultSecretId = String(data.vault_secret_id);
+  }
+  if (!vaultSecretId) {
+    const { data } = await supabase
+      .from("wallets").select("vault_secret_id").eq("public_key", publicKey).maybeSingle();
+    if (data?.vault_secret_id) vaultSecretId = String(data.vault_secret_id);
+  }
+  if (!vaultSecretId) return null;
+  const secret = await new VaultService(supabase).getSecret(vaultSecretId);
+  return secret ? Keypair.fromSecret(secret) : null;
+}
+
+// Build → sign → submit a single supply into DeFindex or Blend, on either network.
+async function executeYieldSupply(params: {
+  keypair: Keypair;
+  publicKey: string;
+  protocol: "defindex" | "blend";
+  amountUsdc: number;
+  network: "mainnet" | "testnet";
+  assetId?: string;
+}): Promise<{ hash: string | null; target: string; result: any }> {
+  const { keypair, publicKey, protocol, amountUsdc, network, assetId: reqAsset } = params;
+  const passphrase = network === "testnet" ? Networks.TESTNET : Networks.PUBLIC;
+
+  if (protocol === "blend") {
+    const pool = await BlendService.getPoolInfo(network);
+    const assetId = reqAsset
+      ? (pool.reserves?.find((r: any) => r.assetId === reqAsset)?.assetId || reqAsset)
+      : pool.usdc?.assetId;
+    if (!assetId) throw new Error(`Blend USDC reserve not available on ${network}.`);
+    const amountStroops = String(Math.floor(amountUsdc * 1e7));
+    const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network });
+    const tx = TransactionBuilder.fromXDR(built.xdr, passphrase);
+    tx.sign(keypair);
+    const submit = await BlendService.submitSignedXdr(tx.toXDR(), network);
+    return { hash: submit.hash, target: built.poolId, result: submit };
+  }
+
+  const target = network === "testnet"
+    ? (process.env.DEFINDEX_USDC_VAULT_TESTNET || "").trim()
+    : ((process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET);
+  if (!target) throw new Error(`No DeFindex USDC vault configured for ${network}.`);
+  const amountUnits = DefindexYieldService.amountToContractUnits(amountUsdc.toFixed(7), 7);
+  const { xdr } = await DefindexYieldService.buildVaultAction({
+    action: "deposit", vaultAddress: target, caller: publicKey, amountUnits, network, invest: true,
+  });
+  const tx = TransactionBuilder.fromXDR(xdr, passphrase);
+  tx.sign(keypair);
+  const result = await DefindexYieldService.sendSignedTransaction(tx.toXDR(), network);
+  const hash = result?.hash || result?.txHash || result?.transactionHash || null;
+  return { hash, target, result };
+}
+
+// Read idle USDC/XLM for a wallet on a network straight from Horizon.
+async function readWalletBalances(publicKey: string, network: "mainnet" | "testnet"): Promise<{ usdc: number; xlm: number; exists: boolean }> {
+  const horizon = network === "testnet" ? "https://horizon-testnet.stellar.org" : "https://horizon.stellar.org";
+  try {
+    const r = await fetch(`${horizon}/accounts/${publicKey}`);
+    if (!r.ok) return { usdc: 0, xlm: 0, exists: false };
+    const acct: any = await r.json();
+    const balances: any[] = Array.isArray(acct.balances) ? acct.balances : [];
+    const isUsdc = (b: any) =>
+      (b.asset_type === "credit_alphanum4" || b.asset_type === "credit_alphanum12") &&
+      String(b.asset_code).toUpperCase() === "USDC" &&
+      (network === "testnet" || b.asset_issuer === NETWORK_USDC_ISSUER.mainnet);
+    const usdc = balances.filter(isUsdc).reduce((s: number, b: any) => s + (Number(b.balance) || 0), 0);
+    const xlm = Number(balances.find((b) => b.asset_type === "native")?.balance ?? "0");
+    return { usdc, xlm, exists: true };
+  } catch {
+    return { usdc: 0, xlm: 0, exists: false };
+  }
+}
+
+// Best-effort: swap idle XLM (above a gas reserve) into USDC via Soroswap so it
+// can be put to work. Only runs where Soroswap is configured. Returns USDC gained.
+async function sweepXlmToUsdc(keypair: Keypair, publicKey: string, xlmToSwap: number): Promise<{ ok: boolean; hash?: string; note?: string }> {
+  if (xlmToSwap <= 0) return { ok: false, note: "no XLM to swap" };
+  try {
+    const quote = await SoroswapService.getQuote({ assetIn: "XLM", assetOut: "USDC", amount: xlmToSwap.toFixed(7), tradeType: "EXACT_IN" } as any);
+    const built = await SoroswapService.buildSwapXdr({ quote, senderAddress: publicKey } as any);
+    const tx = TransactionBuilder.fromXDR(built.xdr, built.networkPassphrase);
+    tx.sign(keypair);
+    const sent = await SoroswapService.sendSignedXdr(tx.toXDR());
+    return { ok: true, hash: (sent as any)?.hash };
+  } catch (e: any) {
+    return { ok: false, note: e?.message || String(e) };
   }
 }
 
@@ -2941,93 +3046,25 @@ export class BridgeController {
         return;
       }
 
-      // Resolve the wallet's vaulted signing key. Mainnet uses the Bridge email
-      // wallet; testnet (and any session/login wallet) lives in `wallets`. Try the
-      // Bridge wallet first (scoped to email), then fall back to the session wallet
-      // by public_key. Supply-only here, so resolving by public_key is low-risk.
-      let vaultSecretId = "";
-      if (email) {
-        const { data: bridgeRow } = await supabase
-          .from("bridge_stellar_wallets")
-          .select("vault_secret_id")
-          .eq("email", email)
-          .eq("public_key", publicKey)
-          .maybeSingle();
-        if (bridgeRow?.vault_secret_id) vaultSecretId = String(bridgeRow.vault_secret_id);
-      }
-      if (!vaultSecretId) {
-        const { data: sessionWalletRow } = await supabase
-          .from("wallets")
-          .select("vault_secret_id")
-          .eq("public_key", publicKey)
-          .maybeSingle();
-        if (sessionWalletRow?.vault_secret_id) vaultSecretId = String(sessionWalletRow.vault_secret_id);
-      }
-      if (!vaultSecretId) {
+      const keypair = await resolveWalletKeypair(email, publicKey);
+      if (!keypair) {
         res.status(404).json({ success: false, message: "Wallet not found for this account." });
         return;
       }
-      const secret = await new VaultService(supabase).getSecret(vaultSecretId);
-      if (!secret) {
-        res.status(500).json({ success: false, message: "Wallet signing key is unavailable." });
-        return;
-      }
-      const keypair = Keypair.fromSecret(secret);
 
       // Network: "mainnet" (default, Path B custodial) or "testnet".
       const network = (readText(req.body?.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
-      const passphrase = network === "testnet" ? Networks.TESTNET : Networks.PUBLIC;
 
       // Make sure the wallet can pay Soroban fees on the chosen network.
       if (network === "testnet") await ensureWalletGasTestnet(publicKey);
       else await ensureWalletGasMainnet(publicKey, 1);
 
       // Protocol: "defindex" (vault, default) or "blend" (direct lending pool).
-      const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase();
+      const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase() === "blend" ? "blend" : "defindex";
+      const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId) || undefined;
 
-      let hash: string | null = null;
-      let result: any;
-      let target = "";
-
-      if (protocol === "blend") {
-        // Direct Blend supply. Caller may target a specific reserve via asset_id;
-        // otherwise default to the USDC reserve.
-        const pool = await BlendService.getPoolInfo(network);
-        const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId);
-        const assetId = requestedAsset
-          ? (pool.reserves?.find((r: any) => r.assetId === requestedAsset)?.assetId || requestedAsset)
-          : pool.usdc?.assetId;
-        if (!assetId) throw new Error(`Blend USDC reserve not available on ${network}.`);
-        const amountStroops = String(Math.floor(amountNum * 1e7));
-        const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network });
-        target = built.poolId;
-        const tx = TransactionBuilder.fromXDR(built.xdr, passphrase);
-        tx.sign(keypair);
-        const submit = await BlendService.submitSignedXdr(tx.toXDR(), network);
-        hash = submit.hash;
-        result = submit;
-        logger.info(`[bridge] ${network} Blend supply ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
-      } else {
-        // DeFindex vault deposit.
-        target = network === "testnet"
-          ? ((process.env.DEFINDEX_USDC_VAULT_TESTNET || "").trim())
-          : ((process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET);
-        if (!target) throw new Error(`No DeFindex USDC vault configured for ${network}.`);
-        const amountUnits = DefindexYieldService.amountToContractUnits(amount, 7);
-        const { xdr } = await DefindexYieldService.buildVaultAction({
-          action: "deposit",
-          vaultAddress: target,
-          caller: publicKey,
-          amountUnits,
-          network,
-          invest: true,
-        });
-        const tx = TransactionBuilder.fromXDR(xdr, passphrase);
-        tx.sign(keypair);
-        result = await DefindexYieldService.sendSignedTransaction(tx.toXDR(), network);
-        hash = result?.hash || result?.txHash || result?.transactionHash || null;
-        logger.info(`[bridge] ${network} DeFindex deposit ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
-      }
+      const { hash, target, result } = await executeYieldSupply({ keypair, publicKey, protocol, amountUsdc: amountNum, network, assetId: requestedAsset });
+      logger.info(`[bridge] ${network} ${protocol} supply ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
 
       res.status(201).json({
         success: true,
@@ -3042,6 +3079,109 @@ export class BridgeController {
     } catch (error: any) {
       const msg = error?.response?.data?.error || error?.message || "Failed to invest on mainnet.";
       logger.error(`[bridge] investStellarWallet failed: ${msg}`);
+      res.status(statusFromError(error)).json({ success: false, message: msg });
+    }
+  }
+
+  /**
+   * POST /api/bridge/stellar-wallets/auto-yield — sweep a wallet's idle funds
+   * into yield: the bulk into DeFindex, a slice into Blend. Optionally swaps idle
+   * XLM (above a gas reserve) into USDC via Soroswap first. Network-aware and
+   * works for both the Bridge wallet (mainnet) and the session wallet (testnet).
+   * Body: { email?, public_key, network?, defindex_pct?, blend_pct?,
+   *         min_reserve_usdc?, swap_xlm?, xlm_gas_reserve? }
+   */
+  static async autoYieldWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.body?.public_key ?? req.body?.publicKey);
+      if (!publicKey) {
+        res.status(400).json({ success: false, message: "public_key is required." });
+        return;
+      }
+      const network = (readText(req.body?.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
+
+      // Allocation: bulk to DeFindex, slice to Blend (defaults 80/20).
+      let defindexPct = Number(req.body?.defindex_pct);
+      let blendPct = Number(req.body?.blend_pct);
+      if (!Number.isFinite(defindexPct)) defindexPct = 80;
+      if (!Number.isFinite(blendPct)) blendPct = 20;
+      const minReserve = Number.isFinite(Number(req.body?.min_reserve_usdc)) ? Number(req.body?.min_reserve_usdc) : 0.5;
+      const swapXlm = Boolean(req.body?.swap_xlm);
+      const xlmGasReserve = Number.isFinite(Number(req.body?.xlm_gas_reserve)) ? Number(req.body?.xlm_gas_reserve) : 5;
+
+      const keypair = await resolveWalletKeypair(email, publicKey);
+      if (!keypair) {
+        res.status(404).json({ success: false, message: "Wallet not found for this account." });
+        return;
+      }
+
+      if (network === "testnet") await ensureWalletGasTestnet(publicKey);
+      else await ensureWalletGasMainnet(publicKey, 1);
+
+      const steps: any[] = [];
+
+      // Optional: convert idle XLM (beyond a gas reserve) into USDC via Soroswap.
+      let swap: any = null;
+      if (swapXlm) {
+        const pre = await readWalletBalances(publicKey, network);
+        const xlmToSwap = Math.max(0, Math.floor((pre.xlm - xlmGasReserve) * 1e7) / 1e7);
+        if (xlmToSwap > 0) {
+          swap = await sweepXlmToUsdc(keypair, publicKey, xlmToSwap);
+          steps.push({ step: "swap", asset_in: "XLM", amount: xlmToSwap, ...swap });
+          if (swap.ok) await new Promise((r) => setTimeout(r, 4000)); // let it settle
+        } else {
+          swap = { ok: false, note: "no idle XLM above gas reserve" };
+          steps.push({ step: "swap", ...swap });
+        }
+      }
+
+      // Read idle USDC and allocate.
+      const bal = await readWalletBalances(publicKey, network);
+      const investable = Math.max(0, Math.floor((bal.usdc - minReserve) * 1e7) / 1e7);
+      if (investable <= 0) {
+        res.json({ success: true, network, public_key: publicKey, idle_usdc: bal.usdc, invested_usdc: 0, steps, message: "No idle USDC above the reserve to deploy." });
+        return;
+      }
+
+      const pctTotal = defindexPct + blendPct || 1;
+      const defindexAmt = Math.floor((investable * defindexPct / pctTotal) * 1e7) / 1e7;
+      const blendAmt = Math.floor((investable - defindexAmt) * 1e7) / 1e7;
+
+      let investedUsdc = 0;
+      if (defindexAmt > 0) {
+        try {
+          const r = await executeYieldSupply({ keypair, publicKey, protocol: "defindex", amountUsdc: defindexAmt, network });
+          investedUsdc += defindexAmt;
+          steps.push({ step: "defindex", amount: defindexAmt, hash: r.hash, target: r.target });
+          logger.info(`[bridge] auto-yield ${network} DeFindex ${defindexAmt} USDC <- ${publicKey} hash=${r.hash}`);
+        } catch (e: any) {
+          steps.push({ step: "defindex", amount: defindexAmt, error: e?.message || String(e) });
+        }
+      }
+      if (blendAmt > 0) {
+        try {
+          const r = await executeYieldSupply({ keypair, publicKey, protocol: "blend", amountUsdc: blendAmt, network });
+          investedUsdc += blendAmt;
+          steps.push({ step: "blend", amount: blendAmt, hash: r.hash, target: r.target });
+          logger.info(`[bridge] auto-yield ${network} Blend ${blendAmt} USDC <- ${publicKey} hash=${r.hash}`);
+        } catch (e: any) {
+          steps.push({ step: "blend", amount: blendAmt, error: e?.message || String(e) });
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        network,
+        public_key: publicKey,
+        idle_usdc: bal.usdc,
+        invested_usdc: investedUsdc,
+        allocation: { defindex: defindexAmt, blend: blendAmt },
+        steps,
+      });
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.message || "Auto-yield failed.";
+      logger.error(`[bridge] autoYieldWallet failed: ${msg}`);
       res.status(statusFromError(error)).json({ success: false, message: msg });
     }
   }

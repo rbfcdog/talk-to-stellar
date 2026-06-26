@@ -666,6 +666,31 @@ export default function RendimentosClient({
     }
   }
 
+  // Auto-yield: sweep the wallet's idle USDC into DeFindex (bulk) + Blend (slice).
+  async function autoYield(email: string, publicKey: string) {
+    if (!publicKey) return;
+    setInvestStatus("investing");
+    setInvestError("");
+    setInvestHash("");
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets/auto-yield`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, network: "mainnet", defindex_pct: 80, blend_pct: 20 }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) throw new Error(json.message || `HTTP ${res.status}`);
+      if (!json.invested_usdc) { setInvestStatus("error"); setInvestError(json.message || "No idle USDC to deploy."); return; }
+      setInvestStatus("ok");
+      const firstHash = (json.steps || []).find((s: any) => s.hash)?.hash || "";
+      setInvestHash(firstHash);
+      setTimeout(() => { loadEmailWallets(email); loadPositions(email, publicKey); }, 4000);
+    } catch (e: any) {
+      setInvestStatus("error");
+      setInvestError(e?.message ?? String(e));
+    }
+  }
+
   async function loadEmailWallets(email: string) {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
@@ -1170,6 +1195,19 @@ export default function RendimentosClient({
                     );
                   })}
                 </div>
+
+                {/* Auto-invest: one tap to deploy everything (80% DeFindex / 20% Blend) */}
+                {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => autoYield(walletEmail, selectedWalletKey)}
+                    disabled={investStatus === "investing"}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-stone-950 hover:bg-amber-400 disabled:opacity-40 transition-colors"
+                  >
+                    {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {L("Auto-investir tudo (80% DeFindex · 20% Blend)", "Auto-invest everything (80% DeFindex · 20% Blend)")}
+                  </button>
+                )}
 
                 {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) <= 0 && (
                   <p className="text-[11px] text-tts-muted">
