@@ -426,7 +426,7 @@
 
 - **Where**: `frontend/app/rendimentos/rendimentos-client.tsx`, `frontend/__tests__/unit/ux-copy.test.ts`, `docs/project-brain/product/surfaces/investments-page.md`.
 - **Root cause**: The returns view had two competing surfaces mounted at once: the overview selected the first yield product by default and showed its detail/actions immediately, while the top-level page still rendered auto-invest/wallet action panels and a separate `#invest` section on initial load.
-- **Status**: **Fixed in current working tree; commit pending**. The first `/rendimentos` view now renders the total graph and yield product cards only. Product cards open a detail state, and invest/withdraw controls mount only from that specific detail or an application deep link.
+- **Status**: **Fixed by `c8ac9783`**. The first `/rendimentos` view now renders the total graph and yield product cards only. Product cards open a detail state, and invest/withdraw controls mount only from that specific detail or an application deep link.
 - **Lesson**: **Investment overview and transaction entry must be separate states**. Default `/rendimentos` should be portfolio browsing; actions belong behind a selected product detail.
 
 ---
@@ -725,4 +725,4 @@ Fixing commits verified in codebase:
 | #63 | `008da16` | Validate Blend pool contract ids and discover current v2 pools from the backstop reward zone |
 | #64 | `34b27a7` | Add Bridge virtual-account connection map, direct USD-to-Stellar VA creation, and Bridge-wallet-to-Stellar transfer route |
 | #65 | `8122ee8b` | Darken operational ramp overlays and form controls so `/wire-onramp` and `/usd-withdraw` remain readable in dark mode |
-| #66 | Commit pending | Split `/rendimentos` overview from product detail/invest states so the first screen only shows total graph and yield cards |
+| #66 | `c8ac9783` | Split `/rendimentos` overview from product detail/invest states so the first screen only shows total graph and yield cards |
