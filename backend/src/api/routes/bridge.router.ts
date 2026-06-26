@@ -17,6 +17,7 @@ router.use(requireBridgePassword);
 // ── Session-based helpers (use session_id to look up customer) ──
 router.get("/session/usd-account", BridgeController.getSessionUsdAccount);
 router.get("/session/stellar-balances", BridgeController.getSessionStellarBalances);
+router.post("/session/link-email", BridgeController.linkSessionEmail);
 router.get("/stellar-wallets", BridgeController.listStellarWallets);
 router.post("/stellar-wallets/generate", BridgeController.generateStellarWallet);
 router.post("/stellar-wallets/activate", BridgeController.activateStellarWallet);

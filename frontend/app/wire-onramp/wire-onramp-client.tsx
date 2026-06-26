@@ -200,11 +200,6 @@ function clearCachedEmail() {
   }
 }
 
-function shortId(value?: string | null) {
-  const raw = String(value || "");
-  return raw.length > 16 ? `${raw.slice(0, 10)}...${raw.slice(-6)}` : raw || "-";
-}
-
 // ── Copy button ────────────────────────────────────────────────────────────────
 
 function CopyBtn({ value, label }: { value: string; label?: string }) {
@@ -448,6 +443,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [status, setStatus] = useState<Status>("login");
   const [data, setData] = useState<ApiResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  // Nubank-grade default: show only the deposit instructions. Operator detail
+  // (account status, linked wallets, manual sweep) lives behind one disclosure.
+  const [showDetails, setShowDetails] = useState(false);
   const [emailInput, setEmailInput] = useState(emailParam);
   const [loggedEmail, setLoggedEmail] = useState("");
   const [cachedEmail, setCachedEmail] = useState("");
@@ -996,10 +994,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     <OperationalPage size="lg" frameClassName="max-w-4xl">
       <OperationalHeader
         eyebrow="US$"
-        title={L("Depositar em Dólar", "USD Deposit")}
+        title={L("Receber dólares", "Receive dollars")}
         description={L(
-          "Use estes dados para enviar wire/ACH. A Bridge converte o depósito para USDC e envia para sua carteira Stellar.",
-          "Use these details to send a wire/ACH deposit. Bridge converts the deposit to USDC and routes it to your Stellar wallet."
+          "Envie um wire ou ACH do seu banco americano usando os dados abaixo. O valor chega em dólar na sua conta.",
+          "Send a wire or ACH from your US bank using the details below. The money arrives as dollars in your account."
         )}
         actions={
           <div className="flex items-center gap-3">
@@ -1015,30 +1013,19 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      {/* Received summary — the only number the user cares about up front */}
+      <div className="grid gap-3 sm:grid-cols-2">
         <OperationalStat
-          label="Customer"
-          value={shortId(data?.customer_id)}
-          detail={data?.customer_status || data?.kyc_status || "Loaded"}
-          tone={data?.customer_id ? "confirm" : "default"}
-        />
-        <OperationalStat
-          label="USD accounts"
-          value={String(usdAccounts.length)}
-          detail={data?.virtual_account_source === "db_cache" ? "Loaded from cache" : "Live Bridge API"}
-          tone={usdAccounts.length ? "confirm" : "gold"}
-        />
-        <OperationalStat
-          label="Received"
+          label={L("Recebido até agora", "Received so far")}
           value={`$${fmt(totalReceived)}`}
-          detail="Bridge account activity"
+          detail={L("nesta conta", "in this account")}
           tone={totalReceived > 0 ? "confirm" : "default"}
         />
         <OperationalStat
-          label="Destination"
-          value={data?.stellar_wallet?.public_key ? shortId(data.stellar_wallet.public_key) : "-"}
-          detail={data?.stellar_wallet ? "Stellar USDC" : "Wallet not linked"}
-          tone={data?.stellar_wallet ? "confirm" : "gold"}
+          label={L("Contas de depósito", "Deposit accounts")}
+          value={String(usdAccounts.length)}
+          detail={usdAccounts.length ? L("prontas para uso", "ready to use") : L("nenhuma ainda", "none yet")}
+          tone={usdAccounts.length ? "confirm" : "gold"}
         />
       </div>
 
@@ -1067,10 +1054,21 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         </OperationalCard>
       )}
 
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowDetails((v) => !v)}
+          className="text-xs font-bold text-tts-muted hover:text-tts-deep transition-colors"
+        >
+          {showDetails ? L("Ocultar detalhes da conta", "Hide account details") : L("Detalhes da conta", "Account details")}
+        </button>
+      </div>
+
+      {showDetails && (
       <OperationalCard>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-tts-muted">Bridge account</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-tts-muted">{L("Conta", "Account")}</p>
             <p className="mt-1 text-sm text-tts-muted">
               {loggedEmail || emailInput}
               {data?.lookup_source ? <span className="ml-2 text-tts-muted/60">via {data.lookup_source}</span> : null}
@@ -1088,9 +1086,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         </div>
       </OperationalCard>
+      )}
 
         {/* Mainnet Stellar wallets (linked for Bridge routing) */}
-        {data?.mainnet_wallets && data.mainnet_wallets.length > 0 && (
+        {showDetails && data?.mainnet_wallets && data.mainnet_wallets.length > 0 && (
           <OperationalCard>
             <div className="flex items-center gap-2.5 mb-4">
               <Wallet className="h-5 w-5 text-tts-muted" />
@@ -1193,7 +1192,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
               </>
             )}
 
-            {status === "ready" && (
+            {showDetails && status === "ready" && (
               <OperationalCard>
                 <div className="flex items-center gap-2.5 mb-4">
                   <Send className="h-5 w-5 text-tts-muted" />

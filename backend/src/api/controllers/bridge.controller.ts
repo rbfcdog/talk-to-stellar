@@ -2879,6 +2879,56 @@ export class BridgeController {
     }
   }
 
+  /**
+   * POST /session/link-email — associate a Bridge customer email (and thus its
+   * dollar account) with the user's normal session/login wallet. Persists the
+   * email on agent_sessions so every later call resolves it from the session,
+   * and returns the Bridge Stellar wallets under that email so the UI can pick
+   * a primary account.
+   */
+  static async linkSessionEmail(req: Request, res: Response): Promise<void> {
+    try {
+      const sessionId = readText(req.body?.session_id ?? req.query.session_id ?? req.headers["x-session-id"]);
+      const email = readText(req.body?.email ?? req.query.email).toLowerCase();
+
+      if (!sessionId) {
+        res.status(400).json({ success: false, message: "session_id is required." });
+        return;
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.status(400).json({ success: false, message: "A valid email is required." });
+        return;
+      }
+
+      // Persist the link on the session.
+      const { error: updErr } = await supabase
+        .from("agent_sessions").update({ email }).eq("session_id", sessionId);
+      if (updErr) throw updErr;
+
+      // Best-effort backlink on the Bridge customer side (non-blocking).
+      try {
+        await supabase
+          .from("bridge_customers").update({ local_user_id: sessionId }).eq("email", email);
+      } catch { /* column may not exist in every env */ }
+
+      // Return the Bridge wallets under this email so the UI can choose one.
+      const { data: wallets } = await supabase
+        .from("bridge_stellar_wallets")
+        .select("public_key, label, is_primary, is_funded, has_usdc_trustline")
+        .eq("email", email)
+        .order("is_primary", { ascending: false });
+
+      res.json({
+        success: true,
+        email,
+        session_id: sessionId,
+        wallets: Array.isArray(wallets) ? wallets : [],
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error?.message || "Failed to link email." });
+    }
+  }
+
   // ── Bridge destination wallets (stored by email) ──────────────────────
 
   /** Resolve the Bridge customer email from session_id or email query/body. */
