@@ -2810,45 +2810,63 @@ export class BridgeController {
   static async getSessionStellarBalances(req: Request, res: Response): Promise<void> {
     try {
       const sessionId = readText(req.query.session_id ?? req.body?.session_id);
-      const email = readText(req.query.email ?? req.body?.email).toLowerCase();
+      let email = readText(req.query.email ?? req.body?.email).toLowerCase();
 
       if (!sessionId && !email) {
         res.status(400).json({ success: false, message: "session_id or email is required." });
         return;
       }
 
-      // Resolve public key from session or email
-      let publicKey = "";
+      // Resolve the user's email from the session if not passed explicitly — the
+      // mainnet (Bridge) wallet is keyed by email.
+      if (!email && sessionId) {
+        const { data: sessionRow } = await supabase
+          .from("agent_sessions").select("email").eq("session_id", sessionId).maybeSingle();
+        if (sessionRow?.email) email = String(sessionRow.email).toLowerCase();
+      }
+
+      // Testnet wallet = the user's login/session wallet (wallets table).
+      let testnetKey = "";
       if (sessionId) {
         const { data: walletRow } = await supabase
           .from("wallets").select("public_key").eq("session_id", sessionId).maybeSingle();
-        if (walletRow?.public_key) publicKey = walletRow.public_key;
+        if (walletRow?.public_key) testnetKey = walletRow.public_key;
       }
-      if (!publicKey && email) {
+      if (!testnetKey && email) {
         const { data: sessionRow } = await supabase
           .from("agent_sessions").select("session_id").eq("email", email)
           .order("created_at", { ascending: false }).limit(1).maybeSingle();
         if (sessionRow?.session_id) {
           const { data: walletRow } = await supabase
             .from("wallets").select("public_key").eq("session_id", sessionRow.session_id).maybeSingle();
-          if (walletRow?.public_key) publicKey = walletRow.public_key;
+          if (walletRow?.public_key) testnetKey = walletRow.public_key;
         }
       }
 
-      if (!publicKey) {
-        res.json({ success: true, public_key: null, testnet: null, mainnet: null });
+      // Mainnet wallet = the Bridge Stellar wallet, ALWAYS resolved by email.
+      // Every mainnet wallet is a bridge_stellar_wallets row.
+      let mainnetKey = "";
+      if (email) {
+        const { data: bridgeRow } = await supabase
+          .from("bridge_stellar_wallets").select("public_key")
+          .eq("email", email).order("is_primary", { ascending: false }).limit(1).maybeSingle();
+        if (bridgeRow?.public_key) mainnetKey = bridgeRow.public_key;
+      }
+
+      if (!testnetKey && !mainnetKey) {
+        res.json({ success: true, public_key: null, testnet_public_key: null, mainnet_public_key: null, testnet: null, mainnet: null });
         return;
       }
 
-      // Fetch from both Horizon servers in parallel
       const MAINNET_HORIZON = "https://horizon.stellar.org";
       const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
       const MAINNET_USDC = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
       const TESTNET_USDC = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
 
-      async function fetchBalance(horizonUrl: string, usdcIssuer: string): Promise<{ usdc: string; xlm: string } | null> {
+      async function fetchBalance(horizonUrl: string, usdcIssuer: string, key: string): Promise<{ usdc: string; xlm: string } | null> {
+        if (!key) return null;
         try {
-          const r = await fetch(`${horizonUrl}/accounts/${publicKey}`);
+          const r = await fetch(`${horizonUrl}/accounts/${key}`);
           if (!r.ok) return null;
           const acct: any = await r.json();
           const balances: Array<{ asset_type: string; asset_code?: string; asset_issuer?: string; balance: string }> =
@@ -2864,13 +2882,15 @@ export class BridgeController {
       }
 
       const [testnetBalance, mainnetBalance] = await Promise.all([
-        fetchBalance(TESTNET_HORIZON, TESTNET_USDC),
-        fetchBalance(MAINNET_HORIZON, MAINNET_USDC),
+        fetchBalance(TESTNET_HORIZON, TESTNET_USDC, testnetKey),
+        fetchBalance(MAINNET_HORIZON, MAINNET_USDC, mainnetKey),
       ]);
 
       res.json({
         success: true,
-        public_key: publicKey,
+        public_key: testnetKey || null,        // back-compat: the login/testnet wallet
+        testnet_public_key: testnetKey || null,
+        mainnet_public_key: mainnetKey || null, // the Bridge wallet (by email)
         testnet: testnetBalance,
         mainnet: mainnetBalance,
       });
