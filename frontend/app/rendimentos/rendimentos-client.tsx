@@ -22,6 +22,7 @@ import {
   Percent,
   Plus,
   TrendingUp,
+  Wallet,
   WalletCards,
 } from "lucide-react";
 import {
@@ -598,7 +599,7 @@ export default function RendimentosClient({
   const [mainnetHistory, setMainnetHistory] = useState<PositionHistoryState | null>(null);
   // The user's login/session wallet (used for testnet yield — distinct from the
   // Bridge email wallet used on mainnet).
-  const [sessionWallet, setSessionWallet] = useState<{ public_key: string } | null>(null);
+  const [sessionWallet, setSessionWallet] = useState<{ public_key: string; testnet_usdc: number; testnet_xlm: number } | null>(null);
   const loadPositionsToken = useRef(""); // stale-response guard for positions/history
 
   async function loadSessionWallet() {
@@ -609,8 +610,39 @@ export default function RendimentosClient({
       if (![...params].length) return;
       const res = await fetch(`/api/bridge/session/stellar-balances?${params.toString()}`, { cache: "no-store" });
       const j = await res.json().catch(() => ({}));
-      if (j?.success && j.public_key) setSessionWallet({ public_key: String(j.public_key) });
+      if (j?.success && j.public_key) {
+        setSessionWallet({
+          public_key: String(j.public_key),
+          testnet_usdc: Number(j.testnet?.usdc) || 0,
+          testnet_xlm: Number(j.testnet?.xlm) || 0,
+        });
+      }
     } catch { /* non-critical */ }
+  }
+
+  // Associate a Bridge (dollar-account) email with the user's login wallet, so
+  // every later call resolves the dollar account from the session.
+  const [linkState, setLinkState] = useState<{ loading: boolean; linked: boolean; error: string }>({ loading: false, linked: false, error: "" });
+  async function linkBridgeEmail(email: string) {
+    const e = email.trim().toLowerCase();
+    if (!session.sessionId) { setLinkState({ loading: false, linked: false, error: L("Faça login para vincular.", "Sign in to link.") }); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setLinkState({ loading: false, linked: false, error: L("E-mail inválido.", "Invalid email.") }); return; }
+    setLinkState({ loading: true, linked: false, error: "" });
+    try {
+      const res = await fetch("/api/bridge/session/link-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: session.sessionId, email: e }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.success) throw new Error(j.message || `HTTP ${res.status}`);
+      setLinkState({ loading: false, linked: true, error: "" });
+      setWalletEmail(e);
+      loadEmailWallets(e);
+      loadSessionWallet();
+    } catch (err: any) {
+      setLinkState({ loading: false, linked: false, error: err?.message ?? String(err) });
+    }
   }
 
   async function loadPositions(email: string, publicKey: string) {
@@ -688,8 +720,10 @@ export default function RendimentosClient({
     }
   }
 
-  // Auto-yield: sweep the wallet's idle USDC into DeFindex + Blend by the chosen split.
-  async function autoYield(email: string, publicKey: string, defindexPct: number) {
+  // Auto-yield: sweep the wallet's idle USDC into DeFindex + Blend by the chosen
+  // split. Works on both networks — mainnet uses the Bridge wallet, testnet uses
+  // the login/session wallet (resolved server-side from the public key).
+  async function autoYield(email: string, publicKey: string, defindexPct: number, network: "mainnet" | "testnet" = "mainnet") {
     if (investBusyRef.current) return; // re-entrancy guard
     if (!publicKey) return;
     const dPct = Math.min(100, Math.max(0, Math.round(defindexPct)));
@@ -701,7 +735,7 @@ export default function RendimentosClient({
       const res = await fetch(`/api/bridge/stellar-wallets/auto-yield`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, network: "mainnet", defindex_pct: dPct, blend_pct: 100 - dPct }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, network, defindex_pct: dPct, blend_pct: 100 - dPct }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) throw new Error(json.message || `HTTP ${res.status}`);
@@ -709,7 +743,8 @@ export default function RendimentosClient({
       setInvestStatus("ok");
       const firstHash = (json.steps || []).find((s: any) => s.hash)?.hash || "";
       setInvestHash(firstHash);
-      setTimeout(() => { loadEmailWallets(email); loadPositions(email, publicKey); }, 4000);
+      if (network === "mainnet") setTimeout(() => { loadEmailWallets(email); loadPositions(email, publicKey); }, 4000);
+      else setTimeout(() => { loadSessionWallet(); }, 4000);
     } catch (e: any) {
       setInvestStatus("error");
       setInvestError(e?.message ?? String(e));
@@ -1125,6 +1160,42 @@ export default function RendimentosClient({
             </button>
           </div>
         </div>
+
+        {/* Put money to work — one-tap auto-yield from idle balance.
+            Demo uses the login/session wallet; Real money uses the dollar account. */}
+        {networkView === "testnet" && sessionWallet?.public_key && (
+          <AutoYieldHero
+            language={language}
+            idleUsdc={sessionWallet.testnet_usdc}
+            defindexPct={autoDefindexPct}
+            busy={investStatus === "investing"}
+            status={investStatus === "ok" ? "ok" : investStatus === "error" ? "error" : ""}
+            error={investError}
+            onRun={() => autoYield(walletEmail, sessionWallet.public_key, autoDefindexPct, "testnet")}
+          />
+        )}
+        {networkView === "mainnet" && bridgeUnlocked && selectedWalletKey && (
+          <AutoYieldHero
+            language={language}
+            idleUsdc={mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance) : 0}
+            defindexPct={autoDefindexPct}
+            busy={investStatus === "investing"}
+            status={investStatus === "ok" ? "ok" : investStatus === "error" ? "error" : ""}
+            error={investError}
+            onRun={() => autoYield(walletEmail, selectedWalletKey, autoDefindexPct, "mainnet")}
+          />
+        )}
+
+        {/* Link your dollar account — associate a Bridge email with this wallet.
+            Shown until linked so the clean default stays uncluttered. */}
+        {!linkState.linked && !walletEmail && session.authenticated && (
+          <BridgeLinkCard
+            language={language}
+            defaultEmail={walletEmail}
+            state={linkState}
+            onLink={linkBridgeEmail}
+          />
+        )}
 
         {/* Bridge wallet — access gate (mainnet only). The real-money wallet is
             password-protected; testnet and the returns view stay open. */}
@@ -1981,6 +2052,103 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       <p className="text-xl font-bold mt-1">{value}</p>
       {sub && <p className="text-xs text-tts-muted mt-0.5">{sub}</p>}
     </div>
+  );
+}
+
+// ── Auto-yield hero — one-tap "put your money to work" ───────────────────────
+function AutoYieldHero({ language, idleUsdc, defindexPct, busy, status, error, onRun }: {
+  language: AppLanguage;
+  idleUsdc: number;
+  defindexPct: number;
+  busy: boolean;
+  status: "" | "ok" | "error";
+  error: string;
+  onRun: () => void;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const hasIdle = idleUsdc > 0.0000001;
+  return (
+    <div className="mb-5 rounded-2xl border border-tts-border bg-tts-surface p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-tts-muted">{L("Disponível para render", "Available to earn")}</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-tts-deep">
+            {idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })}
+            <span className="ml-1.5 text-base font-bold text-tts-muted">USDC</span>
+          </p>
+          <p className="mt-1 text-xs text-tts-muted">
+            {L(`Aplicado em ${defindexPct}% cofre · ${100 - defindexPct}% empréstimo`, `Split ${defindexPct}% vault · ${100 - defindexPct}% lending`)}
+          </p>
+        </div>
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500">
+          <TrendingUp className="h-6 w-6" />
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={onRun}
+        disabled={busy || !hasIdle}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-deep py-3.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
+        {busy ? L("Aplicando…", "Putting it to work…") : hasIdle ? L("Pôr meu dinheiro pra render", "Put my money to work") : L("Sem saldo livre", "No idle balance")}
+      </button>
+
+      {status === "ok" && (
+        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-tts-confirm">
+          <CheckCircle2 className="h-3.5 w-3.5" /> {L("Aplicado! Seu dinheiro já está rendendo.", "Done! Your money is earning now.")}
+        </p>
+      )}
+      {status === "error" && error && (
+        <p className="mt-2 text-center text-xs font-semibold text-tts-error">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Link your dollar account (associate a Bridge email with this wallet) ──────
+function BridgeLinkCard({ language, defaultEmail, state, onLink }: {
+  language: AppLanguage;
+  defaultEmail: string;
+  state: { loading: boolean; linked: boolean; error: string };
+  onLink: (email: string) => void;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const [email, setEmail] = useState(defaultEmail);
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); onLink(email); }}
+      className="mb-5 rounded-2xl border border-tts-border bg-tts-surface p-5"
+    >
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+          <Wallet className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-bold text-tts-deep">{L("Vincular sua conta em dólar", "Link your dollar account")}</p>
+          <p className="text-xs text-tts-muted">{L("Conecte o e-mail da sua conta em dólar a esta carteira.", "Connect your dollar-account email to this wallet.")}</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@email.com"
+          className="flex-1 rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-bold text-tts-deep outline-none focus:border-tts-deep placeholder:text-tts-muted/40"
+        />
+        <button
+          type="submit"
+          disabled={!email.trim() || state.loading}
+          className="flex items-center justify-center gap-2 rounded-lg bg-tts-deep px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {state.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {L("Vincular", "Link")}
+        </button>
+      </div>
+      {state.error && <p className="mt-2 text-xs font-semibold text-tts-error">{state.error}</p>}
+    </form>
   );
 }
 
