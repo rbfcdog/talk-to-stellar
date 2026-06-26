@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowUpFromLine,
@@ -22,12 +22,15 @@ import {
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BridgeAccessField, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
+import { BridgeAccountLogin, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
+import { WalletsSuiteCard } from "@/components/shared/wallets-suite-card";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type StellarWallet = { public_key: string; usdc_balance: string | null };
-type BridgeWallet = { balances: Array<{ currency: string; amount: string }> };
+type BridgeWallet = { id: string; chain: string | null; balances: Array<{ currency: string; amount: string }> };
+type MainnetWallet = { public_key: string; label?: string | null; is_primary?: boolean; last_balance?: Array<{ asset_code: string; balance: string }> };
+type VirtualAccount = { id: string; status?: string; currency?: string; total_received_usd?: number };
 
 type UsdAccountResponse = {
   has_account?: boolean;
@@ -36,6 +39,8 @@ type UsdAccountResponse = {
   message?: string;
   stellar_wallet?: StellarWallet | null;
   bridge_wallets?: BridgeWallet[];
+  mainnet_wallets?: MainnetWallet[];
+  virtual_accounts?: VirtualAccount[];
 };
 
 type ExternalAccount = {
@@ -150,11 +155,12 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
     }
   }, [sessionId, loadExternalAccounts]);
 
+  const didAuto = useRef(false);
   useEffect(() => {
-    if (!bridgeUnlocked) return;
+    if (!bridgeUnlocked || didAuto.current) return;
     const stored = readCachedEmail();
     if (stored) setEmailInput(stored);
-    if (sessionId || stored) load(stored);
+    if (sessionId || stored) { didAuto.current = true; load(stored); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridgeUnlocked]);
 
@@ -187,40 +193,24 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
     }
   }
 
-  // ── Bridge access gate ──────────────────────────────────────────────────────
-  if (bridgeChecked && !bridgeUnlocked) {
+  // ── Bridge account login (email + access password) ──────────────────────────
+  if (bridgeChecked && (!bridgeUnlocked || status === "login")) {
     return (
       <OperationalPage size="sm" centered>
         <OperationalHeader
           eyebrow="US$"
           title={L("Sacar para banco americano", "Withdraw to US bank")}
-          description={L("Esta área é protegida. Entre com a senha de acesso.", "This area is protected. Enter the access password.")}
+          description={L("Entre com o e-mail e a senha da sua conta em dólar.", "Sign in with your dollar-account email and password.")}
         />
-        <BridgeAccessField
-          onUnlock={unlockBridge}
-          title={L("Saque em dólar — restrito", "USD withdrawal — restricted")}
-          description={L("Senha de acesso necessária.", "Access password required.")}
+        <BridgeAccountLogin
+          defaultEmail={emailInput}
+          title={L("Conta em dólar", "Dollar account")}
+          description={L("E-mail e senha de acesso da conta.", "Account email and access password.")}
+          emailLabel={L("E-mail da conta", "Account email")}
+          passwordLabel={L("Senha de acesso", "Access password")}
+          submitLabel={L("Entrar", "Sign in")}
+          onAuthenticated={(em) => { didAuto.current = true; setEmailInput(em); unlockBridge(); load(em); }}
         />
-      </OperationalPage>
-    );
-  }
-
-  // ── Login ───────────────────────────────────────────────────────────────────
-  if (status === "login") {
-    return (
-      <OperationalPage size="sm" centered>
-        <OperationalHeader
-          eyebrow="USD"
-          title={L("Sacar para banco americano", "Withdraw to US bank")}
-          description={L("Entre com o e-mail da sua conta para sacar dólares para um banco nos EUA.", "Enter your account email to withdraw dollars to a US bank.")}
-        />
-        <OperationalCard>
-          <form onSubmit={(e) => { e.preventDefault(); load(emailInput); }} className="space-y-3">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("E-mail da conta", "Account email")}</label>
-            <Input type="email" autoFocus value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder="you@email.com" className="text-center" />
-            <Button type="submit" disabled={!emailInput.trim()} className="w-full">{L("Continuar", "Continue")}</Button>
-          </form>
-        </OperationalCard>
       </OperationalPage>
     );
   }
@@ -268,6 +258,19 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
         <OperationalStat label={L("Disponível", "Available")} value={`$${fmtUsd(availableUsd)}`} detail="USD" tone={availableUsd > 0 ? "confirm" : "default"} />
         <OperationalStat label={L("Conta", "Account")} value={loggedEmail || "—"} detail={customerId ? "Loaded" : "—"} tone={customerId ? "confirm" : "gold"} />
       </div>
+
+      {/* Full account suite — VAs + custodial + Stellar wallets */}
+      <WalletsSuiteCard
+        isEn={isEn}
+        virtualAccounts={data?.virtual_accounts ?? []}
+        custodial={data?.bridge_wallets ?? []}
+        stellar={[
+          ...(data?.mainnet_wallets ?? []).map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, last_balance: w.last_balance })),
+          ...(data?.stellar_wallet?.public_key && !(data?.mainnet_wallets ?? []).some((m) => m.public_key === data!.stellar_wallet!.public_key)
+            ? [{ public_key: data.stellar_wallet.public_key, label: "Stellar USDC", usdc_balance: data.stellar_wallet.usdc_balance }]
+            : []),
+        ]}
+      />
 
       {result ? (
         <OperationalCard className="space-y-4 text-center">

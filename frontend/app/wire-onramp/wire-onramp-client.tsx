@@ -30,7 +30,8 @@ import {
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BridgeAccessField, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
+import { BridgeAccountLogin, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
+import { WalletsSuiteCard } from "@/components/shared/wallets-suite-card";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -423,70 +424,6 @@ function VaCard({ va }: { va: UsdVA }) {
   );
 }
 
-// ── Wallets card (custodial + Stellar) ──────────────────────────────────────
-
-function WalletsCard({ data, isEn }: { data: ApiResponse | null; isEn: boolean }) {
-  const L = (pt: string, en: string) => (isEn ? en : pt);
-  const f = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const custodial = (data?.bridge_wallets ?? []).map((w) => ({
-    id: w.id,
-    chain: w.chain || "—",
-    usdc: (w.balances ?? []).filter((b) => b.currency === "USDC").reduce((s, b) => s + (Number(b.amount) || 0), 0),
-  }));
-
-  const stellar: Array<{ key: string; label: string; usdc: number; primary: boolean }> = [];
-  for (const mw of data?.mainnet_wallets ?? []) {
-    const usdc = Number((mw.last_balance || []).find((b) => b.asset_code === "USDC")?.balance ?? 0) || 0;
-    stellar.push({ key: mw.public_key, label: mw.label || "Stellar", usdc, primary: mw.is_primary });
-  }
-  if (data?.stellar_wallet?.public_key && !stellar.some((s) => s.key === data.stellar_wallet!.public_key)) {
-    stellar.push({ key: data.stellar_wallet.public_key, label: "Stellar USDC", usdc: Number(data.stellar_wallet.usdc_balance ?? 0) || 0, primary: false });
-  }
-
-  if (!custodial.length && !stellar.length) return null;
-  const short = (k: string) => (k.length > 12 ? `${k.slice(0, 6)}…${k.slice(-6)}` : k);
-
-  return (
-    <OperationalCard>
-      <div className="mb-4 flex items-center gap-2.5">
-        <Wallet className="h-5 w-5 text-tts-muted" />
-        <p className="text-sm font-bold text-tts-deep">{L("Suas carteiras", "Your wallets")}</p>
-      </div>
-
-      {custodial.length > 0 && (
-        <div className="mb-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Custodiais", "Custodial")}</p>
-          <div className="space-y-2">
-            {custodial.map((w) => (
-              <div key={w.id} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
-                <span className="text-sm font-semibold capitalize text-tts-deep">{w.chain}</span>
-                <span className="text-sm font-bold tabular-nums text-tts-deep">{f(w.usdc)} <span className="font-medium text-tts-muted">USDC</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {stellar.length > 0 && (
-        <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Carteiras Stellar", "Stellar wallets")}</p>
-          <div className="space-y-2">
-            {stellar.map((w) => (
-              <div key={w.key} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
-                <div className="min-w-0">
-                  <span className="font-mono text-xs font-semibold text-tts-deep">{short(w.key)}</span>
-                  {w.primary && <span className="ml-2 text-[10px] font-medium text-tts-confirm">{L("Principal", "Primary")}</span>}
-                </div>
-                <span className="text-sm font-bold tabular-nums text-tts-deep">{f(w.usdc)} <span className="font-medium text-tts-muted">USDC</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </OperationalCard>
-  );
-}
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -842,84 +779,35 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     }
   }, [sendAmount, bridgeWallets, pipeline, selectedSourceWalletId, activeVa, data, destinationAddress, load, loadDestWallets, loadPipeline, loggedEmail, emailInput, L]);
 
-  // ── Bridge access gate ─────────────────────────────────────────────────────
-  // The mainnet bridge wallet is password-protected. Show the access field
-  // inside the normal page shell (not a full-screen wall) before anything loads.
-  if (bridgeChecked && !bridgeUnlocked) {
+  // ── Bridge account login (email + access password) ──────────────────────────
+  if (bridgeChecked && (!bridgeUnlocked || status === "login")) {
     return (
       <OperationalPage size="sm" centered>
         <OperationalHeader
           eyebrow="US$"
           title={L("Depositar em Dólar", "USD Deposit")}
           description={L(
-            "Esta carteira é protegida. Entre com a senha de acesso para continuar.",
-            "This wallet is protected. Enter the access password to continue."
+            "Entre com o e-mail e a senha da sua conta em dólar.",
+            "Sign in with your dollar-account email and password."
           )}
         />
-        <BridgeAccessField
-          onUnlock={unlockBridge}
-          title={L("Carteira Bridge — restrita", "Bridge wallet — restricted")}
-          description={L("Senha de acesso necessária.", "Access password required.")}
+        {amount && (
+          <div className="flex items-center gap-2 rounded-md border border-tts-gold/30 bg-tts-gold-bg px-3 py-2">
+            <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+              {L(`Valor: US$ ${amount}`, `Amount: US$ ${amount}`)}
+            </span>
+          </div>
+        )}
+        <BridgeAccountLogin
+          defaultEmail={emailInput || cachedEmail}
+          title={L("Conta em dólar", "Dollar account")}
+          description={L("E-mail e senha de acesso da conta.", "Account email and access password.")}
+          emailLabel={L("E-mail da conta", "Account email")}
+          passwordLabel={L("Senha de acesso", "Access password")}
+          submitLabel={L("Entrar", "Sign in")}
+          onAuthenticated={(em) => { didAuto.current = true; setEmailInput(em); unlockBridge(); load(em, { forceEmail: true }); }}
         />
-      </OperationalPage>
-    );
-  }
-
-  // ── Login gate ─────────────────────────────────────────────────────────────
-
-  if (status === "login") {
-    return (
-      <OperationalPage size="sm" centered>
-        <OperationalHeader
-          eyebrow="US$"
-          title={L("Depositar em Dólar", "USD Deposit")}
-          description={L(
-            "Entre com o e-mail da conta Bridge que deve receber o depósito. Pode ser diferente do WhatsApp.",
-            "Enter the Bridge account email that should receive the deposit. It can be different from WhatsApp."
-          )}
-        />
-        <OperationalCard>
-          {amount && (
-            <div className="mb-4 flex items-center gap-2 rounded-md border border-tts-gold/30 bg-tts-gold-bg px-3 py-2">
-              <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
-              <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
-                {L(`Valor: US$ ${amount}`, `Amount: US$ ${amount}`)}
-              </span>
-            </div>
-          )}
-
-          <form
-            onSubmit={(e) => { e.preventDefault(); load(emailInput, { forceEmail: true }); }}
-            className="space-y-3"
-          >
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-tts-muted mb-2">
-                {L("E-mail da conta", "Account email")}
-              </label>
-              <Input
-                type="email"
-                autoFocus
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="you@email.com"
-                className="text-center"
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={!emailInput.trim()}
-              className="w-full"
-            >
-              {L("Continuar", "Continue")}
-            </Button>
-          </form>
-          {cachedEmail && (
-            <p className="mt-3 text-center text-xs text-tts-muted">
-              {L("E-mail salvo neste navegador:", "Saved in this browser:")}{" "}
-              <span className="font-mono text-tts-deep">{cachedEmail}</span>
-            </p>
-          )}
-        </OperationalCard>
       </OperationalPage>
     );
   }
@@ -1119,8 +1007,18 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         </OperationalCard>
       )}
 
-      {/* Your wallets — custodial + Stellar (where the dollars land) */}
-      <WalletsCard data={data} isEn={isEn} />
+      {/* Full account suite — VAs + custodial + Stellar (where the dollars land) */}
+      <WalletsSuiteCard
+        isEn={isEn}
+        virtualAccounts={(data?.virtual_accounts ?? []).map((v) => ({ id: v.id, status: v.status, currency: v.currency, total_received_usd: v.total_received_usd }))}
+        custodial={data?.bridge_wallets ?? []}
+        stellar={[
+          ...(data?.mainnet_wallets ?? []).map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, last_balance: w.last_balance })),
+          ...(data?.stellar_wallet?.public_key && !(data?.mainnet_wallets ?? []).some((m) => m.public_key === data!.stellar_wallet!.public_key)
+            ? [{ public_key: data.stellar_wallet.public_key, label: "Stellar USDC", usdc_balance: data.stellar_wallet.usdc_balance }]
+            : []),
+        ]}
+      />
 
       <div className="flex justify-center">
         <button
