@@ -108,12 +108,29 @@ export const SoroswapController = {
       if (!pool) {
         return ok(res, { fee_bp: 30, reserves: [], network: useMainnet ? 'mainnet' : 'testnet' });
       }
+
+      // Derive USD figures straight from the reserves: USDC ≈ $1, so the XLM
+      // price = usdcReserve / xlmReserve and a balanced AMM's TVL ≈ 2 × the USDC
+      // side. No external price feed needed — the pool itself is the oracle.
+      const reserves: Array<{ asset: string; amount: string }> = pool.reserves ?? [];
+      const usdcReserve = reserves.find((x) => x.asset !== 'native');
+      const xlmReserve = reserves.find((x) => x.asset === 'native');
+      const usdcAmt = usdcReserve ? parseFloat(usdcReserve.amount) : 0;
+      const xlmAmt = xlmReserve ? parseFloat(xlmReserve.amount) : 0;
+      const xlmUsdPrice = xlmAmt > 0 && usdcAmt > 0 ? usdcAmt / xlmAmt : null;
+      const tvlUsd = usdcAmt > 0 ? usdcAmt * 2 : null;
+      const feeBp = pool.fee_bp ?? 30;
+
       ok(res, {
         pool_id: pool.id,
-        fee_bp: pool.fee_bp ?? 30,
+        pair: 'XLM/USDC',
+        fee_bp: feeBp,
+        fee_pct: feeBp / 100,
         total_shares: pool.total_shares,
         total_trustlines: pool.total_trustlines,
-        reserves: pool.reserves ?? [],
+        reserves,
+        tvl_usd: tvlUsd,
+        xlm_usd_price: xlmUsdPrice,
         network: useMainnet ? 'mainnet' : 'testnet',
       });
     } catch (e) { err(res, e); }

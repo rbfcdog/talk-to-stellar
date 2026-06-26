@@ -11,13 +11,16 @@ import {
   CalendarDays,
   CheckCircle2,
   Coins,
+  Droplets,
   ExternalLink,
   FileCheck2,
   HelpCircle,
+  Layers,
   Loader2,
   LockKeyhole,
+  Percent,
   Plus,
-  Wallet,
+  TrendingUp,
   WalletCards,
 } from "lucide-react";
 import {
@@ -105,13 +108,8 @@ const SELECT_CARD = "w-full text-left rounded-xl border-2 p-3 transition-all dur
 const SELECT_CARD_OFF = "border-stone-700 bg-stone-800 text-stone-100 hover:border-amber-400/60 hover:bg-stone-700/70";
 const SELECT_CARD_ON = "border-amber-500 bg-amber-500/15 text-white ring-2 ring-amber-500/40 shadow-lg";
 const selectCard = (on: boolean) => `${SELECT_CARD} ${on ? SELECT_CARD_ON : SELECT_CARD_OFF}`;
-const PILL = "rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors duration-150";
-const PILL_OFF = "border-stone-700 bg-stone-800 text-stone-300 hover:border-stone-500 hover:text-white";
-const PILL_ON = "border-amber-500 bg-amber-500 text-stone-950 shadow-sm";
-const pill = (on: boolean) => `${PILL} ${on ? PILL_ON : PILL_OFF}`;
-// Primary action button — amber on dark; secondary — outlined stone.
+// Primary action button — amber on dark.
 const BTN_PRIMARY = "flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 py-3 text-sm font-bold text-stone-950 transition-colors hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500";
-const BTN_SECONDARY = "flex items-center justify-center gap-2 rounded-lg border-2 border-stone-700 bg-stone-800 py-3 text-sm font-bold text-white transition-colors hover:border-stone-500 disabled:opacity-40";
 function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
   // Use the same robust parser as normalizeDecimal (handles thousands separators
   // and comma decimals) instead of a single naive comma→dot replace.
@@ -1937,414 +1935,239 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-// ── Inline Soroswap swap widget ──────────────────────────────────────────────
+// ── Inline Soroswap liquidity-yield panel ────────────────────────────────────
+// Swaps/conversions are handled internally via path payments — this panel is
+// focused on liquidity provision yield (the part the user actually opts into).
+
+type LpPool = {
+  pair?: string;
+  fee_bp?: number;
+  fee_pct?: number;
+  total_shares?: string;
+  total_trustlines?: number;
+  reserves?: Array<{ asset: string; amount: string }>;
+  tvl_usd?: number | null;
+  xlm_usd_price?: number | null;
+  pool_id?: string;
+  network?: string;
+};
 
 function SwapInlinePanel({ language }: { language: AppLanguage }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
-  const [assetIn, setAssetIn] = useState("XLM");
-  const [assetOut, setAssetOut] = useState("USDC");
-  const [amount, setAmount] = useState("10");
-  const [tradeType, setTradeType] = useState<"EXACT_IN" | "EXACT_OUT">("EXACT_IN");
+  const [pool, setPool] = useState<LpPool | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [quote, setQuote] = useState<any>(null);
-  const [loadingQuote, setLoadingQuote] = useState(false);
-  const [errQuote, setErrQuote] = useState<string | null>(null);
-
-  const [xdrResult, setXdrResult] = useState<any>(null);
-  const [loadingXdr, setLoadingXdr] = useState(false);
-  const [errXdr, setErrXdr] = useState<string | null>(null);
-
-  const [walletAddress, setWalletAddress] = useState("");
-  const [walletNetwork, setWalletNetwork] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [errWallet, setErrWallet] = useState<string | null>(null);
-
-  const [signedXdr, setSignedXdr] = useState("");
-  const [signing, setSigning] = useState(false);
-  const [errSign, setErrSign] = useState<string | null>(null);
-
-  const [submitResult, setSubmitResult] = useState<any>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [errSubmit, setErrSubmit] = useState<string | null>(null);
-
-  const [swapNetwork, setSwapNetwork] = useState<"TESTNET" | "PUBLIC">("TESTNET");
-
-  const [lpPool, setLpPool] = useState<{ fee_bp?: number; reserves?: Array<{ asset: string; amount: string }>; pool_id?: string } | null>(null);
+  // LP yield simulator inputs.
+  const [deposit, setDeposit] = useState("1000");
+  const [turnoverPct, setTurnoverPct] = useState(15); // assumed daily volume as % of TVL
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/swap/pool-info?network=mainnet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d) setLpPool(d); })
-      .catch(() => {});
+      .then((d) => { if (!cancelled && d && !d.error) setPool(d); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  const PAIRS = [
-    { from: "XLM", to: "USDC" },
-    { from: "USDC", to: "XLM" },
+  const feePct = pool?.fee_pct ?? (pool?.fee_bp != null ? pool.fee_bp / 100 : 0.3);
+  const tvl = pool?.tvl_usd ?? null;
+  const xlmPrice = pool?.xlm_usd_price ?? null;
+  const lpCount = pool?.total_trustlines ?? null;
+
+  const depositNum = Math.max(0, Number(deposit) || 0);
+  const dailyVolume = tvl != null ? tvl * (turnoverPct / 100) : null;
+  // Your share of the pool once you add `deposit` of total value.
+  const yourShare = tvl != null && tvl + depositNum > 0 ? depositNum / (tvl + depositNum) : null;
+  const poolDailyFees = dailyVolume != null ? dailyVolume * (feePct / 100) : null;
+  const yourDailyFees = poolDailyFees != null && yourShare != null ? poolDailyFees * yourShare : null;
+  const yourYearlyFees = yourDailyFees != null ? yourDailyFees * 365 : null;
+  const estApr = yourYearlyFees != null && depositNum > 0 ? (yourYearlyFees / depositNum) * 100 : null;
+
+  const fmtUsd = (n: number | null | undefined, d = 0) =>
+    n == null ? "—" : `$${n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+
+  // Pools to surface. XLM/USDC is live from Horizon; the BRL pairs are the
+  // Stellar BRL liquidity layer (shown as available, deep-linked to Soroswap).
+  const pairs = [
+    {
+      pair: "XLM / USDC",
+      note: L("Par principal · dados ao vivo", "Core pair · live data"),
+      tvl: tvl,
+      fee: feePct,
+      live: true,
+    },
+    { pair: "USDC / BRZ", note: L("Camada de liquidez BRL", "BRL liquidity layer"), tvl: null, fee: 0.3, live: false },
+    { pair: "USDC / BRLT", note: L("Camada de liquidez BRL", "BRL liquidity layer"), tvl: null, fee: 0.3, live: false },
   ];
-
-  function resetBuild() {
-    setXdrResult(null);
-    setSignedXdr("");
-    setSubmitResult(null);
-    setErrXdr(null);
-    setErrSign(null);
-    setErrSubmit(null);
-  }
-
-  function shortAddr(addr: string) {
-    if (!addr) return "";
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-  }
-
-  function netPassphrase(net: string) {
-    return net === "TESTNET"
-      ? "Test SDF Network ; September 2015"
-      : "Public Global Stellar Network ; September 2015";
-  }
-
-  async function getQuote() {
-    setLoadingQuote(true);
-    setErrQuote(null);
-    setQuote(null);
-    resetBuild();
-    try {
-      const qs = new URLSearchParams({ assetIn, assetOut, amount, tradeType });
-      const res = await fetch(`/api/swap/quote?${qs}`, { cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.network) setSwapNetwork(data.network === "testnet" ? "TESTNET" : "PUBLIC");
-      setQuote(data);
-    } catch (e: any) {
-      setErrQuote(e.message);
-    } finally {
-      setLoadingQuote(false);
-    }
-  }
-
-  async function buildXdr() {
-    if (!quote || !walletAddress) return;
-    setLoadingXdr(true);
-    setErrXdr(null);
-    resetBuild();
-    try {
-      const res = await fetch("/api/swap/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quote, senderAddress: walletAddress }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.network) setSwapNetwork(data.network === "testnet" ? "TESTNET" : "PUBLIC");
-      setXdrResult(data);
-    } catch (e: any) {
-      setErrXdr(e.message);
-    } finally {
-      setLoadingXdr(false);
-    }
-  }
-
-  async function connectFreighter() {
-    setConnecting(true);
-    setErrWallet(null);
-    try {
-      const f = await import("@stellar/freighter-api");
-      const connected = await f.isConnected();
-      if (!connected.isConnected) throw new Error("Freighter extension not installed.");
-      const access = await f.requestAccess();
-      if (!access.address) throw new Error("Freighter did not return a public key.");
-      const net = await f.getNetwork();
-      setWalletAddress(access.address);
-      setWalletNetwork(net.network || "");
-    } catch (e: any) {
-      setErrWallet(e.message);
-    } finally {
-      setConnecting(false);
-    }
-  }
-
-  async function signWithFreighter() {
-    if (!xdrResult?.xdr || !walletAddress) return;
-    setSigning(true);
-    setErrSign(null);
-    setSignedXdr("");
-    setSubmitResult(null);
-    try {
-      const f = await import("@stellar/freighter-api");
-      const pass = xdrResult.networkPassphrase || netPassphrase(swapNetwork);
-      const result = await f.signTransaction(xdrResult.xdr, { networkPassphrase: pass, address: walletAddress });
-      if (!result.signedTxXdr) throw new Error("Freighter did not return signed XDR.");
-      setSignedXdr(result.signedTxXdr);
-    } catch (e: any) {
-      setErrSign(e.message);
-    } finally {
-      setSigning(false);
-    }
-  }
-
-  async function submitSwap() {
-    if (!signedXdr) return;
-    setSubmitting(true);
-    setErrSubmit(null);
-    setSubmitResult(null);
-    try {
-      const res = await fetch("/api/swap/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signedXdr }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-      setSubmitResult(data);
-    } catch (e: any) {
-      setErrSubmit(e.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const walletNetOk = !walletNetwork || (walletNetwork.toUpperCase().includes("TEST") ? "TESTNET" : "PUBLIC") === swapNetwork;
 
   return (
     <div className="space-y-5">
+      {/* Hero — liquidity yield */}
       <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Trocar tokens", "Swap tokens")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Swap via DEX", "Swap via DEX")}</h3>
-          </div>
-          <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[10px] font-bold uppercase text-stone-400">{swapNetwork}</span>
-        </div>
-
-        {/* What you can do with Soroswap */}
-        <div className="mb-4 rounded-xl border border-stone-800 bg-stone-950/60 p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-400 mb-1.5">{L("O que dá pra fazer com a Soroswap", "What you can do with Soroswap")}</p>
-          <ul className="grid grid-cols-1 gap-1 text-[11px] text-stone-300 sm:grid-cols-2">
-            <li className="flex items-center gap-1.5"><ArrowRightLeft className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Trocar qualquer token", "Swap any token")}</li>
-            <li className="flex items-center gap-1.5"><BarChart3 className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Melhor preço agregado", "Best aggregated price")}</li>
-            <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Rotas via Soroswap, Aqua, Phoenix, SDEX", "Routes across Soroswap, Aqua, Phoenix, SDEX")}</li>
-            <li className="flex items-center gap-1.5"><Plus className="h-3 w-3 text-emerald-400 shrink-0" /> {L("Fornecer liquidez e ganhar taxas", "Provide liquidity, earn fees")}</li>
-          </ul>
-        </div>
-
-        {/* Pair quick-select */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          {PAIRS.map((p) => (
-            <button
-              key={`${p.from}-${p.to}`}
-              onClick={() => { setAssetIn(p.from); setAssetOut(p.to); resetBuild(); setQuote(null); setErrQuote(null); }}
-              className={pill(assetIn === p.from && assetOut === p.to)}
-            >
-              {p.from} → {p.to}
-            </button>
-          ))}
-        </div>
-
-        {/* Inputs (with a direction-flip button) */}
-        <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-end gap-2 mb-3">
-          <div>
-            <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("De", "From")}</label>
-            <input value={assetIn} onChange={(e) => { setAssetIn(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
-          </div>
-          <button
-            type="button"
-            title={L("Inverter", "Flip")}
-            onClick={() => { const a = assetIn, b = assetOut; setAssetIn(b); setAssetOut(a); resetBuild(); setQuote(null); }}
-            className="mb-0.5 flex h-10 w-9 items-center justify-center rounded-lg border-2 border-stone-700 bg-stone-800 text-amber-400 hover:border-amber-400 transition-colors"
-          >
-            <ArrowRightLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Para", "To")}</label>
-            <input value={assetOut} onChange={(e) => { setAssetOut(e.target.value.toUpperCase()); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
-          </div>
-          <div>
-            <label className="block mb-1 text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Valor", "Amount")}</label>
-            <input type="number" min="0" step="0.01" value={amount} onChange={(e) => { setAmount(e.target.value); resetBuild(); setQuote(null); }} className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400" />
-          </div>
-        </div>
-
-        {/* Quick amounts */}
-        <div className="flex gap-1.5 mb-3">
-          {["10", "50", "100", "500"].map((q) => (
-            <button key={q} type="button" onClick={() => { setAmount(q); resetBuild(); setQuote(null); }}
-              className={`flex-1 rounded-md border px-2 py-1 text-[11px] font-bold transition-colors ${amount === q ? "border-amber-500 bg-amber-500 text-stone-950" : "border-stone-700 bg-stone-900 text-stone-300 hover:border-stone-500"}`}>
-              {q}
-            </button>
-          ))}
-        </div>
-
-        {/* Trade type */}
-        <div className="flex gap-2 mb-4">
-          {(["EXACT_IN", "EXACT_OUT"] as const).map((t) => (
-            <button key={t} onClick={() => { setTradeType(t); resetBuild(); setQuote(null); }} className={pill(tradeType === t)}>
-              {t === "EXACT_IN" ? L("Exato entrada", "Exact in") : L("Exato saída", "Exact out")}
-            </button>
-          ))}
-        </div>
-
-        {/* Freighter Wallet — always visible so user can connect before getting a quote */}
-        <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">{L("Carteira Freighter", "Freighter Wallet")}</p>
-            {walletAddress
-              ? <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">{walletNetwork || L("Conectada", "Connected")}</span>
-              : <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">{L("Não conectada", "Not connected")}</span>}
-          </div>
-          {walletAddress ? (
-            <p className="font-mono text-xs text-stone-400 break-all">{walletAddress}</p>
-          ) : (
-            <button onClick={connectFreighter} disabled={connecting} className={BTN_SECONDARY + " w-full !py-2 text-xs"}>
-              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
-              {L("Conectar Freighter", "Connect Freighter")}
-            </button>
-          )}
-          {errWallet && <p className="mt-2 text-xs text-red-300">{errWallet}</p>}
-          {!walletNetOk && <p className="mt-2 text-xs font-semibold text-amber-300">{L(`Freighter está na rede ${walletNetwork}; mude para ${swapNetwork}.`, `Freighter is on ${walletNetwork}; switch to ${swapNetwork}.`)}</p>}
-        </div>
-
-        {/* Step 1: Quote */}
-        <button onClick={getQuote} disabled={loadingQuote} className={BTN_PRIMARY + " mb-3"}>
-          {loadingQuote ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRightLeft className="h-4 w-4" />}
-          {L("1 — Obter cotação", "1 — Get quote")}
-        </button>
-
-        {errQuote && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300 mb-3">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {errQuote}
-          </div>
-        )}
-
-        {quote && (
-          <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-4 space-y-1">
-            <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Você envia", "You send")}</span><span className="font-bold text-white">{quote.amountIn} {quote.assetIn || assetIn}</span></div>
-            <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Você recebe", "You receive")}</span><span className="font-bold text-emerald-400">{quote.amountOut} {quote.assetOut || assetOut}</span></div>
-            {quote.priceImpact != null && <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Impacto", "Impact")}</span><span className="font-bold text-white">{Number(quote.priceImpact).toFixed(4)}%</span></div>}
-            {quote.protocols && <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Protocolos", "Protocols")}</span><span className="font-bold text-white">{Array.isArray(quote.protocols) ? quote.protocols.join(", ") : quote.protocols}</span></div>}
-            {quote.warning && <p className="text-xs text-stone-400 pt-1">ℹ️ {quote.warning}</p>}
-          </div>
-        )}
-
-        {/* Step 2: Build */}
-        {quote && walletAddress && walletNetOk && (
-          <div className="space-y-3 mb-3">
-            <button onClick={buildXdr} disabled={loadingXdr} className={BTN_SECONDARY + " w-full"}>
-              {loadingXdr ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {L(`2 — Preparar transação (${shortAddr(walletAddress)})`, `2 — Build XDR (${shortAddr(walletAddress)})`)}
-            </button>
-            {errXdr && <p className="text-xs text-red-300">{errXdr}</p>}
-          </div>
-        )}
-        {quote && !walletAddress && (
-          <p className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300">{L("Conecte o Freighter acima para continuar.", "Connect Freighter above to continue.")}</p>
-        )}
-
-        {/* Step 3: Sign */}
-        {xdrResult?.xdr && (
-          <div className="space-y-3 mt-3">
-            <div className="rounded-lg border-2 border-stone-700 bg-stone-800/60 p-3">
-              <p className="text-xs font-bold text-stone-400 mb-1">{L("XDR não assinado", "Unsigned XDR")}</p>
-              <p className="max-h-14 overflow-y-auto break-all font-mono text-[10px] text-stone-400">{xdrResult.xdr}</p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+              <Droplets className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Rendimento via liquidez", "Liquidity yield")}</p>
+              <h3 className="text-lg font-bold text-white">{L("Forneça liquidez, ganhe taxas", "Provide liquidity, earn fees")}</h3>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={signWithFreighter} disabled={signing || !walletAddress} className={BTN_PRIMARY}>
-                {signing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                {L("3 — Assinar", "3 — Sign")}
-              </button>
-              <a href={`https://lab.stellar.org/transaction/sign?xdr=${encodeURIComponent(xdrResult.xdr)}&networkPassphrase=${encodeURIComponent(xdrResult.networkPassphrase || netPassphrase(swapNetwork))}`}
-                target="_blank" rel="noopener noreferrer" className={BTN_SECONDARY}>
-                <ExternalLink className="h-4 w-4" /> {L("Stellar Lab", "Stellar Lab")}
-              </a>
-            </div>
-            {errSign && <p className="text-xs text-red-300">{errSign}</p>}
-            {signedXdr && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-300">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                {L(`Assinado por ${shortAddr(walletAddress)}`, `Signed by ${shortAddr(walletAddress)}`)}
-              </div>
-            )}
           </div>
-        )}
-
-        {/* Step 4: Submit */}
-        {signedXdr && (
-          <div className="space-y-3 mt-3">
-            <button onClick={submitSwap} disabled={submitting} className={BTN_PRIMARY}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {L("4 — Enviar para Stellar", "4 — Submit to Stellar")}
-            </button>
-            {errSubmit && <p className="text-xs text-red-300">{errSubmit}</p>}
-            {submitResult && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
-                <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Status", "Status")}</span><span className="font-bold text-emerald-300">{submitResult.successful ? L("✓ Sucesso", "✓ Success") : L("Falha", "Failed")}</span></div>
-                {submitResult.hash && <div className="flex justify-between text-xs"><span className="text-stone-400">Hash</span><span className="font-mono font-bold text-white">{submitResult.hash.slice(0, 16)}…</span></div>}
-                {submitResult.ledger && <div className="flex justify-between text-xs"><span className="text-stone-400">Ledger</span><span className="font-bold text-white">{submitResult.ledger}</span></div>}
-                {submitResult.hash && (
-                  <a href={`https://stellar.expert/explorer/${swapNetwork === "PUBLIC" ? "public" : "testnet"}/tx/${submitResult.hash}`} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:underline mt-1">
-                    <ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* LP Yield */}
-      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Rendimento via liquidez", "Liquidity yield")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Fornecer Liquidez", "Provide Liquidity")}</h3>
-          </div>
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-300">{L("Avançado", "Advanced")}</span>
+          <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[10px] font-bold uppercase text-stone-400">{(pool?.network || "mainnet").toUpperCase()}</span>
         </div>
 
-        <p className="text-xs text-stone-400 mb-3">
+        <p className="text-xs leading-relaxed text-stone-400 mb-4">
           {L(
-            `Além de trocar, você pode fornecer liquidez no par ${assetIn}/${assetOut} e ganhar uma parte das taxas de cada swap realizado.`,
-            `Beyond swapping, you can provide ${assetIn}/${assetOut} liquidity and earn a share of fees from every trade.`
+            "Trocas e conversões já acontecem nos bastidores via path payments. Aqui você coloca o USDC para trabalhar fornecendo liquidez — e fica com uma fatia das taxas de cada swap roteado pela pool.",
+            "Swaps and conversions already happen behind the scenes via path payments. Here you put USDC to work by providing liquidity — and keep a slice of the fees from every swap routed through the pool."
           )}
         </p>
 
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 text-center">
-            <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Taxa por swap", "Fee per swap")}</p>
-            <p className="text-xl font-bold text-emerald-400">{((lpPool?.fee_bp ?? 30) / 100).toFixed(1)}%</p>
+        {/* Live pool stats */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-xl border border-stone-700 bg-stone-950/60 p-3">
+            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">
+              <Layers className="h-3 w-3" /> {L("Liquidez total", "Total liquidity")}
+            </div>
+            <p className="text-lg font-bold text-white tabular-nums">{loading ? "…" : fmtUsd(tvl)}</p>
+            <p className="text-[10px] text-stone-500">{L("XLM/USDC · ao vivo", "XLM/USDC · live")}</p>
           </div>
-          {lpPool?.reserves?.length ? (
-            <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Liquidez (mainnet)", "Liquidity (mainnet)")}</p>
-              {lpPool.reserves.map((r) => (
-                <p key={r.asset} className="text-xs font-bold text-white">
-                  {parseFloat(r.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })} {r.asset === "native" ? "XLM" : r.asset.split(":")[0]}
-                </p>
-              ))}
+          <div className="rounded-xl border border-stone-700 bg-stone-950/60 p-3">
+            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">
+              <Percent className="h-3 w-3" /> {L("Taxa por swap", "Fee per swap")}
             </div>
-          ) : (
-            <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Rendimento", "Return")}</p>
-              <p className="text-xs text-stone-400">{L("Proporcional ao volume", "Proportional to volume")}</p>
+            <p className="text-lg font-bold text-emerald-400 tabular-nums">{feePct.toFixed(2)}%</p>
+            <p className="text-[10px] text-stone-500">{L("dividido entre LPs", "split across LPs")}</p>
+          </div>
+          <div className="rounded-xl border border-stone-700 bg-stone-950/60 p-3">
+            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">
+              <Coins className="h-3 w-3" /> {L("Provedores", "Providers")}
             </div>
+            <p className="text-lg font-bold text-white tabular-nums">{loading ? "…" : (lpCount != null ? lpCount.toLocaleString("en-US") : "—")}</p>
+            <p className="text-[10px] text-stone-500">{xlmPrice != null ? `XLM ≈ $${xlmPrice.toFixed(4)}` : L("posições ativas", "active positions")}</p>
+          </div>
+        </div>
+
+        {/* Reserves breakdown */}
+        {pool?.reserves?.length ? (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {pool.reserves.map((r) => (
+              <span key={r.asset} className="rounded-lg border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[11px] font-bold text-stone-300">
+                {parseFloat(r.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })} {r.asset === "native" ? "XLM" : r.asset.split(":")[0]}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Yield simulator */}
+      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Simulador de rendimento", "Yield simulator")}</p>
+            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Quanto eu ganharia?", "What would I earn?")}</h3>
+          </div>
+          <TrendingUp className="h-5 w-5 text-emerald-400" />
+        </div>
+
+        {/* Deposit amount */}
+        <label className="block mb-1 text-[11px] font-bold uppercase tracking-wide text-stone-400">{L("Seu aporte (USD)", "Your deposit (USD)")}</label>
+        <input
+          type="number" min="0" step="100" value={deposit}
+          onChange={(e) => setDeposit(e.target.value)}
+          className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400 mb-2"
+        />
+        <div className="flex gap-1.5 mb-4">
+          {["100", "1000", "5000", "10000"].map((q) => (
+            <button key={q} type="button" onClick={() => setDeposit(q)}
+              className={`flex-1 rounded-md border px-2 py-1 text-[11px] font-bold transition-colors ${deposit === q ? "border-amber-500 bg-amber-500 text-stone-950" : "border-stone-700 bg-stone-900 text-stone-300 hover:border-stone-500"}`}>
+              ${Number(q).toLocaleString("en-US")}
+            </button>
+          ))}
+        </div>
+
+        {/* Assumed daily volume */}
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-[11px] font-bold uppercase tracking-wide text-stone-400">{L("Volume diário assumido", "Assumed daily volume")}</label>
+          <span className="text-[11px] font-bold text-stone-300">{turnoverPct}% {L("da pool", "of TVL")}{dailyVolume != null ? ` · ${fmtUsd(dailyVolume)}` : ""}</span>
+        </div>
+        <input
+          type="range" min={2} max={60} step={1} value={turnoverPct}
+          onChange={(e) => setTurnoverPct(Number(e.target.value))}
+          className="w-full accent-emerald-500 mb-4"
+        />
+
+        {/* Results */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
+            <p className="text-[10px] font-bold uppercase text-emerald-300/80 mb-1">{L("APR estimada", "Est. APR")}</p>
+            <p className="text-2xl font-black text-emerald-400 tabular-nums">{estApr != null ? `${estApr.toFixed(1)}%` : "—"}</p>
+          </div>
+          <div className="rounded-xl border border-stone-700 bg-stone-800/60 p-3 text-center">
+            <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Taxas/ano", "Fees / yr")}</p>
+            <p className="text-lg font-bold text-white tabular-nums">{fmtUsd(yourYearlyFees, 0)}</p>
+          </div>
+          <div className="rounded-xl border border-stone-700 bg-stone-800/60 p-3 text-center">
+            <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Sua fatia", "Your share")}</p>
+            <p className="text-lg font-bold text-white tabular-nums">{yourShare != null ? `${(yourShare * 100).toFixed(2)}%` : "—"}</p>
+          </div>
+        </div>
+
+        <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-stone-500">
+          <HelpCircle className="mt-0.5 h-3 w-3 shrink-0" />
+          {L(
+            "Estimativa baseada na liquidez real da pool e na taxa de swap. O rendimento real varia com o volume negociado e impermanent loss.",
+            "Estimate based on the pool's real liquidity and swap fee. Actual yield varies with traded volume and impermanent loss."
           )}
+        </p>
+      </div>
+
+      {/* Available pools */}
+      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-3">{L("Pools disponíveis", "Available pools")}</p>
+        <div className="space-y-2">
+          {pairs.map((p) => (
+            <div key={p.pair} className="flex items-center justify-between rounded-xl border border-stone-700 bg-stone-950/60 px-3.5 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <Droplets className="h-3.5 w-3.5" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-white">{p.pair}</p>
+                  <p className="text-[10px] text-stone-500">{p.note}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                {p.live ? (
+                  <>
+                    <p className="text-xs font-bold text-white tabular-nums">{fmtUsd(p.tvl)}</p>
+                    <p className="text-[10px] font-bold text-emerald-400">{p.fee.toFixed(2)}% {L("taxa", "fee")}</p>
+                  </>
+                ) : (
+                  <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-400">{L("Soroswap", "Soroswap")}</span>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
         <a
           href="https://app.soroswap.finance/liquidity"
           target="_blank"
           rel="noopener noreferrer"
-          className={BTN_SECONDARY + " w-full !py-2.5 text-xs"}
+          className={BTN_PRIMARY + " mt-4 w-full"}
         >
-          <ExternalLink className="h-3.5 w-3.5" />
-          {L("Ver pools de liquidez →", "View liquidity pools →")}
+          <Plus className="h-4 w-4" />
+          {L("Fornecer liquidez na Soroswap →", "Provide liquidity on Soroswap →")}
         </a>
+        <p className="mt-2 text-center text-[11px] text-stone-500">
+          {L("Rotas agregadas: Soroswap · Aqua · Phoenix · SDEX", "Aggregated routes: Soroswap · Aqua · Phoenix · SDEX")}
+        </p>
       </div>
-
-      <p className="text-center text-xs text-stone-400">
-        {L("Troca via DEX. Após trocar, vá para Aplicar para depositar na vault.", "Swap via DEX. After swapping, go to Apply to deposit into the vault.")}
-      </p>
     </div>
   );
 }
