@@ -5,7 +5,7 @@ import { assertBridgeAmountInRange } from "../middlewares/bridge-mainnet.middlew
 import { mainnetServer } from "../../config/stellar";
 import { PUBLIC_USDC_ISSUER } from "../../config/assets";
 import { supabase } from "../../config/supabase";
-import { Asset, Keypair, Operation, TransactionBuilder, Networks } from "@stellar/stellar-sdk";
+import { Asset, Keypair, Memo, Operation, TransactionBuilder, Networks } from "@stellar/stellar-sdk";
 import { VaultService } from "../services/core/vault.service";
 import { DefindexYieldService } from "../services/defindex-yield.service";
 import { DEFINDEX_USDC_VAULT_MAINNET } from "../../integrations/defindex/config";
@@ -877,6 +877,43 @@ async function sponsorExistingWallet(publicKey: string, vaultSecretId: string): 
       : String(e?.message || e);
     return { ok: false, funded: exists, trustline: hasTrust, reason: `Sponsored activation failed: ${msg}` };
   }
+}
+
+// Build → sign → submit a single USDC payment on Stellar mainnet, from a wallet
+// whose secret we can resolve from the vault. Used by the account-to-account
+// transfer matrix for every Stellar-sourced leg (Stellar→Stellar directly, and
+// Stellar→custodial by paying the Bridge-provided deposit address).
+async function sendUsdcOnChainMainnet(
+  keypair: Keypair,
+  fromAddress: string,
+  toAddress: string,
+  amount: string,
+  memo?: string,
+): Promise<string> {
+  const account = await mainnetServer.loadAccount(fromAddress);
+  const builder = new TransactionBuilder(account, {
+    fee: "10000",
+    networkPassphrase: MAINNET_PASSPHRASE,
+  }).addOperation(
+    Operation.payment({
+      destination: toAddress,
+      asset: new Asset("USDC", PUBLIC_USDC_ISSUER),
+      amount: Number(amount).toFixed(7),
+    }),
+  );
+  if (memo) {
+    // Bridge deposit instructions hand back a numeric memo that MUST ride along
+    // for the credit to land; free-form memos fall back to text (28-byte cap).
+    builder.addMemo(/^[0-9]+$/.test(memo) ? Memo.id(memo) : Memo.text(memo.slice(0, 28)));
+  }
+  const tx = builder.setTimeout(120).build();
+  tx.sign(keypair);
+  const res: any = await mainnetServer.submitTransaction(tx);
+  return res.hash;
+}
+
+function randomBlockchainMemo(): string {
+  return String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
 }
 
 export class BridgeController {
@@ -2770,6 +2807,122 @@ export class BridgeController {
       res.status(statusFromError(error)).json({
         success: false,
         message: error?.error || error?.message || "Failed to create Bridge wallet to Stellar transfer.",
+        bridge_invalid_fields: error?.source ?? null,
+        bridge_details: error?.response ?? null,
+      });
+    }
+  }
+
+  /**
+   * Account-to-account money movement across the whole suite. One endpoint, four
+   * directions, picked from the (source.kind, destination.kind) pair:
+   *   custodial → custodial   Bridge transfer (bridge_wallet → bridge_wallet)
+   *   custodial → stellar     Bridge transfer (bridge_wallet → stellar to_address)
+   *   stellar   → stellar     on-chain USDC payment, signed with the vault key
+   *   stellar   → custodial   Bridge gives a Stellar deposit address; we push to it
+   *
+   * Body: { email, customer_id, amount, source, destination, confirm_mainnet }
+   *   source/destination = { kind: "custodial"|"stellar", wallet_id?, address?, chain?, blockchain_memo? }
+   */
+  static async createInternalTransfer(req: Request, res: Response): Promise<void> {
+    try {
+      const service = getBridgeService();
+      const email = readText(req.body?.email).toLowerCase();
+      const customerId = readText(req.body?.customer_id || req.body?.customerId || req.body?.on_behalf_of);
+      const amount = readText(req.body?.amount || "0");
+
+      const source = (req.body?.source || {}) as Record<string, unknown>;
+      const destination = (req.body?.destination || {}) as Record<string, unknown>;
+      const srcKind = readText(source.kind).toLowerCase();
+      const dstKind = readText(destination.kind).toLowerCase();
+      const srcWalletId = readText(source.wallet_id || (source as any).walletId);
+      const srcAddress = readText(source.address);
+      const dstWalletId = readText(destination.wallet_id || (destination as any).walletId);
+      const dstAddress = readText(destination.address);
+      const dstMemo = readText(destination.blockchain_memo || (destination as any).blockchainMemo);
+
+      assertBridgeAmountInRange(amount, service.config.minUsdcAmount, service.config.maxUsdcAmount, "USDC");
+
+      // ── custodial source: pushed by Bridge ──────────────────────────────────
+      if (srcKind === "custodial") {
+        if (!customerId) { res.status(400).json({ success: false, message: "customer_id is required for custodial transfers." }); return; }
+        if (!srcWalletId) { res.status(400).json({ success: false, message: "source.wallet_id is required." }); return; }
+
+        let destinationPayload: Record<string, unknown>;
+        if (dstKind === "stellar") {
+          const check = await validateStellarDestination(dstAddress);
+          if (!check.ok) { res.status(400).json({ success: false, message: check.reason }); return; }
+          destinationPayload = {
+            amount, payment_rail: "stellar", currency: "usdc",
+            to_address: dstAddress, blockchain_memo: dstMemo || randomBlockchainMemo(),
+          };
+        } else if (dstKind === "custodial") {
+          if (!dstWalletId) { res.status(400).json({ success: false, message: "destination.wallet_id is required." }); return; }
+          if (dstWalletId === srcWalletId) { res.status(400).json({ success: false, message: "Source and destination wallets are the same." }); return; }
+          destinationPayload = { amount, payment_rail: "bridge_wallet", currency: "usdc", bridge_wallet_id: dstWalletId };
+        } else {
+          res.status(400).json({ success: false, message: `Unsupported destination kind: ${dstKind || "?"}` });
+          return;
+        }
+
+        const transfer = await service.createTransfer({
+          on_behalf_of: customerId,
+          source: { payment_rail: "bridge_wallet", currency: "usdc", bridge_wallet_id: srcWalletId },
+          destination: destinationPayload as any,
+        });
+        logger.info(`[bridge] internal transfer custodial→${dstKind} created: ${transfer.id}`);
+        res.status(201).json({ success: true, kind: `custodial_to_${dstKind}`, transfer });
+        return;
+      }
+
+      // ── stellar source: signed on-chain with the wallet's vault key ─────────
+      if (srcKind === "stellar") {
+        if (!srcAddress) { res.status(400).json({ success: false, message: "source.address is required for Stellar transfers." }); return; }
+        const keypair = await resolveWalletKeypair(email, srcAddress);
+        if (!keypair) { res.status(400).json({ success: false, message: "Could not resolve a signing key for the source Stellar wallet. Only your own wallets can send." }); return; }
+
+        if (dstKind === "stellar") {
+          const check = await validateStellarDestination(dstAddress);
+          if (!check.ok) { res.status(400).json({ success: false, message: check.reason }); return; }
+          if (dstAddress === srcAddress) { res.status(400).json({ success: false, message: "Source and destination wallets are the same." }); return; }
+          const hash = await sendUsdcOnChainMainnet(keypair, srcAddress, dstAddress, amount, dstMemo || undefined);
+          logger.info(`[bridge] internal transfer stellar→stellar submitted: ${hash}`);
+          res.status(201).json({ success: true, kind: "stellar_to_stellar", transfer: { id: hash, state: "submitted", hash } });
+          return;
+        }
+
+        if (dstKind === "custodial") {
+          if (!customerId) { res.status(400).json({ success: false, message: "customer_id is required to credit a custodial wallet." }); return; }
+          if (!dstWalletId) { res.status(400).json({ success: false, message: "destination.wallet_id is required." }); return; }
+          // Ask Bridge for a Stellar deposit address that credits the custodial wallet.
+          const transfer = await service.createTransfer({
+            on_behalf_of: customerId,
+            source: { payment_rail: "stellar", currency: "usdc" },
+            destination: { amount, payment_rail: "bridge_wallet", currency: "usdc", bridge_wallet_id: dstWalletId } as any,
+          });
+          const instr = ((transfer as any).source_deposit_instructions || (transfer as any).source?.deposit_instructions || {}) as Record<string, unknown>;
+          const depositAddress = readText(instr.to_address || instr.address || (instr as any).deposit_address);
+          const depositMemo = readText(instr.blockchain_memo || (instr as any).memo) || undefined;
+          if (!depositAddress) {
+            res.status(502).json({ success: false, message: "Bridge did not return a Stellar deposit address for this transfer.", transfer });
+            return;
+          }
+          const hash = await sendUsdcOnChainMainnet(keypair, srcAddress, depositAddress, amount, depositMemo);
+          logger.info(`[bridge] internal transfer stellar→custodial: bridge ${transfer.id}, on-chain ${hash}`);
+          res.status(201).json({ success: true, kind: "stellar_to_custodial", transfer, deposit: { address: depositAddress, memo: depositMemo ?? null, hash } });
+          return;
+        }
+
+        res.status(400).json({ success: false, message: `Unsupported destination kind: ${dstKind || "?"}` });
+        return;
+      }
+
+      res.status(400).json({ success: false, message: `Unsupported source kind: ${srcKind || "?"}` });
+    } catch (error: any) {
+      logger.error(`[bridge] createInternalTransfer failed: ${error?.message} ${JSON.stringify({ source: error?.source, response: error?.response })}`);
+      res.status(statusFromError(error)).json({
+        success: false,
+        message: error?.error || error?.message || "Internal transfer failed.",
         bridge_invalid_fields: error?.source ?? null,
         bridge_details: error?.response ?? null,
       });

@@ -1011,9 +1011,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           this email (the associated mainnet wallets, where the dollars land). */}
       <WalletsSuiteCard
         isEn={isEn}
-        virtualAccounts={(data?.virtual_accounts ?? []).map((v) => ({ id: v.id, status: v.status, currency: v.currency, total_received_usd: v.total_received_usd }))}
+        customerId={data?.customer_id ?? ""}
+        email={loggedEmail}
+        virtualAccounts={(data?.virtual_accounts ?? []) as any}
         custodial={data?.bridge_wallets ?? []}
         stellar={destWallets.map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, usdc_balance: w.usdc_balance }))}
+        onTransferDone={() => { if (loggedEmail) { load(loggedEmail); loadDestWallets(loggedEmail); } }}
       />
 
       <div className="flex justify-center">

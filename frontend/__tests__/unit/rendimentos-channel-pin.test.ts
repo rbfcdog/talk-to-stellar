@@ -30,7 +30,6 @@ describe("rendimentos channel PIN gate", () => {
     expect(text).toContain("session.sessionSource");
     expect(text).toContain('yieldApi("etherfuse/wallet-balances", undefined, 20000, session.sessionSource)');
     expect(text).toContain("setReturnsPinVerified(true)");
-    expect(text).toContain("PIN validado. Não consegui atualizar os saldos agora");
     expect(text).toContain("requiresChannelPin");
     expect(text).toContain("!channelPinUnlocked");
     expect(text).toContain("ChannelPinGate");

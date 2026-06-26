@@ -215,6 +215,12 @@ router.post(
   requireBridgeMainnetEnabled,
   BridgeController.createTransfer,
 );
+// Account-to-account money movement across the suite (custodial ⇄ stellar).
+router.post(
+  "/internal-transfer",
+  requireBridgeMainnetEnabled,
+  BridgeController.createInternalTransfer,
+);
 router.get("/transfers", BridgeController.listTransfers);
 router.delete(
   "/transfers/:transferId",
