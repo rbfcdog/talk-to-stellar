@@ -1111,14 +1111,14 @@ export default function RendimentosClient({
               onClick={() => setNetworkView("testnet")}
               className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "testnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
             >
-              Testnet
+              {L("Demonstração", "Demo")}
             </button>
             <button
               type="button"
               onClick={() => setNetworkView("mainnet")}
               className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "mainnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
             >
-              Mainnet
+              {L("Dinheiro real", "Real money")}
             </button>
           </div>
         </div>
@@ -1129,7 +1129,7 @@ export default function RendimentosClient({
           <BridgeAccessField
             className="mb-5"
             onUnlock={unlockBridge}
-            title={L("Carteira Stellar · Mainnet — restrita", "Stellar Wallet · Mainnet — restricted")}
+            title={L("Carteira em dólar — restrita", "USD wallet — restricted")}
             description={L("Senha de acesso necessária para gerenciar esta carteira.", "Access password required to manage this wallet.")}
           />
         )}
@@ -1139,7 +1139,7 @@ export default function RendimentosClient({
           <div className="mb-5 rounded-2xl border border-tts-border bg-tts-surface overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Carteira Stellar · Mainnet", "Stellar Wallet · Mainnet")}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Sua carteira em dólar", "Your USD wallet")}</p>
                 <p className="text-sm font-bold text-tts-deep mt-0.5">{L("Saldo real USDC", "Real USDC balance")}</p>
               </div>
               {(bridgeWalletLoading || emailWalletsLoading) && <Loader2 className="h-4 w-4 animate-spin text-tts-muted" />}

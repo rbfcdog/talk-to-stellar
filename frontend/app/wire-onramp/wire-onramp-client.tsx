@@ -786,7 +786,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     return (
       <OperationalPage size="sm" centered>
         <OperationalHeader
-          eyebrow="Bridge.xyz mainnet"
+          eyebrow="US$"
           title={L("Depositar em Dólar", "USD Deposit")}
           description={L(
             "Esta carteira é protegida. Entre com a senha de acesso para continuar.",
@@ -808,7 +808,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     return (
       <OperationalPage size="sm" centered>
         <OperationalHeader
-          eyebrow="Bridge.xyz mainnet"
+          eyebrow="US$"
           title={L("Depositar em Dólar", "USD Deposit")}
           description={L(
             "Entre com o e-mail da conta Bridge que deve receber o depósito. Pode ser diferente do WhatsApp.",
@@ -995,7 +995,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   return (
     <OperationalPage size="lg" frameClassName="max-w-4xl">
       <OperationalHeader
-        eyebrow="Bridge.xyz mainnet"
+        eyebrow="US$"
         title={L("Depositar em Dólar", "USD Deposit")}
         description={L(
           "Use estes dados para enviar wire/ACH. A Bridge converte o depósito para USDC e envia para sua carteira Stellar.",

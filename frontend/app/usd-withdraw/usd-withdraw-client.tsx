@@ -192,7 +192,7 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
     return (
       <OperationalPage size="sm" centered>
         <OperationalHeader
-          eyebrow="Bridge.xyz mainnet"
+          eyebrow="US$"
           title={L("Sacar para banco americano", "Withdraw to US bank")}
           description={L("Esta área é protegida. Entre com a senha de acesso.", "This area is protected. Enter the access password.")}
         />
