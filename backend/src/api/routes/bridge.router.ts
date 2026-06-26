@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { BridgeController } from "../controllers/bridge.controller";
 import {
+  requireBridgePassword,
   requireBridgeEnabled,
   requireBridgeMainnetEnabled,
 } from "../middlewares/bridge-mainnet.middleware";
@@ -9,6 +10,9 @@ const router = Router();
 
 // All bridge routes require bridge enabled
 router.use(requireBridgeEnabled);
+// …and a valid access password (BRIDGE_ACCESS_PASSWORD). Webhooks + trusted
+// internal callers bypass this inside the middleware.
+router.use(requireBridgePassword);
 
 // ── Session-based helpers (use session_id to look up customer) ──
 router.get("/session/usd-account", BridgeController.getSessionUsdAccount);

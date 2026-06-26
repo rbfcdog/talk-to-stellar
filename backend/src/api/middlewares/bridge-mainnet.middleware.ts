@@ -9,6 +9,54 @@ function readBearerToken(req: Request): string {
   return "";
 }
 
+/**
+ * Gate bridge access behind a shared access password. The browser sends it as the
+ * `x-bridge-password` header (the Next proxy injects it from the `bridge_pw`
+ * cookie set by the BridgeAuthGate). Webhooks (called by Bridge.xyz, not the
+ * browser) and trusted server-to-server callers (INTERNAL_API_SECRET) bypass it.
+ */
+export function requireBridgePassword(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  // Bridge.xyz calls webhooks directly — never gate them with the UI password.
+  if (req.path.startsWith("/webhooks")) {
+    next();
+    return;
+  }
+
+  const expected = String(process.env.BRIDGE_ACCESS_PASSWORD || "yuWooF9t").trim();
+  if (!expected) {
+    next();
+    return;
+  }
+
+  // Trusted internal callers (other backend services) bypass the UI gate.
+  const internalSecret = String(process.env.INTERNAL_API_SECRET || "").trim();
+  if (internalSecret && String(req.headers["x-internal-api-secret"] || "").trim() === internalSecret) {
+    next();
+    return;
+  }
+
+  const provided = String(
+    req.headers["x-bridge-password"] ||
+    readBearerToken(req) ||
+    req.query.bridge_password ||
+    "",
+  ).trim();
+
+  if (provided !== expected) {
+    res.status(401).json({
+      success: false,
+      code: "bridge_auth_required",
+      message: "Bridge access password required.",
+    });
+    return;
+  }
+  next();
+}
+
 export function requireBridgeEnabled(
   _req: Request,
   res: Response,

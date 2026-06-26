@@ -23,11 +23,15 @@ async function proxy(request: NextRequest) {
   const [pathOnly, queryString] = rawPath.split("?");
   const targetQuery = queryString ? `?${queryString}` : url.search;
   const target = `${BACKEND}/api/bridge${pathOnly}${targetQuery}`;
+  const bridgePw = request.cookies.get("bridge_pw")?.value || request.headers.get("x-bridge-password") || "";
 
   try {
     const response = await fetch(target, {
       method: request.method,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(bridgePw ? { "x-bridge-password": bridgePw } : {}),
+      },
       body: request.method !== "GET" && request.method !== "HEAD"
         ? await request.text()
         : undefined,
