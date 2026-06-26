@@ -1362,8 +1362,12 @@
   .dark .bg-tts-surface\/30,
   .dark .bg-tts-surface\/40,
   .dark .bg-tts-surface\/\[0\.03\],
+  .dark .bg-tts-bg\/50,
   .dark .bg-tts-bg\/40,
   .dark .bg-tts-bg\/60,
+  .dark .bg-tts-bg\/70,
+  .dark .bg-tts-deep\/5,
+  .dark .bg-tts-deep\/10,
   .dark .bg-tts-deep\/20,
   .dark .bg-tts-deep\/30,
   .dark .bg-tts-deep\/40,
@@ -1453,6 +1457,62 @@
   .dark .bg-primary .text-tts-deep,
   .dark .bg-primary .text-tts-surface {
     color: #071013 !important;
+  }
+
+  .dark .tts-op-page .bg-tts-bg\/50,
+  .dark .tts-op-page .bg-tts-bg\/60,
+  .dark .tts-op-page .bg-tts-bg\/70,
+  .dark .tts-op-page .bg-white\/50,
+  .dark .tts-op-page .bg-white\/60,
+  .dark .tts-op-page .bg-white\/70,
+  .dark .tts-op-page .bg-amber-50\/30,
+  .dark .tts-op-page .bg-amber-50\/40 {
+    background-color: rgba(255, 255, 255, 0.055) !important;
+  }
+
+  .dark .tts-op-page .bg-tts-deep\/5,
+  .dark .tts-op-page .bg-tts-deep\/10 {
+    background-color: rgba(255, 255, 255, 0.075) !important;
+  }
+
+  .dark .tts-op-page input,
+  .dark .tts-op-page textarea,
+  .dark .tts-op-page select,
+  .dark .tts-op-page [data-slot='input'] {
+    color-scheme: dark;
+    background-color: color-mix(in oklab, var(--tts-dark-surface) 88%, black 12%) !important;
+    color: var(--tts-dark-text) !important;
+    caret-color: var(--tts-gold-lt) !important;
+    border-color: var(--tts-dark-border) !important;
+  }
+
+  .dark .tts-op-page input:focus,
+  .dark .tts-op-page textarea:focus,
+  .dark .tts-op-page select:focus,
+  .dark .tts-op-page [data-slot='input']:focus,
+  .dark .tts-op-page [data-slot='input']:focus-visible {
+    background-color: color-mix(in oklab, var(--tts-dark-elevated) 84%, black 16%) !important;
+    border-color: color-mix(in oklab, var(--tts-gold) 64%, var(--tts-dark-border) 36%) !important;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--tts-gold) 18%, transparent) !important;
+  }
+
+  .dark .tts-op-page input::placeholder,
+  .dark .tts-op-page textarea::placeholder {
+    color: rgba(169, 180, 199, 0.68) !important;
+  }
+
+  .dark .tts-op-page option {
+    background-color: var(--tts-dark-surface) !important;
+    color: var(--tts-dark-text) !important;
+  }
+
+  .dark .tts-op-page input:-webkit-autofill,
+  .dark .tts-op-page textarea:-webkit-autofill,
+  .dark .tts-op-page select:-webkit-autofill,
+  .dark .tts-op-page [data-slot='input']:-webkit-autofill {
+    -webkit-text-fill-color: var(--tts-dark-text) !important;
+    caret-color: var(--tts-gold-lt) !important;
+    box-shadow: 0 0 0 1000px color-mix(in oklab, var(--tts-dark-surface) 88%, black 12%) inset !important;
   }
 
   .dark input,
