@@ -26,7 +26,8 @@ export function requireBridgePassword(
     return;
   }
 
-  const expected = String(process.env.BRIDGE_ACCESS_PASSWORD || "yuWooF9t").trim();
+  const expected = String(process.env.BRIDGE_ACCESS_PASSWORD || "").trim();
+  // No password configured → gate is disabled (set BRIDGE_ACCESS_PASSWORD to enable).
   if (!expected) {
     next();
     return;

@@ -3,20 +3,40 @@
 import { useEffect, useState } from "react";
 import { Loader2, Lock } from "lucide-react";
 
-// Shared access password for the bridge features (wire on-ramp + yield).
-// The backend (requireBridgeAuth) is the real gate; this is the matching UI lock.
-// Kept in sync with BRIDGE_ACCESS_PASSWORD on the backend.
-const BRIDGE_PASSWORD = "yuWooF9t";
+// Access password for the bridge features (wire on-ramp + yield) lives only in
+// the backend env (BRIDGE_ACCESS_PASSWORD). We never embed it in the client
+// bundle — instead we set the typed value as a cookie and let the backend
+// validate it (a probe request). The Next proxy forwards the cookie as
+// x-bridge-password; requireBridgePassword on the backend is the real gate.
 const FLAG_KEY = "bridge_auth_ok";
 
-function persistAccess() {
-  try {
-    sessionStorage.setItem(FLAG_KEY, "1");
-  } catch {
-    /* ignore */
-  }
+function setCookie(pw: string) {
   // Session cookie — the Next proxy forwards it to the backend as x-bridge-password.
-  document.cookie = `bridge_pw=${encodeURIComponent(BRIDGE_PASSWORD)}; path=/; samesite=lax`;
+  document.cookie = `bridge_pw=${encodeURIComponent(pw)}; path=/; samesite=lax`;
+}
+
+function clearCookie() {
+  document.cookie = "bridge_pw=; path=/; max-age=0; samesite=lax";
+}
+
+// Probe a cheap authenticated bridge endpoint. Returns true if the cookie's
+// password is accepted by the backend (anything other than the 401 auth error).
+async function verifyPassword(pw: string): Promise<boolean> {
+  setCookie(pw);
+  try {
+    const res = await fetch("/api/bridge?_path=/sponsor/status", {
+      method: "GET",
+      headers: { "x-bridge-password": pw },
+    });
+    if (res.status === 401) {
+      const body = await res.json().catch(() => ({}));
+      if (body?.code === "bridge_auth_required") return false;
+    }
+    return true;
+  } catch {
+    // Network/backend error — don't lock the user out over an unrelated failure.
+    return true;
+  }
 }
 
 /**
@@ -28,6 +48,7 @@ export function BridgeAuthGate({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const ok = (() => {
@@ -37,22 +58,29 @@ export function BridgeAuthGate({ children }: { children: React.ReactNode }) {
         return false;
       }
     })();
-    if (ok) {
-      persistAccess(); // make sure the cookie is present for the proxy
-      setUnlocked(true);
-    }
+    if (ok) setUnlocked(true);
     setChecked(true);
   }, []);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (value.trim() === BRIDGE_PASSWORD) {
-      persistAccess();
-      setError("");
+    const pw = value.trim();
+    if (!pw || submitting) return;
+    setSubmitting(true);
+    setError("");
+    const ok = await verifyPassword(pw);
+    if (ok) {
+      try {
+        sessionStorage.setItem(FLAG_KEY, "1");
+      } catch {
+        /* ignore */
+      }
       setUnlocked(true);
     } else {
+      clearCookie();
       setError("Incorrect password.");
     }
+    setSubmitting(false);
   }
 
   if (!checked) {
@@ -88,10 +116,11 @@ export function BridgeAuthGate({ children }: { children: React.ReactNode }) {
         {error && <p className="mt-2 text-xs font-semibold text-red-400">{error}</p>}
         <button
           type="submit"
-          disabled={!value.trim()}
+          disabled={!value.trim() || submitting}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-stone-950 transition-colors hover:bg-amber-400 disabled:opacity-40"
         >
-          Unlock
+          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {submitting ? "Verifying…" : "Unlock"}
         </button>
       </form>
     </div>
