@@ -229,8 +229,6 @@ describe("UX copy guardrails", () => {
       "Projeção 12m",
       "PIN ativo",
       "A consultar",
-      "Sem conta",
-      "APY",
       "Saldo operacional",
       "Operational balance",
       "OPS",
@@ -444,22 +442,37 @@ describe("UX copy guardrails", () => {
     expect(reviewText).toContain("InvestmentLineChart");
     expect(reviewText).toContain("LineChart");
     expect(reviewText).toContain("defindex/yield/history");
-    expect(reviewText).toContain("buildGrowthPathPoints");
     expect(reviewText).toContain("buildPositionLinePoints");
-    expect(reviewText).toContain("Caminho estimado");
-    expect(reviewText).toContain("Growth path");
-    expect(reviewText).toContain("Linha real");
-    expect(reviewText).toContain("Real balance line");
+    expect(reviewText).toContain("buildPortfolioLinePoints");
+    expect(reviewText).toContain("YieldProductCard");
+    expect(reviewText).toContain("SelectedYieldDetail");
+    expect(reviewText).toContain('const selectedRow = selectedCode ? rows.find((row) => row.code === selectedCode) || null : null;');
+    expect(reviewText).toContain("Voltar aos rendimentos");
+    expect(reviewText).toContain("Back to earnings");
+    expect(reviewText).toContain("Voltar para visão geral");
+    expect(reviewText).toContain("Back to overview");
+    expect(reviewText).toContain("Produtos de rendimento");
+    expect(reviewText).toContain("Yield products");
+    expect(reviewText).toContain("Gráfico total");
+    expect(reviewText).toContain("Total graph");
+    expect(reviewText).toContain("Performance atual");
+    expect(reviewText).toContain("Current performance");
+    expect(reviewText).toContain("Investir mais");
+    expect(reviewText).toContain("Invest more");
+    expect(reviewText).toContain("{formatApy(row.rate)} APY");
+    expect(reviewText).not.toContain('id: "invest", label: L("Aplicar", "Invest")');
+    expect(reviewText).not.toContain("AutoYieldHero");
+    expect(reviewText).not.toContain("Disponível para render");
+    expect(reviewText).not.toContain("Available to earn");
+    expect(reviewText).not.toContain("No idle USDC in the wallet to invest");
     expect(reviewText).toContain("ANALYSIS_WINDOWS");
     expect(reviewText).toContain("AnalysisWindow");
-    expect(reviewText).toContain("Análise por período");
-    expect(reviewText).toContain("Period analysis");
+    expect(reviewText).toContain("Resultado recente");
+    expect(reviewText).toContain("Recent result");
     expect(reviewText).toContain("Diário");
     expect(reviewText).toContain("Daily");
     expect(reviewText).toContain("Semanal");
     expect(reviewText).toContain("Weekly");
-    expect(reviewText).toContain("Pontos");
-    expect(reviewText).toContain("Points");
     expect(reviewText).toContain("30 dias");
     expect(reviewText).toContain("6 meses");
     expect(reviewText).toContain("12 meses");
@@ -485,16 +498,18 @@ describe("UX copy guardrails", () => {
     expect(reviewText).not.toContain("Confirmação DeFindex indisponível agora");
     expect(reviewText).toContain("const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;");
     expect(reviewText).not.toContain("const canConfirm = canPrepare && confirmAvailable");
-    expect(reviewText).toContain("Posições");
-    expect(reviewText).toContain("Posição atual");
+    expect(reviewText).toContain("Rendimentos totais");
+    expect(reviewText).toContain("Total earnings");
+    expect(reviewText).toContain("Valor aplicado");
+    expect(reviewText).toContain("Invested amount");
     expect(reviewText).toContain("formatPositionAmount");
     expect(reviewText).not.toContain("Nada aplicado agora");
-    expect(reviewText).toContain("Testnet · valores estimados");
+    expect(reviewText).toContain("Ambiente de teste");
+    expect(reviewText).toContain("Demo environment");
     expect(reviewText).toContain("extractDefindexPositionAmount(payload?.position || payload?.balance)");
     expect(reviewText).toContain("operation_history_fallback");
     expect(reviewText).toContain("Atualizado pelo histórico da conta");
     expect(reviewText).toContain("Confirmando...");
-    expect(reviewText).toContain('role="status"');
     expect(reviewText).not.toContain("Saldos e posições atualizados");
     expect(reviewText).not.toContain("Balances and positions updated");
     expect(reviewText).not.toContain("returnsOpen");

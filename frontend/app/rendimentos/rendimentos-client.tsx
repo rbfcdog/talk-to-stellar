@@ -8,7 +8,6 @@ import {
   ArrowUpFromLine,
   BadgeCheck,
   BarChart3,
-  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -299,6 +298,20 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
   return points;
 }
 
+function buildPortfolioLinePoints(rows: InvestmentRow[], language: AppLanguage, days: number): ChartPoint[] {
+  const series = rows.map((row) => buildPositionLinePoints(row.history, row.amount, language, days));
+  const length = Math.max(0, ...series.map((points) => points.length));
+  if (!length) return [{ label: localCopy(language, "Agora", "Now"), value: 0 }];
+  return Array.from({ length }, (_, index) => {
+    const firstSeriesPoint = series.find((points) => points[index])?.[index];
+    return {
+      label: firstSeriesPoint?.label || localCopy(language, "Agora", "Now"),
+      date: firstSeriesPoint?.date,
+      value: series.reduce((sum, points) => sum + Number(points[index]?.value || 0), 0),
+    };
+  });
+}
+
 function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
   data: ChartPoint[];
   profile: { short: string };
@@ -583,7 +596,6 @@ export default function RendimentosClient({
     testnet: { usdc: string; xlm: string } | null;
     mainnet: { usdc: string; xlm: string } | null;
   } | null>(null);
-  const [bridgeWalletLoading, setBridgeWalletLoading] = useState(false);
 
   // Email-based Stellar wallet lookup (mainnet) — pick one when several exist.
   type EmailWallet = { public_key: string; label: string | null; usdc_balance: string | null; is_primary?: boolean; is_funded?: boolean; exists_on_mainnet?: boolean };
@@ -591,18 +603,7 @@ export default function RendimentosClient({
   const [emailWallets, setEmailWallets] = useState<EmailWallet[]>([]);
   const [selectedWalletKey, setSelectedWalletKey] = useState("");
   const [emailWalletsLoading, setEmailWalletsLoading] = useState(false);
-  const [emailWalletsError, setEmailWalletsError] = useState("");
-  // Mainnet invest (deposits the selected Bridge wallet's USDC into a protocol)
-  type MainnetProtocol = "defindex" | "blend";
-  const [investAmount, setInvestAmount] = useState("");
-  const investBusyRef = useRef(false); // synchronous guard against double-submit
   const yieldBusyRef = useRef(false); // guards the custodial confirmYield deposit
-  const [autoDefindexPct, setAutoDefindexPct] = useState(80); // auto-invest split (DeFindex %)
-  const [investStatus, setInvestStatus] = useState<"idle" | "investing" | "ok" | "error">("idle");
-  const [investError, setInvestError] = useState("");
-  const [investHash, setInvestHash] = useState("");
-  const [mainnetProtocol, setMainnetProtocol] = useState<MainnetProtocol>("defindex");
-  const [blendMainnetApy, setBlendMainnetApy] = useState<number | null>(null);
   const [positions, setPositions] = useState<{ defindex_usdc: number; blend_usdc: number; total_invested_usdc: number } | null>(null);
   // Daily snapshot series of the mainnet wallet's invested USDC, for the balance chart.
   const [mainnetHistory, setMainnetHistory] = useState<PositionHistoryState | null>(null);
@@ -680,93 +681,10 @@ export default function RendimentosClient({
     }
   }
 
-  // Mainnet APYs: DeFindex from yield status, Blend from the pool info endpoint.
-  const defindexMainnetApy = useMemo(() => {
-    const v = (yieldStatus?.vaults || []).find((x) => optionCode(x) === "USDC");
-    const p = Number(String(v?.apy_percent || "").replace("%", "").replace(",", "."));
-    return Number.isFinite(p) && p > 0 ? p : null;
-  }, [yieldStatus]);
-
-  async function loadBlendMainnetApy() {
-    try {
-      const res = await fetch(`/api/blend/pool/info?network=mainnet`, { cache: "no-store" });
-      const json = await res.json().catch(() => ({}));
-      const apy = json?.usdc?.supplyApy ?? json?.data?.usdc?.supplyApy;
-      if (Number.isFinite(Number(apy))) setBlendMainnetApy(Number(apy));
-    } catch {
-      // non-critical
-    }
-  }
-
-  async function mainnetInvest(email: string, publicKey: string, amount: string, protocol: MainnetProtocol) {
-    if (investBusyRef.current) return; // re-entrancy guard (double-click / Enter spam)
-    if (!email || !publicKey) return;
-    const amt = normalizeDecimal(amount);
-    if (!Number.isFinite(amt) || amt <= 0) { setInvestStatus("error"); setInvestError(L("Informe um valor válido.", "Enter a valid amount.")); return; }
-    const idle = mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance) : null;
-    if (idle !== null && amt > idle + 0.0000001) { setInvestStatus("error"); setInvestError(L("Valor acima do saldo disponível.", "Amount exceeds available balance.")); return; }
-    investBusyRef.current = true;
-    setInvestStatus("investing");
-    setInvestError("");
-    setInvestHash("");
-    try {
-      const res = await fetch(`/api/bridge/stellar-wallets/invest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, amount: String(amt), protocol }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.message || `HTTP ${res.status}`);
-      setInvestStatus("ok");
-      setInvestHash(json.hash || "");
-      setInvestAmount("");
-      setTimeout(() => { loadEmailWallets(email); loadPositions(email, publicKey); }, 4000);
-    } catch (e: any) {
-      setInvestStatus("error");
-      setInvestError(e?.message ?? String(e));
-    } finally {
-      investBusyRef.current = false;
-    }
-  }
-
-  // Auto-yield: sweep the wallet's idle USDC into DeFindex + Blend by the chosen
-  // split. Works on both networks — mainnet uses the Bridge wallet, testnet uses
-  // the login/session wallet (resolved server-side from the public key).
-  async function autoYield(email: string, publicKey: string, defindexPct: number, network: "mainnet" | "testnet" = "mainnet") {
-    if (investBusyRef.current) return; // re-entrancy guard
-    if (!publicKey) return;
-    const dPct = Math.min(100, Math.max(0, Math.round(defindexPct)));
-    investBusyRef.current = true;
-    setInvestStatus("investing");
-    setInvestError("");
-    setInvestHash("");
-    try {
-      const res = await fetch(`/api/bridge/stellar-wallets/auto-yield`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), public_key: publicKey, network, defindex_pct: dPct, blend_pct: 100 - dPct }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) throw new Error(json.message || `HTTP ${res.status}`);
-      if (!json.invested_usdc) { setInvestStatus("error"); setInvestError(json.message || L("Sem USDC livre para investir.", "No idle USDC to deploy.")); return; }
-      setInvestStatus("ok");
-      const firstHash = (json.steps || []).find((s: any) => s.hash)?.hash || "";
-      setInvestHash(firstHash);
-      if (network === "mainnet") setTimeout(() => { loadEmailWallets(email); loadPositions(email, publicKey); }, 4000);
-      else setTimeout(() => { loadSessionWallet(); }, 4000);
-    } catch (e: any) {
-      setInvestStatus("error");
-      setInvestError(e?.message ?? String(e));
-    } finally {
-      investBusyRef.current = false;
-    }
-  }
-
   async function loadEmailWallets(email: string) {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
     setEmailWalletsLoading(true);
-    setEmailWalletsError("");
     try {
       const res = await fetch(`/api/bridge/stellar-wallets?email=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
@@ -775,7 +693,6 @@ export default function RendimentosClient({
       if (res.status === 401 || json?.code === "bridge_auth_required") {
         relockBridge();
         setEmailWallets([]);
-        setEmailWalletsError(L("Sessão expirada. Digite a senha de acesso novamente.", "Session expired. Enter the access password again."));
         return;
       }
       const wallets: EmailWallet[] = Array.isArray(json?.wallets) ? json.wallets : [];
@@ -785,9 +702,8 @@ export default function RendimentosClient({
         const primary = wallets.find((w) => w.is_primary) || wallets.find((w) => Number(w.usdc_balance) > 0) || wallets[0];
         return primary?.public_key || "";
       });
-      if (!wallets.length) setEmailWalletsError(L("Nenhuma carteira encontrada para este e-mail.", "No wallets found for this email."));
-    } catch (e: any) {
-      setEmailWalletsError(e?.message ?? String(e));
+    } catch {
+      setEmailWallets([]);
     } finally {
       setEmailWalletsLoading(false);
     }
@@ -911,7 +827,6 @@ export default function RendimentosClient({
   }
 
   async function fetchBridgeWalletBalances(sid?: string) {
-    setBridgeWalletLoading(true);
     try {
       const params = new URLSearchParams();
       const id = sid || session.sessionId;
@@ -921,8 +836,6 @@ export default function RendimentosClient({
       if (json?.success) setBridgeWalletBalances(json);
     } catch {
       // non-critical
-    } finally {
-      setBridgeWalletLoading(false);
     }
   }
 
@@ -961,12 +874,6 @@ export default function RendimentosClient({
       .then((s) => { if (!cancelled) setYieldStatus(s); })
       .catch(() => null);
     return () => { cancelled = true; };
-  }, [networkView]);
-
-  // Load the Blend mainnet APY when on the mainnet view.
-  useEffect(() => {
-    if (networkView === "mainnet") loadBlendMainnetApy();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkView]);
 
   // Load the selected wallet's invested positions (DeFindex + Blend) on mainnet.
@@ -1122,22 +1029,7 @@ export default function RendimentosClient({
         {/* Calm, single-page header with a light quick-jump (no tabs) */}
         <div className="mb-5">
           <h1 className="text-2xl font-bold text-tts-deep">{L("Seu dinheiro", "Your money")}</h1>
-          <p className="text-sm text-tts-muted">{L("Veja render e aplique em poucos toques.", "See it grow and put it to work in a few taps.")}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {[
-              { id: "portfolio", label: L("Render", "Earnings") },
-              { id: "invest", label: L("Aplicar", "Invest") },
-            ].map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                className="rounded-full border border-tts-border bg-tts-surface px-3.5 py-1.5 text-xs font-bold text-tts-deep transition-colors hover:border-tts-deep"
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          <p className="text-sm text-tts-muted">{L("Veja o total rendendo e abra cada produto para detalhes.", "See total earnings and open each product for details.")}</p>
         </div>
 
         {apiState.error && (
@@ -1178,31 +1070,6 @@ export default function RendimentosClient({
           </div>
         </div>
 
-        {/* Put money to work — one-tap auto-yield from idle balance.
-            Demo uses the login/session wallet; Real money uses the dollar account. */}
-        {networkView === "testnet" && sessionWallet?.public_key && (
-          <AutoYieldHero
-            language={language}
-            idleUsdc={sessionWallet.testnet_usdc}
-            defindexPct={autoDefindexPct}
-            busy={investStatus === "investing"}
-            status={investStatus === "ok" ? "ok" : investStatus === "error" ? "error" : ""}
-            error={investError}
-            onRun={() => autoYield(walletEmail, sessionWallet.public_key, autoDefindexPct, "testnet")}
-          />
-        )}
-        {networkView === "mainnet" && bridgeUnlocked && selectedWalletKey && (
-          <AutoYieldHero
-            language={language}
-            idleUsdc={mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance) : 0}
-            defindexPct={autoDefindexPct}
-            busy={investStatus === "investing"}
-            status={investStatus === "ok" ? "ok" : investStatus === "error" ? "error" : ""}
-            error={investError}
-            onRun={() => autoYield(walletEmail, selectedWalletKey, autoDefindexPct, "mainnet")}
-          />
-        )}
-
         {/* Link your dollar account — associate a Bridge email with this wallet.
             Shown until linked so the clean default stays uncluttered. */}
         {!linkState.linked && !walletEmail && session.authenticated && (
@@ -1225,224 +1092,6 @@ export default function RendimentosClient({
           />
         )}
 
-        {/* Bridge wallet balance banner (mainnet) */}
-        {networkView === "mainnet" && returnsPinVerified && bridgeUnlocked && (
-          <div className="mb-5 rounded-2xl border border-tts-border bg-tts-surface overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Sua carteira em dólar", "Your USD wallet")}</p>
-                <p className="text-sm font-bold text-tts-deep mt-0.5">{L("Saldo real USDC", "Real USDC balance")}</p>
-              </div>
-              {(bridgeWalletLoading || emailWalletsLoading) && <Loader2 className="h-4 w-4 animate-spin text-tts-muted" />}
-            </div>
-
-            {/* Email lookup + wallet chooser */}
-            <div className="px-5 py-4 border-b border-tts-border/40 space-y-2.5">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted">
-                {L("Buscar carteiras por e-mail", "Find wallets by email")}
-              </p>
-              <form onSubmit={(e) => { e.preventDefault(); loadEmailWallets(walletEmail); }} className="flex gap-2">
-                <input
-                  type="email"
-                  value={walletEmail}
-                  onChange={(e) => setWalletEmail(e.target.value)}
-                  placeholder="you@email.com"
-                  className="flex-1 rounded-lg border border-tts-border bg-tts-bg px-3 py-2 text-sm outline-none focus:border-tts-deep placeholder:text-tts-muted/40"
-                />
-                <button
-                  type="submit"
-                  disabled={!walletEmail.trim() || emailWalletsLoading}
-                  className="rounded-lg bg-tts-deep px-4 py-2 text-sm font-bold text-white disabled:opacity-40 hover:opacity-90"
-                >
-                  {emailWalletsLoading ? L("Buscando...", "Loading...") : L("Buscar", "Find")}
-                </button>
-              </form>
-
-              {emailWalletsError && <p className="text-[11px] text-tts-error">{emailWalletsError}</p>}
-
-              {emailWallets.length > 0 && (
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1">
-                    {emailWallets.length === 1 ? L("Carteira", "Wallet") : L("Escolha a carteira", "Choose a wallet")}
-                  </label>
-                  <select
-                    value={selectedWalletKey}
-                    onChange={(e) => setSelectedWalletKey(e.target.value)}
-                    className="w-full rounded-lg border border-tts-border bg-tts-bg px-3 py-2.5 text-sm font-mono text-tts-deep outline-none focus:border-tts-deep"
-                  >
-                    {emailWallets.map((w) => (
-                      <option key={w.public_key} value={w.public_key}>
-                        {`${w.public_key.slice(0, 6)}...${w.public_key.slice(-6)}`}
-                        {w.is_primary ? ` · ${L("principal", "primary")}` : ""}
-                        {w.usdc_balance !== null ? ` · ${Number(w.usdc_balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedEmailWallet && (
-                    <p className="mt-1 text-[10px] font-mono text-tts-muted/70 break-all">{selectedEmailWallet.public_key}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* Balance: wallet (idle) + invested */}
-            <div className="px-5 py-4 border-b border-tts-border/40 grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Na carteira", "In wallet")}</p>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-2xl font-bold tabular-nums text-tts-deep">
-                    {mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 }) : "—"}
-                  </span>
-                  <span className="text-xs font-bold text-tts-muted">USDC</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-confirm">{L("Investido", "Invested")}</p>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-2xl font-bold tabular-nums text-tts-confirm">
-                    {positions ? positions.total_invested_usdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 }) : "—"}
-                  </span>
-                  <span className="text-xs font-bold text-tts-muted">USDC</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Earn — protocol choice (+ invest when funds are idle) */}
-            {selectedWalletKey && (
-              <div className="px-5 py-4 space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Render seu USDC", "Earn on your USDC")}</p>
-
-                {/* Protocol cards — APY + your position */}
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    { id: "defindex" as MainnetProtocol, name: "DeFindex", desc: L("Cofre auto-otimizado", "Auto-optimized vault"), apy: defindexMainnetApy, pos: positions?.defindex_usdc ?? null },
-                    { id: "blend" as MainnetProtocol, name: "Blend", desc: L("Pool de empréstimo", "Lending pool"), apy: blendMainnetApy, pos: positions?.blend_usdc ?? null },
-                  ]).map((p) => {
-                    const sel = mainnetProtocol === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setMainnetProtocol(p.id)}
-                        className={selectCard(sel)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-white">{p.name}</span>
-                          <span className="text-sm font-black text-emerald-400">{p.apy !== null ? `${p.apy.toFixed(2)}%` : "—"}</span>
-                        </div>
-                        <p className="text-[10px] text-stone-400 mt-0.5">{p.desc}</p>
-                        <div className="mt-1.5 flex items-center justify-between">
-                          <span className="text-[9px] font-bold uppercase tracking-wide text-stone-400">APY</span>
-                          {p.pos !== null && p.pos > 0 && (
-                            <span className="text-[10px] font-bold text-white">{p.pos.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })} {L("investido", "invested")}</span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Auto-invest: interactive split slider + one-tap deploy */}
-                {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
-                  <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wide">
-                      <span className="text-emerald-400">DeFindex {autoDefindexPct}%</span>
-                      <span className="text-stone-400">{L("Divisão automática", "Auto split")}</span>
-                      <span className="text-amber-400">Blend {100 - autoDefindexPct}%</span>
-                    </div>
-                    <input
-                      type="range" min={0} max={100} step={5}
-                      value={autoDefindexPct}
-                      onChange={(e) => setAutoDefindexPct(Number(e.target.value))}
-                      className="w-full accent-amber-500"
-                    />
-                    <div className="flex gap-1.5">
-                      {[
-                        { label: "100/0", v: 100 }, { label: "80/20", v: 80 }, { label: "50/50", v: 50 }, { label: "0/100", v: 0 },
-                      ].map((p) => (
-                        <button key={p.v} type="button" onClick={() => setAutoDefindexPct(p.v)}
-                          className={`flex-1 rounded-md border px-2 py-1 text-[10px] font-bold transition-colors ${autoDefindexPct === p.v ? "border-amber-500 bg-amber-500 text-stone-950" : "border-stone-700 bg-stone-900 text-stone-300 hover:border-stone-500"}`}>
-                          {p.label}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => autoYield(walletEmail, selectedWalletKey, autoDefindexPct)}
-                      disabled={investStatus === "investing"}
-                      className="w-full flex items-center justify-center gap-2 rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-stone-950 hover:bg-amber-400 disabled:opacity-40 transition-colors"
-                    >
-                      {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      {investStatus === "investing"
-                        ? L("Investindo...", "Investing...")
-                        : L(`Auto-investir tudo (${autoDefindexPct}% / ${100 - autoDefindexPct}%)`, `Auto-invest everything (${autoDefindexPct}% / ${100 - autoDefindexPct}%)`)}
-                    </button>
-                  </div>
-                )}
-
-                {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) <= 0 && (
-                  <p className="text-[11px] text-tts-muted">
-                    {L("Sem USDC livre na carteira para investir. Seus fundos investidos aparecem acima.", "No idle USDC in the wallet to invest. Your invested funds are shown above.")}
-                  </p>
-                )}
-
-                {/* Amount + invest (only when there's idle USDC) */}
-                {mainnetUsdcBalance !== null && Number(mainnetUsdcBalance) > 0 && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <div className="flex flex-1 items-center rounded-xl border border-tts-border bg-tts-bg focus-within:border-tts-deep">
-                        <span className="px-3 text-xs font-bold text-tts-muted border-r border-tts-border">USDC</span>
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          max={Number(mainnetUsdcBalance)}
-                          value={investAmount}
-                          onChange={(e) => setInvestAmount(e.target.value)}
-                          placeholder={`${L("máx", "max")} ${Number(mainnetUsdcBalance).toFixed(2)}`}
-                          className="flex-1 bg-transparent px-3 py-2.5 text-sm outline-none"
-                        />
-                        <button type="button" onClick={() => setInvestAmount(String(mainnetUsdcBalance))} className="px-3 text-[11px] font-bold text-tts-muted hover:text-tts-deep">{L("Tudo", "Max")}</button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => mainnetInvest(walletEmail, selectedWalletKey, investAmount, mainnetProtocol)}
-                        disabled={investStatus === "investing" || !investAmount || Number(investAmount) <= 0}
-                        className="flex items-center gap-1.5 rounded-xl bg-tts-confirm px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-                      >
-                        {investStatus === "investing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                        {investStatus === "investing" ? L("Investindo...", "Investing...") : L("Investir", "Invest")}
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-tts-muted/70">
-                      {L(
-                        `Investe da carteira selecionada em ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} na mainnet. O gás é coberto automaticamente.`,
-                        `Invests from the selected wallet into ${mainnetProtocol === "blend" ? "Blend" : "DeFindex"} on mainnet. Gas is covered automatically.`,
-                      )}
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Invest result / error */}
-            {(investStatus === "ok" || investStatus === "error") && (
-              <div className={`px-5 py-3 border-t border-tts-border/40 text-xs ${investStatus === "ok" ? "text-tts-confirm" : "text-tts-error"}`}>
-                {investStatus === "ok" ? (
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    {L("Investido na mainnet!", "Invested on mainnet!")}
-                    {investHash && (
-                      <a href={`https://stellar.expert/explorer/public/tx/${investHash}`} target="_blank" rel="noreferrer" className="underline">
-                        tx {investHash.slice(0, 8)}…
-                      </a>
-                    )}
-                  </span>
-                ) : investError}
-              </div>
-            )}
-          </div>
-        )}
-
         {requiresChannelPin && !returnsPinVerified ? (
           <ChannelPinGate
             language={language}
@@ -1463,32 +1112,25 @@ export default function RendimentosClient({
                 positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
                 mainnetInvested={networkView === "mainnet" ? positions?.total_invested_usdc ?? null : null}
                 mainnetHistory={networkView === "mainnet" ? mainnetHistory : null}
-                onRefresh={() => {}} sessionLinkContext={sessionLinkContext}
+                sessionLinkContext={sessionLinkContext}
+                onInvest={(code) => { setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                onWithdraw={(code) => { setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
               />
             </section>
 
-            <section id="invest" className="scroll-mt-4">
-              <SuiteSectionHeader
-                eyebrow={investView === "form" && action === "withdraw" ? L("Resgate seu dinheiro", "Cash out") : L("Coloque para render", "Put it to work")}
-                title={investView === "form" ? (action === "withdraw" ? L("Retirar", "Withdraw") : L("Investir", "Invest")) : L("Aplicar", "Invest")}
-              />
-              {investView === "list" ? (
-                <InvestList
-                  language={language}
-                  options={options}
-                  positionBalances={positionBalances}
-                  mainnetInvested={networkView === "mainnet" ? positions?.total_invested_usdc ?? null : null}
-                  onInvest={(code) => { setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); }}
-                  onWithdraw={(code) => { setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); }}
+            {investView === "form" && (
+              <section id="invest" className="scroll-mt-4">
+                <SuiteSectionHeader
+                  eyebrow={action === "withdraw" ? L("Resgate seu dinheiro", "Cash out") : L("Produto selecionado", "Selected product")}
+                  title={action === "withdraw" ? L("Retirar", "Withdraw") : L("Investir", "Invest")}
                 />
-              ) : (
                 <div className="space-y-4">
                   <button
                     type="button"
                     onClick={() => setInvestView("list")}
                     className="inline-flex items-center gap-1.5 text-sm font-bold text-tts-muted transition hover:text-tts-deep"
                   >
-                    <ChevronLeft className="h-4 w-4" /> {L("Voltar aos investimentos", "Back to investments")}
+                    <ChevronLeft className="h-4 w-4" /> {L("Voltar para visão geral", "Back to overview")}
                   </button>
                   <ApplyTab
                     language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
@@ -1508,8 +1150,8 @@ export default function RendimentosClient({
                     convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
                   />
                 </div>
-              )}
-            </section>
+              </section>
+            )}
 
             {/* Advanced — hidden by default to keep the home calm and Nubank-clean */}
             <section id="advanced" className="scroll-mt-4">
@@ -1598,12 +1240,13 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, onRefresh, sessionLinkContext }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, sessionLinkContext, onInvest, onWithdraw }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
   positionHistories: Record<string, PositionHistoryState>;
   isTestnet: boolean; mainnetInvested: number | null; mainnetHistory: PositionHistoryState | null;
-  onRefresh: () => void; sessionLinkContext: Record<string, string>;
+  sessionLinkContext: Record<string, string>;
+  onInvest: (code: string) => void; onWithdraw: (code: string) => void;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const rows = options.filter((o) => String(o.vault_address || "").trim()).map((o) => {
@@ -1627,6 +1270,18 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
       history: useMainnet && mainnetHistory ? mainnetHistory : (positionHistories[code] || { loading: false, points: [], error: "" }),
     };
   });
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>("daily");
+  const activeWindow = ANALYSIS_WINDOWS.find((item) => item.key === analysisWindow) || ANALYSIS_WINDOWS[0];
+  const rowSignature = rows.map((row) => row.code).join("|");
+  const selectedRow = selectedCode ? rows.find((row) => row.code === selectedCode) || null : null;
+
+  useEffect(() => {
+    if (selectedCode && !rows.some((row) => row.code === selectedCode)) {
+      setSelectedCode(null);
+    }
+  }, [rowSignature, selectedCode]);
+
   return (
     <div className="space-y-6">
       {!session.authenticated && !sessionLoading ? (
@@ -1638,36 +1293,59 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
         </div>
       ) : (
         <>
-          <PortfolioOverview language={language} rows={rows} isTestnet={isTestnet} />
+          {selectedRow ? (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setSelectedCode(null)}
+                className="inline-flex items-center gap-1.5 text-sm font-bold text-tts-muted transition hover:text-tts-deep"
+              >
+                <ChevronLeft className="h-4 w-4" /> {L("Voltar aos rendimentos", "Back to earnings")}
+              </button>
+              <SelectedYieldDetail
+                language={language}
+                row={selectedRow}
+                isTestnet={isTestnet}
+                activeWindow={activeWindow}
+                sessionLinkContext={sessionLinkContext}
+                onInvest={onInvest}
+                onWithdraw={onWithdraw}
+              />
+            </div>
+          ) : (
+            <>
+              <PortfolioOverview
+                language={language}
+                rows={rows}
+                isTestnet={isTestnet}
+                activeWindow={activeWindow}
+                analysisWindow={analysisWindow}
+                onAnalysisWindowChange={setAnalysisWindow}
+              />
 
-          {rows.map((row) => {
-            const balanceText = row.loading ? L("Consultando", "Checking") : row.error ? L("Consulta indisponível", "Unavailable") : formatPositionAmount(row.amount, row.profile, language);
-            const sourceText = row.source === "operation_history_fallback"
-              ? L("Atualizado pelo histórico da conta", "Updated from account history")
-              : L("Atualizado da conta.", "Updated from account.");
-            return (
-              <div key={row.code} className="border border-tts-border bg-tts-surface p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <span className="text-xs font-bold text-tts-muted uppercase tracking-wide">{row.profile.short}</span>
-                    <h3 className="text-lg font-bold mt-0.5">{profileName(row.profile, language)}</h3>
+              {rows.length ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">
+                      {L("Produtos de rendimento", "Yield products")}
+                    </p>
+                    <p className="text-[11px] font-bold text-tts-muted">{rows.length} {L("opções", "options")}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Posição atual", "Current position")}</p>
-                    <p className="text-lg font-bold" role="status">{balanceText}</p>
-                    {!row.loading && !row.error ? <p className="text-xs text-tts-muted">{sourceText}</p> : null}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {rows.map((row) => (
+                      <YieldProductCard
+                        key={row.code}
+                        language={language}
+                        row={row}
+                        selected={false}
+                        onSelect={() => setSelectedCode(row.code)}
+                      />
+                    ))}
                   </div>
                 </div>
-                <div className="mb-3">
-                  <InvestmentGraphs language={language} row={row} />
-                </div>
-                <a href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", ...sessionLinkContext, lang: language })}
-                  className="flex items-center justify-center gap-2 w-full py-3 border border-tts-border text-sm font-bold hover:bg-tts-bg transition mt-2">
-                  <Plus className="h-4 w-4" /> {L("Aplicar", "Apply")}
-                </a>
-              </div>
-            );
-          })}
+              ) : null}
+            </>
+          )}
 
           {!rows.length && !sessionLoading && (
             <div className="text-center py-12 border border-tts-border bg-tts-surface">
@@ -1680,138 +1358,110 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
   );
 }
 
-function PortfolioOverview({ language, rows, isTestnet }: {
+function yieldProductTitle(row: InvestmentRow, language: AppLanguage) {
+  const label = String(row.option.label || "").trim();
+  if (label) return label;
+  return `${profileName(row.profile, language)} ${localCopy(language, "rendimento", "earnings")}`;
+}
+
+function formatApy(rate: number) {
+  return rate > 0 ? `${rate.toFixed(2)}%` : "—";
+}
+
+function PortfolioOverview({ language, rows, isTestnet, activeWindow, analysisWindow, onAnalysisWindowChange }: {
   language: AppLanguage;
   rows: InvestmentRow[];
   isTestnet: boolean;
+  activeWindow: (typeof ANALYSIS_WINDOWS)[number];
+  analysisWindow: AnalysisWindow;
+  onAnalysisWindowChange: (value: AnalysisWindow) => void;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>("daily");
-  const activeWindow = ANALYSIS_WINDOWS.find((item) => item.key === analysisWindow) || ANALYSIS_WINDOWS[0];
+  const totalInvested = rows.reduce((sum, row) => sum + row.amount, 0);
+  const activeCount = rows.filter((row) => row.amount > 0.0000001).length;
+  const weightedRate = totalInvested > 0
+    ? rows.reduce((sum, row) => sum + row.rate * row.amount, 0) / totalInvested
+    : rows.reduce((max, row) => Math.max(max, row.rate), 0);
+  const periodAnalyses = rows.map((row) => analyzePortfolioPeriod({
+    currentAmount: row.amount,
+    historyPoints: row.history?.points || [],
+    days: activeWindow.days,
+  }));
+  const periodChange = periodAnalyses.reduce((sum, item) => sum + item.change, 0);
+  const periodBase = Math.max(0, totalInvested - periodChange);
+  const periodChangePercent = periodBase > 0 ? (periodChange / periodBase) * 100 : 0;
+  const positive = periodChange > 0.0000001;
+  const negative = periodChange < -0.0000001;
+  const tone = positive ? "text-tts-confirm" : negative ? "text-tts-error" : "text-tts-muted";
+  const graphProfile = rows[0]?.profile || moneyProfile("USDC");
+  const portfolioGraphPoints = buildPortfolioLinePoints(rows, language, activeWindow.days);
   return (
-    <section className="border border-tts-border bg-tts-surface p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <section className="tts-op-shell p-5">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Posições", "Positions")}</p>
-          <h2 className="mt-1 text-2xl font-bold text-tts-deep">{L("Investimentos atuais", "Current investments")}</h2>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-gold">{L("Rendimentos totais", "Total earnings")}</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <p className="text-3xl font-bold tabular-nums text-tts-deep">
+              {formatPrecise(totalInvested, language)}
+            </p>
+            <span className="text-sm font-bold text-tts-muted">{rows[0]?.profile.short || "USD"}</span>
+          </div>
+          <p className="mt-2 text-sm font-semibold text-tts-muted">
+            {activeCount
+              ? L(`${activeCount} produto${activeCount === 1 ? "" : "s"} rendendo agora`, `${activeCount} product${activeCount === 1 ? "" : "s"} earning now`)
+              : L("Nenhum produto com saldo aplicado ainda.", "No product has an invested balance yet.")}
+          </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:min-w-72">
-          <StatCard label={L("Opções", "Options")} value={String(rows.length)} sub={L("disponíveis", "available")} />
-          <StatCard label={L("Ambiente", "Environment")} value={isTestnet ? L("Testnet", "Testnet") : L("Rede ativa", "Live")} sub={L("valores estimados", "estimated values")} />
+        <div className="grid grid-cols-3 gap-2 sm:min-w-96">
+          <StatCard label="APY" value={formatApy(weightedRate)} sub={totalInvested > 0 ? L("média", "average") : L("melhor taxa", "best rate")} />
+          <StatCard label={L("Produtos", "Products")} value={String(rows.length)} sub={L("disponíveis", "available")} />
+          <StatCard label={L("Ambiente", "Environment")} value={isTestnet ? L("Teste", "Demo") : L("Ativo", "Live")} sub={isTestnet ? L("estimado", "estimated") : L("real", "real")} />
         </div>
       </div>
 
-      <div className="mt-5 border border-tts-border bg-tts-bg p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-tts-confirm" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Análise por período", "Period analysis")}</p>
+      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)]">
+        <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-tts-confirm" />
+                <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Gráfico total", "Total graph")}</p>
+              </div>
+              <p className={`mt-3 text-2xl font-bold tabular-nums ${tone}`}>
+                {formatSignedAmount(periodChange, graphProfile, language)}
+              </p>
+              <p className={`mt-1 text-sm font-bold ${tone}`}>
+                {formatSignedPercent(periodChangePercent, language)}
+              </p>
             </div>
-            <p className="mt-1 text-sm font-semibold text-tts-muted">
-              {L("Compare o retorno recente por ativo sem contar aplicações, resgates ou dinheiro adicionado.", "Compare recent vault return by asset without counting deposits, withdrawals, or added cash.")}
+            <p className="max-w-52 text-xs font-semibold text-tts-muted sm:text-right">
+              {L("Resultado recente sem contar aplicações e resgates.", "Recent result excluding deposits and withdrawals.")}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-tts-border bg-tts-surface p-1">
-            {ANALYSIS_WINDOWS.map((item) => {
-              const active = item.key === analysisWindow;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setAnalysisWindow(item.key)}
-                  className={[
-                    "min-w-28 px-3 py-2 text-left transition",
-                    active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-bg",
-                  ].join(" ")}
-                  aria-pressed={active}
-                >
-                  <span className="block text-xs font-black">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
-                  <span className={active ? "block text-[10px] font-semibold text-tts-surface/75" : "block text-[10px] font-semibold text-tts-muted"}>
-                    {isPortuguese(language) ? item.detailPt : item.detailEn}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="mt-3 rounded-lg border border-tts-border bg-tts-surface p-3">
+            <InvestmentLineChart data={portfolioGraphPoints} profile={graphProfile} language={language} tone="muted" />
           </div>
         </div>
 
-        <div className="mt-4 overflow-hidden border border-tts-border bg-tts-surface">
-          <div className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-2 text-[10px] font-black uppercase tracking-wide text-tts-muted md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
-            <span>{L("Ativo", "Asset")}</span>
-            <span>{L("Atual", "Current")}</span>
-            <span>{L("Retorno", "Return")}</span>
-            <span className="hidden md:block">{L("Pontos", "Points")}</span>
-            <span className="hidden md:block">{L("Último movimento", "Last movement")}</span>
-          </div>
-          {rows.map((row) => {
-            const analysis = analyzePortfolioPeriod({
-              currentAmount: row.amount,
-              historyPoints: row.history?.points || [],
-              days: activeWindow.days,
-            });
-            const positive = analysis.change > 0.0000001;
-            const negative = analysis.change < -0.0000001;
-            const tone = positive ? "text-tts-confirm" : negative ? "text-tts-error" : "text-tts-muted";
-            const hasIgnoredCashflow = Math.abs(analysis.cashflowChange) > 0.0000001;
-
-            // Projected return: shown on testnet when no history points in window but APY is known.
-            // Uses the last deposit date from all-time history to estimate elapsed accrual.
-            const allPoints = (row.history?.points || []).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-            const firstDepositDate = allPoints.find((p) => p.action === "deposit")?.date;
-            const daysElapsedSinceDeposit = firstDepositDate
-              ? Math.max(0, (Date.now() - new Date(firstDepositDate).getTime()) / (1000 * 60 * 60 * 24))
-              : 0;
-            const projectedReturn = (isTestnet && analysis.change === 0 && row.rate > 0 && row.amount > 0 && daysElapsedSinceDeposit > 0)
-              ? row.amount * (Math.pow(1 + row.rate / 100, daysElapsedSinceDeposit / 365) - 1)
-              : 0;
-            const showProjected = projectedReturn > 0.00001;
-
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-tts-border bg-tts-bg p-1">
+          {ANALYSIS_WINDOWS.map((item) => {
+            const active = item.key === analysisWindow;
             return (
-              <div key={row.code} className="grid grid-cols-[1.15fr_1fr_1fr] gap-3 border-b border-tts-border px-3 py-3 last:border-b-0 md:grid-cols-[1.15fr_1fr_1fr_0.8fr_1fr]">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-tts-deep">{row.profile.short}</p>
-                  <p className="truncate text-xs font-semibold text-tts-muted">{profileName(row.profile, language)}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-black text-tts-deep">{formatChartAmount(row.amount, row.profile, language)}</p>
-                  <p className="text-[10px] font-semibold text-tts-muted">{isTestnet ? L("Testnet", "Testnet") : L("Rede ativa", "Live")}</p>
-                </div>
-                <div>
-                  {showProjected ? (
-                    <>
-                      <p className="text-sm font-black text-tts-confirm">~{formatSignedAmount(projectedReturn, row.profile, language)}</p>
-                      <p className="text-[10px] font-bold text-tts-confirm">~{formatReturnPercent(periodReturnPercent(row.rate, daysElapsedSinceDeposit / 365), language)}</p>
-                      <p className="mt-0.5 text-[9px] font-semibold text-tts-muted uppercase tracking-wide">{L("projetado", "projected")}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className={`text-sm font-black ${tone}`}>{formatSignedAmount(analysis.change, row.profile, language)}</p>
-                      <p className={`text-[10px] font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</p>
-                    </>
-                  )}
-                  {hasIgnoredCashflow ? (
-                    <p className="mt-0.5 truncate text-[10px] font-semibold text-tts-muted">
-                      {L("Fluxo ignorado", "Cash flow ignored")}: {formatSignedAmount(analysis.cashflowChange, row.profile, language)}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="hidden md:block">
-                  <p className="text-sm font-black text-tts-deep">{analysis.pointCount}</p>
-                  <p className="text-[10px] font-semibold text-tts-muted">{isPortuguese(language) ? activeWindow.detailPt : activeWindow.detailEn}</p>
-                </div>
-                <div className="hidden min-w-0 md:block">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="h-3.5 w-3.5 shrink-0 text-tts-muted" />
-                    <p className="truncate text-xs font-bold text-tts-deep">
-                      {analysis.lastPoint ? formatChartDate(analysis.lastPoint.date, language) : L("Sem histórico", "No history")}
-                    </p>
-                  </div>
-                  <p className="mt-0.5 truncate text-[10px] font-semibold text-tts-muted">
-                    {analysis.lastPoint?.action ? L(analysis.lastPoint.action === "deposit" ? "Aplicação" : "Resgate", analysis.lastPoint.action === "deposit" ? "Deposit" : "Withdraw") : L("Saldo atual", "Current balance")}
-                  </p>
-                </div>
-              </div>
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onAnalysisWindowChange(item.key)}
+                className={[
+                  "min-h-16 px-3 py-2 text-left transition",
+                  active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-surface",
+                ].join(" ")}
+                aria-pressed={active}
+              >
+                <span className="block text-xs font-black">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
+                <span className={active ? "block text-[10px] font-semibold text-tts-surface/75" : "block text-[10px] font-semibold text-tts-muted"}>
+                  {isPortuguese(language) ? item.detailPt : item.detailEn}
+                </span>
+              </button>
             );
           })}
         </div>
@@ -1820,97 +1470,149 @@ function PortfolioOverview({ language, rows, isTestnet }: {
   );
 }
 
-// ── Invest overview — lead with each investment and its rentability, then drill
-// into the chosen one (invest) or cash out (withdraw). ─────────────────────────
-function InvestList({ language, options, positionBalances, mainnetInvested, onInvest, onWithdraw }: {
+function YieldProductCard({ language, row, selected, onSelect }: {
   language: AppLanguage;
-  options: YieldOption[];
-  positionBalances: Record<string, PositionState>;
-  mainnetInvested: number | null;
+  row: InvestmentRow;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const L = (pt: string, en: string) => localCopy(language, pt, en);
+  const analysis = analyzePortfolioPeriod({
+    currentAmount: row.amount,
+    historyPoints: row.history?.points || [],
+    days: 1,
+  });
+  const returnTone = analysis.change > 0.0000001 ? "text-tts-confirm" : analysis.change < -0.0000001 ? "text-tts-error" : "text-tts-muted";
+  const balanceText = row.loading ? L("Consultando", "Checking") : row.error ? L("Indisponível", "Unavailable") : formatPositionAmount(row.amount, row.profile, language);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={[
+        "tts-op-tile tts-interactive-tile w-full border p-4 text-left",
+        selected ? "border-tts-gold-br bg-tts-gold-bg" : "border-tts-border bg-tts-surface",
+      ].join(" ")}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-base font-bold text-tts-deep">{yieldProductTitle(row, language)}</p>
+          <p className="mt-1 text-xs font-semibold text-tts-muted">{row.profile.short} · {profileName(row.profile, language)}</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-tts-border bg-tts-bg px-2.5 py-1 text-xs font-bold text-tts-gold">
+          {formatApy(row.rate)} APY
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">{L("Aplicado", "Invested")}</p>
+          <p className="mt-1 text-sm font-bold tabular-nums text-tts-deep">{balanceText}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">{L("Hoje", "Today")}</p>
+          <p className={`mt-1 text-sm font-bold tabular-nums ${returnTone}`}>{formatSignedPercent(analysis.changePercent, language)}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function SelectedYieldDetail({ language, row, isTestnet, activeWindow, sessionLinkContext, onInvest, onWithdraw }: {
+  language: AppLanguage;
+  row: InvestmentRow;
+  isTestnet: boolean;
+  activeWindow: (typeof ANALYSIS_WINDOWS)[number];
+  sessionLinkContext: Record<string, string>;
   onInvest: (code: string) => void;
   onWithdraw: (code: string) => void;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const rows = options
-    .filter((o) => String(o.vault_address || "").trim())
-    .map((o) => {
-      const code = optionCode(o);
-      // On mainnet the real USDC position lives in the Bridge wallet (positions endpoint).
-      const useMainnet = mainnetInvested !== null && code === "USDC";
-      const invested = useMainnet ? mainnetInvested : normalizeDecimal(positionBalances[code]?.amount || "0");
-      return { code, profile: moneyProfile(code), rate: optionRatePercent(o), invested };
-    });
-  const investedRows = rows.filter((r) => r.invested > 0);
+  const analysis = analyzePortfolioPeriod({
+    currentAmount: row.amount,
+    historyPoints: row.history?.points || [],
+    days: activeWindow.days,
+  });
+  const positive = analysis.change > 0.0000001;
+  const negative = analysis.change < -0.0000001;
+  const tone = positive ? "text-tts-confirm" : negative ? "text-tts-error" : "text-tts-muted";
+  const hasIgnoredCashflow = Math.abs(analysis.cashflowChange) > 0.0000001;
+  const sourceText = row.source === "operation_history_fallback"
+    ? L("Atualizado pelo histórico da conta", "Updated from account history")
+    : L("Atualizado da conta.", "Updated from account.");
+  const canWithdraw = row.amount > 0.0000001 && !row.loading && !row.error;
 
   return (
-    <div className="space-y-8">
-      {/* Browse — possible investments, each with its rentability */}
-      <div className="space-y-3">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Escolha onde investir", "Choose where to invest")}</p>
-        {rows.length ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {rows.map((r) => (
-              <div key={r.code} className="flex flex-col rounded-2xl border border-tts-border bg-tts-surface p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{r.profile.short}</span>
-                    <h3 className="mt-0.5 text-lg font-bold text-tts-deep">{profileName(r.profile, language)}</h3>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-black tabular-nums text-tts-confirm">{r.rate > 0 ? `${r.rate.toFixed(2)}%` : "—"}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-tts-muted">{L("ao ano", "per year")}</p>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <ReturnPeriodGrid language={language} rate={r.rate} />
-                </div>
-                {r.invested > 0 && (
-                  <p className="mt-3 text-xs font-bold text-tts-muted">
-                    {L("Já investido", "Already invested")}: <span className="text-tts-deep">{formatPositionAmount(r.invested, r.profile, language)}</span>
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onInvest(r.code)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-deep py-3 text-sm font-bold text-tts-surface transition hover:opacity-90"
-                >
-                  <Plus className="h-4 w-4" /> {L("Investir", "Invest")}
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-tts-border bg-tts-surface py-10 text-center">
-            <p className="text-sm text-tts-muted">{L("Nenhuma opção disponível.", "No options available.")}</p>
-          </div>
-        )}
+    <div className="tts-op-shell p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">
+            {L("Performance atual", "Current performance")}
+          </p>
+          <h3 className="mt-1 truncate text-xl font-bold text-tts-deep">{yieldProductTitle(row, language)}</h3>
+          <p className="mt-1 text-xs font-semibold text-tts-muted">
+            {isTestnet ? L("Ambiente de teste", "Demo environment") : L("Rede ativa", "Live")} · {formatApy(row.rate)} APY
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-tts-border bg-tts-bg px-3 py-1 text-xs font-bold text-tts-gold">
+          {row.profile.short}
+        </span>
       </div>
 
-      {/* Withdraw — money currently invested */}
-      <div className="rounded-2xl border border-tts-border bg-tts-surface p-5">
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Resgatar dinheiro investido", "Withdraw invested money")}</p>
-        {investedRows.length ? (
-          <div className="space-y-2">
-            {investedRows.map((r) => (
-              <div key={r.code} className="flex items-center justify-between rounded-xl border border-tts-border bg-tts-bg px-4 py-3">
-                <div>
-                  <p className="text-sm font-bold text-tts-deep">{profileName(r.profile, language)}</p>
-                  <p className="text-xs text-tts-muted">{L("Investido", "Invested")}: {formatPositionAmount(r.invested, r.profile, language)}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onWithdraw(r.code)}
-                  className="flex items-center gap-1.5 rounded-xl border border-tts-border px-4 py-2 text-sm font-bold text-tts-deep transition hover:bg-tts-surface"
-                >
-                  <ArrowUpFromLine className="h-4 w-4" /> {L("Retirar", "Withdraw")}
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-tts-muted">{L("Você ainda não tem dinheiro investido aqui.", "You have no invested money here yet.")}</p>
-        )}
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label={L("Valor aplicado", "Invested amount")}
+          value={row.loading ? L("Consultando", "Checking") : row.error ? L("Indisponível", "Unavailable") : formatPositionAmount(row.amount, row.profile, language)}
+          sub={!row.loading && !row.error ? sourceText : row.error}
+        />
+        <StatCard
+          label={isPortuguese(language) ? activeWindow.detailPt : activeWindow.detailEn}
+          value={formatSignedAmount(analysis.change, row.profile, language)}
+          sub={formatSignedPercent(analysis.changePercent, language)}
+        />
+        <StatCard
+          label={L("Último movimento", "Last movement")}
+          value={analysis.lastPoint ? formatChartDate(analysis.lastPoint.date, language) : L("Sem histórico", "No history")}
+          sub={analysis.lastPoint?.action ? L(analysis.lastPoint.action === "deposit" ? "Aplicação" : "Resgate", analysis.lastPoint.action === "deposit" ? "Deposit" : "Withdraw") : L("Saldo atual", "Current balance")}
+        />
       </div>
+
+      <div className="mt-5 rounded-xl border border-tts-border bg-tts-bg p-4">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha de saldo", "Balance line")}</p>
+          <span className={`text-sm font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</span>
+        </div>
+        <InvestmentGraphs language={language} row={row} />
+        {hasIgnoredCashflow ? (
+          <p className="mt-3 text-xs font-semibold text-tts-muted">
+            {L("Aplicações e resgates ignorados na performance:", "Deposits and withdrawals ignored in performance:")} {formatSignedAmount(analysis.cashflowChange, row.profile, language)}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <a
+          href={buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", asset: row.code, amount: "100", ...sessionLinkContext, lang: language })}
+          onClick={(event) => { event.preventDefault(); onInvest(row.code); }}
+          className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-tts-deep px-4 py-3 text-sm font-bold text-tts-surface"
+        >
+          <Plus className="h-4 w-4" /> {L("Investir mais", "Invest more")}
+        </a>
+        <button
+          type="button"
+          onClick={() => onWithdraw(row.code)}
+          disabled={!canWithdraw}
+          className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-tts-border px-4 py-3 text-sm font-bold text-tts-deep disabled:opacity-40"
+        >
+          <ArrowUpFromLine className="h-4 w-4" /> {L("Retirar", "Withdraw")}
+        </button>
+      </div>
+      {!canWithdraw ? (
+        <p className="mt-2 text-xs font-semibold text-tts-muted">
+          {row.loading ? L("A posição ainda está carregando.", "The position is still loading.") : L("Sem valor aplicado para retirar.", "No invested amount to withdraw.")}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -2183,58 +1885,6 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
       <p className="text-xl font-bold mt-1">{value}</p>
       {sub && <p className="text-xs text-tts-muted mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
-// ── Auto-yield hero — one-tap "put your money to work" ───────────────────────
-function AutoYieldHero({ language, idleUsdc, defindexPct, busy, status, error, onRun }: {
-  language: AppLanguage;
-  idleUsdc: number;
-  defindexPct: number;
-  busy: boolean;
-  status: "" | "ok" | "error";
-  error: string;
-  onRun: () => void;
-}) {
-  const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const hasIdle = idleUsdc > 0.0000001;
-  return (
-    <div className="mb-5 rounded-2xl border border-tts-border bg-tts-surface p-5">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-tts-muted">{L("Disponível para render", "Available to earn")}</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-tts-deep">
-            {idleUsdc.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 7 })}
-            <span className="ml-1.5 text-base font-bold text-tts-muted">USDC</span>
-          </p>
-          <p className="mt-1 text-xs text-tts-muted">
-            {L(`Aplicado em ${defindexPct}% cofre · ${100 - defindexPct}% empréstimo`, `Split ${defindexPct}% vault · ${100 - defindexPct}% lending`)}
-          </p>
-        </div>
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500">
-          <TrendingUp className="h-6 w-6" />
-        </span>
-      </div>
-
-      <button
-        type="button"
-        onClick={onRun}
-        disabled={busy || !hasIdle}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tts-deep py-3.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
-        {busy ? L("Aplicando…", "Putting it to work…") : hasIdle ? L("Pôr meu dinheiro pra render", "Put my money to work") : L("Sem saldo livre", "No idle balance")}
-      </button>
-
-      {status === "ok" && (
-        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-tts-confirm">
-          <CheckCircle2 className="h-3.5 w-3.5" /> {L("Aplicado! Seu dinheiro já está rendendo.", "Done! Your money is earning now.")}
-        </p>
-      )}
-      {status === "error" && error && (
-        <p className="mt-2 text-center text-xs font-semibold text-tts-error">{error}</p>
-      )}
     </div>
   );
 }

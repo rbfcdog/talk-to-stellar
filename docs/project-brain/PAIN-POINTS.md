@@ -2,7 +2,7 @@
 
 > **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-26. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-62 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+63 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -346,7 +346,7 @@
 
 ---
 
-## Cluster G — Visual Polish (8 incidents, SEVERITY: MEDIUM)
+## Cluster G — Visual Polish (9 incidents, SEVERITY: MEDIUM)
 
 ### #1 — PIX Confirmation Pop-Up Aesthetics
 > **Quote**: "fazer tela de confirmação pix ser um pop-up mais bonitinho, melhorar a estetica final"
@@ -419,6 +419,15 @@
 - **Root cause**: Dark-mode compatibility CSS remapped exact `bg-tts-bg` and a few opacity variants, but the ramp surfaces use additional translucent utilities such as `bg-tts-bg/50`, `bg-tts-bg/70`, `bg-white/70`, amber highlights, and browser-controlled select/autofill/input backgrounds. The remaining light overlays could sit behind text that had already been remapped to dark-mode colors.
 - **Status**: **Fixed by `8122ee8b`**. The `.dark .tts-op-page` rules now explicitly darken ramp overlay utilities and set readable input, textarea, select, placeholder, option, focus, caret, and autofill colors.
 - **Lesson**: **Operational dark mode must treat form controls and translucent panels as one system**. Test on both `/wire-onramp` and `/usd-withdraw` whenever adding light background utilities to operational pages.
+
+### #66 — Rendimentos Overview Still Shows Invest Controls
+> **Quote**: "stikll is the same way as before the yiels, in the first ccreen should appear only teh cards and total graph, clicking the cards should go to specifics, there should be no invst in the first page"
+> **Gloss**: The `/rendimentos` first screen still looked like the old invest workflow: wallet/invest panels appeared before the returns overview, and a product detail with invest actions was visible before the user clicked a card.
+
+- **Where**: `frontend/app/rendimentos/rendimentos-client.tsx`, `frontend/__tests__/unit/ux-copy.test.ts`, `docs/project-brain/product/surfaces/investments-page.md`.
+- **Root cause**: The returns view had two competing surfaces mounted at once: the overview selected the first yield product by default and showed its detail/actions immediately, while the top-level page still rendered auto-invest/wallet action panels and a separate `#invest` section on initial load.
+- **Status**: **Fixed in current working tree; commit pending**. The first `/rendimentos` view now renders the total graph and yield product cards only. Product cards open a detail state, and invest/withdraw controls mount only from that specific detail or an application deep link.
+- **Lesson**: **Investment overview and transaction entry must be separate states**. Default `/rendimentos` should be portfolio browsing; actions belong behind a selected product detail.
 
 ---
 
@@ -651,7 +660,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 62 documented incidents:
+Ranked by frequency × severity across the 63 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -660,18 +669,18 @@ Ranked by frequency × severity across the 62 documented incidents:
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 8 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility, provider-path drift, Bridge-to-Stellar wallet linkage |
 | 5 | **H — Reliability** | 19 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, Blend pool discovery, investments fail, payment links unreliable, login redirects wrong |
-| 6 | **G — Visual Polish** | 8 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness, ramp contrast |
+| 6 | **G — Visual Polish** | 9 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness, ramp contrast, yield overview hierarchy |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
 ## Status Summary
 
-- **Confirmed fixed**: 37 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65)
+- **Confirmed fixed**: 38 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65, #66)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 37 of 62 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 38 of 63 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
@@ -716,3 +725,4 @@ Fixing commits verified in codebase:
 | #63 | `008da16` | Validate Blend pool contract ids and discover current v2 pools from the backstop reward zone |
 | #64 | `34b27a7` | Add Bridge virtual-account connection map, direct USD-to-Stellar VA creation, and Bridge-wallet-to-Stellar transfer route |
 | #65 | `8122ee8b` | Darken operational ramp overlays and form controls so `/wire-onramp` and `/usd-withdraw` remain readable in dark mode |
+| #66 | Commit pending | Split `/rendimentos` overview from product detail/invest states so the first screen only shows total graph and yield cards |

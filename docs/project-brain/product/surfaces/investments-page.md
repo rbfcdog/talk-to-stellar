@@ -5,19 +5,20 @@
 ## Flow
 ```
 User opens investments page (web)
-  → View vault options (USDC, CETES)
-  → View current balance + APY + performance chart
-  → Enter amount to apply
-  → Lending & Yield panel loads Blend v2 pool info
+  → View total portfolio graph + yield product cards only
+  → Tap a product card
+  → View that product's current performance, amount, and balance chart
+  → Choose invest more or withdraw from the product detail
   → Confirm → DeFindex or Blend transaction flow executes
 ```
 
-## Known Issues (Updated June 23, 2026)
+## Known Issues (Updated June 26, 2026)
 
 ### Fixed
 - **Performance math wrong** (#11): ✅ Fixed by `dcec791` — `analyzePortfolioPeriod` subtracts `cashflowChange` from raw change (deposits/withdrawals excluded)
 - **Charts need work** (#12): ✅ Fixed by `d4b1d98` — weekly/monthly toggle added, `ChartWindow` type with 7d/30d options
 - **Blend v2 pool load failed with unsupported address type** (#63): ✅ Fixed by `008da16` — invalid configured pool ids are ignored, current Blend v2 pools are discovered from the backstop reward zone, and USDC/XLM reserve hints were refreshed for mainnet/testnet
+- **Overview still showed invest controls** (#66): ✅ Fixed in current working tree; commit pending — `/rendimentos` now defaults to total graph + yield cards only. Product details and invest/withdraw controls mount only after tapping a yield card or opening an application deep link.
 
 ### Still Open
 - **Page failing** (#13): Needs retry + backoff for DeFindex API calls
@@ -31,6 +32,7 @@ User opens investments page (web)
 
 ## Key Files
 - `frontend/app/rendimentos/rendimentos-client.tsx` (~1343 lines) — investments page
+- `frontend/__tests__/unit/ux-copy.test.ts` — source guardrails for overview/detail separation and first-screen copy
 - `frontend/lib/portfolio-period-analysis.ts` — period analysis with cashflow exclusion
 - `backend/src/api/services/defindex-yield.service.ts` — vault operations
 - `backend/src/integrations/blend/service.ts` — Blend v2 pool discovery, reserve selection, and supply/withdraw XDR construction
@@ -38,6 +40,12 @@ User opens investments page (web)
 - `backend/src/config/` — DeFindex vault config
 
 ## Latest Verification
+
+2026-06-26:
+
+- `npm --prefix frontend test -- --run __tests__/unit/ux-copy.test.ts __tests__/unit/rendimentos-channel-pin.test.ts` passed.
+- `npm --prefix frontend run build -- --debug-build-paths "app/rendimentos/**"` passed and listed `/rendimentos`.
+- `npm exec -- tsc --noEmit --pretty false` from `frontend/` still fails on pre-existing unit-test typing issues (`NODE_ENV` readonly and missing Vitest globals in older tests), but reports no `/rendimentos` errors.
 
 2026-06-23:
 

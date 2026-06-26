@@ -4,7 +4,7 @@
 
 Every pain point from [PAIN-POINTS.md](./PAIN-POINTS.md) whose fix could NOT be verified in the current code. Only genuinely open issues listed here.
 
-PAIN-POINTS.md currently records 37 fixed, 22 still open, and 3 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
+PAIN-POINTS.md currently records 38 fixed, 22 still open, and 3 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
 
 ## Priority: P0 (Blocking Production)
 
@@ -138,7 +138,7 @@ PAIN-POINTS.md currently records 37 fixed, 22 still open, and 3 partially-fixed 
 
 ## Status Notes
 
-- **37 documented fixes confirmed** (see PAIN-POINTS.md Status Summary for full commit table)
+- **38 documented fixes confirmed** (see PAIN-POINTS.md Status Summary for full commit table)
 - **3 partially fixed** (#1, #10, #16)
 - **22 documented pain points still open** — predominantly UX/flow-state, conversational routing, and reliability gaps
 - The backend correctness issues (quote/fee consistency, ledger/balance) are largely resolved
