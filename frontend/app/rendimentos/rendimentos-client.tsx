@@ -10,6 +10,7 @@ import {
   BarChart3,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Coins,
   Droplets,
   ExternalLink,
@@ -540,6 +541,9 @@ export default function RendimentosClient({
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
   // Inline gate for the mainnet bridge wallet part (testnet/returns stay open).
   const { unlocked: bridgeUnlocked, unlock: unlockBridge } = useBridgeAccess();
+  // Nubank-grade default: keep the screen calm. Power features (per-asset
+  // lending, liquidity) live behind one disclosure.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [returnsPin, setReturnsPin] = useState("");
   const [returnsPinVerified, setReturnsPinVerified] = useState(false);
   const [returnsPinState, setReturnsPinState] = useState<ApiState>({ loading: false, message: "", error: "" });
@@ -1063,15 +1067,14 @@ export default function RendimentosClient({
       {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }} />}
 
       <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-8">
-        {/* Unified suite header + quick-jump nav (single page, no tabs) */}
+        {/* Calm, single-page header with a light quick-jump (no tabs) */}
         <div className="mb-5">
-          <h1 className="text-xl font-bold text-tts-deep">{L("Suíte de Investimentos", "Investment Suite")}</h1>
-          <p className="text-sm text-tts-muted">{L("Carteira, aplicações e liquidez — tudo em um só lugar.", "Portfolio, deposits and liquidity — all in one place.")}</p>
+          <h1 className="text-2xl font-bold text-tts-deep">{L("Seu dinheiro", "Your money")}</h1>
+          <p className="text-sm text-tts-muted">{L("Veja render e aplique em poucos toques.", "See it grow and put it to work in a few taps.")}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {[
-              { id: "portfolio", label: L("Carteira", "Portfolio") },
+              { id: "portfolio", label: L("Render", "Earnings") },
               { id: "invest", label: L("Aplicar", "Invest") },
-              { id: "liquidity", label: L("Liquidez", "Liquidity") },
             ].map((s) => (
               <button
                 key={s.id}
@@ -1398,27 +1401,45 @@ export default function RendimentosClient({
                 onPrepare={prepareYield} onConfirm={confirmYield}
                 convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
               />
-              <div className="mt-8">
-                <BlendInlinePanel
-                  language={language}
-                  email={walletEmail}
-                  wallets={emailWallets}
-                  defaultWallet={selectedWalletKey}
-                  walletsLoading={emailWalletsLoading}
-                  onLoadWallets={loadEmailWallets}
-                  onEmailChange={setWalletEmail}
-                  onSelectWallet={setSelectedWalletKey}
-                  sessionWalletKey={sessionWallet?.public_key || ""}
-                />
-              </div>
             </section>
 
-            <section id="liquidity" className="scroll-mt-4">
-              <SuiteSectionHeader
-                eyebrow={L("Ganhe com taxas", "Earn on fees")}
-                title={L("Liquidez", "Liquidity")}
-              />
-              <SwapInlinePanel language={language} />
+            {/* Advanced — hidden by default to keep the home calm and Nubank-clean */}
+            <section id="advanced" className="scroll-mt-4">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="flex w-full items-center justify-between rounded-2xl border border-tts-border bg-tts-surface px-5 py-4 text-left transition-colors hover:border-tts-deep/40"
+                aria-expanded={advancedOpen}
+              >
+                <div>
+                  <p className="text-sm font-bold text-tts-deep">{L("Opções avançadas", "Advanced options")}</p>
+                  <p className="text-xs text-tts-muted">{L("Empréstimo por ativo e liquidez", "Per-asset lending and liquidity")}</p>
+                </div>
+                <ChevronDown className={`h-5 w-5 text-tts-muted transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {advancedOpen && (
+                <div className="mt-6 space-y-12">
+                  <BlendInlinePanel
+                    language={language}
+                    email={walletEmail}
+                    wallets={emailWallets}
+                    defaultWallet={selectedWalletKey}
+                    walletsLoading={emailWalletsLoading}
+                    onLoadWallets={loadEmailWallets}
+                    onEmailChange={setWalletEmail}
+                    onSelectWallet={setSelectedWalletKey}
+                    sessionWalletKey={sessionWallet?.public_key || ""}
+                  />
+                  <div>
+                    <SuiteSectionHeader
+                      eyebrow={L("Ganhe com taxas", "Earn on fees")}
+                      title={L("Liquidez", "Liquidity")}
+                    />
+                    <SwapInlinePanel language={language} />
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         )}
