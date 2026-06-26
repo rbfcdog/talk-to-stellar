@@ -1135,7 +1135,7 @@ export default function RendimentosClient({
                   <ApplyTab
                     language={language} session={session} sessionLoading={sessionLoading} apiState={apiState}
                     amount={amount} onAmountChange={setAmount} amountPresets={amountPresets}
-                    action={action} onActionChange={setAction}
+                    action={action}
                     selectedCode={safeSelectedCode} selectedOption={actionableOption} selectedProfile={selectedProfile}
                     options={options} onSelectCode={setSelectedCode}
                     selectedHasYield={selectedHasYield} selectedExecutionBlocked={selectedExecutionBlocked}
@@ -1617,10 +1617,10 @@ function SelectedYieldDetail({ language, row, isTestnet, activeWindow, sessionLi
   );
 }
 
-function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmountChange, amountPresets, action, onActionChange, selectedCode, selectedOption, selectedProfile, options, onSelectCode, selectedHasYield, selectedExecutionBlocked, selectedBalanceInsufficient, balanceForSelected, alternativeConversionCode, activeStep, setActiveStep, yieldResult, canPrepare, confirmationEnabled, configured, pin, onPinChange, variationBps, onVariationBpsChange, onPrepare, onConfirm, convertAssetsUrl, pixTopUpUrl }: {
+function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmountChange, amountPresets, action, selectedCode, selectedOption, selectedProfile, options, onSelectCode, selectedHasYield, selectedExecutionBlocked, selectedBalanceInsufficient, balanceForSelected, alternativeConversionCode, activeStep, setActiveStep, yieldResult, canPrepare, confirmationEnabled, configured, pin, onPinChange, variationBps, onVariationBpsChange, onPrepare, onConfirm, convertAssetsUrl, pixTopUpUrl }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean; apiState: ApiState;
   amount: string; onAmountChange: (v: string) => void; amountPresets: string[];
-  action: "deposit" | "withdraw"; onActionChange: (v: "deposit" | "withdraw") => void;
+  action: "deposit" | "withdraw";
   selectedCode: string; selectedOption: YieldOption | null; selectedProfile: { namePt: string; nameEn: string; short: string };
   options: YieldOption[]; onSelectCode: (v: string) => void;
   selectedHasYield: boolean; selectedExecutionBlocked: boolean;
@@ -1724,15 +1724,13 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
 
       {activeStep === "plan" && (
         <div className="tts-mobile-flow-card tts-stage-panel p-4 space-y-5 sm:p-5">
-          <div className="flex border border-tts-border p-0.5">
-            <button onClick={() => onActionChange("deposit")}
-              className={`flex-1 py-2.5 text-sm font-bold text-center transition ${action === "deposit" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}>
-              <ArrowDownToLine className="inline h-4 w-4 mr-1.5" />{L("Investir", "Invest")}
-            </button>
-            <button onClick={() => onActionChange("withdraw")}
-              className={`flex-1 py-2.5 text-sm font-bold text-center transition ${action === "withdraw" ? "bg-tts-deep text-tts-surface" : "text-tts-muted"}`}>
-              <ArrowUpFromLine className="inline h-4 w-4 mr-1.5" />{L("Retirar", "Withdraw")}
-            </button>
+          {/* The Invest/Withdraw choice is made on the investments list, so we only
+              show which one is in progress here — no second toggle. */}
+          <div className="flex items-center gap-2 rounded-xl border border-tts-border bg-tts-bg px-4 py-2.5">
+            {action === "deposit"
+              ? <ArrowDownToLine className="h-4 w-4 text-tts-deep" />
+              : <ArrowUpFromLine className="h-4 w-4 text-tts-deep" />}
+            <span className="text-sm font-bold text-tts-deep">{action === "deposit" ? L("Investir", "Invest") : L("Retirar", "Withdraw")}</span>
           </div>
 
           <div className="rounded-2xl border border-tts-border bg-tts-bg p-4">
