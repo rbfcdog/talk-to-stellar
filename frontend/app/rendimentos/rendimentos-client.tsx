@@ -112,7 +112,9 @@ const pill = (on: boolean) => `${PILL} ${on ? PILL_ON : PILL_OFF}`;
 const BTN_PRIMARY = "flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 py-3 text-sm font-bold text-stone-950 transition-colors hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500";
 const BTN_SECONDARY = "flex items-center justify-center gap-2 rounded-lg border-2 border-stone-700 bg-stone-800 py-3 text-sm font-bold text-white transition-colors hover:border-stone-500 disabled:opacity-40";
 function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
-  const p = Number(String(value || "0").replace(",", "."));
+  // Use the same robust parser as normalizeDecimal (handles thousands separators
+  // and comma decimals) instead of a single naive comma→dot replace.
+  const p = normalizeDecimal(value);
   if (!Number.isFinite(p)) return String(value || "0");
   return formatCustomerNumber(p, isPortuguese(language) ? "pt-BR" : "en-US");
 }
@@ -576,6 +578,8 @@ export default function RendimentosClient({
   // Mainnet invest (deposits the selected Bridge wallet's USDC into a protocol)
   type MainnetProtocol = "defindex" | "blend";
   const [investAmount, setInvestAmount] = useState("");
+  const investBusyRef = useRef(false); // synchronous guard against double-submit
+  const yieldBusyRef = useRef(false); // guards the custodial confirmYield deposit
   const [investStatus, setInvestStatus] = useState<"idle" | "investing" | "ok" | "error">("idle");
   const [investError, setInvestError] = useState("");
   const [investHash, setInvestHash] = useState("");
@@ -587,6 +591,7 @@ export default function RendimentosClient({
   // The user's login/session wallet (used for testnet yield — distinct from the
   // Bridge email wallet used on mainnet).
   const [sessionWallet, setSessionWallet] = useState<{ public_key: string } | null>(null);
+  const loadPositionsToken = useRef(""); // stale-response guard for positions/history
 
   async function loadSessionWallet() {
     try {
@@ -603,10 +608,13 @@ export default function RendimentosClient({
   async function loadPositions(email: string, publicKey: string) {
     if (!email || !publicKey) return;
     const e = email.trim().toLowerCase();
+    // Drop stale responses when the selected wallet changes mid-flight.
+    const token = `${e}:${publicKey}`;
+    loadPositionsToken.current = token;
     try {
       const res = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
-      if (json?.success) setPositions({ defindex_usdc: Number(json.defindex_usdc) || 0, blend_usdc: Number(json.blend_usdc) || 0, total_invested_usdc: Number(json.total_invested_usdc) || 0 });
+      if (loadPositionsToken.current === token && json?.success) setPositions({ defindex_usdc: Number(json.defindex_usdc) || 0, blend_usdc: Number(json.blend_usdc) || 0, total_invested_usdc: Number(json.total_invested_usdc) || 0 });
     } catch {
       // non-critical
     }
@@ -615,7 +623,7 @@ export default function RendimentosClient({
     try {
       const hr = await fetch(`/api/bridge/stellar-wallets/position-history?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
       const hj = await hr.json().catch(() => ({}));
-      if (hj?.success) {
+      if (loadPositionsToken.current === token && hj?.success) {
         setMainnetHistory({ loading: false, points: Array.isArray(hj.points) ? hj.points : [], error: "", source: String(hj.source || "") });
       }
     } catch {
@@ -642,9 +650,13 @@ export default function RendimentosClient({
   }
 
   async function mainnetInvest(email: string, publicKey: string, amount: string, protocol: MainnetProtocol) {
+    if (investBusyRef.current) return; // re-entrancy guard (double-click / Enter spam)
     if (!email || !publicKey) return;
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) { setInvestStatus("error"); setInvestError("Enter a valid amount."); return; }
+    const amt = normalizeDecimal(amount);
+    if (!Number.isFinite(amt) || amt <= 0) { setInvestStatus("error"); setInvestError(L("Informe um valor válido.", "Enter a valid amount.")); return; }
+    const idle = mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance) : null;
+    if (idle !== null && amt > idle + 0.0000001) { setInvestStatus("error"); setInvestError(L("Valor acima do saldo disponível.", "Amount exceeds available balance.")); return; }
+    investBusyRef.current = true;
     setInvestStatus("investing");
     setInvestError("");
     setInvestHash("");
@@ -663,12 +675,16 @@ export default function RendimentosClient({
     } catch (e: any) {
       setInvestStatus("error");
       setInvestError(e?.message ?? String(e));
+    } finally {
+      investBusyRef.current = false;
     }
   }
 
   // Auto-yield: sweep the wallet's idle USDC into DeFindex (bulk) + Blend (slice).
   async function autoYield(email: string, publicKey: string) {
+    if (investBusyRef.current) return; // re-entrancy guard
     if (!publicKey) return;
+    investBusyRef.current = true;
     setInvestStatus("investing");
     setInvestError("");
     setInvestHash("");
@@ -680,7 +696,7 @@ export default function RendimentosClient({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) throw new Error(json.message || `HTTP ${res.status}`);
-      if (!json.invested_usdc) { setInvestStatus("error"); setInvestError(json.message || "No idle USDC to deploy."); return; }
+      if (!json.invested_usdc) { setInvestStatus("error"); setInvestError(json.message || L("Sem USDC livre para investir.", "No idle USDC to deploy.")); return; }
       setInvestStatus("ok");
       const firstHash = (json.steps || []).find((s: any) => s.hash)?.hash || "";
       setInvestHash(firstHash);
@@ -688,6 +704,8 @@ export default function RendimentosClient({
     } catch (e: any) {
       setInvestStatus("error");
       setInvestError(e?.message ?? String(e));
+    } finally {
+      investBusyRef.current = false;
     }
   }
 
@@ -1006,6 +1024,8 @@ export default function RendimentosClient({
 
   async function confirmYield() {
     if (!actionableOption || !yieldResult) return;
+    if (yieldBusyRef.current) return; // re-entrancy guard — custodial deposit
+    yieldBusyRef.current = true;
     setApiState({ loading: true, message: "", error: "" });
     try {
       const payload = await yieldApi("defindex/yield/execute", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, pin, wallet_pin: pin, network: networkView }) }, 60000, session.sessionSource);
@@ -1028,12 +1048,14 @@ export default function RendimentosClient({
         return;
       }
       setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
+    } finally {
+      yieldBusyRef.current = false;
     }
   }
 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); /* refresh */ }} />}
+      {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }} />}
 
       <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-8">
         <div className="tts-stage-strip mb-5 grid-cols-3">
@@ -2189,7 +2211,7 @@ function SwapInlinePanel({ language }: { language: AppLanguage }) {
                 {submitResult.hash && <div className="flex justify-between text-xs"><span className="text-stone-400">Hash</span><span className="font-mono font-bold text-white">{submitResult.hash.slice(0, 16)}…</span></div>}
                 {submitResult.ledger && <div className="flex justify-between text-xs"><span className="text-stone-400">Ledger</span><span className="font-bold text-white">{submitResult.ledger}</span></div>}
                 {submitResult.hash && (
-                  <a href={`https://stellar.expert/explorer/testnet/tx/${submitResult.hash}`} target="_blank" rel="noopener noreferrer"
+                  <a href={`https://stellar.expert/explorer/${swapNetwork === "PUBLIC" ? "public" : "testnet"}/tx/${submitResult.hash}`} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:underline mt-1">
                     <ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}
                   </a>
@@ -2292,6 +2314,9 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
 
   // Idle balance for the selected wallet on the selected network.
   const [netBalance, setNetBalance] = useState<{ usdc: number; exists: boolean } | null>(null);
+  // Stale-response guards: only the latest wallet/network request applies its result.
+  const loadPosToken = useRef("");
+  const loadBalToken = useRef("");
 
   const [emailInput, setEmailInput] = useState(email || "");
   useEffect(() => { if (email) setEmailInput(email); }, [email]);
@@ -2327,21 +2352,28 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
 
   async function loadPosition() {
     if (!walletAddress) { setPosition(null); return; }
+    // Drop the response if the wallet/network changed while it was in flight.
+    const token = `${walletAddress}:${network}`;
+    loadPosToken.current = token;
     setLoadingPos(true);
     try {
       const res = await fetch(`/api/blend/pool/position?address=${walletAddress}&network=${network}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
+      if (loadPosToken.current !== token) return;
       if (res.ok && !data.error) setPosition(data);
     } catch { /* silent */ }
-    finally { setLoadingPos(false); }
+    finally { if (loadPosToken.current === token) setLoadingPos(false); }
   }
 
   // Idle USDC for the selected wallet on the selected network.
   async function loadBalance() {
     if (!walletAddress) { setNetBalance(null); return; }
+    const token = `${walletAddress}:${network}`;
+    loadBalToken.current = token;
     try {
       const res = await fetch(`/api/bridge/stellar-wallets/balance?public_key=${walletAddress}&network=${network}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
+      if (loadBalToken.current !== token) return; // stale — a newer request superseded this
       if (data?.success) setNetBalance({ usdc: Number(data.usdc) || 0, exists: Boolean(data.exists) });
     } catch { /* non-critical */ }
   }
@@ -2349,6 +2381,7 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   useEffect(() => { loadPosition(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [walletAddress, network]);
 
   async function supply() {
+    if (submitting) return; // re-entrancy guard (double-click)
     if (!walletAddress) return;
     const assetId = selectedAssetId || poolInfo?.usdc?.assetId;
     setSubmitting(true); setErrSubmit(null); setResult(null);

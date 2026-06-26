@@ -692,9 +692,8 @@ async function ensureWalletGasTestnet(address: string): Promise<void> {
 
 // ── Custodial yield helpers (shared by invest + auto-yield) ──────────────────
 
-const NETWORK_USDC_ISSUER: Record<string, string> = {
-  mainnet: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-};
+// Canonical mainnet USDC issuer (centralized in config/assets).
+const MAINNET_USDC_ISSUER = PUBLIC_USDC_ISSUER;
 
 // Resolve the vaulted signing key for a wallet: the Bridge email wallet (mainnet
 // custodial) or the session/login wallet in `wallets` (testnet). Supply-only
@@ -769,7 +768,7 @@ async function readWalletBalances(publicKey: string, network: "mainnet" | "testn
     const isUsdc = (b: any) =>
       (b.asset_type === "credit_alphanum4" || b.asset_type === "credit_alphanum12") &&
       String(b.asset_code).toUpperCase() === "USDC" &&
-      (network === "testnet" || b.asset_issuer === NETWORK_USDC_ISSUER.mainnet);
+      (network === "testnet" || b.asset_issuer === MAINNET_USDC_ISSUER);
     const usdc = balances.filter(isUsdc).reduce((s: number, b: any) => s + (Number(b.balance) || 0), 0);
     const xlm = Number(balances.find((b) => b.asset_type === "native")?.balance ?? "0");
     return { usdc, xlm, exists: true };
@@ -3102,13 +3101,23 @@ export class BridgeController {
       const network = (readText(req.body?.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
 
       // Allocation: bulk to DeFindex, slice to Blend (defaults 80/20).
-      let defindexPct = Number(req.body?.defindex_pct);
-      let blendPct = Number(req.body?.blend_pct);
-      if (!Number.isFinite(defindexPct)) defindexPct = 80;
-      if (!Number.isFinite(blendPct)) blendPct = 20;
-      const minReserve = Number.isFinite(Number(req.body?.min_reserve_usdc)) ? Number(req.body?.min_reserve_usdc) : 0.5;
+      // Clamp percentages to [0,100] and reject negative reserves so a bad body
+      // can't over-allocate (e.g. 200/-100) or inflate investable past the balance.
+      const clampPct = (v: unknown, def: number) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : def;
+      };
+      const defindexPct = clampPct(req.body?.defindex_pct, 80);
+      const blendPct = clampPct(req.body?.blend_pct, 20);
+      const minReserveRaw = Number(req.body?.min_reserve_usdc);
+      const minReserve = Number.isFinite(minReserveRaw) && minReserveRaw >= 0 ? minReserveRaw : 0.5;
       const swapXlm = Boolean(req.body?.swap_xlm);
-      const xlmGasReserve = Number.isFinite(Number(req.body?.xlm_gas_reserve)) ? Number(req.body?.xlm_gas_reserve) : 5;
+      const xlmGasReserveRaw = Number(req.body?.xlm_gas_reserve);
+      const xlmGasReserve = Number.isFinite(xlmGasReserveRaw) && xlmGasReserveRaw >= 0 ? xlmGasReserveRaw : 5;
+      if (defindexPct + blendPct <= 0) {
+        res.status(400).json({ success: false, message: "At least one of defindex_pct / blend_pct must be > 0." });
+        return;
+      }
 
       const keypair = await resolveWalletKeypair(email, publicKey);
       if (!keypair) {
@@ -3148,10 +3157,13 @@ export class BridgeController {
       const defindexAmt = Math.floor((investable * defindexPct / pctTotal) * 1e7) / 1e7;
       const blendAmt = Math.floor((investable - defindexAmt) * 1e7) / 1e7;
 
+      // Only count funds as invested once a tx hash comes back (a null hash means
+      // the submission didn't confirm — surface it as an error, don't over-report).
       let investedUsdc = 0;
       if (defindexAmt > 0) {
         try {
           const r = await executeYieldSupply({ keypair, publicKey, protocol: "defindex", amountUsdc: defindexAmt, network });
+          if (!r.hash) throw new Error("DeFindex deposit did not confirm (no transaction hash).");
           investedUsdc += defindexAmt;
           steps.push({ step: "defindex", amount: defindexAmt, hash: r.hash, target: r.target });
           logger.info(`[bridge] auto-yield ${network} DeFindex ${defindexAmt} USDC <- ${publicKey} hash=${r.hash}`);
@@ -3162,6 +3174,7 @@ export class BridgeController {
       if (blendAmt > 0) {
         try {
           const r = await executeYieldSupply({ keypair, publicKey, protocol: "blend", amountUsdc: blendAmt, network });
+          if (!r.hash) throw new Error("Blend supply did not confirm (no transaction hash).");
           investedUsdc += blendAmt;
           steps.push({ step: "blend", amount: blendAmt, hash: r.hash, target: r.target });
           logger.info(`[bridge] auto-yield ${network} Blend ${blendAmt} USDC <- ${publicKey} hash=${r.hash}`);
@@ -3282,8 +3295,6 @@ export class BridgeController {
       const horizon = network === "testnet" ? "https://horizon-testnet.stellar.org" : "https://horizon.stellar.org";
       // Mainnet USDC has one canonical issuer; testnet has several (friendbot/SAC/
       // Blend/DeFindex variants), so on testnet we sum ANY USDC-coded balance.
-      const MAINNET_USDC_ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
-
       let usdc = "0", xlm = "0", exists = false;
       try {
         const r = await fetch(`${horizon}/accounts/${publicKey}`);
@@ -3317,10 +3328,14 @@ export class BridgeController {
 
       let points: Array<{ date: string; amount: string; defindex_usdc: number; blend_usdc: number }> = [];
       try {
-        const { data, error } = await supabase
+        // Scope to the caller's email when available so one wallet's history
+        // isn't readable purely by knowing its (public) address.
+        let query = supabase
           .from("bridge_position_snapshots")
           .select("snapshot_date, total_usdc, defindex_usdc, blend_usdc")
-          .eq("public_key", publicKey)
+          .eq("public_key", publicKey);
+        if (email) query = query.eq("email", email);
+        const { data, error } = await query
           .order("snapshot_date", { ascending: true })
           .limit(400);
         if (error) throw error;
