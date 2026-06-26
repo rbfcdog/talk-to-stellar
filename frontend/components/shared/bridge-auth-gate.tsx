@@ -19,6 +19,18 @@ function clearCookie() {
   document.cookie = "bridge_pw=; path=/; max-age=0; samesite=lax";
 }
 
+// True only if the bridge_pw cookie is actually present. The unlock *flag* lives
+// in sessionStorage, but the password rides in this cookie — if the cookie is
+// gone (cleared, expired) while the flag lingers, requests 401 and the UI must
+// re-prompt instead of silently showing "no wallets".
+function hasBridgeCookie(): boolean {
+  try {
+    return document.cookie.split(";").some((c) => c.trim().startsWith("bridge_pw="));
+  } catch {
+    return false;
+  }
+}
+
 // Probe a cheap authenticated bridge endpoint. Returns true if the cookie's
 // password is accepted by the backend (anything other than the 401 auth error).
 async function verifyPassword(pw: string): Promise<boolean> {
@@ -49,7 +61,13 @@ export function useBridgeAccess() {
 
   useEffect(() => {
     try {
-      if (sessionStorage.getItem(FLAG_KEY) === "1") setUnlocked(true);
+      // Require BOTH the flag and the cookie. If they desynced, drop the flag so
+      // the gate reappears rather than firing requests that 401.
+      if (sessionStorage.getItem(FLAG_KEY) === "1" && hasBridgeCookie()) {
+        setUnlocked(true);
+      } else {
+        sessionStorage.removeItem(FLAG_KEY);
+      }
     } catch {
       /* ignore */
     }
@@ -65,7 +83,18 @@ export function useBridgeAccess() {
     setUnlocked(true);
   }
 
-  return { unlocked, checked, unlock };
+  // Force the gate back (e.g. after a 401 — the cookie was rejected/expired).
+  function relock() {
+    try {
+      sessionStorage.removeItem(FLAG_KEY);
+    } catch {
+      /* ignore */
+    }
+    clearCookie();
+    setUnlocked(false);
+  }
+
+  return { unlocked, checked, unlock, relock };
 }
 
 /**
