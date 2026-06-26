@@ -33,10 +33,12 @@ const LIQUID_RESERVE  = Number(process.env.AUTO_YIELD_LIQUID_RESERVE_USDC  || '0
 const MIN_XLM_FOR_LP  = Number(process.env.AUTO_YIELD_MIN_XLM_FOR_LP       || '5.0');
 const XLM_LP_RESERVE  = Number(process.env.AUTO_YIELD_XLM_LP_RESERVE       || '2.0');
 
-// Allocation shares when strategy=all (must sum to 100)
-const SHARE_DEFINDEX    = Number(process.env.AUTO_YIELD_DEFINDEX_SHARE  || '50');
-const SHARE_BLEND       = Number(process.env.AUTO_YIELD_BLEND_SHARE     || '30');
-const SHARE_SOROSWAP_LP = Number(process.env.AUTO_YIELD_SOROSWAP_SHARE  || '20');
+// Allocation shares when strategy=all (must sum to 100).
+// Default: bulk into DeFindex, a slice into Blend, no LP — Soroswap is used for
+// asset conversions, not as a yield leg, unless AUTO_YIELD_SOROSWAP_SHARE is set.
+const SHARE_DEFINDEX    = Number(process.env.AUTO_YIELD_DEFINDEX_SHARE  || '80');
+const SHARE_BLEND       = Number(process.env.AUTO_YIELD_BLEND_SHARE     || '20');
+const SHARE_SOROSWAP_LP = Number(process.env.AUTO_YIELD_SOROSWAP_SHARE  || '0');
 
 type Strategy = 'defindex' | 'blend' | 'soroswap_lp' | 'all';
 
