@@ -45,11 +45,18 @@ export function WalletsSuiteCard({
 }) {
   const L = (pt: string, en: string) => (isEn ? en : pt);
 
-  const custodialRows = custodial.map((w) => ({
-    id: w.id,
-    chain: w.chain || "—",
-    usdc: (w.balances ?? []).filter((b) => b.currency === "USDC").reduce((s, b) => s + (Number(b.amount) || 0), 0),
-  }));
+  // Aggregate custodial wallets by chain — a customer often has many wallets on
+  // the same chain; show one row per chain with the count and summed balance.
+  const custodialByChain = new Map<string, { chain: string; count: number; usdc: number }>();
+  for (const w of custodial) {
+    const chain = w.chain || "—";
+    const usdc = (w.balances ?? []).filter((b) => b.currency === "USDC").reduce((s, b) => s + (Number(b.amount) || 0), 0);
+    const row = custodialByChain.get(chain) || { chain, count: 0, usdc: 0 };
+    row.count += 1;
+    row.usdc += usdc;
+    custodialByChain.set(chain, row);
+  }
+  const custodialRows = Array.from(custodialByChain.values());
   const stellarRows = stellar.map((w) => ({
     key: w.public_key,
     label: w.label || "Stellar",
@@ -92,8 +99,10 @@ export function WalletsSuiteCard({
           </p>
           <div className="space-y-2">
             {custodialRows.map((w) => (
-              <div key={w.id} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
-                <span className="text-sm font-semibold capitalize text-tts-deep">{w.chain}</span>
+              <div key={w.chain} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
+                <span className="text-sm font-semibold capitalize text-tts-deep">
+                  {w.chain}{w.count > 1 && <span className="ml-1.5 text-xs font-medium text-tts-muted">×{w.count}</span>}
+                </span>
                 <span className="text-sm font-bold tabular-nums text-tts-deep">{f2(w.usdc)} <span className="font-medium text-tts-muted">USDC</span></span>
               </div>
             ))}

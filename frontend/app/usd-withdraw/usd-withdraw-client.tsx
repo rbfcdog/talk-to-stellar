@@ -54,6 +54,8 @@ type ExternalAccount = {
   beneficiary_name?: string;
 };
 
+type BridgeStellarWallet = { public_key: string; label?: string | null; is_primary?: boolean; usdc_balance?: string | null };
+
 type Status = "login" | "loading" | "ready" | "no_account" | "error";
 type Rail = "ach" | "wire";
 
@@ -86,6 +88,10 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
   const [data, setData] = useState<UsdAccountResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // The Bridge Stellar wallets for this email — these ARE the mainnet wallets
+  // that hold the dollars and are the source of the withdrawal.
+  const [bridgeWallets, setBridgeWallets] = useState<BridgeStellarWallet[]>([]);
+
   // Destination accounts
   const [extAccounts, setExtAccounts] = useState<ExternalAccount[]>([]);
   const [extLoading, setExtLoading] = useState(false);
@@ -99,14 +105,11 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<{ id?: string; state?: string } | null>(null);
 
-  // Available USD balance (USDC ≈ USD).
-  const usdcFromStellar = Number(data?.stellar_wallet?.usdc_balance ?? 0) || 0;
-  const usdcFromBridge = (data?.bridge_wallets ?? []).reduce(
-    (sum, w) => sum + (w.balances ?? []).filter((b) => b.currency === "USDC").reduce((s, b) => s + (Number(b.amount) || 0), 0),
-    0,
-  );
-  const availableUsd = usdcFromStellar + usdcFromBridge;
-  const fromAddress = data?.stellar_wallet?.public_key || "";
+  // Available USD = the Bridge Stellar wallets' USDC (USDC ≈ USD). The withdrawal
+  // is sent from the primary Bridge wallet (the associated mainnet wallet).
+  const primaryBridge = bridgeWallets.find((w) => w.is_primary) || bridgeWallets[0] || null;
+  const availableUsd = bridgeWallets.reduce((sum, w) => sum + (Number(w.usdc_balance) || 0), 0);
+  const fromAddress = primaryBridge?.public_key || "";
   const customerId = data?.customer_id || "";
 
   const amountNum = Math.max(0, Number(amount) || 0);
@@ -131,6 +134,18 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
     finally { setExtLoading(false); }
   }, [selectedExtId]);
 
+  // The associated mainnet (Bridge Stellar) wallets, found by email.
+  const loadBridgeWallets = useCallback(async (email: string) => {
+    const e = email.trim().toLowerCase();
+    if (!e) return;
+    try {
+      const res = await fetch(`/api/bridge/stellar-wallets?email=${encodeURIComponent(e)}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const list: BridgeStellarWallet[] = (json.wallets ?? []).filter(Boolean);
+      setBridgeWallets(list);
+    } catch { /* non-blocking */ }
+  }, []);
+
   const load = useCallback(async (email: string) => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed && !sessionId) return;
@@ -146,14 +161,14 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
       setData(json);
       const nextEmail = (json.email ?? trimmed).trim().toLowerCase();
       setLoggedEmail(nextEmail);
-      if (nextEmail) { setEmailInput(nextEmail); writeCachedEmail(nextEmail); }
+      if (nextEmail) { setEmailInput(nextEmail); writeCachedEmail(nextEmail); loadBridgeWallets(nextEmail); }
       if (json.customer_id) loadExternalAccounts(json.customer_id);
       setStatus(json.has_account ? "ready" : "no_account");
     } catch (e: any) {
       setErrorMsg(e?.message ?? String(e));
       setStatus("error");
     }
-  }, [sessionId, loadExternalAccounts]);
+  }, [sessionId, loadExternalAccounts, loadBridgeWallets]);
 
   const didAuto = useRef(false);
   useEffect(() => {
@@ -259,17 +274,12 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
         <OperationalStat label={L("Conta", "Account")} value={loggedEmail || "—"} detail={customerId ? "Loaded" : "—"} tone={customerId ? "confirm" : "gold"} />
       </div>
 
-      {/* Full account suite — VAs + custodial + Stellar wallets */}
+      {/* Full account suite — VAs + custodial + the Bridge Stellar wallets (by email) */}
       <WalletsSuiteCard
         isEn={isEn}
         virtualAccounts={data?.virtual_accounts ?? []}
         custodial={data?.bridge_wallets ?? []}
-        stellar={[
-          ...(data?.mainnet_wallets ?? []).map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, last_balance: w.last_balance })),
-          ...(data?.stellar_wallet?.public_key && !(data?.mainnet_wallets ?? []).some((m) => m.public_key === data!.stellar_wallet!.public_key)
-            ? [{ public_key: data.stellar_wallet.public_key, label: "Stellar USDC", usdc_balance: data.stellar_wallet.usdc_balance }]
-            : []),
-        ]}
+        stellar={bridgeWallets.map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, usdc_balance: w.usdc_balance }))}
       />
 
       {result ? (
