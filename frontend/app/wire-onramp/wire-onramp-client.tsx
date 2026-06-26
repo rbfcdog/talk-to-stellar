@@ -423,6 +423,71 @@ function VaCard({ va }: { va: UsdVA }) {
   );
 }
 
+// ── Wallets card (custodial + Stellar) ──────────────────────────────────────
+
+function WalletsCard({ data, isEn }: { data: ApiResponse | null; isEn: boolean }) {
+  const L = (pt: string, en: string) => (isEn ? en : pt);
+  const f = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const custodial = (data?.bridge_wallets ?? []).map((w) => ({
+    id: w.id,
+    chain: w.chain || "—",
+    usdc: (w.balances ?? []).filter((b) => b.currency === "USDC").reduce((s, b) => s + (Number(b.amount) || 0), 0),
+  }));
+
+  const stellar: Array<{ key: string; label: string; usdc: number; primary: boolean }> = [];
+  for (const mw of data?.mainnet_wallets ?? []) {
+    const usdc = Number((mw.last_balance || []).find((b) => b.asset_code === "USDC")?.balance ?? 0) || 0;
+    stellar.push({ key: mw.public_key, label: mw.label || "Stellar", usdc, primary: mw.is_primary });
+  }
+  if (data?.stellar_wallet?.public_key && !stellar.some((s) => s.key === data.stellar_wallet!.public_key)) {
+    stellar.push({ key: data.stellar_wallet.public_key, label: "Stellar USDC", usdc: Number(data.stellar_wallet.usdc_balance ?? 0) || 0, primary: false });
+  }
+
+  if (!custodial.length && !stellar.length) return null;
+  const short = (k: string) => (k.length > 12 ? `${k.slice(0, 6)}…${k.slice(-6)}` : k);
+
+  return (
+    <OperationalCard>
+      <div className="mb-4 flex items-center gap-2.5">
+        <Wallet className="h-5 w-5 text-tts-muted" />
+        <p className="text-sm font-bold text-tts-deep">{L("Suas carteiras", "Your wallets")}</p>
+      </div>
+
+      {custodial.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Custodiais", "Custodial")}</p>
+          <div className="space-y-2">
+            {custodial.map((w) => (
+              <div key={w.id} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
+                <span className="text-sm font-semibold capitalize text-tts-deep">{w.chain}</span>
+                <span className="text-sm font-bold tabular-nums text-tts-deep">{f(w.usdc)} <span className="font-medium text-tts-muted">USDC</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {stellar.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-tts-muted">{L("Carteiras Stellar", "Stellar wallets")}</p>
+          <div className="space-y-2">
+            {stellar.map((w) => (
+              <div key={w.key} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
+                <div className="min-w-0">
+                  <span className="font-mono text-xs font-semibold text-tts-deep">{short(w.key)}</span>
+                  {w.primary && <span className="ml-2 text-[10px] font-medium text-tts-confirm">{L("Principal", "Primary")}</span>}
+                </div>
+                <span className="text-sm font-bold tabular-nums text-tts-deep">{f(w.usdc)} <span className="font-medium text-tts-muted">USDC</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </OperationalCard>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?: string }) {
@@ -1053,6 +1118,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         </OperationalCard>
       )}
+
+      {/* Your wallets — custodial + Stellar (where the dollars land) */}
+      <WalletsCard data={data} isEn={isEn} />
 
       <div className="flex justify-center">
         <button
