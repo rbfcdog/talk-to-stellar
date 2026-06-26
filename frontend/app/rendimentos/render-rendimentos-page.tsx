@@ -1,4 +1,5 @@
 import RendimentosClient from "./rendimentos-client";
+import { BridgeAuthGate } from "@/components/shared/bridge-auth-gate";
 
 export type RendimentosSearchParams = Record<string, string | string[] | undefined>;
 
@@ -28,5 +29,9 @@ export async function renderRendimentosPage(searchParams?: RendimentosSearchPara
     ? "application"
     : "returns";
 
-  return <RendimentosClient initialQuery={serializeSearchParams(resolved)} view={resolvedView} />;
+  return (
+    <BridgeAuthGate>
+      <RendimentosClient initialQuery={serializeSearchParams(resolved)} view={resolvedView} />
+    </BridgeAuthGate>
+  );
 }

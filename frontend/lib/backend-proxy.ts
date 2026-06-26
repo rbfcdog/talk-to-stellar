@@ -80,6 +80,11 @@ export async function proxyBackendApi(
     if (value) headers[headerName] = value;
   }
 
+  // Bridge access gate: forward the password set by the BridgeAuthGate (cookie)
+  // so the backend's requireBridgeAuth lets the request through.
+  const bridgePw = req.cookies.get("bridge_pw")?.value || req.headers.get("x-bridge-password");
+  if (bridgePw) headers["x-bridge-password"] = bridgePw;
+
   const init: RequestInit = {
     method: req.method,
     headers,
