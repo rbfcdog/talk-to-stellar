@@ -9,10 +9,14 @@ import { Loader2, Lock } from "lucide-react";
 // validate it (a probe request). The Next proxy forwards the cookie as
 // x-bridge-password; requireBridgePassword on the backend is the real gate.
 const FLAG_KEY = "bridge_auth_ok";
+// Persist the bridge unlock across browser sessions (cache ONLY the bridge
+// access password — the channel PIN is never stored). 30 days.
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 
 function setCookie(pw: string) {
-  // Session cookie — the Next proxy forwards it to the backend as x-bridge-password.
-  document.cookie = `bridge_pw=${encodeURIComponent(pw)}; path=/; samesite=lax`;
+  // Persistent cookie — the Next proxy forwards it to the backend as
+  // x-bridge-password, so the user stays unlocked between visits.
+  document.cookie = `bridge_pw=${encodeURIComponent(pw)}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
 }
 
 function clearCookie() {
@@ -20,7 +24,7 @@ function clearCookie() {
 }
 
 // True only if the bridge_pw cookie is actually present. The unlock *flag* lives
-// in sessionStorage, but the password rides in this cookie — if the cookie is
+// in localStorage, but the password rides in this cookie — if the cookie is
 // gone (cleared, expired) while the flag lingers, requests 401 and the UI must
 // re-prompt instead of silently showing "no wallets".
 function hasBridgeCookie(): boolean {
@@ -63,10 +67,10 @@ export function useBridgeAccess() {
     try {
       // Require BOTH the flag and the cookie. If they desynced, drop the flag so
       // the gate reappears rather than firing requests that 401.
-      if (sessionStorage.getItem(FLAG_KEY) === "1" && hasBridgeCookie()) {
+      if (localStorage.getItem(FLAG_KEY) === "1" && hasBridgeCookie()) {
         setUnlocked(true);
       } else {
-        sessionStorage.removeItem(FLAG_KEY);
+        localStorage.removeItem(FLAG_KEY);
       }
     } catch {
       /* ignore */
@@ -76,7 +80,7 @@ export function useBridgeAccess() {
 
   function unlock() {
     try {
-      sessionStorage.setItem(FLAG_KEY, "1");
+      localStorage.setItem(FLAG_KEY, "1");
     } catch {
       /* ignore */
     }
@@ -86,7 +90,7 @@ export function useBridgeAccess() {
   // Force the gate back (e.g. after a 401 — the cookie was rejected/expired).
   function relock() {
     try {
-      sessionStorage.removeItem(FLAG_KEY);
+      localStorage.removeItem(FLAG_KEY);
     } catch {
       /* ignore */
     }
@@ -205,7 +209,7 @@ export function BridgeAccountLogin({
     setError("");
     const ok = await verifyPassword(pw);
     if (ok) {
-      try { sessionStorage.setItem(FLAG_KEY, "1"); } catch { /* ignore */ }
+      try { localStorage.setItem(FLAG_KEY, "1"); } catch { /* ignore */ }
       onAuthenticated(em);
     } else {
       clearCookie();
@@ -275,7 +279,7 @@ export function BridgeAuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const ok = (() => {
       try {
-        return sessionStorage.getItem(FLAG_KEY) === "1";
+        return localStorage.getItem(FLAG_KEY) === "1";
       } catch {
         return false;
       }
@@ -293,7 +297,7 @@ export function BridgeAuthGate({ children }: { children: React.ReactNode }) {
     const ok = await verifyPassword(pw);
     if (ok) {
       try {
-        sessionStorage.setItem(FLAG_KEY, "1");
+        localStorage.setItem(FLAG_KEY, "1");
       } catch {
         /* ignore */
       }
