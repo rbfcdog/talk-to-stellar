@@ -200,6 +200,74 @@ TalkToStellar usa Stellar como infraestrutura:
 
 O produto não vende "cripto" para o usuário. Ele vende economia, clareza e conveniência. Stellar fica nos bastidores como o trilho que permite essa experiência.
 
+## Integrações Stellar (Núcleo Do Produto)
+
+As integrações abaixo são **load-bearing**: elas movem dinheiro de verdade e
+sustentam o produto, não aparecem só no slide. Cada dólar que entra é
+on-ramped, custodiado, colocado para render e sacado por essas peças — toda a
+liquidação acontece na Stellar (USDC SAC + path payments + contratos Soroban).
+
+### Bridge.xyz — entrada e saída de dólar (on/off-ramp)
+
+Trilho fiat<>USDC que dá ao usuário uma conta em dólar real sem precisar de
+banco nos EUA.
+
+- **Virtual accounts (USD/EUR/MXN/GBP/COP/BRL):** o usuário recebe dados de
+  wire/ACH e o dinheiro chega como USDC na Stellar.
+- **Carteiras custodiais por e-mail (`bridge_stellar_wallets`):** carteira
+  Stellar mainnet por conta, com a chave assinante guardada em cofre
+  (`vault_secret_id`) — o usuário nunca toca em secret key.
+- **Off-ramp real:** `crypto-to-{ach,wire,pix,rtp,sepa,spei}` via liquidation
+  addresses — USDC sai da carteira e cai na conta bancária do usuário.
+- **Transferência interna unificada (`/internal-transfer`):** move USDC entre
+  qualquer conta da suíte — custodial⇄custodial, custodial→stellar,
+  stellar→stellar, stellar→custodial — assinando as pernas Stellar com a chave
+  cofre da carteira.
+
+### DeFindex — cofre de rendimento (Soroban)
+
+Cofre auto-otimizado de USDC. O backend constrói a operação de deposit/withdraw
+(`buildVaultAction`), assina com a chave da carteira e submete — em mainnet e
+testnet. É a base do "coloque seu dólar para render".
+
+### Blend — pool de empréstimo (Soroban)
+
+Supply direto de USDC numa pool Blend (`buildSupplyXdr` + submit assinado).
+Aparece lado a lado com a DeFindex, com APY ao vivo, e entra na divisão do
+auto-investimento.
+
+### Soroswap — liquidez e conversão (Soroban + path payments)
+
+- **Conversão interna:** swaps e conversões acontecem nos bastidores via path
+  payments (o usuário pensa em "dólar", não em par de tokens).
+- **Provisão de liquidez (zap):** investir numa pool XLM/USDC a partir de um
+  único valor em USDC — o backend troca metade por XLM e adiciona liquidez
+  balanceada (`buildAddLiquidityXdr`), tudo assinado com a chave cofre.
+- **Dados ao vivo:** TVL/taxa/reservas lidos da Horizon para o simulador de
+  rendimento de LP.
+
+### Auto-yield — colocar o saldo parado para trabalhar
+
+Varre o USDC parado da carteira e divide entre DeFindex e Blend (split
+configurável); opcionalmente troca XLM parado (acima da reserva de gás) por
+USDC antes. Funciona nas duas redes e roda também por agendador.
+
+### Arquitetura de duas carteiras
+
+- **Testnet = carteira de sessão** (login/`wallets`, por `session_id`) para
+  demonstração segura.
+- **Mainnet = carteira Bridge** (`bridge_stellar_wallets`, encontrada por
+  e-mail) onde o dólar real vive. Gás patrocinado pela plataforma (sponsored
+  reserves), então o usuário não precisa segurar XLM.
+
+| Integração | Camada Stellar | O que ela sustenta |
+| --- | --- | --- |
+| Bridge.xyz | USDC SAC / contas custodiais | Entrada e saída de dólar, suíte de contas, transferências internas |
+| DeFindex | Contrato Soroban | Rendimento em cofre auto-otimizado |
+| Blend | Contrato Soroban | Rendimento por empréstimo (lending) |
+| Soroswap | Soroban + path payments | Conversão interna e provisão de liquidez (LP) |
+| Auto-yield | Orquestra DeFindex+Blend+Soroswap | Põe saldo parado para render automaticamente |
+
 ## Mercado
 
 Públicos iniciais:
@@ -262,12 +330,16 @@ O projeto já inclui:
 - contatos salvos;
 - links de confirmação de pagamento;
 - fluxo Pix on-ramp/off-ramp;
+- on/off-ramp de dólar via Bridge.xyz (virtual accounts USD + saque ACH/wire);
+- carteiras Stellar custodiais por e-mail com chave em cofre;
+- suíte de contas (virtual accounts, custodiais, Stellar) com transferência interna entre elas;
+- rendimento em DeFindex (cofre) e Blend (empréstimo) com APY ao vivo;
+- provisão de liquidez Soroswap (zap XLM/USDC) dentro do app;
+- auto-yield que coloca o saldo parado para render nas duas redes;
 - UX orientada a taxas e economia;
 - histórico de transações;
 - geração de comprovantes;
-- infraestrutura Stellar Testnet;
-- console Stellar Mainnet read-only;
-- protótipo de roteamento institucional BRL -> USD;
+- infraestrutura Stellar Testnet e execução custodial em Mainnet;
 - arquitetura de payout adapters;
 - modelos de reconciliação e evidência de settlement;
 - documentação de demo, deploy, taxas, segurança e Mainnet readiness.
@@ -287,6 +359,12 @@ Ferramentas de cotação, taxa, contato, Pix e pagamento
         |
         v
 Backend de orquestração e estado transacional
+        |
+        v
+Integrações Stellar  ──  Bridge (on/off-ramp + custódia)
+                     ──  DeFindex / Blend (rendimento, Soroban)
+                     ──  Soroswap (conversão + liquidez)
+                     ──  Auto-yield (orquestra os três)
         |
         v
 Stellar settlement / evidência / recibos
@@ -535,8 +613,12 @@ Controles já tratados ou previstos no desenho:
 
 | Integração | Uso atual | Observação |
 | --- | --- | --- |
-| Stellar SDK/Horizon | Conta, saldo, XDR, submit e histórico público | Testnet para execução; Mainnet read-only |
-| Supabase | Banco operacional, sessão, carteiras e logs | Precisa migrations aplicadas fora do startup |
+| Stellar SDK/Horizon | Conta, saldo, XDR, submit e histórico público | Testnet e execução custodial em Mainnet |
+| Bridge.xyz | On/off-ramp de dólar, virtual accounts, carteiras custodiais, transferências internas | Movimentação Mainnet atrás de senha de acesso e confirmação |
+| DeFindex | Cofre de rendimento de USDC (Soroban) | Mainnet + testnet; vault configurável por env |
+| Blend | Pool de empréstimo de USDC (Soroban) | APY ao vivo; entra na divisão do auto-yield |
+| Soroswap | Conversão (path payments) e provisão de liquidez XLM/USDC | Add-liquidity exige USDC+XLM funded na carteira |
+| Supabase | Banco operacional, sessão, carteiras, snapshots e logs | Precisa migrations aplicadas fora do startup |
 | Evolution API | WhatsApp | Requer instância e secrets alinhados |
 | Telegram/Telegraf | Bot Telegram | Token inválido gera `401 Unauthorized` no startup |
 | Etherfuse sandbox | Pix/on-ramp/off-ramp e assets sandbox | Produção exige parceiro e enquadramento regulatório |
