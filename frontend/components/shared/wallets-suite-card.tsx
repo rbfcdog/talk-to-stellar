@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   Banknote,
@@ -10,6 +10,7 @@ import {
   Copy,
   Layers,
   Loader2,
+  Send,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,26 @@ function Paginated<T>({ items, isEn, render }: {
   );
 }
 
+// A labeled field inside a detail card. `copy` renders the value as a CopyChip.
+function Field({ label, value, copy = false, mono = false }: {
+  label: string;
+  value?: string | number | null;
+  copy?: boolean;
+  mono?: boolean;
+}) {
+  if (value == null || String(value).trim() === "") return null;
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
+      {copy ? (
+        <div className="mt-0.5"><CopyChip value={String(value)} /></div>
+      ) : (
+        <p className={`mt-0.5 break-words text-xs font-semibold text-tts-deep ${mono ? "font-mono" : ""}`}>{String(value)}</p>
+      )}
+    </div>
+  );
+}
+
 export function WalletsSuiteCard({
   virtualAccounts = [],
   custodial = [],
@@ -215,6 +236,39 @@ export function WalletsSuiteCard({
 
   const canTransfer = transferAccounts.length >= 1 && (Boolean(customerId) || stellar.length >= 1);
 
+  // Transfer source/destination are lifted here so a card's "Transfer" button can
+  // prefill them and scroll to the panel.
+  const [fromUid, setFromUid] = useState("");
+  const [toUid, setToUid] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const primaryStellarUid = useMemo(() => {
+    const w = stellar.find((s) => s.is_primary) || stellar[0];
+    return w ? `st:${w.public_key}` : "";
+  }, [stellar]);
+
+  // Prefill the transfer panel from a card and scroll up to it.
+  function requestTransfer(from: string, to?: string) {
+    if (!transferAccounts.some((a) => a.uid === from)) return; // not a usable source
+    setFromUid(from);
+    if (to && to !== from) setToUid(to);
+    else if (toUid === from) setToUid("");
+    panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function TransferButton({ uid, to, label }: { uid: string; to?: string; label: string }) {
+    if (!canTransfer || !transferAccounts.some((a) => a.uid === uid)) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => requestTransfer(uid, to)}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-tts-deep px-3 py-2 text-xs font-bold text-tts-surface transition hover:opacity-90"
+      >
+        <Send className="h-3.5 w-3.5" /> {label}
+      </button>
+    );
+  }
+
   if (!virtualAccounts.length && !custodial.length && !stellar.length) return null;
 
   return (
@@ -223,25 +277,31 @@ export function WalletsSuiteCard({
         <p className="text-sm font-bold text-tts-deep">{L("Sua conta completa", "Your full account")}</p>
         {canTransfer && (
           <span className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-            {transferAccounts.length} {L("carteiras", "wallets")}
+            {transferAccounts.length} {L("contas", "accounts")}
           </span>
         )}
       </div>
 
       {/* Move money panel */}
       {canTransfer && (
-        <TransferPanel
-          isEn={isEn}
-          accounts={transferAccounts}
-          customerId={customerId}
-          email={email}
-          onDone={onTransferDone}
-        />
+        <div ref={panelRef}>
+          <TransferPanel
+            isEn={isEn}
+            accounts={transferAccounts}
+            customerId={customerId}
+            email={email}
+            onDone={onTransferDone}
+            fromUid={fromUid}
+            setFromUid={setFromUid}
+            toUid={toUid}
+            setToUid={setToUid}
+          />
+        </div>
       )}
 
-      {/* Virtual accounts — full detail */}
+      {/* Virtual accounts — full detail card */}
       {virtualAccounts.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-5">
           <p className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-tts-muted">
             <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5" /> {L("Contas de depósito (USD)", "Deposit accounts (USD)")}</span>
             <span className="tabular-nums text-tts-deep">{f2(vaReceived)} {L("recebido", "received")}</span>
@@ -250,28 +310,47 @@ export function WalletsSuiteCard({
             items={virtualAccounts}
             isEn={isEn}
             render={(va) => {
-              const iban = depositField(va, "iban", "account_number", "bank_account_number");
-              const routing = depositField(va, "routing_number", "bic", "sort_code");
-              const bank = depositField(va, "bank_name", "bank");
+              const account = depositField(va, "iban", "account_number", "bank_account_number");
+              const routing = depositField(va, "routing_number", "bic", "sort_code", "aba");
+              const bank = depositField(va, "bank_name", "bank", "beneficiary_bank_name");
+              const beneficiary = depositField(va, "beneficiary_name", "account_holder_name", "beneficiary", "bank_beneficiary_name");
+              const beneficiaryAddress = depositField(va, "beneficiary_address", "account_holder_address", "bank_beneficiary_address");
+              const bankAddress = depositField(va, "bank_address");
+              const reference = depositField(va, "deposit_message", "reference", "payment_reference");
+              const uid = `va:${va.id}`;
               return (
-                <div className="rounded-lg bg-tts-bg/70 px-3 py-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold uppercase text-tts-deep">{va.currency || "USD"}</span>
-                    <span className="font-bold tabular-nums text-tts-deep">{f2(Number(va.total_received_usd) || 0)} {L("recebido", "received")}</span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-tts-muted">
-                    {va.status && <span>{L("Status", "Status")}: <span className="font-medium text-tts-deep">{va.status}</span></span>}
-                    <span>ID: <CopyChip value={va.id} /></span>
-                    {va.destination_chain && <span>→ {va.destination_chain}</span>}
-                    {va.destination_address && <span>→ <CopyChip value={va.destination_address} /></span>}
-                  </div>
-                  {(bank || iban || routing) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-tts-muted">
-                      {bank && <span>{L("Banco", "Bank")}: <span className="font-medium text-tts-deep">{bank}</span></span>}
-                      {iban && <span>{L("Conta", "Account")}: <CopyChip value={iban} /></span>}
-                      {routing && <span>{L("Routing", "Routing")}: <CopyChip value={routing} /></span>}
+                <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-confirm/15 text-tts-confirm"><Banknote className="h-4 w-4" /></span>
+                      <div>
+                        <p className="text-base font-bold uppercase text-tts-deep">{va.currency || "USD"}</p>
+                        <p className="text-[11px] font-semibold text-tts-muted">{L("Conta de depósito", "Deposit account")}</p>
+                      </div>
                     </div>
-                  )}
+                    <div className="text-right">
+                      <p className="text-lg font-black tabular-nums text-tts-deep">{f2(Number(va.total_received_usd) || 0)}</p>
+                      <p className="text-[10px] font-bold uppercase text-tts-muted">{L("recebido", "received")}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label={L("Status", "Status")} value={va.status} />
+                    <Field label="ID" value={va.id} copy />
+                    <Field label={L("Banco", "Bank")} value={bank} />
+                    <Field label={L("Beneficiário", "Beneficiary")} value={beneficiary} />
+                    <Field label={L("Conta", "Account number")} value={account} copy />
+                    <Field label={L("Routing", "Routing")} value={routing} copy />
+                    <Field label={L("Rede destino", "Destination network")} value={va.destination_chain} />
+                    <Field label={L("Endereço destino", "Destination address")} value={va.destination_address} copy />
+                    <Field label={L("Endereço do banco", "Bank address")} value={bankAddress} />
+                    <Field label={L("Beneficiário (endereço)", "Beneficiary address")} value={beneficiaryAddress} />
+                    <Field label={L("Referência", "Reference")} value={reference} />
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <TransferButton uid={uid} to={primaryStellarUid} label={L("Enviar para carteira Stellar", "Send to Stellar wallet")} />
+                  </div>
                 </div>
               );
             }}
@@ -279,29 +358,50 @@ export function WalletsSuiteCard({
         </div>
       )}
 
-      {/* Custodial wallets — per item */}
+      {/* Custodial wallets — full detail card */}
       {custodial.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-5">
           <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
             <Layers className="h-3.5 w-3.5" /> {L("Carteiras custodiais", "Custodial wallets")}
           </p>
           <Paginated
             items={custodial}
             isEn={isEn}
-            render={(w) => (
-              <div className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
-                <div className="min-w-0">
-                  <span className="text-sm font-semibold capitalize text-tts-deep">{w.chain || "—"}</span>
-                  <div className="text-[11px] text-tts-muted">{w.address ? <CopyChip value={w.address} /> : <CopyChip value={w.id} />}</div>
+            render={(w) => {
+              const uid = `cw:${w.id}`;
+              return (
+                <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-deep/10 text-tts-deep"><Layers className="h-4 w-4" /></span>
+                      <div>
+                        <p className="text-base font-bold capitalize text-tts-deep">{w.chain || "—"}</p>
+                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira custodial", "Custodial wallet")}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black tabular-nums text-tts-deep">{f2(custodialUsdc(w))}</p>
+                      <p className="text-[10px] font-bold uppercase text-tts-muted">USDC</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="ID" value={w.id} copy />
+                    <Field label={L("Endereço", "Address")} value={w.address} copy />
+                    {(w.balances ?? []).map((b, i) => (
+                      <Field key={`${b.currency}-${i}`} label={b.currency} value={`${f2(Number(b.amount) || 0)} ${b.currency}`} />
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <TransferButton uid={uid} to={primaryStellarUid} label={L("Transferir", "Transfer")} />
+                  </div>
                 </div>
-                <span className="text-sm font-bold tabular-nums text-tts-deep">{f2(custodialUsdc(w))} <span className="font-medium text-tts-muted">USDC</span></span>
-              </div>
-            )}
+              );
+            }}
           />
         </div>
       )}
 
-      {/* Stellar wallets — per item */}
+      {/* Stellar wallets — full detail card */}
       {stellar.length > 0 && (
         <div>
           <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
@@ -310,16 +410,38 @@ export function WalletsSuiteCard({
           <Paginated
             items={stellar}
             isEn={isEn}
-            render={(w) => (
-              <div className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
-                <div className="min-w-0">
-                  <CopyChip value={w.public_key} />
-                  {w.is_primary && <span className="ml-2 text-[10px] font-medium text-tts-confirm">{L("Principal", "Primary")}</span>}
-                  {w.label && <span className="ml-2 text-[10px] text-tts-muted">{w.label}</span>}
+            render={(w) => {
+              const uid = `st:${w.public_key}`;
+              return (
+                <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-gold/15 text-tts-gold"><Wallet className="h-4 w-4" /></span>
+                      <div>
+                        <p className="flex items-center gap-2 text-base font-bold text-tts-deep">
+                          {w.label || "Stellar"}
+                          {w.is_primary && <span className="rounded-full bg-tts-confirm/15 px-2 py-0.5 text-[9px] font-bold uppercase text-tts-confirm">{L("Principal", "Primary")}</span>}
+                        </p>
+                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira Stellar", "Stellar wallet")}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black tabular-nums text-tts-deep">{f2(stellarUsdc(w))}</p>
+                      <p className="text-[10px] font-bold uppercase text-tts-muted">USDC</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <Field label={L("Chave pública", "Public key")} value={w.public_key} copy />
+                    {(w.last_balance || []).map((b, i) => (
+                      <Field key={`${b.asset_code}-${i}`} label={b.asset_code} value={`${f2(Number(b.balance) || 0)} ${b.asset_code}`} />
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <TransferButton uid={uid} label={L("Transferir", "Transfer")} />
+                  </div>
                 </div>
-                <span className="text-sm font-bold tabular-nums text-tts-deep">{f2(stellarUsdc(w))} <span className="font-medium text-tts-muted">USDC</span></span>
-              </div>
-            )}
+              );
+            }}
           />
         </div>
       )}
@@ -335,16 +457,22 @@ function TransferPanel({
   customerId,
   email,
   onDone,
+  fromUid,
+  setFromUid,
+  toUid,
+  setToUid,
 }: {
   isEn: boolean;
   accounts: TransferAccount[];
   customerId: string;
   email: string;
   onDone?: () => void;
+  fromUid: string;
+  setFromUid: (v: string) => void;
+  toUid: string;
+  setToUid: (v: string) => void;
 }) {
   const L = (pt: string, en: string) => (isEn ? en : pt);
-  const [fromUid, setFromUid] = useState("");
-  const [toUid, setToUid] = useState("");
   const [useCustom, setUseCustom] = useState(false);
   const [customAddr, setCustomAddr] = useState("");
   const [amount, setAmount] = useState("");
