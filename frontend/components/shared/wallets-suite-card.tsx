@@ -184,6 +184,11 @@ export function WalletsSuiteCard({
       ? Number(w.usdc_balance) || 0
       : Number((w.last_balance || []).find((b) => b.asset_code === "USDC")?.balance ?? 0) || 0;
 
+  // Funded wallets first, so the one holding money (e.g. the wire deposit) is the
+  // first card shown and the first transfer option.
+  const custodialSorted = useMemo(() => [...custodial].sort((a, b) => custodialUsdc(b) - custodialUsdc(a)), [custodial]);
+  const stellarSorted = useMemo(() => [...stellar].sort((a, b) => stellarUsdc(b) - stellarUsdc(a)), [stellar]);
+
   const vaReceived = virtualAccounts.reduce((s, v) => s + (Number(v.total_received_usd) || 0), 0);
 
   // Flat list of accounts that can send/receive a USDC transfer. Virtual accounts
@@ -217,7 +222,7 @@ export function WalletsSuiteCard({
         list.push({ ...base, kind: "custodial", sub: `${matchCustodial.chain || "base"} · ${short(addr)}`, walletId: matchCustodial.id });
       }
     });
-    custodial.forEach((w) => {
+    custodialSorted.forEach((w) => {
       list.push({
         uid: `cw:${w.id}`,
         kind: "custodial", origin: "custodial",
@@ -228,7 +233,7 @@ export function WalletsSuiteCard({
         usdc: custodialUsdc(w),
       });
     });
-    stellar.forEach((w) => {
+    stellarSorted.forEach((w) => {
       list.push({
         uid: `st:${w.public_key}`,
         kind: "stellar", origin: "stellar",
@@ -239,7 +244,7 @@ export function WalletsSuiteCard({
       });
     });
     return list;
-  }, [virtualAccounts, custodial, stellar, isEn]);
+  }, [virtualAccounts, custodial, custodialSorted, stellarSorted, isEn]);
 
   const canTransfer = transferAccounts.length >= 1 && (Boolean(customerId) || stellar.length >= 1);
 
@@ -253,7 +258,7 @@ export function WalletsSuiteCard({
     const w = stellar.find((s) => s.is_primary) || stellar[0];
     return w ? `st:${w.public_key}` : "";
   }, [stellar]);
-  const primaryCustodialUid = useMemo(() => (custodial[0] ? `cw:${custodial[0].id}` : ""), [custodial]);
+  const primaryCustodialUid = useMemo(() => (custodialSorted[0] ? `cw:${custodialSorted[0].id}` : ""), [custodialSorted]);
 
   // Prefill the transfer panel from a card and scroll up to it.
   function requestTransfer(from: string, to?: string) {
@@ -378,7 +383,7 @@ export function WalletsSuiteCard({
             <Layers className="h-3.5 w-3.5" /> {L("Carteiras custodiais", "Custodial wallets")}
           </p>
           <Paginated
-            items={custodial}
+            items={custodialSorted}
             isEn={isEn}
             render={(w) => {
               const uid = `cw:${w.id}`;
@@ -421,7 +426,7 @@ export function WalletsSuiteCard({
             <Wallet className="h-3.5 w-3.5" /> {L("Carteiras Stellar", "Stellar wallets")}
           </p>
           <Paginated
-            items={stellar}
+            items={stellarSorted}
             isEn={isEn}
             render={(w) => {
               const uid = `st:${w.public_key}`;
