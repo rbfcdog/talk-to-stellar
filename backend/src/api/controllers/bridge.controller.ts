@@ -3568,23 +3568,28 @@ export class BridgeController {
 
       const totalUsdc = defindexUsdc + blendUsdc;
 
-      // Best-effort: persist today's snapshot so the balance chart has real
-      // per-day history. One row per (public_key, day); same day upserts in
-      // place. Never let a snapshot failure (e.g. table not migrated) break
-      // the positions read.
+      // Best-effort: persist a snapshot every 4 hours so the balance chart shows
+      // a real, curving series instead of one flat per-day point. We bucket "now"
+      // to a 4h boundary (00,04,08,12,16,20 UTC): reads within the same window
+      // update that bucket; a new window appends a new point — so earlier points
+      // are kept, not overwritten. Never let a snapshot failure (e.g. table not
+      // migrated to a timestamp bucket) break the positions read.
       try {
-        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const now = new Date();
+        const bucket = new Date(now);
+        bucket.setUTCMinutes(0, 0, 0);
+        bucket.setUTCHours(Math.floor(now.getUTCHours() / 4) * 4);
         await supabase
           .from("bridge_position_snapshots")
           .upsert(
             {
               public_key: publicKey,
               email,
-              snapshot_date: today,
+              snapshot_date: bucket.toISOString(),
               defindex_usdc: defindexUsdc,
               blend_usdc: blendUsdc,
               total_usdc: totalUsdc,
-              updated_at: new Date().toISOString(),
+              updated_at: now.toISOString(),
             },
             { onConflict: "public_key,snapshot_date" },
           );
@@ -3680,7 +3685,7 @@ export class BridgeController {
         logger.warn(`[bridge] position history fetch failed: ${e?.message || e}`);
       }
 
-      res.json({ success: true, public_key: publicKey, email, points, source: "daily_snapshots" });
+      res.json({ success: true, public_key: publicKey, email, points, source: "4h_snapshots" });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error?.message || "Failed to load position history." });
     }

@@ -340,7 +340,7 @@ function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
             }}
           />
           <Line
-            type="linear"
+            type="monotone"
             dataKey="value"
             stroke={stroke}
             strokeOpacity={tone === "primary" ? 0.72 : 0.62}
