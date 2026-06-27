@@ -878,11 +878,16 @@ export default function RendimentosClient({
   }, [networkView]);
 
   // Load the selected wallet's invested positions (DeFindex + Blend) on mainnet.
+  // Also depends on channelPinUnlocked so that logging in / confirming the PIN
+  // (re)resolves the wallet and loads positions WITHOUT needing a page refresh.
   useEffect(() => {
-    if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey);
-    else { setPositions(null); setMainnetHistory(null); }
+    if (networkView !== "mainnet") { setPositions(null); setMainnetHistory(null); return; }
+    if (walletEmail && selectedWalletKey) { loadPositions(walletEmail, selectedWalletKey); return; }
+    // Ready (auth + PIN) with a known email but no resolved wallet yet → resolve
+    // it; that sets selectedWalletKey and re-runs this effect to load positions.
+    if (walletEmail && channelPinUnlocked) loadEmailWallets(walletEmail);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [networkView, selectedWalletKey, walletEmail]);
+  }, [networkView, selectedWalletKey, walletEmail, channelPinUnlocked]);
 
   useEffect(() => {
     setReturnsPin("");
