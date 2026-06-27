@@ -1119,8 +1119,16 @@ export default function RendimentosClient({
                 blendInvested={networkView === "mainnet" ? positions?.blend_usdc ?? null : null}
                 availableBalance={availableBalance}
                 sessionLinkContext={sessionLinkContext}
-                onInvest={(code) => { setSelectedCode(code === "BLEND" ? "USDC" : code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-                onWithdraw={(code) => { setSelectedCode(code === "BLEND" ? "USDC" : code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                onInvest={(code) => {
+                  // Blend isn't a DeFindex vault — send it to the real Blend
+                  // supply panel (Advanced) instead of the DeFindex invest form.
+                  if (code === "BLEND") { setAdvancedOpen(true); setTimeout(() => document.getElementById("advanced")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+                  setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                onWithdraw={(code) => {
+                  if (code === "BLEND") { setAdvancedOpen(true); setTimeout(() => document.getElementById("advanced")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+                  setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
               />
             </section>
 
