@@ -193,21 +193,22 @@ export function WalletsSuiteCard({
   const transferAccounts: TransferAccount[] = useMemo(() => {
     const list: TransferAccount[] = [];
     virtualAccounts.forEach((va) => {
-      const stellarDest = String(va.destination_chain || "").toLowerCase() === "stellar" && va.destination_address;
-      if (stellarDest) {
-        list.push({
-          uid: `va:${va.id}`, kind: "stellar", origin: "va",
-          label: `${L("Depósito", "Deposit")} ${va.currency || "USD"}`,
-          sub: short(va.destination_address), address: va.destination_address!,
-          usdc: Number(va.total_received_usd) || 0,
-        });
-      } else if (va.bridge_wallet_id) {
-        list.push({
-          uid: `va:${va.id}`, kind: "custodial", origin: "va",
-          label: `${L("Depósito", "Deposit")} ${va.currency || "USD"}`,
-          sub: short(va.bridge_wallet_id), walletId: va.bridge_wallet_id!,
-          usdc: Number(va.total_received_usd) || 0,
-        });
+      // Money received into a VA lands in its destination wallet. Resolve that
+      // leg robustly: a Bridge custodial wallet (bridge_wallet_id) takes
+      // priority; otherwise a Stellar destination detected by address shape
+      // (so it works even when destination_chain is blank/odd).
+      const addr = String(va.destination_address || "").trim();
+      const isStellarAddr = /^G[A-Z2-7]{55}$/.test(addr);
+      const received = Number(va.total_received_usd) || 0;
+      const base = {
+        uid: `va:${va.id}`, origin: "va" as const,
+        label: `${L("Depósito", "Deposit")} ${va.currency || "USD"}`,
+        usdc: received,
+      };
+      if (va.bridge_wallet_id) {
+        list.push({ ...base, kind: "custodial", sub: short(va.bridge_wallet_id), walletId: va.bridge_wallet_id });
+      } else if (isStellarAddr) {
+        list.push({ ...base, kind: "stellar", sub: short(addr), address: addr });
       }
     });
     custodial.forEach((w) => {
