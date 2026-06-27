@@ -80,7 +80,6 @@ type InvestmentRow = {
 };
 type YieldSuccessNotice = { action: "deposit" | "withdraw"; reviewedAmount: string; reviewedAsset: string; vaultAmount?: string; vaultAsset?: string; hash?: string; };
 type AnalysisWindow = "daily" | "weekly";
-type ChartWindow = "weekly" | "monthly";
 
 const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: string }> = {
   USDC: { namePt: "Dólares", nameEn: "Dollars", short: "USD" },
@@ -150,10 +149,6 @@ const RETURN_PERIODS = [
 const ANALYSIS_WINDOWS: Array<{ key: AnalysisWindow; days: number; labelPt: string; labelEn: string; detailPt: string; detailEn: string }> = [
   { key: "daily", days: 1, labelPt: "Diário", labelEn: "Daily", detailPt: "Últimas 24h", detailEn: "Last 24h" },
   { key: "weekly", days: 7, labelPt: "Semanal", labelEn: "Weekly", detailPt: "Últimos 7 dias", detailEn: "Last 7 days" },
-];
-const CHART_WINDOWS: Array<{ key: ChartWindow; days: number; labelPt: string; labelEn: string; detail: string }> = [
-  { key: "weekly", days: 7, labelPt: "Semanal", labelEn: "Weekly", detail: "7d" },
-  { key: "monthly", days: 30, labelPt: "Mensal", labelEn: "Monthly", detail: "30d" },
 ];
 function periodReturnPercent(ratePercent: number, years: number) {
   const annualRate = Math.max(0, ratePercent) / 100;
@@ -352,43 +347,15 @@ function InvestmentLineChart({ data, profile, language, tone = "primary" }: {
   );
 }
 
-function InvestmentGraphs({ language, row }: { language: AppLanguage; row: InvestmentRow }) {
+function InvestmentGraphs({ language, row, days }: { language: AppLanguage; row: InvestmentRow; days: number }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-  const [chartWindow, setChartWindow] = useState<ChartWindow>("weekly");
-  const activeWindow = CHART_WINDOWS.find((item) => item.key === chartWindow) || CHART_WINDOWS[0];
-  const historyPoints = buildPositionLinePoints(row.history, row.amount, language, activeWindow.days);
+  // The window matches the Total returns plot (same `days`), so the product line
+  // starts at the same point — one shared time control, no separate selector.
+  const historyPoints = buildPositionLinePoints(row.history, row.amount, language, days);
   const changePct = seriesChangePercent(historyPoints);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] font-black uppercase tracking-wide text-tts-muted">
-          {L("Visualização do gráfico", "Chart view")}
-        </p>
-        <div className="grid grid-cols-2 gap-1 rounded-lg border border-tts-border bg-tts-bg p-1">
-          {CHART_WINDOWS.map((item) => {
-            const active = item.key === chartWindow;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setChartWindow(item.key)}
-                className={[
-                  "min-w-20 rounded-md px-2.5 py-1.5 text-left transition",
-                  active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-surface",
-                ].join(" ")}
-                aria-pressed={active}
-              >
-                <span className="block text-[10px] font-black">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
-                <span className={active ? "block text-[9px] font-semibold text-tts-surface/70" : "block text-[9px] font-semibold text-tts-muted"}>
-                  {item.detail}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="rounded-lg border border-tts-border bg-tts-bg p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -1653,7 +1620,7 @@ function SelectedYieldDetail({ language, row, isTestnet, activeWindow, sessionLi
           <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">{L("Linha de saldo", "Balance line")}</p>
           <span className={`text-sm font-bold ${tone}`}>{formatSignedPercent(analysis.changePercent, language)}</span>
         </div>
-        <InvestmentGraphs language={language} row={row} />
+        <InvestmentGraphs language={language} row={row} days={activeWindow.days} />
         {hasIgnoredCashflow ? (
           <p className="mt-3 text-xs font-semibold text-tts-muted">
             {L("Aplicações e resgates ignorados na performance:", "Deposits and withdrawals ignored in performance:")} {formatSignedAmount(analysis.cashflowChange, row.profile, language)}
