@@ -96,17 +96,47 @@ export function analyzePortfolioPeriod(input: {
   const baseline = previousPoint
     ? parsePositiveDecimal(previousPoint.amount)
     : Math.max(0, parsePositiveDecimal(firstWindowPoint.amount) - firstWindowCashflow);
-  const cashflowChange = inWindow.reduce((sum, point) => sum + cashflowDelta(point), 0);
-  const rawChange = currentAmount - baseline;
-  const change = normalizeSmall(rawChange - cashflowChange);
+  // Walk the balance series step by step and split each move into cashflow
+  // (deposits/withdrawals — the user's own money in/out) vs return (yield).
+  // Points without an explicit deposit/withdraw marker (e.g. the mainnet
+  // position snapshots) are still handled: a step larger than ~10% of the
+  // balance (and ≥ $0.25) is treated as a cashflow, since real yield moves in
+  // tiny increments — so money the user puts in never shows up as "return".
+  const series: Array<{ amount: number; point?: PortfolioHistoryPoint }> = [{ amount: baseline }];
+  for (const point of inWindow) series.push({ amount: parsePositiveDecimal(point.amount), point });
+  series.push({ amount: currentAmount });
+
+  let change = 0;
+  let cashflowChange = 0;
+  for (let i = 1; i < series.length; i += 1) {
+    const prevAmount = series[i - 1].amount;
+    const curAmount = series[i].amount;
+    const point = series[i].point;
+    const delta = curAmount - prevAmount;
+    let cashflow = point ? cashflowDelta(point) : 0;
+    if (Math.abs(cashflow) <= EPSILON) {
+      const base = Math.max(prevAmount, curAmount, 1);
+      const threshold = Math.max(0.25, base * 0.1);
+      if (Math.abs(delta) >= threshold) cashflow = delta;
+    }
+    if (Math.abs(cashflow) > EPSILON) {
+      cashflowChange += cashflow;
+      change += delta - cashflow;
+    } else {
+      change += delta;
+    }
+  }
+  change = normalizeSmall(change);
+  cashflowChange = normalizeSmall(cashflowChange);
+  const rawChange = normalizeSmall(currentAmount - baseline);
   const denominator = Math.max(0, currentAmount - change);
   const changePercent = denominator > EPSILON ? (change / denominator) * 100 : 0;
 
   return {
     change,
     changePercent: normalizeSmall(changePercent),
-    cashflowChange: normalizeSmall(cashflowChange),
-    rawChange: normalizeSmall(rawChange),
+    cashflowChange,
+    rawChange,
     baseline,
     denominator,
     pointCount: inWindow.length,
