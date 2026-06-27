@@ -261,6 +261,45 @@ export function WalletsSuiteCard({
   }, [stellar]);
   const primaryCustodialUid = useMemo(() => (custodialSorted[0] ? `cw:${custodialSorted[0].id}` : ""), [custodialSorted]);
 
+  // ── Create actions (used per-section) ──────────────────────────────────────
+  const [createBusy, setCreateBusy] = useState("");
+  const [createErr, setCreateErr] = useState("");
+  const [newChain, setNewChain] = useState("base");
+  const [vaWalletId, setVaWalletId] = useState("");
+
+  async function runCreate(kind: string, fn: () => Promise<Response>) {
+    if (createBusy) return;
+    setCreateBusy(kind); setCreateErr("");
+    try {
+      const res = await fn();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) throw new Error(json.message || `HTTP ${res.status}`);
+      onTransferDone?.();
+    } catch (e: any) {
+      setCreateErr(e?.message ?? String(e));
+    } finally {
+      setCreateBusy("");
+    }
+  }
+  const createCustodial = () => runCreate("custodial", () =>
+    fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/wallets`)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chain: newChain }),
+    }));
+  const createStellar = () => runCreate("stellar", () =>
+    fetch(`/api/bridge/stellar-wallets/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
+    }));
+  const createVA = () => {
+    const w = custodial.find((c) => c.id === vaWalletId);
+    if (!w || !w.address) { setCreateErr(L("Escolha uma carteira custodial.", "Pick a custodial wallet.")); return; }
+    runCreate("va", () =>
+      fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/virtual-accounts/usd`)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination_wallet: w.address, destination_chain: w.chain || "base", confirm_mainnet: true }),
+      }));
+  };
+  const createSelectCls = "rounded-lg border border-tts-border bg-tts-bg px-2 py-1.5 text-xs font-semibold text-tts-deep focus:border-tts-deep focus:outline-none";
+
   // Prefill the transfer panel from a card and scroll up to it.
   function requestTransfer(from: string, to?: string) {
     if (!transferAccounts.some((a) => a.uid === from)) return; // not a usable source
@@ -296,16 +335,7 @@ export function WalletsSuiteCard({
         )}
       </div>
 
-      {/* Create accounts/wallets (VA points to custodial only) */}
-      {(Boolean(customerId) || Boolean(email)) && (
-        <CreateAccountsPanel
-          isEn={isEn}
-          customerId={customerId}
-          email={email}
-          custodial={custodialSorted}
-          onDone={onTransferDone}
-        />
-      )}
+      {createErr && <p className="mb-3 text-[11px] font-semibold text-tts-error">{createErr}</p>}
 
       {/* Move money panel */}
       {canTransfer && (
@@ -331,6 +361,18 @@ export function WalletsSuiteCard({
             <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5" /> {L("Contas de depósito (USD)", "Deposit accounts (USD)")}</span>
             <span className="tabular-nums text-tts-deep">{f2(vaReceived)} {L("recebido", "received")}</span>
           </p>
+          {customerId && (
+            <div className="mb-3 flex items-center gap-2">
+              <select className={`${createSelectCls} flex-1`} value={vaWalletId} onChange={(e) => setVaWalletId(e.target.value)}>
+                <option value="">{L("Nova conta → carteira custodial", "New account → custodial wallet")}</option>
+                {custodialSorted.map((w) => <option key={w.id} value={w.id}>{(w.chain || "custodial")} · {short(w.address || w.id)}</option>)}
+              </select>
+              <button type="button" onClick={createVA} disabled={!vaWalletId || !!createBusy}
+                className="inline-flex items-center gap-1 rounded-lg bg-tts-deep px-3 py-1.5 text-xs font-bold text-tts-surface transition hover:opacity-90 disabled:opacity-40">
+                {createBusy === "va" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Criar", "Create")}
+              </button>
+            </div>
+          )}
           <Paginated
             items={virtualAccounts}
             isEn={isEn}
@@ -389,11 +431,27 @@ export function WalletsSuiteCard({
       )}
 
       {/* Custodial wallets — full detail card */}
-      {custodial.length > 0 && (
+      {(custodial.length > 0 || Boolean(customerId)) && (
         <div className="mb-5">
-          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-            <Layers className="h-3.5 w-3.5" /> {L("Carteiras custodiais", "Custodial wallets")}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+              <Layers className="h-3.5 w-3.5" /> {L("Carteiras custodiais", "Custodial wallets")}
+            </p>
+            {customerId && (
+              <div className="flex items-center gap-1.5">
+                <select className={createSelectCls} value={newChain} onChange={(e) => setNewChain(e.target.value)}>
+                  {["base", "ethereum", "solana", "tempo", "tron"].map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <button type="button" onClick={createCustodial} disabled={!!createBusy}
+                  className="inline-flex items-center gap-1 rounded-lg border border-tts-border px-2.5 py-1.5 text-xs font-bold text-tts-deep transition hover:bg-tts-bg disabled:opacity-40">
+                  {createBusy === "custodial" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Nova", "New")}
+                </button>
+              </div>
+            )}
+          </div>
+          {custodial.length === 0 && (
+            <p className="mb-2 text-[11px] text-tts-muted">{L("Nenhuma carteira custodial ainda.", "No custodial wallet yet.")}</p>
+          )}
           <Paginated
             items={custodialSorted}
             isEn={isEn}
@@ -432,11 +490,22 @@ export function WalletsSuiteCard({
       )}
 
       {/* Stellar wallets — full detail card */}
-      {stellar.length > 0 && (
+      {(stellar.length > 0 || Boolean(email)) && (
         <div>
-          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-            <Wallet className="h-3.5 w-3.5" /> {L("Carteiras Stellar", "Stellar wallets")}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
+              <Wallet className="h-3.5 w-3.5" /> {L("Carteiras Stellar", "Stellar wallets")}
+            </p>
+            {email && (
+              <button type="button" onClick={createStellar} disabled={!!createBusy}
+                className="inline-flex items-center gap-1 rounded-lg border border-tts-border px-2.5 py-1.5 text-xs font-bold text-tts-deep transition hover:bg-tts-bg disabled:opacity-40">
+                {createBusy === "stellar" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Nova", "New")}
+              </button>
+            )}
+          </div>
+          {stellar.length === 0 && (
+            <p className="mb-2 text-[11px] text-tts-muted">{L("Nenhuma carteira Stellar ainda.", "No Stellar wallet yet.")}</p>
+          )}
           <Paginated
             items={stellarSorted}
             isEn={isEn}
@@ -473,118 +542,6 @@ export function WalletsSuiteCard({
               );
             }}
           />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Create accounts panel ────────────────────────────────────────────────────
-// Create a custodial wallet, a Stellar wallet, or a USD deposit account (VA).
-// A VA can only point to a CUSTODIAL wallet — money wired in lands there.
-function CreateAccountsPanel({ isEn, customerId, email, custodial, onDone }: {
-  isEn: boolean;
-  customerId: string;
-  email: string;
-  custodial: SuiteCustodial[];
-  onDone?: () => void;
-}) {
-  const L = (pt: string, en: string) => (isEn ? en : pt);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
-  const [chain, setChain] = useState("base");
-  const [vaWalletId, setVaWalletId] = useState("");
-
-  const CHAINS = ["base", "ethereum", "solana", "tempo", "tron"];
-
-  async function run(kind: string, fn: () => Promise<Response>) {
-    if (busy) return;
-    setBusy(kind); setErr(""); setOk("");
-    try {
-      const res = await fn();
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json.success === false) throw new Error(json.message || `HTTP ${res.status}`);
-      setOk(L("Criado!", "Created!"));
-      onDone?.();
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  const createCustodial = () => run("custodial", () =>
-    fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/wallets`)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chain }),
-    }));
-  const createStellar = () => run("stellar", () =>
-    fetch(`/api/bridge/stellar-wallets/generate`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
-    }));
-  const createVA = () => {
-    const w = custodial.find((c) => c.id === vaWalletId);
-    if (!w || !w.address) { setErr(L("Escolha uma carteira custodial.", "Pick a custodial wallet.")); return; }
-    return run("va", () =>
-      fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/virtual-accounts/usd`)}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination_wallet: w.address, destination_chain: w.chain || "base", confirm_mainnet: true }),
-      }));
-  };
-
-  const selectCls = "w-full rounded-xl border-2 border-tts-border bg-tts-surface px-3 py-2.5 text-sm font-semibold text-tts-deep focus:border-tts-deep focus:outline-none";
-
-  return (
-    <div className="mb-4 rounded-xl border border-tts-border bg-tts-bg/60 p-3">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between">
-        <span className="flex items-center gap-1.5 text-sm font-bold text-tts-deep">
-          <Plus className="h-4 w-4" /> {L("Criar contas e carteiras", "Create accounts & wallets")}
-        </span>
-        <span className="text-xs text-tts-muted">{open ? L("Fechar", "Close") : L("Abrir", "Open")}</span>
-      </button>
-
-      {open && (
-        <div className="mt-3 space-y-4">
-          {/* Custodial wallet */}
-          <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-tts-muted">{L("Carteira custodial", "Custodial wallet")}</p>
-            <div className="flex gap-2">
-              <select className={selectCls} value={chain} onChange={(e) => setChain(e.target.value)}>
-                {CHAINS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <Button onClick={createCustodial} disabled={!customerId || !!busy} size="sm">
-                {busy === "custodial" ? <Loader2 className="h-4 w-4 animate-spin" /> : L("Criar", "Create")}
-              </Button>
-            </div>
-          </div>
-
-          {/* Stellar wallet */}
-          <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-tts-muted">{L("Carteira Stellar", "Stellar wallet")}</p>
-            <Button onClick={createStellar} disabled={!email || !!busy} size="sm" className="w-full">
-              {busy === "stellar" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              {L("Gerar carteira Stellar", "Generate Stellar wallet")}
-            </Button>
-          </div>
-
-          {/* USD deposit account (VA) → custodial only */}
-          <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-tts-muted">{L("Conta de depósito USD (aponta para custodial)", "USD deposit account (points to custodial)")}</p>
-            <select className={selectCls} value={vaWalletId} onChange={(e) => setVaWalletId(e.target.value)}>
-              <option value="">{L("Carteira custodial de destino", "Destination custodial wallet")}</option>
-              {custodial.map((w) => (
-                <option key={w.id} value={w.id}>{(w.chain || "custodial")} · {short(w.address || w.id)}</option>
-              ))}
-            </select>
-            <Button onClick={createVA} disabled={!customerId || !vaWalletId || !!busy} size="sm" className="mt-2 w-full">
-              {busy === "va" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Banknote className="mr-2 h-4 w-4" />}
-              {L("Criar conta de depósito", "Create deposit account")}
-            </Button>
-          </div>
-
-          {err && <p className="text-[11px] font-semibold text-tts-error">{err}</p>}
-          {ok && <p className="text-[11px] font-bold text-tts-confirm">{ok}</p>}
         </div>
       )}
     </div>
