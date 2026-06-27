@@ -1147,27 +1147,27 @@ export class BridgeController {
             }));
           }
         }
-        let walletBalances: any[] = [];
-        try {
-          walletBalances = await service.getWalletBalances();
-        } catch {
-          // balances unavailable — still return wallet list
-        }
-        const balanceArr = Array.isArray(walletBalances) ? walletBalances : [];
-        bridgeWallets = liveWallets.map((w: any) => {
-          const walletBal = balanceArr.filter(
-            (b: any) => String(b.wallet_id || '').toLowerCase() === String(w.id || '').toLowerCase()
-          );
-          return {
-            id: w.id,
-            chain: w.chain ?? null,
-            address: w.address ?? null,
-            balances: walletBal.map((b: any) => ({
-              currency: (b.currency || 'USDC').toUpperCase(),
-              amount: String(b.amount ?? '0'),
-            })),
-          };
-        });
+        // Per-wallet balances: the bulk endpoint is unreliable, so read each
+        // wallet directly (it returns its on-chain balances, e.g. base USDC).
+        // If a wallet already carries balances (DB cache), keep them.
+        bridgeWallets = await Promise.all(liveWallets.map(async (w: any) => {
+          let balances = Array.isArray(w.balances)
+            ? w.balances.map((b: any) => ({ currency: String(b.currency || 'USDC').toUpperCase(), amount: String(b.amount ?? b.balance ?? '0') }))
+            : [];
+          if (!balances.length) {
+            try {
+              const full: any = await service.getWallet(bridgeCustomerId, w.id);
+              const bals = Array.isArray(full?.balances) ? full.balances : [];
+              balances = bals.map((b: any) => ({
+                currency: String(b.currency || 'USDC').toUpperCase(),
+                amount: String(b.balance ?? b.amount ?? '0'),
+              }));
+            } catch {
+              // balances unavailable — still return wallet
+            }
+          }
+          return { id: w.id, chain: w.chain ?? null, address: w.address ?? null, balances };
+        }));
       } catch {
         // non-fatal — page works without wallet list
       }
