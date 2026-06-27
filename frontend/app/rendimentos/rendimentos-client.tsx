@@ -1480,7 +1480,7 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-tts-border bg-tts-bg p-1">
+        <div className="flex gap-1 rounded-lg border border-tts-border bg-tts-bg p-1">
           {ANALYSIS_WINDOWS.map((item) => {
             const active = item.key === analysisWindow;
             return (
@@ -1489,12 +1489,12 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
                 type="button"
                 onClick={() => onAnalysisWindowChange(item.key)}
                 className={[
-                  "min-h-16 px-3 py-2 text-left transition",
+                  "flex-1 rounded-md px-3 py-1.5 text-center transition",
                   active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-surface",
                 ].join(" ")}
                 aria-pressed={active}
               >
-                <span className="block text-xs font-black">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
+                <span className="block text-xs font-bold">{isPortuguese(language) ? item.labelPt : item.labelEn}</span>
                 <span className={active ? "block text-[10px] font-semibold text-tts-surface/75" : "block text-[10px] font-semibold text-tts-muted"}>
                   {isPortuguese(language) ? item.detailPt : item.detailEn}
                 </span>
