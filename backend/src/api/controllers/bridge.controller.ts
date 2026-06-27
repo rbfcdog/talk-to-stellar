@@ -54,6 +54,22 @@ function statusFromError(error: unknown): number {
   return 500;
 }
 
+// Turn raw Soroban/Blend HostError dumps into a short, actionable message.
+function friendlyYieldError(raw: string): string {
+  const msg = String(raw || "");
+  const low = msg.toLowerCase();
+  if (low.includes("trustline entry is missing") || low.includes("trustline") ) {
+    return "This wallet has no trustline/balance for this pool's asset. Supply USDC (which your account holds), or fund this asset first.";
+  }
+  if (low.includes("balance is not sufficient") || low.includes("insufficient") || low.includes("error(contract, #10)")) {
+    return "Insufficient balance in the wallet for this supply. Move USDC into this wallet first.";
+  }
+  if (low.includes("hosterror") || low.includes("error(contract")) {
+    return "The pool rejected this supply (asset/network mismatch or the wallet can't supply this reserve). Try USDC on the correct network.";
+  }
+  return msg;
+}
+
 function bridgeError(error: unknown, fallback: string) {
   const e = error as Record<string, unknown>;
   return {
@@ -3323,9 +3339,9 @@ export class BridgeController {
         result,
       });
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || "Failed to invest on mainnet.";
-      logger.error(`[bridge] investStellarWallet failed: ${msg}`);
-      res.status(statusFromError(error)).json({ success: false, message: msg });
+      const raw = error?.response?.data?.error || error?.message || "Failed to invest on mainnet.";
+      logger.error(`[bridge] investStellarWallet failed: ${raw}`);
+      res.status(statusFromError(error)).json({ success: false, message: friendlyYieldError(raw) });
     }
   }
 
