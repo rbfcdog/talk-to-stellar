@@ -798,11 +798,11 @@ async function readWalletBalances(publicKey: string, network: "mainnet" | "testn
 async function sweepXlmToUsdc(keypair: Keypair, publicKey: string, xlmToSwap: number): Promise<{ ok: boolean; hash?: string; note?: string }> {
   if (xlmToSwap <= 0) return { ok: false, note: "no XLM to swap" };
   try {
-    const quote = await SoroswapService.getQuote({ assetIn: "XLM", assetOut: "USDC", amount: xlmToSwap.toFixed(7), tradeType: "EXACT_IN" } as any);
+    const quote = await SoroswapService.getQuote({ assetIn: "XLM", assetOut: "USDC", amount: xlmToSwap.toFixed(7), tradeType: "EXACT_IN", network: "mainnet" } as any);
     const built = await SoroswapService.buildSwapXdr({ quote, senderAddress: publicKey } as any);
     const tx = TransactionBuilder.fromXDR(built.xdr, built.networkPassphrase);
     tx.sign(keypair);
-    const sent = await SoroswapService.sendSignedXdr(tx.toXDR());
+    const sent = await SoroswapService.sendSignedXdr(tx.toXDR(), "mainnet");
     return { ok: true, hash: (sent as any)?.hash };
   } catch (e: any) {
     return { ok: false, note: e?.message || String(e) };
@@ -813,11 +813,11 @@ async function sweepXlmToUsdc(keypair: Keypair, publicKey: string, xlmToSwap: nu
 async function swapUsdcToXlm(keypair: Keypair, publicKey: string, usdcToSwap: number): Promise<{ ok: boolean; hash?: string; note?: string }> {
   if (usdcToSwap <= 0) return { ok: false, note: "no USDC to swap" };
   try {
-    const quote = await SoroswapService.getQuote({ assetIn: "USDC", assetOut: "XLM", amount: usdcToSwap.toFixed(7), tradeType: "EXACT_IN" } as any);
+    const quote = await SoroswapService.getQuote({ assetIn: "USDC", assetOut: "XLM", amount: usdcToSwap.toFixed(7), tradeType: "EXACT_IN", network: "mainnet" } as any);
     const built = await SoroswapService.buildSwapXdr({ quote, senderAddress: publicKey } as any);
     const tx = TransactionBuilder.fromXDR(built.xdr, built.networkPassphrase);
     tx.sign(keypair);
-    const sent = await SoroswapService.sendSignedXdr(tx.toXDR());
+    const sent = await SoroswapService.sendSignedXdr(tx.toXDR(), "mainnet");
     return { ok: true, hash: (sent as any)?.hash };
   } catch (e: any) {
     return { ok: false, note: e?.message || String(e) };
@@ -3405,10 +3405,11 @@ export class BridgeController {
         amountADesired: toStroops(usdcLeg),
         amountBDesired: toStroops(xlmGained),
         senderAddress: publicKey,
+        network: "mainnet",
       });
       const tx = TransactionBuilder.fromXDR(built.xdr, MAINNET_PASSPHRASE);
       tx.sign(keypair);
-      const sent = await SoroswapService.sendSignedXdr(tx.toXDR());
+      const sent = await SoroswapService.sendSignedXdr(tx.toXDR(), "mainnet");
       const hash = (sent as any)?.hash ?? null;
       logger.info(`[bridge] add-liquidity XLM/USDC from ${publicKey}: usdc=${usdcLeg} xlm=${xlmGained} pool=${built.pool} hash=${hash}`);
 

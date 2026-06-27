@@ -11,8 +11,8 @@ function normalizeApiUrl(value: string): string {
     .replace(/\/api\/v1$/i, '');
 }
 
-export function loadSoroswapConfig(): SoroswapConfig {
-  const network = (process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
+export function loadSoroswapConfig(networkOverride?: string): SoroswapConfig {
+  const network = String(networkOverride || process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
   const normalized = network === 'public' ? 'mainnet' : network;
   const apiKey = process.env.SOROSWAP_API_KEY?.trim();
   return {
