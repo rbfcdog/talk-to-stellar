@@ -12,6 +12,7 @@ export interface SwapQuoteInput {
   amount: string;      // human-readable amount like "10.5"
   tradeType?: 'EXACT_IN' | 'EXACT_OUT';
   senderAddress?: string; // optional for quote, required for build
+  network?: string;       // override the configured network (e.g. force 'mainnet')
 }
 
 export interface SwapQuoteResult {

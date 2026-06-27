@@ -188,7 +188,7 @@ export const SoroswapService = {
    * Calls GET /quote with all protocols enabled.
    */
   async getQuote(input: SwapQuoteInput): Promise<SwapQuoteResult> {
-    const config = loadSoroswapConfig();
+    const config = loadSoroswapConfig(input.network);
     const assetInToken = await SoroswapService.resolveTokenForQuote(input.assetIn, config);
     const assetOutToken = await SoroswapService.resolveTokenForQuote(input.assetOut, config);
     const assetInAddress = assetInToken.address;
@@ -477,7 +477,9 @@ export const SoroswapService = {
    * Calls POST /quote/build. The caller is responsible for signing and submitting.
    */
   async buildSwapXdr(input: SwapBuildInput): Promise<SwapBuildResult> {
-    const config = loadSoroswapConfig();
+    // Honor the network the quote was produced on (the swap leg of mainnet
+    // add-liquidity must stay on mainnet even if STELLAR_NETWORK is testnet).
+    const config = loadSoroswapConfig(input.quote?.network);
     const slippageBps = input.slippageBps ?? config.defaultSlippageBps;
 
     if (input.quote.source === 'stellar-path-payment-fallback' && input.quote.rawQuote?.provider === 'stellar-path-payment') {
@@ -577,12 +579,14 @@ export const SoroswapService = {
    * Submit a user-signed swap XDR to Horizon on the configured Stellar network.
    * Signing remains client-side in Freighter; the backend only relays.
    */
-  async sendSignedXdr(signedXdr: string): Promise<SwapSendResult> {
-    const config = loadSoroswapConfig();
+  async sendSignedXdr(signedXdr: string, network?: string): Promise<SwapSendResult> {
+    const config = loadSoroswapConfig(network);
     const networkPassphrase = networkPassphraseFor(config.network);
     const tx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
-    const { server } = await import('../../config/stellar');
-    const result = await server.submitTransaction(tx);
+    const stellar = await import('../../config/stellar');
+    // Submit on the matching network — mainnet swaps go to mainnet Horizon.
+    const submitServer = config.network === 'mainnet' ? stellar.mainnetServer : stellar.server;
+    const result = await submitServer.submitTransaction(tx);
 
     return {
       hash: result.hash,
@@ -677,8 +681,9 @@ export const SoroswapService = {
     amountBDesired: string;  // stroops
     senderAddress: string;
     slippageBps?: number;
+    network?: string;  // override (e.g. force 'mainnet')
   }): Promise<{ xdr: string; pool?: string; network: string }> {
-    const config = loadSoroswapConfig();
+    const config = loadSoroswapConfig(params.network);
     const slippage = params.slippageBps ?? config.defaultSlippageBps;
     const qs = new URLSearchParams({ network: config.network });
     const url = `${config.apiUrl}/liquidity/add?${qs}`;
