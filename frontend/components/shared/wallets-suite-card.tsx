@@ -18,8 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 // The full account suite shown on the on-ramp and off-ramp screens. It renders
-// every virtual account (USD deposit rail), every custodial wallet (per chain),
-// and every associated Stellar wallet with full detail — and lets the user move
+// every virtual account (USD deposit rail), every receiver wallet (per chain),
+// and every associated TalkToStellar wallet with full detail — and lets the user move
 // USDC between any custodial/Stellar account through the unified
 // `/api/bridge/internal-transfer` endpoint (custodial⇄custodial, custodial⇄stellar,
 // stellar⇄stellar). Virtual accounts are fiat deposit rails, so they appear with
@@ -99,7 +99,7 @@ function CopyChip({ value }: { value: string }) {
 }
 
 // One-at-a-time carousel with prev/next + "i / N", used for every account
-// section so VAs, custodial wallets and Stellar wallets all page the same way.
+// section so VAs, receiver wallets and TalkToStellar wallets all page the same way.
 function Paginated<T>({ items, isEn, render }: {
   items: T[];
   isEn: boolean;
@@ -200,9 +200,9 @@ export function WalletsSuiteCard({
     const list: TransferAccount[] = [];
     virtualAccounts.forEach((va) => {
       // Money received into a VA lands in its destination wallet. Resolve the
-      // transfer leg: (1) an explicit Bridge custodial wallet id; (2) a Stellar
+      // transfer leg: (1) an explicit Bridge receiver wallet id; (2) a Stellar
       // destination by address shape; (3) a chain address (e.g. base 0x…) matched
-      // to one of the listed custodial wallets, so a wire deposit that landed in a
+      // to one of the listed receiver wallets, so a wire deposit that landed in a
       // base wallet becomes a usable source.
       const addr = String(va.destination_address || "").trim();
       const isStellarAddr = /^G[A-Z2-7]{55}$/.test(addr);
@@ -238,7 +238,7 @@ export function WalletsSuiteCard({
       list.push({
         uid: `st:${w.public_key}`,
         kind: "stellar", origin: "stellar",
-        label: w.label || "Stellar",
+        label: w.label || "TalkToStellar",
         sub: short(w.public_key),
         address: w.public_key,
         usdc: stellarUsdc(w),
@@ -283,17 +283,17 @@ export function WalletsSuiteCard({
       setCreateBusy("");
     }
   }
-  const createCustodial = () => runCreate("custodial", L("Carteira custodial criada.", "Custodial wallet created."), () =>
+  const createCustodial = () => runCreate("custodial", L("Carteira de recebimento criada.", "Receiver wallet created."), () =>
     fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/wallets`)}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chain: newChain }),
     }));
-  const createStellar = () => runCreate("stellar", L("Carteira Stellar criada.", "Stellar wallet created."), () =>
+  const createStellar = () => runCreate("stellar", L("Carteira TalkToStellar criada.", "TalkToStellar wallet created."), () =>
     fetch(`/api/bridge/stellar-wallets/generate`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
     }));
   const createVA = () => {
     const w = custodial.find((c) => c.id === vaWalletId);
-    if (!w || !w.address) { setCreateErr(L("Escolha uma carteira custodial.", "Pick a custodial wallet.")); return; }
+    if (!w || !w.address) { setCreateErr(L("Escolha uma carteira de recebimento.", "Pick a receiver wallet.")); return; }
     runCreate("va", L("Conta de depósito criada.", "Deposit account created."), () =>
       fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/virtual-accounts/usd`)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -373,7 +373,7 @@ export function WalletsSuiteCard({
           {customerId && (
             <div className="mb-3 flex items-center gap-2">
               <select className={`${createSelectCls} flex-1`} value={vaWalletId} onChange={(e) => setVaWalletId(e.target.value)}>
-                <option value="">{L("Nova conta → carteira custodial", "New account → custodial wallet")}</option>
+                <option value="">{L("Nova conta → carteira de recebimento", "New account → receiver wallet")}</option>
                 {custodialSorted.map((w) => <option key={w.id} value={w.id}>{(w.chain || "custodial")} · {short(w.address || w.id)}</option>)}
               </select>
               <button type="button" onClick={createVA} disabled={!vaWalletId || !!createBusy}
@@ -426,10 +426,10 @@ export function WalletsSuiteCard({
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     {primaryCustodialUid && (
-                      <TransferButton uid={uid} to={primaryCustodialUid} label={L("Enviar para carteira custodial", "Send to custodial wallet")} />
+                      <TransferButton uid={uid} to={primaryCustodialUid} label={L("Enviar para carteira de recebimento", "Send to receiver wallet")} />
                     )}
                     {primaryStellarUid && (
-                      <TransferButton uid={uid} to={primaryStellarUid} label={L("Enviar para carteira Stellar", "Send to Stellar wallet")} />
+                      <TransferButton uid={uid} to={primaryStellarUid} label={L("Enviar para carteira TalkToStellar", "Send to TalkToStellar wallet")} />
                     )}
                   </div>
                 </div>
@@ -439,12 +439,12 @@ export function WalletsSuiteCard({
         </div>
       )}
 
-      {/* Custodial wallets — full detail card */}
+      {/* Receiver wallets — full detail card */}
       {(custodial.length > 0 || Boolean(customerId)) && (
         <div className="mb-5">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-              <Layers className="h-3.5 w-3.5" /> {L("Carteiras custodiais", "Custodial wallets")}
+              <Layers className="h-3.5 w-3.5" /> {L("Carteiras de recebimento", "Receiver wallets")}
             </p>
             {customerId && (
               <div className="flex items-center gap-1.5">
@@ -459,7 +459,7 @@ export function WalletsSuiteCard({
             )}
           </div>
           {custodial.length === 0 && (
-            <p className="mb-2 text-[11px] text-tts-muted">{L("Nenhuma carteira custodial ainda.", "No custodial wallet yet.")}</p>
+            <p className="mb-2 text-[11px] text-tts-muted">{L("Nenhuma carteira de recebimento ainda.", "No receiver wallet yet.")}</p>
           )}
           <Paginated
             items={custodialSorted}
@@ -473,7 +473,7 @@ export function WalletsSuiteCard({
                       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-deep/10 text-tts-deep"><Layers className="h-4 w-4" /></span>
                       <div>
                         <p className="text-base font-bold capitalize text-tts-deep">{w.chain || "—"}</p>
-                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira custodial", "Custodial wallet")}</p>
+                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira de recebimento", "Receiver wallet")}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -498,12 +498,12 @@ export function WalletsSuiteCard({
         </div>
       )}
 
-      {/* Stellar wallets — full detail card */}
+      {/* TalkToStellar wallets — full detail card */}
       {(stellar.length > 0 || Boolean(email)) && (
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-              <Wallet className="h-3.5 w-3.5" /> {L("Carteiras Stellar", "Stellar wallets")}
+              <Wallet className="h-3.5 w-3.5" /> {L("Carteiras TalkToStellar", "TalkToStellar wallets")}
             </p>
             {email && (
               <button type="button" onClick={createStellar} disabled={!!createBusy}
@@ -513,7 +513,7 @@ export function WalletsSuiteCard({
             )}
           </div>
           {stellar.length === 0 && (
-            <p className="mb-2 text-[11px] text-tts-muted">{L("Nenhuma carteira Stellar ainda.", "No Stellar wallet yet.")}</p>
+            <p className="mb-2 text-[11px] text-tts-muted">{L("Nenhuma carteira TalkToStellar ainda.", "No TalkToStellar wallet yet.")}</p>
           )}
           <Paginated
             items={stellarSorted}
@@ -527,10 +527,10 @@ export function WalletsSuiteCard({
                       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-gold/15 text-tts-gold"><Wallet className="h-4 w-4" /></span>
                       <div>
                         <p className="flex items-center gap-2 text-base font-bold text-tts-deep">
-                          {w.label || "Stellar"}
+                          {w.label || "TalkToStellar"}
                           {w.is_primary && <span className="rounded-full bg-tts-confirm/15 px-2 py-0.5 text-[9px] font-bold uppercase text-tts-confirm">{L("Principal", "Primary")}</span>}
                         </p>
-                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira Stellar", "Stellar wallet")}</p>
+                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira TalkToStellar", "TalkToStellar wallet")}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -719,7 +719,7 @@ function TransferPanel({
             <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="font-bold" />
             {overBalance && <p className="mt-1 text-[11px] font-semibold text-tts-error">{L("Acima do saldo", "Over balance")}</p>}
             {needsCustomer && !customerId && (
-              <p className="mt-1 text-[11px] font-semibold text-tts-error">{L("Transferências com carteira custodial exigem conta Bridge.", "Custodial-wallet transfers need a Bridge account.")}</p>
+              <p className="mt-1 text-[11px] font-semibold text-tts-error">{L("Transferências com carteira de recebimento exigem conta Bridge.", "Receiver-wallet transfers need a Bridge account.")}</p>
             )}
           </div>
 
