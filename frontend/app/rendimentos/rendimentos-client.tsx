@@ -1357,9 +1357,9 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
               <button
                 type="button"
                 onClick={() => setSelectedCode(null)}
-                className="inline-flex items-center gap-1.5 text-sm font-bold text-tts-muted transition hover:text-tts-deep"
+                className="inline-flex items-center gap-2 rounded-xl border border-tts-border bg-tts-surface px-5 py-3 text-base font-bold text-tts-deep transition hover:bg-tts-bg"
               >
-                <ChevronLeft className="h-4 w-4" /> {L("Voltar aos rendimentos", "Back to earnings")}
+                <ChevronLeft className="h-5 w-5" /> {L("Voltar aos rendimentos", "Back to earnings")}
               </button>
               <SelectedYieldDetail
                 language={language}
