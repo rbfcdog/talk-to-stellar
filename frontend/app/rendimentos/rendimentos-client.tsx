@@ -1308,6 +1308,17 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
   // Its position comes from the mainnet positions endpoint (blend_usdc); invest/
   // withdraw route through the USDC flow via the BLEND code (mapped by the parent).
   if (blendApy != null || blendInvested != null) {
+    // Derive Blend's own history from the snapshot series (each point carries a
+    // per-protocol blend_usdc), so movements/last-movement show for Blend too.
+    const blendHistory: PositionHistoryState = mainnetHistory
+      ? {
+          loading: false,
+          points: (mainnetHistory.points || [])
+            .filter((p) => (p as { blend_usdc?: number }).blend_usdc != null)
+            .map((p) => ({ date: p.date, amount: String((p as { blend_usdc?: number }).blend_usdc ?? 0) })),
+          error: "",
+        }
+      : { loading: false, points: [], error: "" };
     rows.push({
       option: { asset_code: "USDC", vault_address: "blend", label: "Blend USDC" } as YieldOption,
       code: "BLEND",
@@ -1317,7 +1328,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
       error: "",
       source: "blend_pool_position",
       rate: blendApy ?? 0,
-      history: { loading: false, points: [], error: "" },
+      history: blendHistory,
     });
   }
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
