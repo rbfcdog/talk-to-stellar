@@ -547,19 +547,15 @@ export default function RendimentosClient({
   // which section we auto-scroll to on load.
   useEffect(() => {
     if (initialView !== "application") return;
-    // Deep links (?view=application&action=…&asset=…) open the invest form
-    // directly on the requested asset/action, then scroll it into view.
+    // Deep links (?view=application&action=…&asset=…) only PRESELECT the asset/
+    // action and scroll to the products overview. The invest form NEVER opens
+    // from the URL — it opens only when the user taps Invest on a product card.
     const params = new URLSearchParams(initialQuery || "");
     const qAction = params.get("action");
     const qAsset = params.get("asset");
-    // Only auto-open the invest form when a specific product is requested
-    // (asset/action present). A plain ?view=application just scrolls to the
-    // overview — the form stays closed until the user taps Invest on a product.
-    const hasProduct = Boolean(qAsset) || qAction === "withdraw" || qAction === "deposit";
     if (qAction === "withdraw" || qAction === "deposit") setAction(qAction);
     if (qAsset) { const a = qAsset.trim().toUpperCase(); requestedAssetRef.current = a; setSelectedCode(a); }
-    if (hasProduct) setInvestView("form");
-    const el = typeof document !== "undefined" ? document.getElementById(hasProduct ? "invest" : "portfolio") : null;
+    const el = typeof document !== "undefined" ? document.getElementById("portfolio") : null;
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [initialView, initialQuery]);
   const [session, setSession] = useState<SessionState>({ authenticated: false, loading: true, checked: false });
