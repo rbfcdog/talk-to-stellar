@@ -246,6 +246,7 @@ export function WalletsSuiteCard({
     const w = stellar.find((s) => s.is_primary) || stellar[0];
     return w ? `st:${w.public_key}` : "";
   }, [stellar]);
+  const primaryCustodialUid = useMemo(() => (custodial[0] ? `cw:${custodial[0].id}` : ""), [custodial]);
 
   // Prefill the transfer panel from a card and scroll up to it.
   function requestTransfer(from: string, to?: string) {
@@ -349,7 +350,12 @@ export function WalletsSuiteCard({
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <TransferButton uid={uid} to={primaryStellarUid} label={L("Enviar para carteira Stellar", "Send to Stellar wallet")} />
+                    {primaryCustodialUid && (
+                      <TransferButton uid={uid} to={primaryCustodialUid} label={L("Enviar para carteira custodial", "Send to custodial wallet")} />
+                    )}
+                    {primaryStellarUid && (
+                      <TransferButton uid={uid} to={primaryStellarUid} label={L("Enviar para carteira Stellar", "Send to Stellar wallet")} />
+                    )}
                   </div>
                 </div>
               );
