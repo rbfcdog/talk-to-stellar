@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   Banknote,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Layers,
   Loader2,
@@ -51,7 +53,10 @@ export type SuiteStellar = {
 
 type TransferAccount = {
   uid: string;
+  // The real on-chain leg used by the backend transfer.
   kind: "custodial" | "stellar";
+  // Where this account comes from, for the dropdown icon/label.
+  origin: "custodial" | "stellar" | "va";
   label: string;
   sub: string;
   walletId?: string;
@@ -91,6 +96,45 @@ function CopyChip({ value }: { value: string }) {
   );
 }
 
+// One-at-a-time carousel with prev/next + "i / N", used for every account
+// section so VAs, custodial wallets and Stellar wallets all page the same way.
+function Paginated<T>({ items, isEn, render }: {
+  items: T[];
+  isEn: boolean;
+  render: (item: T, index: number) => ReactNode;
+}) {
+  const L = (pt: string, en: string) => (isEn ? en : pt);
+  const [i, setI] = useState(0);
+  if (!items.length) return null;
+  const idx = Math.min(i, items.length - 1);
+  return (
+    <div>
+      {render(items[idx], idx)}
+      {items.length > 1 && (
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setI(Math.max(0, idx - 1))}
+            disabled={idx === 0}
+            className="inline-flex items-center gap-1 rounded-lg border border-tts-border px-2.5 py-1 text-[11px] font-bold text-tts-deep transition disabled:opacity-30 hover:bg-tts-bg"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> {L("Anterior", "Prev")}
+          </button>
+          <span className="text-[10px] font-bold tabular-nums text-tts-muted">{idx + 1} / {items.length}</span>
+          <button
+            type="button"
+            onClick={() => setI(Math.min(items.length - 1, idx + 1))}
+            disabled={idx === items.length - 1}
+            className="inline-flex items-center gap-1 rounded-lg border border-tts-border px-2.5 py-1 text-[11px] font-bold text-tts-deep transition disabled:opacity-30 hover:bg-tts-bg"
+          >
+            {L("Próximo", "Next")} <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WalletsSuiteCard({
   virtualAccounts = [],
   custodial = [],
@@ -121,13 +165,34 @@ export function WalletsSuiteCard({
 
   const vaReceived = virtualAccounts.reduce((s, v) => s + (Number(v.total_received_usd) || 0), 0);
 
-  // Flat list of accounts that can send/receive an on-chain USDC transfer.
+  // Flat list of accounts that can send/receive a USDC transfer. Virtual accounts
+  // are inflow rails: their money lands in a linked wallet, so a VA resolves to
+  // that wallet's on-chain leg (custodial via bridge_wallet_id, or Stellar via a
+  // destination address) — that's how a VA can act as a money source here.
   const transferAccounts: TransferAccount[] = useMemo(() => {
     const list: TransferAccount[] = [];
+    virtualAccounts.forEach((va) => {
+      const stellarDest = String(va.destination_chain || "").toLowerCase() === "stellar" && va.destination_address;
+      if (stellarDest) {
+        list.push({
+          uid: `va:${va.id}`, kind: "stellar", origin: "va",
+          label: `${L("Depósito", "Deposit")} ${va.currency || "USD"}`,
+          sub: short(va.destination_address), address: va.destination_address!,
+          usdc: Number(va.total_received_usd) || 0,
+        });
+      } else if (va.bridge_wallet_id) {
+        list.push({
+          uid: `va:${va.id}`, kind: "custodial", origin: "va",
+          label: `${L("Depósito", "Deposit")} ${va.currency || "USD"}`,
+          sub: short(va.bridge_wallet_id), walletId: va.bridge_wallet_id!,
+          usdc: Number(va.total_received_usd) || 0,
+        });
+      }
+    });
     custodial.forEach((w) => {
       list.push({
         uid: `cw:${w.id}`,
-        kind: "custodial",
+        kind: "custodial", origin: "custodial",
         label: `${(w.chain || "custodial").toString()}`,
         sub: short(w.address || w.id),
         walletId: w.id,
@@ -138,7 +203,7 @@ export function WalletsSuiteCard({
     stellar.forEach((w) => {
       list.push({
         uid: `st:${w.public_key}`,
-        kind: "stellar",
+        kind: "stellar", origin: "stellar",
         label: w.label || "Stellar",
         sub: short(w.public_key),
         address: w.public_key,
@@ -146,7 +211,7 @@ export function WalletsSuiteCard({
       });
     });
     return list;
-  }, [custodial, stellar]);
+  }, [virtualAccounts, custodial, stellar, isEn]);
 
   const canTransfer = transferAccounts.length >= 1 && (Boolean(customerId) || stellar.length >= 1);
 
@@ -181,13 +246,15 @@ export function WalletsSuiteCard({
             <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5" /> {L("Contas de depósito (USD)", "Deposit accounts (USD)")}</span>
             <span className="tabular-nums text-tts-deep">{f2(vaReceived)} {L("recebido", "received")}</span>
           </p>
-          <div className="space-y-2">
-            {virtualAccounts.map((va) => {
+          <Paginated
+            items={virtualAccounts}
+            isEn={isEn}
+            render={(va) => {
               const iban = depositField(va, "iban", "account_number", "bank_account_number");
               const routing = depositField(va, "routing_number", "bic", "sort_code");
               const bank = depositField(va, "bank_name", "bank");
               return (
-                <div key={va.id} className="rounded-lg bg-tts-bg/70 px-3 py-2 text-xs">
+                <div className="rounded-lg bg-tts-bg/70 px-3 py-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold uppercase text-tts-deep">{va.currency || "USD"}</span>
                     <span className="font-bold tabular-nums text-tts-deep">{f2(Number(va.total_received_usd) || 0)} {L("recebido", "received")}</span>
@@ -207,8 +274,8 @@ export function WalletsSuiteCard({
                   )}
                 </div>
               );
-            })}
-          </div>
+            }}
+          />
         </div>
       )}
 
@@ -218,17 +285,19 @@ export function WalletsSuiteCard({
           <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
             <Layers className="h-3.5 w-3.5" /> {L("Carteiras custodiais", "Custodial wallets")}
           </p>
-          <div className="space-y-2">
-            {custodial.map((w) => (
-              <div key={w.id} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
+          <Paginated
+            items={custodial}
+            isEn={isEn}
+            render={(w) => (
+              <div className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
                 <div className="min-w-0">
                   <span className="text-sm font-semibold capitalize text-tts-deep">{w.chain || "—"}</span>
                   <div className="text-[11px] text-tts-muted">{w.address ? <CopyChip value={w.address} /> : <CopyChip value={w.id} />}</div>
                 </div>
                 <span className="text-sm font-bold tabular-nums text-tts-deep">{f2(custodialUsdc(w))} <span className="font-medium text-tts-muted">USDC</span></span>
               </div>
-            ))}
-          </div>
+            )}
+          />
         </div>
       )}
 
@@ -238,9 +307,11 @@ export function WalletsSuiteCard({
           <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-tts-muted">
             <Wallet className="h-3.5 w-3.5" /> {L("Carteiras Stellar", "Stellar wallets")}
           </p>
-          <div className="space-y-2">
-            {stellar.map((w) => (
-              <div key={w.public_key} className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
+          <Paginated
+            items={stellar}
+            isEn={isEn}
+            render={(w) => (
+              <div className="flex items-center justify-between rounded-lg bg-tts-bg/70 px-3 py-2">
                 <div className="min-w-0">
                   <CopyChip value={w.public_key} />
                   {w.is_primary && <span className="ml-2 text-[10px] font-medium text-tts-confirm">{L("Principal", "Primary")}</span>}
@@ -248,8 +319,8 @@ export function WalletsSuiteCard({
                 </div>
                 <span className="text-sm font-bold tabular-nums text-tts-deep">{f2(stellarUsdc(w))} <span className="font-medium text-tts-muted">USDC</span></span>
               </div>
-            ))}
-          </div>
+            )}
+          />
         </div>
       )}
     </div>
@@ -272,7 +343,6 @@ function TransferPanel({
   onDone?: () => void;
 }) {
   const L = (pt: string, en: string) => (isEn ? en : pt);
-  const [open, setOpen] = useState(false);
   const [fromUid, setFromUid] = useState("");
   const [toUid, setToUid] = useState("");
   const [useCustom, setUseCustom] = useState(false);
@@ -332,15 +402,11 @@ function TransferPanel({
 
   return (
     <div className="mb-4 rounded-xl border border-tts-border bg-tts-bg/60 p-3">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between">
-        <span className="flex items-center gap-1.5 text-sm font-bold text-tts-deep">
-          <ArrowLeftRight className="h-4 w-4" /> {L("Mover dinheiro entre contas", "Move money between accounts")}
-        </span>
-        <span className="text-xs text-tts-muted">{open ? L("Fechar", "Close") : L("Abrir", "Open")}</span>
-      </button>
+      <div className="flex w-full items-center gap-1.5 text-sm font-bold text-tts-deep">
+        <ArrowLeftRight className="h-4 w-4" /> {L("Mover dinheiro entre contas", "Move money between accounts")}
+      </div>
 
-      {open && (
-        <div className="mt-3 space-y-3">
+      <div className="mt-3 space-y-3">
           {/* From */}
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-tts-muted">{L("De", "From")}</p>
@@ -348,7 +414,7 @@ function TransferPanel({
               <option value="">{L("Selecione a origem", "Select source")}</option>
               {accounts.map((a) => (
                 <option key={a.uid} value={a.uid}>
-                  {a.kind === "custodial" ? "🏦" : "✦"} {a.label} · {a.sub} · {f2(a.usdc)} USDC
+                  {a.origin === "va" ? "💵" : a.kind === "custodial" ? "🏦" : "✦"} {a.label} · {a.sub} · {f2(a.usdc)} USDC
                 </option>
               ))}
             </select>
@@ -369,7 +435,7 @@ function TransferPanel({
                 <option value="">{L("Selecione o destino", "Select destination")}</option>
                 {eligibleDest.map((a) => (
                   <option key={a.uid} value={a.uid}>
-                    {a.kind === "custodial" ? "🏦" : "✦"} {a.label} · {a.sub} · {f2(a.usdc)} USDC
+                    {a.origin === "va" ? "💵" : a.kind === "custodial" ? "🏦" : "✦"} {a.label} · {a.sub} · {f2(a.usdc)} USDC
                   </option>
                 ))}
               </select>
@@ -412,8 +478,7 @@ function TransferPanel({
                 : L("Liquidado pela Bridge entre as carteiras.", "Settled by Bridge across the wallets.")}
             </p>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
