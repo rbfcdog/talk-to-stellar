@@ -264,16 +264,18 @@ export function WalletsSuiteCard({
   // ── Create actions (used per-section) ──────────────────────────────────────
   const [createBusy, setCreateBusy] = useState("");
   const [createErr, setCreateErr] = useState("");
+  const [createOk, setCreateOk] = useState("");
   const [newChain, setNewChain] = useState("base");
   const [vaWalletId, setVaWalletId] = useState("");
 
-  async function runCreate(kind: string, fn: () => Promise<Response>) {
+  async function runCreate(kind: string, okMsg: string, fn: () => Promise<Response>) {
     if (createBusy) return;
-    setCreateBusy(kind); setCreateErr("");
+    setCreateBusy(kind); setCreateErr(""); setCreateOk("");
     try {
       const res = await fn();
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json.success === false) throw new Error(json.message || `HTTP ${res.status}`);
+      setCreateOk(okMsg);
       onTransferDone?.();
     } catch (e: any) {
       setCreateErr(e?.message ?? String(e));
@@ -281,18 +283,18 @@ export function WalletsSuiteCard({
       setCreateBusy("");
     }
   }
-  const createCustodial = () => runCreate("custodial", () =>
+  const createCustodial = () => runCreate("custodial", L("Carteira custodial criada.", "Custodial wallet created."), () =>
     fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/wallets`)}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chain: newChain }),
     }));
-  const createStellar = () => runCreate("stellar", () =>
+  const createStellar = () => runCreate("stellar", L("Carteira Stellar criada.", "Stellar wallet created."), () =>
     fetch(`/api/bridge/stellar-wallets/generate`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
     }));
   const createVA = () => {
     const w = custodial.find((c) => c.id === vaWalletId);
     if (!w || !w.address) { setCreateErr(L("Escolha uma carteira custodial.", "Pick a custodial wallet.")); return; }
-    runCreate("va", () =>
+    runCreate("va", L("Conta de depósito criada.", "Deposit account created."), () =>
       fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/virtual-accounts/usd`)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destination_wallet: w.address, destination_chain: w.chain || "base", confirm_mainnet: true }),
@@ -336,6 +338,13 @@ export function WalletsSuiteCard({
       </div>
 
       {createErr && <p className="mb-3 text-[11px] font-semibold text-tts-error">{createErr}</p>}
+      {createOk && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-tts-confirm/30 bg-tts-confirm/10 px-3 py-2">
+          <Check className="h-4 w-4 text-tts-confirm" />
+          <span className="text-[12px] font-bold text-tts-confirm">{createOk}</span>
+          <span className="text-[11px] text-tts-muted">{L("Veja na lista abaixo (carteiras vazias aparecem no fim).", "See it in the list below (empty wallets appear at the end).")}</span>
+        </div>
+      )}
 
       {/* Move money panel */}
       {canTransfer && (
