@@ -241,6 +241,24 @@
     --tts-gold-br: rgba(200, 170, 104, 0.2);
     --tts-border: rgba(255, 255, 255, 0.1);
     --tts-border2: rgba(255, 255, 255, 0.16);
+    /* Op-pages force a dark palette with white text. Remap the shadcn surface
+       tokens too, so components that use bg-card/bg-popover/bg-secondary/
+       bg-background/bg-muted/bg-accent don't render light under the white text
+       (white-on-white) — e.g. the wire/ACH selectors and dropdowns on off-ramp. */
+    --background: #06070a;
+    --foreground: #f4f6f8;
+    --card: #0d1117;
+    --card-foreground: #f4f6f8;
+    --popover: #0d1117;
+    --popover-foreground: #f4f6f8;
+    --secondary: #151f2e;
+    --secondary-foreground: #f4f6f8;
+    --muted: #151f2e;
+    --muted-foreground: #8b949e;
+    --accent: #1b2738;
+    --accent-foreground: #f4f6f8;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.16);
     --tts-confirm: #c8aa68;
     --tts-error: #ef7777;
     --tts-panel-bg: color-mix(in oklab, var(--tts-surface) 92%, white 8%);
@@ -432,6 +450,24 @@
     --tts-gold-br: rgba(200, 170, 104, 0.2);
     --tts-border: rgba(255, 255, 255, 0.1);
     --tts-border2: rgba(255, 255, 255, 0.16);
+    /* Op-pages force a dark palette with white text. Remap the shadcn surface
+       tokens too, so components that use bg-card/bg-popover/bg-secondary/
+       bg-background/bg-muted/bg-accent don't render light under the white text
+       (white-on-white) — e.g. the wire/ACH selectors and dropdowns on off-ramp. */
+    --background: #06070a;
+    --foreground: #f4f6f8;
+    --card: #0d1117;
+    --card-foreground: #f4f6f8;
+    --popover: #0d1117;
+    --popover-foreground: #f4f6f8;
+    --secondary: #151f2e;
+    --secondary-foreground: #f4f6f8;
+    --muted: #151f2e;
+    --muted-foreground: #8b949e;
+    --accent: #1b2738;
+    --accent-foreground: #f4f6f8;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.16);
     --tts-confirm: #c8aa68;
     --tts-error: #ef7777;
     background:
