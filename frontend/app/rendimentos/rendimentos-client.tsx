@@ -1039,43 +1039,49 @@ export default function RendimentosClient({
           </div>
         )}
 
-        {/* Network toggle */}
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            {networkView === "testnet" && isTestnetYield && (
-              <span className="flex items-center gap-1 text-[11px] font-bold text-amber-400 dark:text-amber-400">
-                <AlertTriangle className="h-3 w-3" />
-                {L("Valores estimados", "Estimated values")}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border border-tts-border bg-tts-bg p-0.5">
-            <button
-              type="button"
-              onClick={() => setNetworkView("testnet")}
-              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "testnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
-            >
-              {L("Demonstração", "Demo")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setNetworkView("mainnet")}
-              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "mainnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
-            >
-              {L("Dinheiro real", "Real money")}
-            </button>
-          </div>
-        </div>
+        {/* Everything below the header stays hidden until the channel PIN is
+            verified — no empty cards/toggles before the gate. */}
+        {channelPinUnlocked && (
+          <>
+            {/* Network toggle */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                {networkView === "testnet" && isTestnetYield && (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-amber-400 dark:text-amber-400">
+                    <AlertTriangle className="h-3 w-3" />
+                    {L("Valores estimados", "Estimated values")}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-tts-border bg-tts-bg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setNetworkView("testnet")}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "testnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
+                >
+                  {L("Demonstração", "Demo")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNetworkView("mainnet")}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-colors ${networkView === "mainnet" ? "bg-tts-deep text-white" : "text-tts-muted hover:text-tts-deep"}`}
+                >
+                  {L("Dinheiro real", "Real money")}
+                </button>
+              </div>
+            </div>
 
-        {/* Link your dollar account — associate a Bridge email with this wallet.
-            Shown until linked so the clean default stays uncluttered. */}
-        {!linkState.linked && !walletEmail && session.authenticated && (
-          <BridgeLinkCard
-            language={language}
-            defaultEmail={walletEmail}
-            state={linkState}
-            onLink={linkBridgeEmail}
-          />
+            {/* Link your dollar account — associate a Bridge email with this wallet.
+                Shown until linked so the clean default stays uncluttered. */}
+            {!linkState.linked && !walletEmail && session.authenticated && (
+              <BridgeLinkCard
+                language={language}
+                defaultEmail={walletEmail}
+                state={linkState}
+                onLink={linkBridgeEmail}
+              />
+            )}
+          </>
         )}
 
         {/* Bridge wallet — access gate (mainnet only). The real-money wallet is
