@@ -2306,7 +2306,9 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
   async function supply() {
     if (submitting) return; // re-entrancy guard (double-click)
     if (!walletAddress) return;
-    const assetId = selectedAssetId || poolInfo?.usdc?.assetId;
+    // Supply USDC (the asset the wallet holds + the balance we validate against).
+    // Other reserves would fail unless the wallet actually holds them.
+    const assetId = poolInfo?.usdc?.assetId || selectedAssetId;
     setSubmitting(true); setErrSubmit(null); setResult(null);
     try {
       const res = await fetch("/api/bridge/stellar-wallets/invest", {
