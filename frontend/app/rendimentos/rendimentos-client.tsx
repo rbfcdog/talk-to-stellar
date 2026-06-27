@@ -1137,7 +1137,7 @@ export default function RendimentosClient({
             state={returnsPinState}
           />
         ) : (
-          <div className="space-y-12">
+          <div className="space-y-8">
             <section id="portfolio" className="scroll-mt-4">
               <SuiteSectionHeader
                 eyebrow={L("Sua carteira", "Your portfolio")}
@@ -1197,18 +1197,18 @@ export default function RendimentosClient({
               <button
                 type="button"
                 onClick={() => setAdvancedOpen((v) => !v)}
-                className="flex w-full items-center justify-between rounded-2xl border border-tts-border bg-tts-surface px-5 py-4 text-left transition-colors hover:border-tts-deep/40"
+                className="flex w-full items-center justify-between rounded-xl border border-tts-border bg-tts-surface px-4 py-2.5 text-left transition-colors hover:border-tts-deep/40"
                 aria-expanded={advancedOpen}
               >
-                <div>
-                  <p className="text-sm font-bold text-tts-deep">{L("Opções avançadas", "Advanced options")}</p>
-                  <p className="text-xs text-tts-muted">{L("Empréstimo por ativo e liquidez", "Per-asset lending and liquidity")}</p>
-                </div>
-                <ChevronDown className={`h-5 w-5 text-tts-muted transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-tts-deep">{L("Opções avançadas", "Advanced options")}</span>
+                  <span className="hidden text-[11px] text-tts-muted sm:inline">· {L("empréstimo e liquidez", "lending & liquidity")}</span>
+                </span>
+                <ChevronDown className={`h-4 w-4 text-tts-muted transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
               </button>
 
               {advancedOpen && (
-                <div className="mt-6 space-y-12">
+                <div className="mt-4 space-y-6">
                   <BlendInlinePanel
                     language={language}
                     network={networkView}

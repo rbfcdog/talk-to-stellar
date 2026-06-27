@@ -261,7 +261,7 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
 
   // ── Ready ───────────────────────────────────────────────────────────────────
   return (
-    <OperationalPage size="md" frameClassName="max-w-2xl">
+    <OperationalPage size="lg" frameClassName="max-w-4xl">
       <OperationalHeader
         eyebrow="USD"
         title={L("Sacar para banco americano", "Withdraw to US bank")}
