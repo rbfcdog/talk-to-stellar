@@ -1465,7 +1465,7 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
                 <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Gráfico total", "Total graph")}</p>
               </div>
               <p className={`mt-3 text-2xl font-bold tabular-nums ${tone}`}>
-                {formatSignedAmount(periodChange, graphProfile, language)}
+                {`${periodChange > 0 ? "+" : periodChange < 0 ? "-" : ""}${formatPrecise(Math.abs(periodChange), language)} ${graphProfile.short}`}
               </p>
               <p className={`mt-1 text-sm font-bold ${tone}`}>
                 {formatSignedPercent(periodChangePercent, language)}
