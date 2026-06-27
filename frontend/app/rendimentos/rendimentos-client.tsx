@@ -1439,17 +1439,13 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
               ? L(`${activeCount} produto${activeCount === 1 ? "" : "s"} rendendo agora`, `${activeCount} product${activeCount === 1 ? "" : "s"} earning now`)
               : L("Nenhum produto com saldo aplicado ainda.", "No product has an invested balance yet.")}
           </p>
-          {availableBalance !== null && (
-            <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-tts-border bg-tts-bg px-3 py-2">
-              <Wallet className="h-4 w-4 text-tts-confirm" />
-              <span className="text-xs font-bold uppercase tracking-wide text-tts-muted">{L("Saldo disponível", "Available balance")}</span>
-              <span className="text-sm font-bold tabular-nums text-tts-deep">
-                {availableBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {rows[0]?.profile.short || "USD"}
-              </span>
-            </div>
-          )}
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:min-w-96">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:min-w-[30rem]">
+          <StatCard
+            label={L("Saldo", "Balance")}
+            value={availableBalance !== null ? formatPrecise(availableBalance, language) : "—"}
+            sub={`${rows[0]?.profile.short || "USD"} · ${L("na carteira", "in wallet")}`}
+          />
           <StatCard label="APY" value={formatApy(weightedRate)} sub={totalInvested > 0 ? L("média", "average") : L("melhor taxa", "best rate")} />
           <StatCard label={L("Produtos", "Products")} value={String(rows.length)} sub={L("disponíveis", "available")} />
           <StatCard label={L("Ambiente", "Environment")} value={isTestnet ? L("Teste", "Demo") : L("Ativo", "Live")} sub={isTestnet ? L("estimado", "estimated") : L("real", "real")} />
