@@ -193,12 +193,16 @@ export function WalletsSuiteCard({
   const transferAccounts: TransferAccount[] = useMemo(() => {
     const list: TransferAccount[] = [];
     virtualAccounts.forEach((va) => {
-      // Money received into a VA lands in its destination wallet. Resolve that
-      // leg robustly: a Bridge custodial wallet (bridge_wallet_id) takes
-      // priority; otherwise a Stellar destination detected by address shape
-      // (so it works even when destination_chain is blank/odd).
+      // Money received into a VA lands in its destination wallet. Resolve the
+      // transfer leg: (1) an explicit Bridge custodial wallet id; (2) a Stellar
+      // destination by address shape; (3) a chain address (e.g. base 0x…) matched
+      // to one of the listed custodial wallets, so a wire deposit that landed in a
+      // base wallet becomes a usable source.
       const addr = String(va.destination_address || "").trim();
       const isStellarAddr = /^G[A-Z2-7]{55}$/.test(addr);
+      const matchCustodial = addr
+        ? custodial.find((w) => String(w.address || "").toLowerCase() === addr.toLowerCase())
+        : undefined;
       const received = Number(va.total_received_usd) || 0;
       const base = {
         uid: `va:${va.id}`, origin: "va" as const,
@@ -209,6 +213,8 @@ export function WalletsSuiteCard({
         list.push({ ...base, kind: "custodial", sub: short(va.bridge_wallet_id), walletId: va.bridge_wallet_id });
       } else if (isStellarAddr) {
         list.push({ ...base, kind: "stellar", sub: short(addr), address: addr });
+      } else if (matchCustodial) {
+        list.push({ ...base, kind: "custodial", sub: `${matchCustodial.chain || "base"} · ${short(addr)}`, walletId: matchCustodial.id });
       }
     });
     custodial.forEach((w) => {
