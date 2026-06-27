@@ -10,6 +10,36 @@ Em uma frase:
 TalkToStellar transforma Pix em uma rota conversacional de conversão BRL -> USD, usando Stellar como trilho de liquidação, transparência de taxas e evidência verificável.
 ```
 
+## Integrações Stellar (O Coração Do Projeto)
+
+Tudo neste produto roda sobre integrações Stellar **load-bearing** — elas movem
+dinheiro de verdade e são o que faz o produto funcionar, não enfeite de slide.
+Um dólar entra, é custodiado, colocado para render e sacado inteiramente por
+estas peças, com liquidação na Stellar (USDC SAC, path payments e contratos
+Soroban).
+
+| Integração | Camada Stellar | O que ela sustenta (load-bearing) | Rede |
+| --- | --- | --- | --- |
+| **Bridge.xyz** | USDC SAC + contas custodiais | On/off-ramp de dólar real: virtual accounts (USD/EUR/MXN/GBP/COP/BRL), carteiras Stellar por e-mail com chave em cofre, saque ACH/wire/pix e transferência interna entre todas as contas | Mainnet |
+| **DeFindex** | Contrato Soroban | "Coloque seu dólar para render": deposit/withdraw em cofre auto-otimizado de USDC, assinado com a chave da carteira | Mainnet + Testnet |
+| **Blend** | Contrato Soroban | Rendimento por empréstimo: supply de USDC numa pool, com APY ao vivo | Mainnet + Testnet |
+| **Soroswap** | Soroban + path payments | Conversão interna (o usuário pensa "dólar", não par de tokens) e provisão de liquidez XLM/USDC via zap | Mainnet |
+| **Auto-yield** | Orquestra DeFindex + Blend + Soroswap | Varre o saldo parado e divide automaticamente em rendimento; roda nas duas redes e por agendador | Mainnet + Testnet |
+| **Stellar SDK / Horizon / RPC** | Núcleo de protocolo | Conta, saldo, trustline, build/sign/submit de XDR, histórico público e evidência | Mainnet + Testnet |
+
+> Detalhamento técnico de cada integração na seção
+> [Integrações Stellar (Núcleo Do Produto)](#integrações-stellar-núcleo-do-produto).
+
+Como isso bate com os critérios do PULSO:
+
+- **Profundidade de integração e complexidade técnica:** 5 integrações Stellar
+  encadeadas (ramp -> custódia -> rendimento -> liquidez -> saque), com
+  assinatura por chave em cofre e contratos Soroban.
+- **Impacto no ecossistema Stellar:** traz Pix/BRL e dólar de varejo para
+  trilhos Stellar com UX de conversa, sem o usuário tocar em cripto.
+- **Deploy em testnet/mainnet:** execução custodial ao vivo em Mainnet e fluxo
+  completo em Testnet.
+
 ## Produto Ao Vivo
 
 | Superfície | Link |
