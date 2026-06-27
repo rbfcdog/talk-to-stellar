@@ -1211,6 +1211,7 @@ export default function RendimentosClient({
                     onEmailChange={setWalletEmail}
                     onSelectWallet={setSelectedWalletKey}
                     sessionWalletKey={sessionWallet?.public_key || ""}
+                    onSupplied={() => { if (walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }}
                   />
                   <div>
                     <SuiteSectionHeader
@@ -2204,7 +2205,7 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
 }
 
 // ── Blend v2 Lending Panel ─────────────────────────────────────────────────
-function BlendInlinePanel({ language, network, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey }: {
+function BlendInlinePanel({ language, network, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey, onSupplied }: {
   language: AppLanguage;
   // Network is driven by the global Demo/Real money toggle — no local switch.
   network: "mainnet" | "testnet";
@@ -2216,6 +2217,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
   onEmailChange: (value: string) => void;
   onSelectWallet: (publicKey: string) => void;
   sessionWalletKey: string;
+  onSupplied?: () => void;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
@@ -2320,6 +2322,9 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
       if (!res.ok || !data.success) throw new Error(data.message || data.error || `HTTP ${res.status}`);
       setResult(data);
       loadPosition(); loadBalance();
+      // Settlement can lag the Horizon read by a couple seconds — refresh again,
+      // and tell the parent so the rendimentos Blend product/position update too.
+      setTimeout(() => { loadPosition(); loadBalance(); onSupplied?.(); }, 3500);
     } catch (e: any) { setErrSubmit(e.message); }
     finally { setSubmitting(false); }
   }

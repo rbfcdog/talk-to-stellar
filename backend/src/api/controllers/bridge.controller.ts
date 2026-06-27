@@ -3386,7 +3386,11 @@ export class BridgeController {
       const half = amountNum / 2;
       const swap = await swapUsdcToXlm(keypair, publicKey, half);
       if (!swap.ok) {
-        res.status(502).json({ success: false, message: `Could not swap USDC→XLM to balance the pair: ${swap.note || "swap failed"}.` });
+        const note = String(swap.note || "");
+        const friendly = /poolhash|quote\/build|soroswap|route/i.test(note)
+          ? "Liquidity provision is temporarily unavailable (Soroswap routing couldn't price the XLM/USDC swap). Try again shortly, or use the yield vault."
+          : `Could not swap USDC→XLM to balance the pair: ${note || "swap failed"}.`;
+        res.status(502).json({ success: false, message: friendly });
         return;
       }
       // Measure the XLM actually gained so we add only what the swap produced.
