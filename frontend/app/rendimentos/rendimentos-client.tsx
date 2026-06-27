@@ -287,7 +287,23 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
   } else {
     points.push({ label: localCopy(language, "Agora", "Now"), date: nowIso, value: liveValue });
   }
-  return points;
+
+  // Convert the balance series into a CUMULATIVE GAIN series: only yield counts,
+  // deposits/withdrawals (large jumps, ≥10% of balance or ≥$0.25) are excluded —
+  // so the plot shows what the investment EARNED, not the money the user put in.
+  // Starts at 0.
+  let cumGain = 0;
+  let prevBalance = points.length ? points[0].value : 0;
+  return points.map((point, index) => {
+    if (index > 0) {
+      const delta = point.value - prevBalance;
+      const base = Math.max(prevBalance, point.value, 1);
+      const isCashflow = Math.abs(delta) >= Math.max(0.25, base * 0.1);
+      if (!isCashflow) cumGain += delta;
+      prevBalance = point.value;
+    }
+    return { ...point, value: cumGain };
+  });
 }
 
 function buildPortfolioLinePoints(rows: InvestmentRow[], language: AppLanguage, days: number): ChartPoint[] {
