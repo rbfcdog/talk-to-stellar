@@ -760,6 +760,10 @@ export default function RendimentosClient({
   const selectedHasYield = Boolean(selectedOption);
   const selectedExecutionBlocked = optionExecutionBlocked(actionableOption);
   const sessionLoading = Boolean(session.loading && !session.checked);
+  // Auth state is known only after the first session check resolves. Until then
+  // `authenticated` is false, which would make the PIN gate look unnecessary and
+  // briefly flash the full page (with empty balances). Gate render on this.
+  const sessionReady = session.checked;
   const requiresChannelPin = Boolean(session.authenticated);
   const channelPinUnlocked = !requiresChannelPin || returnsPinVerified;
   const canPrepare = Boolean(!sessionLoading && session.authenticated && channelPinUnlocked && configured && actionableOption && !selectedExecutionBlocked && Number(String(amount).replace(",", ".")) > 0);
@@ -1039,9 +1043,10 @@ export default function RendimentosClient({
           </div>
         )}
 
-        {/* Everything below the header stays hidden until the channel PIN is
-            verified — no empty cards/toggles before the gate. */}
-        {channelPinUnlocked && (
+        {/* Everything below the header stays hidden until the session is known
+            and the channel PIN is verified — no empty cards/toggles before the
+            gate (and no flash of the full page while auth is still loading). */}
+        {sessionReady && channelPinUnlocked && (
           <>
             {/* Network toggle */}
             <div className="flex items-center justify-between mb-5">
@@ -1095,7 +1100,11 @@ export default function RendimentosClient({
           />
         )}
 
-        {requiresChannelPin && !returnsPinVerified ? (
+        {!sessionReady ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-tts-muted" />
+          </div>
+        ) : requiresChannelPin && !returnsPinVerified ? (
           <ChannelPinGate
             language={language}
             pin={returnsPin}
