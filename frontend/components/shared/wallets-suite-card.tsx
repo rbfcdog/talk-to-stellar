@@ -578,6 +578,7 @@ function TransferPanel({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState<{ kind?: string; ref?: string } | null>(null);
+  const [showDelay, setShowDelay] = useState(false);
 
   const from = accounts.find((a) => a.uid === fromUid) || null;
   // A custodial source needs the Bridge customer; a Stellar source needs only its key.
@@ -617,6 +618,9 @@ function TransferPanel({
       const ref = json?.transfer?.id || json?.deposit?.hash || json?.transfer?.hash;
       setOk({ kind: json.kind, ref });
       setAmount("");
+      // Anything settled by Bridge (not a pure Stellar→Stellar on-chain payment)
+      // can take a few minutes to land — tell the user up front.
+      if (!(from.kind === "stellar" && to.kind === "stellar")) setShowDelay(true);
       onDone?.();
     } catch (e: any) {
       setErr(e?.message ?? String(e));
@@ -629,6 +633,30 @@ function TransferPanel({
 
   return (
     <div className="mb-4 rounded-xl border border-tts-border bg-tts-bg/60 p-3">
+      {/* Bridge-settled transfers can take minutes — confirm popup */}
+      {showDelay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDelay(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-tts-border bg-tts-surface p-6 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-tts-confirm/15 text-tts-confirm">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+            <p className="text-base font-bold text-tts-deep">{L("Transferência enviada", "Transfer sent")}</p>
+            <p className="mt-2 text-sm text-tts-muted">
+              {L(
+                "Esta transferência é liquidada pela Bridge entre redes e pode levar alguns minutos para chegar.",
+                "This transfer settles via Bridge across networks and can take a few minutes to arrive.",
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowDelay(false)}
+              className="mt-5 w-full rounded-xl bg-tts-deep py-3 text-sm font-bold text-tts-surface transition hover:opacity-90"
+            >
+              {L("Entendi", "Got it")}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex w-full items-center gap-1.5 text-sm font-bold text-tts-deep">
         <ArrowLeftRight className="h-4 w-4" /> {L("Mover dinheiro entre contas", "Move money between accounts")}
       </div>
