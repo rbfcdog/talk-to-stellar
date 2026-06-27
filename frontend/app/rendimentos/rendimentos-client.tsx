@@ -765,6 +765,12 @@ export default function RendimentosClient({
     ? (selectedEmailWallet.usdc_balance ?? "0")
     : (bridgeWalletBalances?.mainnet?.usdc ?? null);
 
+  // Idle USDC available to invest, shown in the main portfolio view. Mainnet =
+  // the selected Bridge wallet; testnet (Demo) = the session wallet.
+  const availableBalance = networkView === "mainnet"
+    ? (mainnetUsdcBalance !== null ? Number(mainnetUsdcBalance) : null)
+    : (sessionWallet ? sessionWallet.testnet_usdc : null);
+
   const safeSelectedCode = normalizeUiAssetCode(selectedCode) || optionCode(actionableOption) || selectedCode;
   const sessionLinkContext = useMemo(() => scopedLinkContext(initialQuery), [initialQuery]);
   const selectedProfile = moneyProfile(safeSelectedCode);
@@ -1144,6 +1150,7 @@ export default function RendimentosClient({
                 mainnetHistory={networkView === "mainnet" ? mainnetHistory : null}
                 blendApy={blendApy}
                 blendInvested={networkView === "mainnet" ? positions?.blend_usdc ?? null : null}
+                availableBalance={availableBalance}
                 sessionLinkContext={sessionLinkContext}
                 onInvest={(code) => { setSelectedCode(code === "BLEND" ? "USDC" : code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                 onWithdraw={(code) => { setSelectedCode(code === "BLEND" ? "USDC" : code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
@@ -1272,12 +1279,13 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, blendApy, blendInvested, sessionLinkContext, onInvest, onWithdraw }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, blendApy, blendInvested, availableBalance, sessionLinkContext, onInvest, onWithdraw }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
   positionHistories: Record<string, PositionHistoryState>;
   isTestnet: boolean; mainnetInvested: number | null; mainnetHistory: PositionHistoryState | null;
   blendApy: number | null; blendInvested: number | null;
+  availableBalance: number | null;
   sessionLinkContext: Record<string, string>;
   onInvest: (code: string) => void; onWithdraw: (code: string) => void;
 }) {
@@ -1368,6 +1376,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
                 language={language}
                 rows={rows}
                 isTestnet={isTestnet}
+                availableBalance={availableBalance}
                 activeWindow={activeWindow}
                 analysisWindow={analysisWindow}
                 onAnalysisWindowChange={setAnalysisWindow}
@@ -1418,10 +1427,11 @@ function formatApy(rate: number) {
   return rate > 0 ? `${rate.toFixed(2)}%` : "—";
 }
 
-function PortfolioOverview({ language, rows, isTestnet, activeWindow, analysisWindow, onAnalysisWindowChange }: {
+function PortfolioOverview({ language, rows, isTestnet, availableBalance, activeWindow, analysisWindow, onAnalysisWindowChange }: {
   language: AppLanguage;
   rows: InvestmentRow[];
   isTestnet: boolean;
+  availableBalance: number | null;
   activeWindow: (typeof ANALYSIS_WINDOWS)[number];
   analysisWindow: AnalysisWindow;
   onAnalysisWindowChange: (value: AnalysisWindow) => void;
@@ -1461,6 +1471,15 @@ function PortfolioOverview({ language, rows, isTestnet, activeWindow, analysisWi
               ? L(`${activeCount} produto${activeCount === 1 ? "" : "s"} rendendo agora`, `${activeCount} product${activeCount === 1 ? "" : "s"} earning now`)
               : L("Nenhum produto com saldo aplicado ainda.", "No product has an invested balance yet.")}
           </p>
+          {availableBalance !== null && (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-tts-border bg-tts-bg px-3 py-2">
+              <Wallet className="h-4 w-4 text-tts-confirm" />
+              <span className="text-xs font-bold uppercase tracking-wide text-tts-muted">{L("Saldo disponível", "Available balance")}</span>
+              <span className="text-sm font-bold tabular-nums text-tts-deep">
+                {availableBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {rows[0]?.profile.short || "USD"}
+              </span>
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-3 gap-2 sm:min-w-96">
           <StatCard label="APY" value={formatApy(weightedRate)} sub={totalInvested > 0 ? L("média", "average") : L("melhor taxa", "best rate")} />
