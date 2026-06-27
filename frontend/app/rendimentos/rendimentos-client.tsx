@@ -602,6 +602,19 @@ export default function RendimentosClient({
   const [emailWalletsLoading, setEmailWalletsLoading] = useState(false);
   const yieldBusyRef = useRef(false); // guards the custodial confirmYield deposit
   const [positions, setPositions] = useState<{ defindex_usdc: number; blend_usdc: number; total_invested_usdc: number } | null>(null);
+  // Live Blend USDC supply APY (percent) — shown as a second yield product.
+  const [blendApy, setBlendApy] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/blend/pool/info?network=mainnet", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const apy = d?.usdc?.supplyApy ?? d?.data?.usdc?.supplyApy;
+        if (!cancelled && Number.isFinite(Number(apy))) setBlendApy(Number(apy));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   // Daily snapshot series of the mainnet wallet's invested USDC, for the balance chart.
   const [mainnetHistory, setMainnetHistory] = useState<PositionHistoryState | null>(null);
   // The user's login/session wallet (used for testnet yield — distinct from the
@@ -1129,9 +1142,11 @@ export default function RendimentosClient({
                 positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
                 mainnetInvested={networkView === "mainnet" ? positions?.total_invested_usdc ?? null : null}
                 mainnetHistory={networkView === "mainnet" ? mainnetHistory : null}
+                blendApy={blendApy}
+                blendInvested={networkView === "mainnet" ? positions?.blend_usdc ?? null : null}
                 sessionLinkContext={sessionLinkContext}
-                onInvest={(code) => { setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-                onWithdraw={(code) => { setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                onInvest={(code) => { setSelectedCode(code === "BLEND" ? "USDC" : code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                onWithdraw={(code) => { setSelectedCode(code === "BLEND" ? "USDC" : code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
               />
             </section>
 
@@ -1257,11 +1272,12 @@ function ChannelPinGate({ language, pin, onPinChange, onSubmit, state }: {
   );
 }
 
-function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, sessionLinkContext, onInvest, onWithdraw }: {
+function CurrentInvestmentsPage({ language, session, sessionLoading, options, positionBalances, positionHistories, isTestnet, mainnetInvested, mainnetHistory, blendApy, blendInvested, sessionLinkContext, onInvest, onWithdraw }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean;
   options: YieldOption[]; positionBalances: Record<string, PositionState>;
   positionHistories: Record<string, PositionHistoryState>;
   isTestnet: boolean; mainnetInvested: number | null; mainnetHistory: PositionHistoryState | null;
+  blendApy: number | null; blendInvested: number | null;
   sessionLinkContext: Record<string, string>;
   onInvest: (code: string) => void; onWithdraw: (code: string) => void;
 }) {
@@ -1287,6 +1303,23 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
       history: useMainnet && mainnetHistory ? mainnetHistory : (positionHistories[code] || { loading: false, points: [], error: "" }),
     };
   });
+
+  // Blend lending pool — a second yield product alongside the DeFindex vault.
+  // Its position comes from the mainnet positions endpoint (blend_usdc); invest/
+  // withdraw route through the USDC flow via the BLEND code (mapped by the parent).
+  if (blendApy != null || blendInvested != null) {
+    rows.push({
+      option: { asset_code: "USDC", vault_address: "blend", label: "Blend USDC" } as YieldOption,
+      code: "BLEND",
+      profile: moneyProfile("USDC"),
+      amount: blendInvested ?? 0,
+      loading: false,
+      error: "",
+      source: "blend_pool_position",
+      rate: blendApy ?? 0,
+      history: { loading: false, points: [], error: "" },
+    });
+  }
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>("daily");
   const activeWindow = ANALYSIS_WINDOWS.find((item) => item.key === analysisWindow) || ANALYSIS_WINDOWS[0];
