@@ -1211,6 +1211,7 @@ export default function RendimentosClient({
                 <div className="mt-6 space-y-12">
                   <BlendInlinePanel
                     language={language}
+                    network={networkView}
                     email={walletEmail}
                     wallets={emailWallets}
                     defaultWallet={selectedWalletKey}
@@ -2205,8 +2206,10 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
 }
 
 // ── Blend v2 Lending Panel ─────────────────────────────────────────────────
-function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey }: {
+function BlendInlinePanel({ language, network, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey }: {
   language: AppLanguage;
+  // Network is driven by the global Demo/Real money toggle — no local switch.
+  network: "mainnet" | "testnet";
   email: string;
   wallets: Array<{ public_key: string; usdc_balance: string | null; is_primary?: boolean }>;
   defaultWallet: string;
@@ -2217,9 +2220,6 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
   sessionWalletKey: string;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
-
-  // Network: custodial supply runs on mainnet (Path B) or testnet (friendbot-funded).
-  const [network, setNetwork] = useState<"mainnet" | "testnet">("mainnet");
 
   // Blend pool — markets the custodial Bridge wallet can supply to.
   const [poolInfo, setPoolInfo] = useState<any>(null);
@@ -2349,16 +2349,6 @@ function BlendInlinePanel({ language, email, wallets, defaultWallet, walletsLoad
               <button onClick={loadPool} className="text-xs font-bold text-amber-300 hover:underline">{L("Ver APY", "View APY")}</button>
             )}
           </div>
-        </div>
-
-        {/* Network toggle */}
-        <div className="mb-4 inline-flex rounded-lg border-2 border-stone-700 bg-stone-800/60 p-0.5">
-          {(["mainnet", "testnet"] as const).map((n) => (
-            <button key={n} type="button" onClick={() => { setNetwork(n); setResult(null); setErrSubmit(null); }}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${network === n ? "bg-amber-500 text-stone-950 shadow-sm" : "text-stone-400 hover:text-white"}`}>
-              {n === "mainnet" ? L("Rede principal", "Mainnet") : "Testnet"}
-            </button>
-          ))}
         </div>
 
         {loadingPool && !poolInfo && (
