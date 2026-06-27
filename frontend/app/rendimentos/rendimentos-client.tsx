@@ -16,12 +16,9 @@ import {
   ExternalLink,
   FileCheck2,
   HelpCircle,
-  Layers,
   Loader2,
   LockKeyhole,
-  Percent,
   Plus,
-  TrendingUp,
   Wallet,
   WalletCards,
 } from "lucide-react";
@@ -1966,9 +1963,8 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
   const [pool, setPool] = useState<LpPool | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  // Which pool is selected (drives the simulator + provide-liquidity form).
+  // Which pool is selected (drives the provide-liquidity form).
   const [selectedPair, setSelectedPair] = useState("XLM / USDC");
 
   // Provide-liquidity (custodial) form.
@@ -1977,33 +1973,17 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
   const [lpErr, setLpErr] = useState("");
   const [lpOk, setLpOk] = useState<{ hash?: string | null } | null>(null);
 
-  // LP yield simulator inputs.
-  const [deposit, setDeposit] = useState("1000");
-  const [turnoverPct, setTurnoverPct] = useState(15); // assumed daily volume as % of TVL
-
   useEffect(() => {
     let cancelled = false;
     fetch("/api/swap/pool-info?network=mainnet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setPool(d); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
   const feePct = pool?.fee_pct ?? (pool?.fee_bp != null ? pool.fee_bp / 100 : 0.3);
   const tvl = pool?.tvl_usd ?? null;
-  const xlmPrice = pool?.xlm_usd_price ?? null;
-  const lpCount = pool?.total_trustlines ?? null;
-
-  const depositNum = Math.max(0, Number(deposit) || 0);
-  const dailyVolume = tvl != null ? tvl * (turnoverPct / 100) : null;
-  // Your share of the pool once you add `deposit` of total value.
-  const yourShare = tvl != null && tvl + depositNum > 0 ? depositNum / (tvl + depositNum) : null;
-  const poolDailyFees = dailyVolume != null ? dailyVolume * (feePct / 100) : null;
-  const yourDailyFees = poolDailyFees != null && yourShare != null ? poolDailyFees * yourShare : null;
-  const yourYearlyFees = yourDailyFees != null ? yourDailyFees * 365 : null;
-  const estApr = yourYearlyFees != null && depositNum > 0 ? (yourYearlyFees / depositNum) * 100 : null;
 
   const fmtUsd = (n: number | null | undefined, d = 0) =>
     n == null ? "—" : `$${n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
@@ -2047,127 +2027,6 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
 
   return (
     <div className="space-y-5">
-      {/* Hero — liquidity yield */}
-      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
-              <Droplets className="h-4 w-4" />
-            </span>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Rendimento via liquidez", "Liquidity yield")}</p>
-              <h3 className="text-lg font-bold text-white">{L("Forneça liquidez, ganhe taxas", "Provide liquidity, earn fees")}</h3>
-            </div>
-          </div>
-          <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[10px] font-bold uppercase text-stone-400">{(pool?.network || "mainnet").toUpperCase()}</span>
-        </div>
-
-        <p className="text-xs leading-relaxed text-stone-400 mb-4">
-          {L(
-            "Trocas e conversões já acontecem nos bastidores via path payments. Aqui você coloca o USDC para trabalhar fornecendo liquidez — e fica com uma fatia das taxas de cada swap roteado pela pool.",
-            "Swaps and conversions already happen behind the scenes via path payments. Here you put USDC to work by providing liquidity — and keep a slice of the fees from every swap routed through the pool."
-          )}
-        </p>
-
-        {/* Live pool stats */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-xl border border-stone-700 bg-stone-950/60 p-3">
-            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">
-              <Layers className="h-3 w-3" /> {L("Liquidez total", "Total liquidity")}
-            </div>
-            <p className="text-lg font-bold text-white tabular-nums">{loading ? "…" : fmtUsd(tvl)}</p>
-            <p className="text-[10px] text-stone-500">{L("XLM/USDC · ao vivo", "XLM/USDC · live")}</p>
-          </div>
-          <div className="rounded-xl border border-stone-700 bg-stone-950/60 p-3">
-            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">
-              <Percent className="h-3 w-3" /> {L("Taxa por swap", "Fee per swap")}
-            </div>
-            <p className="text-lg font-bold text-emerald-400 tabular-nums">{feePct.toFixed(2)}%</p>
-            <p className="text-[10px] text-stone-500">{L("dividido entre LPs", "split across LPs")}</p>
-          </div>
-          <div className="rounded-xl border border-stone-700 bg-stone-950/60 p-3">
-            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">
-              <Coins className="h-3 w-3" /> {L("Provedores", "Providers")}
-            </div>
-            <p className="text-lg font-bold text-white tabular-nums">{loading ? "…" : (lpCount != null ? lpCount.toLocaleString("en-US") : "—")}</p>
-            <p className="text-[10px] text-stone-500">{xlmPrice != null ? `XLM ≈ $${xlmPrice.toFixed(4)}` : L("posições ativas", "active positions")}</p>
-          </div>
-        </div>
-
-        {/* Reserves breakdown */}
-        {pool?.reserves?.length ? (
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {pool.reserves.map((r) => (
-              <span key={r.asset} className="rounded-lg border border-stone-700 bg-stone-800/60 px-2.5 py-1 text-[11px] font-bold text-stone-300">
-                {parseFloat(r.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })} {r.asset === "native" ? "XLM" : r.asset.split(":")[0]}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {/* Yield simulator */}
-      <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Simulador de rendimento", "Yield simulator")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Quanto eu ganharia?", "What would I earn?")}</h3>
-          </div>
-          <TrendingUp className="h-5 w-5 text-emerald-400" />
-        </div>
-
-        {/* Deposit amount */}
-        <label className="block mb-1 text-[11px] font-bold uppercase tracking-wide text-stone-400">{L("Seu aporte (USD)", "Your deposit (USD)")}</label>
-        <input
-          type="number" min="0" step="100" value={deposit}
-          onChange={(e) => setDeposit(e.target.value)}
-          className="w-full rounded-lg border-2 border-stone-700 bg-stone-900 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-400 mb-2"
-        />
-        <div className="flex gap-1.5 mb-4">
-          {["100", "1000", "5000", "10000"].map((q) => (
-            <button key={q} type="button" onClick={() => setDeposit(q)}
-              className={`flex-1 rounded-md border px-2 py-1 text-[11px] font-bold transition-colors ${deposit === q ? "border-amber-500 bg-amber-500 text-stone-950" : "border-stone-700 bg-stone-900 text-stone-300 hover:border-stone-500"}`}>
-              ${Number(q).toLocaleString("en-US")}
-            </button>
-          ))}
-        </div>
-
-        {/* Assumed daily volume */}
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-[11px] font-bold uppercase tracking-wide text-stone-400">{L("Volume diário assumido", "Assumed daily volume")}</label>
-          <span className="text-[11px] font-bold text-stone-300">{turnoverPct}% {L("da pool", "of TVL")}{dailyVolume != null ? ` · ${fmtUsd(dailyVolume)}` : ""}</span>
-        </div>
-        <input
-          type="range" min={2} max={60} step={1} value={turnoverPct}
-          onChange={(e) => setTurnoverPct(Number(e.target.value))}
-          className="w-full accent-emerald-500 mb-4"
-        />
-
-        {/* Results */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
-            <p className="text-[10px] font-bold uppercase text-emerald-300/80 mb-1">{L("APR estimada", "Est. APR")}</p>
-            <p className="text-2xl font-black text-emerald-400 tabular-nums">{estApr != null ? `${estApr.toFixed(1)}%` : "—"}</p>
-          </div>
-          <div className="rounded-xl border border-stone-700 bg-stone-800/60 p-3 text-center">
-            <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Taxas/ano", "Fees / yr")}</p>
-            <p className="text-lg font-bold text-white tabular-nums">{fmtUsd(yourYearlyFees, 0)}</p>
-          </div>
-          <div className="rounded-xl border border-stone-700 bg-stone-800/60 p-3 text-center">
-            <p className="text-[10px] font-bold uppercase text-stone-400 mb-1">{L("Sua fatia", "Your share")}</p>
-            <p className="text-lg font-bold text-white tabular-nums">{yourShare != null ? `${(yourShare * 100).toFixed(2)}%` : "—"}</p>
-          </div>
-        </div>
-
-        <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-stone-500">
-          <HelpCircle className="mt-0.5 h-3 w-3 shrink-0" />
-          {L(
-            "Estimativa baseada na liquidez real da pool e na taxa de swap. O rendimento real varia com o volume negociado e impermanent loss.",
-            "Estimate based on the pool's real liquidity and swap fee. Actual yield varies with traded volume and impermanent loss."
-          )}
-        </p>
-      </div>
-
       {/* Available pools */}
       <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-3">{L("Pools disponíveis", "Available pools")}</p>
