@@ -83,6 +83,22 @@ function linkUsedRedirect(req: NextRequest) {
   return response;
 }
 
+// The backend was unreachable/slow — the link is likely still valid. Don't show
+// the alarming "expired/used" wall; offer a retry that re-resolves the same code.
+function linkTransientRedirect(req: NextRequest, code: string) {
+  const url = new URL("/link-used", req.url);
+  url.searchParams.set("state", "transient");
+  // Carry the original short link so the retry button can re-resolve it.
+  if (code) url.searchParams.set("retry", `/r/${encodeURIComponent(code)}`);
+  url.searchParams.set(
+    "message",
+    "Não conseguimos abrir este link agora (instabilidade momentânea). O link continua válido — tente novamente em instantes.",
+  );
+  const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  return response;
+}
+
 function linkCompletedRedirect(req: NextRequest) {
   const url = new URL("/link-used", req.url);
   url.searchParams.set("state", "completed");
@@ -104,28 +120,61 @@ function isAccountAccessUrl(rawUrl: string): boolean {
   }
 }
 
-async function resolveShortLinkPayload(req: NextRequest, encodedCode: string) {
+function usablePayload(payload: any): boolean {
+  return Boolean(payload?.url || payload?.already_completed || payload?.completed);
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    return null as any;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Resolve a short link, tolerating a slow/cold backend.
+//
+// Returns { payload, notFound }:
+//  - payload set      → resolved, redirect the user.
+//  - notFound: true   → the backend definitively answered 404 (genuinely
+//                       expired/used) → show the "link unavailable" wall.
+//  - notFound: false  → every attempt errored/timed out (cold start, 5xx,
+//                       network) → the link may be perfectly valid, so we must
+//                       NOT cry "expired". Show a transient/retry message.
+async function resolveShortLinkPayload(
+  req: NextRequest,
+  encodedCode: string,
+): Promise<{ payload: any | null; notFound: boolean }> {
   const internalSecret = String(process.env.SHORT_LINK_PROXY_SECRET || process.env.INTERNAL_API_SECRET || "").trim();
   const directHeaders: Record<string, string> = {};
   if (internalSecret) directHeaders["x-internal-api-secret"] = internalSecret;
 
-  const direct = await fetch(
-    `${getBackendBaseUrl()}/api/external/short-links/${encodedCode}?include_session=1`,
-    {
-      cache: "no-store",
-      headers: directHeaders,
-    },
-  ).catch(() => null as any);
-  const directPayload = await direct?.json().catch(() => ({}));
-  if (direct?.ok && (directPayload?.url || directPayload?.already_completed || directPayload?.completed)) return directPayload;
+  const directUrl = `${getBackendBaseUrl()}/api/external/short-links/${encodedCode}?include_session=1`;
+  const proxiedUrl = `${req.nextUrl.origin}/api/external/short-links/${encodedCode}?include_session=1`;
 
-  const proxied = await fetch(
-    `${req.nextUrl.origin}/api/external/short-links/${encodedCode}?include_session=1`,
-    { cache: "no-store" },
-  ).catch(() => null as any);
-  const proxiedPayload = await proxied?.json().catch(() => ({}));
-  if (proxied?.ok && (proxiedPayload?.url || proxiedPayload?.already_completed || proxiedPayload?.completed)) return proxiedPayload;
-  return null;
+  let sawDefinitiveNotFound = false;
+
+  // A couple of attempts smooths over Railway/Vercel cold starts and blips.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const direct = await fetchWithTimeout(directUrl, { cache: "no-store", headers: directHeaders });
+    const directPayload = await direct?.json().catch(() => ({}));
+    if (direct?.ok && usablePayload(directPayload)) return { payload: directPayload, notFound: false };
+    if (direct?.status === 404) sawDefinitiveNotFound = true;
+
+    const proxied = await fetchWithTimeout(proxiedUrl, { cache: "no-store" });
+    const proxiedPayload = await proxied?.json().catch(() => ({}));
+    if (proxied?.ok && usablePayload(proxiedPayload)) return { payload: proxiedPayload, notFound: false };
+    if (proxied?.status === 404) sawDefinitiveNotFound = true;
+
+    // If the backend gave us a clean 404, the link is really gone — stop retrying.
+    if (sawDefinitiveNotFound) break;
+  }
+
+  return { payload: null, notFound: sawDefinitiveNotFound };
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ code: string }> }) {
@@ -134,13 +183,15 @@ export async function GET(req: NextRequest, context: { params: Promise<{ code: s
   const code = rawCode.replace(/^[\s"'`([{<]+|[\s"'`)\]}>.,;:!?]+$/g, "");
   const encodedCode = encodeURIComponent(code);
 
-  const payload = await resolveShortLinkPayload(req, encodedCode);
+  const { payload, notFound } = await resolveShortLinkPayload(req, encodedCode);
 
   if (payload?.already_completed || payload?.completed) {
     return linkCompletedRedirect(req);
   }
   if (!payload?.url) {
-    return linkUsedRedirect(req);
+    // Only call it "expired/used" when the backend definitively said 404.
+    // Otherwise it was a transient failure and the link is probably fine.
+    return notFound ? linkUsedRedirect(req) : linkTransientRedirect(req, code);
   }
 
   const sessionSource = sourceFromPayload(payload);
