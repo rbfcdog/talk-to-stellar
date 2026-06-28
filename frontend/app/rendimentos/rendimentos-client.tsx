@@ -1223,13 +1223,33 @@ export default function RendimentosClient({
               >
                 <span className="flex items-center gap-2">
                   <span className="text-sm font-bold text-tts-deep">{L("Opções avançadas", "Advanced options")}</span>
-                  <span className="hidden text-[11px] text-tts-muted sm:inline">· {L("liquidez (Soroswap)", "liquidity (Soroswap)")}</span>
+                  <span className="hidden text-[11px] text-tts-muted sm:inline">· {L("mais mercados e liquidez", "more markets & liquidity")}</span>
                 </span>
                 <ChevronDown className={`h-4 w-4 text-tts-muted transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
               </button>
 
               {advancedOpen && (
                 <div className="mt-4 space-y-6">
+                  <div>
+                    <SuiteSectionHeader
+                      eyebrow={L("Maior rendimento", "Higher yield")}
+                      title={L("Outros mercados do Blend", "Other Blend markets")}
+                    />
+                    <BlendInlinePanel
+                      language={language}
+                      variant="advanced"
+                      network={networkView}
+                      email={walletEmail}
+                      wallets={emailWallets}
+                      defaultWallet={selectedWalletKey}
+                      walletsLoading={emailWalletsLoading}
+                      onLoadWallets={loadEmailWallets}
+                      onEmailChange={setWalletEmail}
+                      onSelectWallet={setSelectedWalletKey}
+                      sessionWalletKey={sessionWallet?.public_key || ""}
+                      onSupplied={() => { if (walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }}
+                    />
+                  </div>
                   <div>
                     <SuiteSectionHeader
                       eyebrow={L("Ganhe com taxas", "Earn on fees")}
@@ -2220,7 +2240,7 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
 }
 
 // ── Blend v2 Lending Panel ─────────────────────────────────────────────────
-function BlendInlinePanel({ language, network, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey, onSupplied }: {
+function BlendInlinePanel({ language, network, email, wallets, defaultWallet, walletsLoading, onLoadWallets, onEmailChange, onSelectWallet, sessionWalletKey, onSupplied, variant = "usdc" }: {
   language: AppLanguage;
   // Network is driven by the global Demo/Real money toggle — no local switch.
   network: "mainnet" | "testnet";
@@ -2233,7 +2253,10 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
   onSelectWallet: (publicKey: string) => void;
   sessionWalletKey: string;
   onSupplied?: () => void;
+  // "usdc" = single USDC market (home). "advanced" = pick any market (higher APY).
+  variant?: "usdc" | "advanced";
 }) {
+  const isAdvanced = variant === "advanced";
   const L = (pt: string, en: string) => localCopy(language, pt, en);
 
   // Blend pool — markets the custodial Bridge wallet can supply to.
@@ -2284,7 +2307,10 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
       setPoolInfo(data);
-      setSelectedAssetId((prev) => prev || data?.usdc?.assetId || data?.reserves?.[0]?.assetId || "");
+      // Advanced: pre-select the highest-APY market. USDC view: always USDC.
+      const all: any[] = Array.isArray(data?.reserves) ? data.reserves : [];
+      const topApy = [...all].sort((a, b) => (b?.supplyApy ?? 0) - (a?.supplyApy ?? 0))[0]?.assetId;
+      setSelectedAssetId((prev) => prev || (isAdvanced ? (topApy || data?.usdc?.assetId) : data?.usdc?.assetId) || data?.reserves?.[0]?.assetId || "");
     } catch (e: any) { setErrPool(e.message); }
     finally { setLoadingPool(false); }
   }
@@ -2323,9 +2349,8 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
   async function supply() {
     if (submitting) return; // re-entrancy guard (double-click)
     if (!walletAddress) return;
-    // Supply USDC (the asset the wallet holds + the balance we validate against).
-    // Other reserves would fail unless the wallet actually holds them.
-    const assetId = poolInfo?.usdc?.assetId || selectedAssetId;
+    // USDC view supplies USDC. Advanced supplies the picked (higher-APY) market.
+    const assetId = isAdvanced ? (selectedAssetId || poolInfo?.usdc?.assetId) : (poolInfo?.usdc?.assetId || selectedAssetId);
     setSubmitting(true); setErrSubmit(null); setResult(null);
     try {
       const res = await fetch("/api/bridge/stellar-wallets/invest", {
@@ -2345,14 +2370,19 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
   }
 
   const usdcApy = poolInfo?.usdc?.supplyApy ?? null;
-  // USDC is the only market we supply to — no reserve picker.
+  // USDC view: single market. Advanced: pick any market (sorted by APY).
   const reserves: any[] = Array.isArray(poolInfo?.reserves) ? poolInfo.reserves : [];
   const usdcReserve = poolInfo?.usdc || reserves.find((r) => /USDC/i.test(String(r?.symbol || ""))) || null;
-  const selectedReserve = usdcReserve;
+  const reservesByApy = [...reserves].sort((a, b) => (b?.supplyApy ?? 0) - (a?.supplyApy ?? 0));
   const supplyFor = (assetId: string) => position?.positions?.find((p: any) => p.assetId === assetId)?.supply ?? null;
   const usdcSupply = usdcReserve?.assetId ? supplyFor(usdcReserve.assetId) : null;
+  const selectedReserve = isAdvanced
+    ? (reserves.find((r) => r.assetId === selectedAssetId) || usdcReserve)
+    : usdcReserve;
   const amtNum = Number(amount);
-  const overBalance = idleUsdc !== null && Number.isFinite(amtNum) && amtNum > idleUsdc;
+  // The idle balance we read is USDC. Only enforce it when supplying USDC.
+  const selectedIsUsdc = !isAdvanced || !selectedReserve?.assetId || selectedReserve.assetId === usdcReserve?.assetId;
+  const overBalance = selectedIsUsdc && idleUsdc !== null && Number.isFinite(amtNum) && amtNum > idleUsdc;
   const canSupply = Boolean(walletAddress && Number.isFinite(amtNum) && amtNum > 0 && !overBalance && !submitting);
 
   return (
@@ -2362,11 +2392,15 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Empréstimos & Rendimentos", "Lending & Yield")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-white">{L("Aplicar no Blend", "Supply to Blend")}</h3>
-            <p className="mt-0.5 text-[11px] text-stone-400">{L("Direto da sua carteira — sem extensões.", "Straight from your wallet — no extensions.")}</p>
+            <h3 className="text-lg font-bold mt-0.5 text-white">{isAdvanced ? L("Outros mercados do Blend", "Other Blend markets") : L("Aplicar no Blend", "Supply to Blend")}</h3>
+            <p className="mt-0.5 text-[11px] text-stone-400">{isAdvanced ? L("Maior APY — supridos direto da sua carteira.", "Higher APY — supplied straight from your wallet.") : L("Direto da sua carteira — sem extensões.", "Straight from your wallet — no extensions.")}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
-            {usdcApy !== null ? (
+            {isAdvanced ? (
+              selectedReserve?.supplyApy != null ? (
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300">{reserveLabel(selectedReserve)} {selectedReserve.supplyApy.toFixed(2)}% APY</span>
+              ) : loadingPool ? <Loader2 className="h-4 w-4 animate-spin text-stone-400" /> : null
+            ) : usdcApy !== null ? (
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300">USDC {usdcApy.toFixed(2)}% APY</span>
             ) : loadingPool ? <Loader2 className="h-4 w-4 animate-spin text-stone-400" /> : (
               <button onClick={loadPool} className="text-xs font-bold text-amber-300 hover:underline">{L("Ver APY", "View APY")}</button>
@@ -2381,8 +2415,8 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
           <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300 mb-3"><AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}</div>
         )}
 
-        {/* USDC market — single, fixed reserve (no picker). */}
-        {usdcReserve && (
+        {/* USDC view: single fixed market. Advanced: pick any market (by APY). */}
+        {!isAdvanced && usdcReserve && (
           <div className="mb-4 rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5 p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-white">USDC</span>
@@ -2396,6 +2430,43 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
             {usdcSupply !== null && usdcSupply > 0 && (
               <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">{L("Sua posição: ", "Your position: ")}{usdcSupply.toFixed(4)} USDC</p>
             )}
+          </div>
+        )}
+
+        {/* Advanced markets picker — sorted by APY, highest first. */}
+        {isAdvanced && reservesByApy.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">{L(`Mercados (${reservesByApy.length})`, `Markets (${reservesByApy.length})`)}</p>
+              <p className="text-[10px] text-stone-400">{L("Maior APY primeiro", "Highest APY first")}</p>
+            </div>
+            <div className="space-y-2">
+              {reservesByApy.map((r: any) => {
+                const sel = r.assetId === selectedAssetId;
+                const mySupply = supplyFor(r.assetId);
+                return (
+                  <button key={r.assetId} type="button" onClick={() => { setSelectedAssetId(r.assetId); setResult(null); setErrSubmit(null); }}
+                    className={`w-full text-left rounded-xl border-2 p-3 transition-all duration-150 ${sel ? "border-amber-500 bg-amber-500/15 ring-2 ring-amber-500/40" : "border-stone-700 bg-stone-800 hover:border-amber-400/60"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">{reserveLabel(r)}</span>
+                        {sel && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-stone-950">{L("selecionado", "selected")}</span>}
+                      </div>
+                      <span className="text-base font-black text-emerald-400">{r.supplyApy.toFixed(2)}%<span className="ml-1 text-[9px] font-bold text-stone-400">{L("ganho", "earn")}</span></span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p><p className="text-[11px] font-bold text-white">{r.utilization.toFixed(1)}%</p></div>
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p><p className="text-[11px] font-bold text-white">{fmtToken(r.supplied)}</p></div>
+                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p><p className="text-[11px] font-bold text-white">{fmtToken(r.liabilities)}</p></div>
+                    </div>
+                    {mySupply !== null && mySupply > 0 && (
+                      <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">{L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}</p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[10px] text-amber-300/80">{L("Aviso: mercados não-USDC exigem que a carteira já tenha o ativo.", "Note: non-USDC markets require the wallet to already hold that asset.")}</p>
           </div>
         )}
 
