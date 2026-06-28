@@ -102,10 +102,6 @@ function optionCode(option?: YieldOption | null) { return String(option?.display
 // ── Bulletproof selectable styling (DARK) ────────────────────────────────────
 // The yield panels run on a dark background, so interactive cards/pills use a
 // dark stone palette with light text + an amber accent for the selected state.
-const SELECT_CARD = "w-full text-left rounded-xl border-2 p-3 transition-all duration-150";
-const SELECT_CARD_OFF = "border-stone-700 bg-stone-800 text-stone-100 hover:border-amber-400/60 hover:bg-stone-700/70";
-const SELECT_CARD_ON = "border-amber-500 bg-amber-500/15 text-white ring-2 ring-amber-500/40 shadow-lg";
-const selectCard = (on: boolean) => `${SELECT_CARD} ${on ? SELECT_CARD_ON : SELECT_CARD_OFF}`;
 // Primary action button — amber on dark.
 const BTN_PRIMARY = "flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 py-3 text-sm font-bold text-stone-950 transition-colors hover:bg-amber-400 disabled:opacity-40 disabled:hover:bg-amber-500";
 function formatAmount(value: unknown, language: AppLanguage = "pt-BR") {
@@ -544,6 +540,8 @@ export default function RendimentosClient({
   // Nubank-grade default: keep the screen calm. Power features (per-asset
   // lending, liquidity) live behind one disclosure.
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Blend USDC yield — its own invest target (opened from the BLEND product card).
+  const [blendOpen, setBlendOpen] = useState(false);
   const [returnsPin, setReturnsPin] = useState("");
   const [returnsPinVerified, setReturnsPinVerified] = useState(false);
   const [returnsPinState, setReturnsPinState] = useState<ApiState>({ loading: false, message: "", error: "" });
@@ -1136,13 +1134,13 @@ export default function RendimentosClient({
                 availableBalance={availableBalance}
                 sessionLinkContext={sessionLinkContext}
                 onInvest={(code) => {
-                  // Blend isn't a DeFindex vault — send it to the real Blend
-                  // supply panel (Advanced) instead of the DeFindex invest form.
-                  if (code === "BLEND") { setAdvancedOpen(true); setTimeout(() => document.getElementById("advanced")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+                  // Blend isn't a DeFindex vault — send it to the dedicated Blend
+                  // USDC supply panel instead of the DeFindex invest form.
+                  if (code === "BLEND") { setBlendOpen(true); setTimeout(() => document.getElementById("blend")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
                   setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
                 onWithdraw={(code) => {
-                  if (code === "BLEND") { setAdvancedOpen(true); setTimeout(() => document.getElementById("advanced")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+                  if (code === "BLEND") { setBlendOpen(true); setTimeout(() => document.getElementById("blend")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
                   setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
               />
@@ -1183,23 +1181,21 @@ export default function RendimentosClient({
               </section>
             )}
 
-            {/* Advanced — hidden by default to keep the home calm and Nubank-clean */}
-            <section id="advanced" className="scroll-mt-4">
-              <button
-                type="button"
-                onClick={() => setAdvancedOpen((v) => !v)}
-                className="flex w-full items-center justify-between rounded-xl border border-tts-border bg-tts-surface px-4 py-2.5 text-left transition-colors hover:border-tts-deep/40"
-                aria-expanded={advancedOpen}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-tts-deep">{L("Opções avançadas", "Advanced options")}</span>
-                  <span className="hidden text-[11px] text-tts-muted sm:inline">· {L("empréstimo e liquidez", "lending & liquidity")}</span>
-                </span>
-                <ChevronDown className={`h-4 w-4 text-tts-muted transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {advancedOpen && (
-                <div className="mt-4 space-y-6">
+            {/* Blend USDC yield — opened from the BLEND product card. */}
+            {blendOpen && (
+              <section id="blend" className="scroll-mt-4">
+                <SuiteSectionHeader
+                  eyebrow={L("Produto selecionado", "Selected product")}
+                  title={L("Blend · Rendimento em USDC", "Blend · USDC yield")}
+                />
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setBlendOpen(false)}
+                    className="inline-flex items-center gap-1.5 text-sm font-bold text-tts-muted transition hover:text-tts-deep"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> {L("Voltar para visão geral", "Back to overview")}
+                  </button>
                   <BlendInlinePanel
                     language={language}
                     network={networkView}
@@ -1213,6 +1209,27 @@ export default function RendimentosClient({
                     sessionWalletKey={sessionWallet?.public_key || ""}
                     onSupplied={() => { if (walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }}
                   />
+                </div>
+              </section>
+            )}
+
+            {/* Advanced — hidden by default to keep the home calm and Nubank-clean */}
+            <section id="advanced" className="scroll-mt-4">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-tts-border bg-tts-surface px-4 py-2.5 text-left transition-colors hover:border-tts-deep/40"
+                aria-expanded={advancedOpen}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-tts-deep">{L("Opções avançadas", "Advanced options")}</span>
+                  <span className="hidden text-[11px] text-tts-muted sm:inline">· {L("liquidez (Soroswap)", "liquidity (Soroswap)")}</span>
+                </span>
+                <ChevronDown className={`h-4 w-4 text-tts-muted transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {advancedOpen && (
+                <div className="mt-4 space-y-6">
                   <div>
                     <SuiteSectionHeader
                       eyebrow={L("Ganhe com taxas", "Earn on fees")}
@@ -2328,9 +2345,12 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
   }
 
   const usdcApy = poolInfo?.usdc?.supplyApy ?? null;
+  // USDC is the only market we supply to — no reserve picker.
   const reserves: any[] = Array.isArray(poolInfo?.reserves) ? poolInfo.reserves : [];
-  const selectedReserve = reserves.find((r) => r.assetId === selectedAssetId) || poolInfo?.usdc || null;
+  const usdcReserve = poolInfo?.usdc || reserves.find((r) => /USDC/i.test(String(r?.symbol || ""))) || null;
+  const selectedReserve = usdcReserve;
   const supplyFor = (assetId: string) => position?.positions?.find((p: any) => p.assetId === assetId)?.supply ?? null;
+  const usdcSupply = usdcReserve?.assetId ? supplyFor(usdcReserve.assetId) : null;
   const amtNum = Number(amount);
   const overBalance = idleUsdc !== null && Number.isFinite(amtNum) && amtNum > idleUsdc;
   const canSupply = Boolean(walletAddress && Number.isFinite(amtNum) && amtNum > 0 && !overBalance && !submitting);
@@ -2361,40 +2381,21 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
           <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300 mb-3"><AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {errPool}</div>
         )}
 
-        {/* Markets */}
-        {reserves.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">{L(`Mercados (${reserves.length})`, `Markets (${reserves.length})`)}</p>
-              <p className="text-[10px] text-stone-400">{L("Toque para escolher", "Tap to choose")}</p>
+        {/* USDC market — single, fixed reserve (no picker). */}
+        {usdcReserve && (
+          <div className="mb-4 rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-white">USDC</span>
+              <span className="text-base font-black text-emerald-400">{usdcReserve.supplyApy.toFixed(2)}%<span className="ml-1 text-[9px] font-bold text-stone-400">{L("ganho", "earn")}</span></span>
             </div>
-            <div className="space-y-2">
-              {reserves.map((r: any) => {
-                const sel = r.assetId === selectedAssetId;
-                const mySupply = supplyFor(r.assetId);
-                return (
-                  <button key={r.assetId} type="button" onClick={() => { setSelectedAssetId(r.assetId); setResult(null); setErrSubmit(null); }} className={selectCard(sel)}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-white">{reserveLabel(r)}</span>
-                        {sel && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-stone-950">{L("selecionado", "selected")}</span>}
-                      </div>
-                      <span className="text-base font-black text-emerald-400">{r.supplyApy.toFixed(2)}%<span className="ml-1 text-[9px] font-bold text-stone-400">{L("ganho", "earn")}</span></span>
-                    </div>
-                    <p className="mt-0.5 font-mono text-[9px] text-stone-400 break-all">{r.assetId}</p>
-                    <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
-                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Empréstimo", "Borrow")}</p><p className="text-[11px] font-bold text-white">{r.borrowApy.toFixed(2)}%</p></div>
-                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p><p className="text-[11px] font-bold text-white">{r.utilization.toFixed(1)}%</p></div>
-                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p><p className="text-[11px] font-bold text-white">{fmtToken(r.supplied)}</p></div>
-                      <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p><p className="text-[11px] font-bold text-white">{fmtToken(r.liabilities)}</p></div>
-                    </div>
-                    {mySupply !== null && mySupply > 0 && (
-                      <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">{L("Sua posição: ", "Your position: ")}{mySupply.toFixed(4)} {reserveLabel(r)}</p>
-                    )}
-                  </button>
-                );
-              })}
+            <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+              <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Uso", "Util.")}</p><p className="text-[11px] font-bold text-white">{usdcReserve.utilization.toFixed(1)}%</p></div>
+              <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Ofertado", "Supplied")}</p><p className="text-[11px] font-bold text-white">{fmtToken(usdcReserve.supplied)}</p></div>
+              <div className="rounded-lg bg-stone-950/60 py-1.5"><p className="text-[8px] font-bold uppercase tracking-wide text-stone-400">{L("Tomado", "Borrowed")}</p><p className="text-[11px] font-bold text-white">{fmtToken(usdcReserve.liabilities)}</p></div>
             </div>
+            {usdcSupply !== null && usdcSupply > 0 && (
+              <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">{L("Sua posição: ", "Your position: ")}{usdcSupply.toFixed(4)} USDC</p>
+            )}
           </div>
         )}
 
