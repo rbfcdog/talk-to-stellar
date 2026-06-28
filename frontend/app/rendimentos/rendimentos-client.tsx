@@ -1136,12 +1136,12 @@ export default function RendimentosClient({
                 onInvest={(code) => {
                   // Blend isn't a DeFindex vault — send it to the dedicated Blend
                   // USDC supply panel instead of the DeFindex invest form.
-                  if (code === "BLEND") { setBlendOpen(true); setTimeout(() => document.getElementById("blend")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
-                  setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  if (code === "BLEND") { setInvestView("list"); setBlendOpen(true); setTimeout(() => document.getElementById("blend")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+                  setBlendOpen(false); setSelectedCode(code); setAction("deposit"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
                 onWithdraw={(code) => {
-                  if (code === "BLEND") { setBlendOpen(true); setTimeout(() => document.getElementById("blend")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
-                  setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  if (code === "BLEND") { setInvestView("list"); setBlendOpen(true); setTimeout(() => document.getElementById("blend")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+                  setBlendOpen(false); setSelectedCode(code); setAction("withdraw"); setActiveStep("plan"); setPin(""); setInvestView("form"); document.getElementById("invest")?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
               />
             </section>
