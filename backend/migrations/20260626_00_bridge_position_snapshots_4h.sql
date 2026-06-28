@@ -1,10 +1,10 @@
-  -- Move bridge_position_snapshots from one-per-day to 4-hour buckets so the
+  -- Move bridge_position_snapshots from one-per-day to 12-hour buckets so the
   -- invested-balance chart shows a real, curving series instead of a single flat
   -- point per day that gets overwritten on every read.
   --
   -- snapshot_date stops being a calendar DATE and becomes a TIMESTAMP holding the
-  -- 4h bucket boundary (00,04,08,12,16,20 UTC). The uniqueness moves to
-  -- (public_key, snapshot_date) on that timestamp, so each 4h window is its own
+  -- 12h bucket boundary (00,12 UTC). The uniqueness moves to
+  -- (public_key, snapshot_date) on that timestamp, so each 12h window is its own
   -- row and earlier points are preserved.
 
   BEGIN;
@@ -17,7 +17,7 @@
   ALTER TABLE bridge_position_snapshots
     ALTER COLUMN snapshot_date TYPE TIMESTAMP USING snapshot_date::timestamp;
 
-  -- New uniqueness on the 4h bucket timestamp.
+  -- New uniqueness on the 12h bucket timestamp.
   ALTER TABLE bridge_position_snapshots
     DROP CONSTRAINT IF EXISTS bridge_position_snapshots_pk_bucket_key;
   ALTER TABLE bridge_position_snapshots

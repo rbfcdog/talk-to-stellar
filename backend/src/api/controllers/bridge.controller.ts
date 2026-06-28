@@ -3589,24 +3589,46 @@ export class BridgeController {
 
       const totalUsdc = defindexUsdc + blendUsdc;
 
-      // Best-effort: persist a snapshot every 4 hours so the balance chart shows
-      // a real, curving series instead of one flat per-day point. We bucket "now"
-      // to a 4h boundary (00,04,08,12,16,20 UTC): reads within the same window
-      // update that bucket; a new window appends a new point — so earlier points
-      // are kept, not overwritten. Never let a snapshot failure (e.g. table not
-      // migrated to a timestamp bucket) break the positions read.
+      // Best-effort: snapshot the invested balance so the chart shows a real,
+      // curving series. We append a NEW point the moment any yield balance
+      // changes (defindex/blend/total), so every change is captured. When
+      // nothing changed we just refresh the current 12h bucket (00,12 UTC) —
+      // a heartbeat that keeps "last updated" current without adding clutter.
+      // Never let a snapshot failure (e.g. table not migrated) break the read.
       try {
         const now = new Date();
+        const EPS = 1e-7;
+
+        // Most recent recorded point for this wallet.
+        const { data: lastSnap } = await supabase
+          .from("bridge_position_snapshots")
+          .select("defindex_usdc, blend_usdc, total_usdc")
+          .eq("public_key", publicKey)
+          .order("snapshot_date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const changed =
+          !lastSnap ||
+          Math.abs(Number(lastSnap.defindex_usdc ?? 0) - defindexUsdc) > EPS ||
+          Math.abs(Number(lastSnap.blend_usdc ?? 0) - blendUsdc) > EPS ||
+          Math.abs(Number(lastSnap.total_usdc ?? 0) - totalUsdc) > EPS;
+
+        // Balance changed → new precise point at `now`. Otherwise → 12h bucket.
         const bucket = new Date(now);
-        bucket.setUTCMinutes(0, 0, 0);
-        bucket.setUTCHours(Math.floor(now.getUTCHours() / 4) * 4);
+        if (!changed) {
+          bucket.setUTCMinutes(0, 0, 0);
+          bucket.setUTCHours(Math.floor(now.getUTCHours() / 12) * 12);
+        }
+        const snapshotDate = changed ? now.toISOString() : bucket.toISOString();
+
         await supabase
           .from("bridge_position_snapshots")
           .upsert(
             {
               public_key: publicKey,
               email,
-              snapshot_date: bucket.toISOString(),
+              snapshot_date: snapshotDate,
               defindex_usdc: defindexUsdc,
               blend_usdc: blendUsdc,
               total_usdc: totalUsdc,
