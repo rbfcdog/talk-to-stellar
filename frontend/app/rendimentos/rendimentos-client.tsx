@@ -1525,49 +1525,48 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)]">
-        <div className="rounded-xl border border-tts-border bg-tts-bg p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-tts-confirm" />
-                <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Gráfico total", "Total graph")}</p>
-              </div>
-              <p className={`mt-3 text-2xl font-bold tabular-nums ${tone}`}>
-                {`${periodChange > 0 ? "+" : periodChange < 0 ? "-" : ""}${formatPrecise(Math.abs(periodChange), language)} ${graphProfile.short}`}
-              </p>
-              <p className={`mt-1 text-sm font-bold ${tone}`}>
-                {formatSignedPercent(periodChangePercent, language)}
-              </p>
+      <div className="mt-5 rounded-xl border border-tts-border bg-tts-bg p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-tts-confirm" />
+              <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Gráfico total", "Total graph")}</p>
+            </div>
+            <p className={`mt-3 text-2xl font-bold tabular-nums ${tone}`}>
+              {`${periodChange > 0 ? "+" : periodChange < 0 ? "-" : ""}${formatPrecise(Math.abs(periodChange), language)} ${graphProfile.short}`}
+            </p>
+            <p className={`mt-1 text-sm font-bold ${tone}`}>
+              {formatSignedPercent(periodChangePercent, language)}
+            </p>
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="inline-flex gap-0.5 rounded-lg border border-tts-border bg-tts-surface p-0.5">
+              {ANALYSIS_WINDOWS.map((item) => {
+                const active = item.key === analysisWindow;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => onAnalysisWindowChange(item.key)}
+                    title={isPortuguese(language) ? item.detailPt : item.detailEn}
+                    className={[
+                      "rounded-md px-2.5 py-1 text-[11px] font-bold transition",
+                      active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-bg",
+                    ].join(" ")}
+                    aria-pressed={active}
+                  >
+                    {isPortuguese(language) ? item.labelPt : item.labelEn}
+                  </button>
+                );
+              })}
             </div>
             <p className="max-w-52 text-xs font-semibold text-tts-muted sm:text-right">
               {L("Resultado recente sem contar aplicações e resgates.", "Recent result excluding deposits and withdrawals.")}
             </p>
           </div>
-          <div className="mt-3 rounded-lg border border-tts-border bg-tts-surface p-3">
-            <InvestmentLineChart data={portfolioGraphPoints} profile={graphProfile} language={language} tone="muted" />
-          </div>
         </div>
-
-        <div className="inline-flex gap-0.5 self-start rounded-lg border border-tts-border bg-tts-bg p-0.5">
-          {ANALYSIS_WINDOWS.map((item) => {
-            const active = item.key === analysisWindow;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => onAnalysisWindowChange(item.key)}
-                title={isPortuguese(language) ? item.detailPt : item.detailEn}
-                className={[
-                  "rounded-md px-2.5 py-1 text-[11px] font-bold transition",
-                  active ? "bg-tts-deep text-tts-surface" : "text-tts-muted hover:bg-tts-surface",
-                ].join(" ")}
-                aria-pressed={active}
-              >
-                {isPortuguese(language) ? item.labelPt : item.labelEn}
-              </button>
-            );
-          })}
+        <div className="mt-3 rounded-lg border border-tts-border bg-tts-surface p-3">
+          <InvestmentLineChart data={portfolioGraphPoints} profile={graphProfile} language={language} tone="muted" />
         </div>
       </div>
     </section>
