@@ -28,6 +28,7 @@ import {
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { BridgeAccountLogin, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
 import { WalletsSuiteCard } from "@/components/shared/wallets-suite-card";
 
@@ -780,7 +781,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       <div className="grid gap-3 sm:grid-cols-2">
         <OperationalStat
           label={L("Recebido até agora", "Received so far")}
-          value={`$${fmt(totalReceived)}`}
+          value={<AnimatedNumber value={totalReceived} format={(n) => `$${fmt(n)}`} />}
           detail={L("nesta conta", "in this account")}
           tone={totalReceived > 0 ? "confirm" : "default"}
         />
@@ -1314,8 +1315,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 )}
 
                 {sendStatus === "ok" && (
-                  <div className="flex items-start gap-2 rounded-lg bg-tts-confirm/10 border border-tts-confirm/30 px-3 py-2">
-                    <CheckCircle2 className="h-4 w-4 text-tts-confirm shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 rounded-lg bg-tts-confirm/10 border border-tts-confirm/30 px-3 py-2 duration-500 animate-in fade-in zoom-in-95">
+                    <CheckCircle2 className="h-4 w-4 text-tts-confirm shrink-0 mt-0.5 duration-700 animate-in zoom-in-50" />
                     <div>
                       <p className="text-xs text-tts-confirm font-medium">
                         {L("Transferência iniciada!", "Transfer started!")}

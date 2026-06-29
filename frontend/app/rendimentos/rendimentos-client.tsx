@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -36,6 +36,7 @@ import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { analyzePortfolioPeriod } from "@/lib/portfolio-period-analysis";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
 import { BridgeAccessField, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 type ApiState = { loading: boolean; message: string; error: string };
 type YieldApiError = Error & { code?: string; requestId?: string; supportCode?: string };
@@ -1505,21 +1506,38 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-tts-gold">{L("Saldo total aplicado", "Total balance")}</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <p className="text-3xl font-bold tabular-nums text-tts-deep">
-              {formatPrecise(totalInvested, language)}
-            </p>
+            <AnimatedNumber
+              value={totalInvested}
+              format={(n) => formatPrecise(n, language)}
+              className="text-3xl font-bold tabular-nums text-tts-deep"
+            />
             <span className="text-sm font-bold text-tts-muted">{rows[0]?.profile.short || "USD"}</span>
           </div>
-          <p className="mt-2 text-sm font-semibold text-tts-muted">
+          <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-tts-muted">
+            {activeCount ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-tts-confirm opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-tts-confirm" />
+              </span>
+            ) : null}
             {activeCount
               ? L(`${activeCount} produto${activeCount === 1 ? "" : "s"} rendendo agora`, `${activeCount} product${activeCount === 1 ? "" : "s"} earning now`)
               : L("Nenhum produto com saldo aplicado ainda.", "No product has an invested balance yet.")}
           </p>
+          {totalInvested > 0 && weightedRate > 0 && (
+            <p className="mt-2 rounded-lg border border-tts-confirm/20 bg-tts-confirm/5 px-3 py-2 text-xs font-semibold text-tts-deep">
+              {L("Em 1 ano", "In 1 year")} <span className="text-tts-muted">(≈{formatApy(weightedRate)})</span>:{" "}
+              <span className="tabular-nums">{formatPrecise(totalInvested, language)}</span>
+              {" → "}
+              <span className="font-bold tabular-nums text-tts-confirm">{formatPrecise(totalInvested * (1 + weightedRate / 100), language)}</span>
+              <span className="ml-1 text-tts-confirm">(+{formatPrecise(totalInvested * (weightedRate / 100), language)})</span>
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:min-w-[30rem]">
           <StatCard
             label={L("Saldo", "Balance")}
-            value={availableBalance !== null ? formatPrecise(availableBalance, language) : "—"}
+            value={availableBalance !== null ? <AnimatedNumber value={availableBalance} format={(n) => formatPrecise(n, language)} /> : "—"}
             sub={`${rows[0]?.profile.short || "USD"} · ${L("na conta", "in account")}`}
           />
           <StatCard label="APY" value={formatApy(weightedRate)} sub={totalInvested > 0 ? L("média", "average") : L("melhor taxa", "best rate")} />
@@ -1535,9 +1553,11 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
               <BarChart3 className="h-4 w-4 text-tts-confirm" />
               <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Gráfico total", "Total graph")}</p>
             </div>
-            <p className={`mt-3 text-2xl font-bold tabular-nums ${tone}`}>
-              {`${periodChange > 0 ? "+" : periodChange < 0 ? "-" : ""}${formatPrecise(Math.abs(periodChange), language)} ${graphProfile.short}`}
-            </p>
+            <AnimatedNumber
+              value={periodChange}
+              format={(n) => `${n > 0 ? "+" : n < 0 ? "-" : ""}${formatPrecise(Math.abs(n), language)} ${graphProfile.short}`}
+              className={`mt-3 block text-2xl font-bold tabular-nums ${tone}`}
+            />
             <p className={`mt-1 text-sm font-bold ${tone}`}>
               {formatSignedPercent(periodChangePercent, language)}
             </p>
@@ -1983,7 +2003,7 @@ function SuccessDialog({ language, notice, returnsHref, onClose, onRefresh }: {
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatCard({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
   return (
     <div className="border border-tts-border bg-tts-surface p-4">
       <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
@@ -2560,7 +2580,10 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errSubmit}</div>
         )}
         {result?.success && (
-          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1 duration-500 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-center pb-1">
+              <CheckCircle2 className="h-7 w-7 text-emerald-400 duration-700 animate-in zoom-in-50" />
+            </div>
             <div className="flex justify-between text-xs"><span className="text-stone-400">Status</span><span className="font-bold text-emerald-300">{L("✓ Aplicado", "✓ Supplied")}</span></div>
             <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Valor", "Amount")}</span><span className="font-bold text-white">{result.amount} USDC</span></div>
             {result.hash && (
