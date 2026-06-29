@@ -15,7 +15,7 @@ GitHub: https://github.com/rbfcdog/talk-to-stellar
 pitch deck: https://docs.google.com/presentation/d/1QjniT8MyUwDwbDIfWl797Mscottl4tdPCIDI_vZNJ3Y/edit?slide=id.p#slide=id.p
 
 interviews (in portuguese):
-
+https://drive.google.com/drive/u/0/folders/1HnMCFOUPH1FSmTptT2hlhcuTNkxyrV9M
 
 Description
 The Problem

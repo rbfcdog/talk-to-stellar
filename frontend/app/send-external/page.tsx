@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import SendExternalClient from "./send-external-client"
 
 export const metadata: Metadata = {
-  title: "Enviar para carteira externa",
+  title: "Enviar para conta externa",
   description: "Confira e confirme um envio para uma public key externa.",
 }
 

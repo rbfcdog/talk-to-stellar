@@ -175,7 +175,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                 {displayName}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
-                Conta pública para conferir saldos, distribuição da carteira, histórico e ações rápidas.
+                Conta pública para conferir saldos, distribuição da conta, histórico e ações rápidas.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -284,14 +284,14 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
               <div className="border border-tts-border bg-tts-surface p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">Distribuição da carteira</p>
+                    <p className="text-[11px] font-black uppercase tracking-normal text-tts-muted">Distribuição da conta</p>
                     <h2 className="mt-1 text-xl font-black text-tts-deep">Saldos por asset</h2>
                   </div>
                   <Wallet className="h-5 w-5 text-tts-gold" aria-hidden="true" />
                 </div>
 
                 {visibleBalances.length === 0 ? (
-                  <p className="mt-5 border border-tts-border bg-tts-bg px-4 py-5 text-sm text-tts-muted">Nenhum saldo disponível para esta carteira.</p>
+                  <p className="mt-5 border border-tts-border bg-tts-bg px-4 py-5 text-sm text-tts-muted">Nenhum saldo disponível para esta conta.</p>
                 ) : (
                   <div className="mt-5 space-y-4">
                     <div className="flex h-4 overflow-hidden border border-tts-border bg-tts-bg">
@@ -346,7 +346,7 @@ export default function WalletProfileClient({ publicKey }: { publicKey: string }
                   <ActionLink href="/pay-anyone?mode=receive" icon={<ArrowDownLeft className="h-4 w-4" aria-hidden="true" />} title="Receber" detail="Criar ou copiar seu link de recebimento." />
                   <ActionLink href="/convert" icon={<Repeat2 className="h-4 w-4" aria-hidden="true" />} title="Converter" detail="Trocar moedas com revisão antes do PIN." />
                   <ActionLink href="/rendimentos?view=returns" icon={<TrendingUp className="h-4 w-4" aria-hidden="true" />} title="Investimentos" detail="Ver posições atuais e opções configuradas." />
-                  <ActionLink href="/send-external" icon={<ArrowUpRight className="h-4 w-4" aria-hidden="true" />} title="Enviar" detail="Mandar para carteira externa com confirmação." />
+                  <ActionLink href="/send-external" icon={<ArrowUpRight className="h-4 w-4" aria-hidden="true" />} title="Enviar" detail="Mandar para conta externa com confirmação." />
                 </div>
               </div>
             </section>

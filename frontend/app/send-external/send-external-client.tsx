@@ -250,7 +250,7 @@ export default function SendExternalClient({ initialParams }: { initialParams?: 
                 {T(language, "Envio externo", "External transfer")}
               </p>
               <h1 className="mt-1 text-2xl font-bold tracking-normal text-tts-deep">
-                {T(language, "Enviar para carteira externa", "Send to external wallet")}
+                {T(language, "Enviar para conta externa", "Send to external account")}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-tts-muted">
                 {T(

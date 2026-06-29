@@ -303,7 +303,7 @@ export default function ExtratoClient() {
                 </div>
                 <div className="rounded border border-tts-border bg-tts-bg p-4">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted mb-1.5">
-                    Carteira Stellar
+                    Conta Stellar
                   </p>
                   <p className="text-2xl font-bold tabular-nums">
                     <span className="text-sm text-tts-muted mr-1">US$</span>
@@ -434,10 +434,10 @@ export default function ExtratoClient() {
                 <div className="border-b border-tts-border px-5 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Wallet className="h-4 w-4 text-tts-muted" />
-                    <p className="text-sm font-bold">Carteira Stellar</p>
+                    <p className="text-sm font-bold">Conta Stellar</p>
                   </div>
                   <span className="text-[10px] font-bold uppercase text-tts-muted">
-                    {data.stellarWallets.length} {data.stellarWallets.length === 1 ? "carteira" : "carteiras"}
+                    {data.stellarWallets.length} {data.stellarWallets.length === 1 ? "conta" : "contas"}
                   </span>
                 </div>
 
@@ -516,7 +516,7 @@ export default function ExtratoClient() {
                         {/* Not yet on-chain */}
                         {bals.length === 0 && !w.is_funded && (
                           <p className="text-xs text-tts-muted">
-                            Carteira ainda não financiada na rede Stellar.
+                            Conta ainda não financiada na rede Stellar.
                           </p>
                         )}
                       </div>
@@ -532,7 +532,7 @@ export default function ExtratoClient() {
                 <ShieldCheck className="h-8 w-8 text-tts-muted mx-auto" />
                 <p className="text-sm font-bold">Conta encontrada</p>
                 <p className="text-xs text-tts-muted">
-                  Nenhuma carteira ou conta virtual cadastrada ainda.
+                  Nenhuma conta ou conta virtual cadastrada ainda.
                 </p>
               </div>
             )}
