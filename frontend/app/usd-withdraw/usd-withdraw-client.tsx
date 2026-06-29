@@ -22,6 +22,7 @@ import {
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { BridgeAccountLogin, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
 import { WalletsSuiteCard } from "@/components/shared/wallets-suite-card";
 
@@ -275,7 +276,7 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
 
       {/* Available balance */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <OperationalStat label={L("Disponível", "Available")} value={`$${fmtUsd(availableUsd)}`} detail="USD" tone={availableUsd > 0 ? "confirm" : "default"} />
+        <OperationalStat label={L("Disponível", "Available")} value={<AnimatedNumber value={availableUsd} format={(n) => `$${fmtUsd(n)}`} />} detail="USD" tone={availableUsd > 0 ? "confirm" : "default"} />
         <OperationalStat label={L("Conta", "Account")} value={loggedEmail || "—"} detail={customerId ? "Loaded" : "—"} tone={customerId ? "confirm" : "gold"} />
       </div>
 
@@ -291,8 +292,8 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
       />
 
       {result ? (
-        <OperationalCard className="space-y-4 text-center">
-          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
+        <OperationalCard className="space-y-4 text-center duration-500 animate-in fade-in zoom-in-95">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500 duration-700 animate-in zoom-in-50" />
           <div>
             <p className="font-bold text-tts-deep">{L("Saque enviado!", "Withdrawal sent!")}</p>
             <p className="mt-1 text-sm text-tts-muted">
