@@ -2005,10 +2005,10 @@ function SuccessDialog({ language, notice, returnsHref, onClose, onRefresh }: {
 
 function StatCard({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
   return (
-    <div className="border border-tts-border bg-tts-surface p-4">
+    <div className="rounded-2xl border border-tts-border bg-tts-surface p-5">
       <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
-      <p className="text-xl font-bold mt-1">{value}</p>
-      {sub && <p className="text-xs text-tts-muted mt-0.5">{sub}</p>}
+      <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight">{value}</p>
+      {sub && <p className="mt-1.5 text-xs text-tts-muted">{sub}</p>}
     </div>
   );
 }

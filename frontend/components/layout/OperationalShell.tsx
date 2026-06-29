@@ -132,10 +132,10 @@ export function OperationalStat({
   }[tone]
 
   return (
-    <div className={cn('tts-op-stat tts-op-tile border border-tts-border bg-tts-bg/55 p-4', className)}>
-      <p className="text-xs font-semibold text-tts-muted">{label}</p>
-      <p className={cn('mt-2 text-lg font-bold', toneClass)}>{value}</p>
-      {detail ? <p className="mt-1 text-xs leading-5 text-tts-muted">{detail}</p> : null}
+    <div className={cn('tts-op-stat tts-op-tile rounded-2xl border border-tts-border bg-tts-bg/55 p-5', className)}>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
+      <p className={cn('mt-2 text-xl font-bold tabular-nums tracking-tight break-words', toneClass)}>{value}</p>
+      {detail ? <p className="mt-1.5 text-xs leading-5 text-tts-muted">{detail}</p> : null}
     </div>
   )
 }
