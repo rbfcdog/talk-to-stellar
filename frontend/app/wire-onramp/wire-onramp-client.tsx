@@ -17,7 +17,6 @@ import {
   LogOut,
   RefreshCw,
   Send,
-  User,
   Wallet,
 } from "lucide-react";
 import {
@@ -776,10 +775,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           tone={totalReceived > 0 ? "confirm" : "default"}
         />
         <OperationalStat
-          label={L("Contas de depósito", "Deposit accounts")}
-          value={String(usdAccounts.length)}
-          detail={usdAccounts.length ? L("prontas para uso", "ready to use") : L("nenhuma ainda", "none yet")}
-          tone={usdAccounts.length ? "confirm" : "gold"}
+          label={L("Titular da conta", "Account holder")}
+          value={beneficiaryName || "—"}
+          detail={loggedEmail || emailInput}
+          tone={beneficiaryName ? "confirm" : "default"}
         />
       </div>
 
@@ -793,20 +792,6 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         )}
 
-      {/* Beneficiary name */}
-      {beneficiaryName && (
-        <OperationalCard>
-          <div className="flex items-center gap-3">
-            <User className="h-5 w-5 text-tts-muted shrink-0" />
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-tts-muted">
-                {L("Titular da conta", "Account holder")}
-              </p>
-              <p className="mt-0.5 text-sm font-semibold text-tts-deep">{beneficiaryName}</p>
-            </div>
-          </div>
-        </OperationalCard>
-      )}
 
       {/* Full account suite — VAs + custodial + the Bridge Stellar wallets for
           this email (the associated mainnet wallets, where the dollars land). */}
