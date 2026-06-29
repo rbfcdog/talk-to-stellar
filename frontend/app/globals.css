@@ -574,7 +574,7 @@
   }
 
   .tts-op-page :is(section, article, aside, header, div)[class*='border']:not([class*='rounded']) {
-    border-radius: 0.75rem;
+    border-radius: 1rem;
   }
 
   .tts-op-page :is(header, section)[class*='border-b'] {

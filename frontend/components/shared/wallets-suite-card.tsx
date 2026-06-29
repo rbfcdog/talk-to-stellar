@@ -332,13 +332,23 @@ export function WalletsSuiteCard({
 
   if (!virtualAccounts.length && !custodial.length && !stellar.length) return null;
 
+  const suiteTotal =
+    custodial.reduce((s, w) => s + custodialUsdc(w), 0) +
+    stellar.reduce((s, w) => s + stellarUsdc(w), 0);
+  const realAccountCount = custodial.length + stellar.length;
+
   return (
-    <div className={`rounded-2xl border border-tts-border bg-tts-surface p-5 ${className}`}>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm font-bold text-tts-deep">{L("Sua conta completa", "Your full account")}</p>
-        {canTransfer && (
-          <span className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-            {transferAccounts.length} {L("contas", "accounts")}
+    <div className={`rounded-3xl border border-tts-border bg-tts-surface p-6 ${className}`}>
+      <div className="mb-5 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Saldo total", "Total balance")}</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-tts-deep">
+            ${f2(suiteTotal)} <span className="text-sm font-bold text-tts-muted">USDC</span>
+          </p>
+        </div>
+        {realAccountCount > 0 && (
+          <span className="shrink-0 rounded-full border border-tts-border bg-tts-bg px-3 py-1 text-[11px] font-bold text-tts-muted">
+            {realAccountCount} {realAccountCount === 1 ? L("conta", "account") : L("contas", "accounts")}
           </span>
         )}
       </div>
@@ -640,7 +650,7 @@ function TransferPanel({
   const selectCls = "w-full rounded-xl border-2 border-tts-border bg-tts-surface px-3 py-2.5 text-sm font-semibold text-tts-deep focus:border-tts-deep focus:outline-none";
 
   return (
-    <div className="mb-4 rounded-xl border border-tts-border bg-tts-bg/60 p-3">
+    <div className="mb-4 rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
       {/* Bridge-settled transfers can take minutes — confirm popup */}
       {showDelay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDelay(false)}>
@@ -665,8 +675,11 @@ function TransferPanel({
           </div>
         </div>
       )}
-      <div className="flex w-full items-center gap-1.5 text-sm font-bold text-tts-deep">
-        <ArrowLeftRight className="h-4 w-4" /> {L("Mover dinheiro entre contas", "Move money between accounts")}
+      <div className="flex w-full items-center gap-2 text-sm font-bold text-tts-deep">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-tts-deep/10 text-tts-deep">
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+        </span>
+        {L("Mover dinheiro entre contas", "Move money between accounts")}
       </div>
 
       <div className="mt-3 space-y-3">
