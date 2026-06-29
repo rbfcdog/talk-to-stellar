@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import UsdWithdrawClient from "./usd-withdraw-client";
+// Unified dollars screen (Receive / Send), opened on the Send tab.
+import DollarsClient from "@/app/dollars/dollars-client";
 
 export const metadata: Metadata = {
   title: "Sacar em Dólar | TalkToStellar",
@@ -26,5 +27,5 @@ export default async function UsdWithdrawPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await Promise.resolve(searchParams || {});
-  return <UsdWithdrawClient initialQuery={serializeSearchParams(resolved)} />;
+  return <DollarsClient initialQuery={serializeSearchParams(resolved)} initialMode="send" />;
 }

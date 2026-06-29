@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowUpFromLine,
@@ -62,7 +62,7 @@ type Rail = "ach" | "wire";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = "tts_bridge_email";
+const CACHE_KEY = "tts:dollars:email";
 function readCachedEmail() { try { return localStorage.getItem(CACHE_KEY) || ""; } catch { return ""; } }
 function writeCachedEmail(v: string) { try { localStorage.setItem(CACHE_KEY, v); } catch { /* */ } }
 
@@ -72,7 +72,7 @@ function fmtUsd(n: number) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?: string }) {
+export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: { initialQuery?: string; modeSwitcher?: ReactNode }) {
   const searchParams = useSearchParams();
   const qp = new URLSearchParams(initialQuery || searchParams.toString());
   const sessionId = qp.get("session_id") ?? "";
@@ -223,6 +223,7 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
           title={L("Sacar para banco americano", "Withdraw to US bank")}
           description={L("Entre com o e-mail e a senha da sua conta em dólar.", "Sign in with your dollar-account email and password.")}
         />
+        {modeSwitcher}
         <BridgeAccountLogin
           defaultEmail={emailInput}
           title={L("Conta em dólar", "Dollar account")}
@@ -273,6 +274,7 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
         title={L("Sacar para banco americano", "Withdraw to US bank")}
         description={L("Envie seus dólares para uma conta bancária nos EUA via ACH ou wire.", "Send your dollars to a US bank account via ACH or wire.")}
       />
+      {modeSwitcher}
 
       {/* Available balance */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -328,7 +330,7 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
                       key={a.id}
                       type="button"
                       onClick={() => setSelectedExtId(a.id)}
-                      className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-tts-deep bg-tts-deep/5" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}
+                      className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-tts-gold bg-tts-gold-bg" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}
                     >
                       <div>
                         <p className="text-sm font-bold text-tts-deep">{a.bank_name || a.account_name || a.beneficiary_name || L("Banco americano", "US bank")}</p>
@@ -376,9 +378,9 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
                 const on = rail === r.id;
                 const Icon = r.icon;
                 return (
-                  <button key={r.id} type="button" onClick={() => setRail(r.id)}
-                    className={`flex flex-col items-start gap-1 rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-tts-deep bg-tts-deep/5" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}>
-                    <span className="flex items-center gap-1.5 text-sm font-bold text-tts-deep"><Icon className="h-4 w-4" /> {r.title}</span>
+                  <button key={r.id} type="button" onClick={() => setRail(r.id)} aria-pressed={on}
+                    className={`flex flex-col items-start gap-1 rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-tts-gold bg-tts-gold-bg" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}>
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-tts-deep"><Icon className={`h-4 w-4 ${on ? "text-tts-gold" : ""}`} /> {r.title}</span>
                     <span className="text-xs text-tts-muted">{r.sub}</span>
                   </button>
                 );
