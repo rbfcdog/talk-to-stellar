@@ -357,7 +357,7 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
     }
     if (!data?.customer_id || !data?.stellar_wallet?.public_key) {
       setSendStatus("error");
-      setSendError(L("Carteira de destino não encontrada.", "Destination wallet not found."));
+      setSendError(L("Conta de destino não encontrada.", "Destination account not found."));
       return;
     }
     // Prefer Bridge wallet, fallback to VA's bridge_wallet_id
@@ -373,8 +373,8 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
       } else {
         setSendStatus("error");
         setSendError(L(
-          "Nenhuma carteira Bridge encontrada para esta conta. Entre em contato pelo WhatsApp para verificar.",
-          "No Bridge wallet found for this account. Contact us on WhatsApp to check."
+          "Nenhuma conta Bridge encontrada para esta conta. Entre em contato pelo WhatsApp para verificar.",
+          "No Bridge account found for this account. Contact us on WhatsApp to check."
         ));
       }
       return;
@@ -601,7 +601,7 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
               <Wallet className="h-5 w-5 text-tts-muted" />
               <div>
                 <p className="text-sm font-bold text-tts-deep">
-                  {L("Carteiras Mainnet vinculadas", "Linked Mainnet Wallets")}
+                  {L("Contas Mainnet vinculadas", "Linked Mainnet Accounts")}
                 </p>
                 <p className="text-[11px] text-tts-muted mt-0.5">
                   {L("Usadas como destino das contas Bridge", "Used as destination for Bridge accounts")}
@@ -690,10 +690,10 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
                   <Send className="h-5 w-5 text-tts-muted" />
                   <div>
                     <p className="text-sm font-bold text-tts-deep">
-                      {L("Enviar para carteira Stellar", "Send to Stellar Wallet")}
+                      {L("Enviar para conta Stellar", "Send to Stellar Account")}
                     </p>
                     <p className="text-[11px] text-tts-muted mt-0.5">
-                      {L("Envie manualmente os fundos da Bridge para sua carteira", "Manually send Bridge funds to your wallet")}
+                      {L("Envie manualmente os fundos da Bridge para sua conta", "Manually send Bridge funds to your account")}
                     </p>
                   </div>
                 </div>
@@ -722,8 +722,8 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
                         {activeVa.bridge_wallet_id && (
                           <span>
                             {" "}· {L(
-                              `Wallet: ${activeVa.bridge_wallet_id.slice(0, 8)}...`,
-                              `Wallet: ${activeVa.bridge_wallet_id.slice(0, 8)}...`,
+                              `Conta: ${activeVa.bridge_wallet_id.slice(0, 8)}...`,
+                              `Account: ${activeVa.bridge_wallet_id.slice(0, 8)}...`,
                             )}
                           </span>
                         )}
@@ -831,8 +831,8 @@ export default function BridgeClient({ initialQuery = "" }: { initialQuery?: str
                     <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
                     <p className="text-xs text-tts-muted leading-relaxed">
                       {L(
-                        "Esse envio transfere o saldo USDC da sua carteira Bridge para sua carteira Stellar. Use caso o roteamento automático não tenha ocorrido.",
-                        "This sends your Bridge wallet USDC balance to your Stellar wallet. Use if auto-routing did not occur."
+                        "Esse envio transfere o saldo USDC da sua conta Bridge para sua conta Stellar. Use caso o roteamento automático não tenha ocorrido.",
+                        "This sends your Bridge account USDC balance to your Stellar account. Use if auto-routing did not occur."
                       )}
                     </p>
                   </div>

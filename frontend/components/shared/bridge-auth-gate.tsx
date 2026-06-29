@@ -108,8 +108,8 @@ export function useBridgeAccess() {
  */
 export function BridgeAccessField({
   onUnlock,
-  title = "Bridge wallet — restricted",
-  description = "Enter the access password to manage this wallet.",
+  title = "Bridge account — restricted",
+  description = "Enter the access password to manage this account.",
   className = "",
 }: {
   onUnlock: () => void;

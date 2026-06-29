@@ -1100,8 +1100,8 @@ export default function RendimentosClient({
           <BridgeAccessField
             className="mb-5"
             onUnlock={() => { unlockBridge(); if (walletEmail.trim()) loadEmailWallets(walletEmail); }}
-            title={L("Carteira em dólar — restrita", "USD wallet — restricted")}
-            description={L("Senha de acesso necessária para gerenciar esta carteira.", "Access password required to manage this wallet.")}
+            title={L("Conta em dólar — restrita", "USD account — restricted")}
+            description={L("Senha de acesso necessária para gerenciar esta conta.", "Access password required to manage this account.")}
           />
         )}
 
@@ -1121,7 +1121,7 @@ export default function RendimentosClient({
           <div className="space-y-8">
             <section id="portfolio" className="scroll-mt-4">
               <SuiteSectionHeader
-                eyebrow={L("Sua carteira", "Your portfolio")}
+                eyebrow={L("Sua conta", "Your portfolio")}
                 title={L("Rendimentos", "Returns")}
               />
               <CurrentInvestmentsPage
@@ -1517,7 +1517,7 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
           <StatCard
             label={L("Saldo", "Balance")}
             value={availableBalance !== null ? formatPrecise(availableBalance, language) : "—"}
-            sub={`${rows[0]?.profile.short || "USD"} · ${L("na carteira", "in wallet")}`}
+            sub={`${rows[0]?.profile.short || "USD"} · ${L("na conta", "in account")}`}
           />
           <StatCard label="APY" value={formatApy(weightedRate)} sub={totalInvested > 0 ? L("média", "average") : L("melhor taxa", "best rate")} />
           <StatCard label={L("Produtos", "Products")} value={String(rows.length)} sub={L("disponíveis", "available")} />
@@ -2010,7 +2010,7 @@ function BridgeLinkCard({ language, defaultEmail, state, onLink }: {
         </span>
         <div>
           <p className="text-sm font-bold text-tts-deep">{L("Vincular sua conta em dólar", "Link your dollar account")}</p>
-          <p className="text-xs text-tts-muted">{L("Conecte o e-mail da sua conta em dólar a esta carteira.", "Connect your dollar-account email to this wallet.")}</p>
+          <p className="text-xs text-tts-muted">{L("Conecte o e-mail da sua conta em dólar a esta conta.", "Connect your dollar-account email to this account.")}</p>
         </div>
       </div>
       <div className="flex gap-2">
@@ -2179,7 +2179,7 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
           {selectedPool.live ? (
             <>
               {!walletKey && (
-                <p className="mb-2 text-[11px] text-stone-400">{L("Selecione sua carteira em dólar acima para investir.", "Select your dollar wallet above to invest.")}</p>
+                <p className="mb-2 text-[11px] text-stone-400">{L("Selecione sua conta em dólar acima para investir.", "Select your dollar account above to invest.")}</p>
               )}
               <div className="flex items-center gap-2">
                 <div className="flex flex-1 items-center rounded-lg border border-stone-700 bg-stone-900">
@@ -2392,7 +2392,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Rendimentos", "Earnings")}</p>
             <h3 className="text-lg font-bold mt-0.5 text-white">{isAdvanced ? L("Outros mercados", "Other markets") : L("Render em USDC", "Earn on USDC")}</h3>
-            <p className="mt-0.5 text-[11px] text-stone-400">{isAdvanced ? L("Maior APY — supridos direto da sua carteira.", "Higher APY — supplied straight from your wallet.") : L("Direto da sua carteira — sem extensões.", "Straight from your wallet — no extensions.")}</p>
+            <p className="mt-0.5 text-[11px] text-stone-400">{isAdvanced ? L("Maior APY — supridos direto da sua conta.", "Higher APY — supplied straight from your account.") : L("Direto da sua conta — sem extensões.", "Straight from your account — no extensions.")}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
             {isAdvanced ? (
@@ -2465,14 +2465,14 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
                 );
               })}
             </div>
-            <p className="mt-2 text-[10px] text-amber-300/80">{L("Aviso: mercados não-USDC exigem que a carteira já tenha o ativo.", "Note: non-USDC markets require the wallet to already hold that asset.")}</p>
+            <p className="mt-2 text-[10px] text-amber-300/80">{L("Aviso: mercados não-USDC exigem que a conta já tenha o ativo.", "Note: non-USDC markets require the account to already hold that asset.")}</p>
           </div>
         )}
 
         {/* Account — testnet uses the login/session wallet; mainnet the Bridge wallet */}
         <div className="rounded-xl border-2 border-stone-700 bg-stone-800/60 p-3 mb-3">
           <p className="text-xs font-bold text-stone-400 uppercase tracking-wide mb-2">
-            {network === "testnet" ? L("Carteira da conta (login)", "Account wallet (login)") : L("Carteira (Bridge)", "Bridge wallet")}
+            {network === "testnet" ? L("Conta (login)", "Account (login)") : L("Conta (Bridge)", "Bridge account")}
           </p>
           {network === "testnet" ? (
             walletAddress ? (
@@ -2488,11 +2488,11 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
                   <p className="text-[11px] text-stone-400">{L("Conta ainda não existe na testnet — será criada (friendbot) ao aplicar.", "Account not on testnet yet — it'll be created (friendbot) on first supply.")}</p>
                 )}
                 {netBalance?.exists && idleUsdc === 0 && (
-                  <p className="text-[11px] text-amber-300">{L("Sem USDC de testnet nesta carteira.", "No testnet USDC in this wallet.")}</p>
+                  <p className="text-[11px] text-amber-300">{L("Sem USDC de testnet nesta conta.", "No testnet USDC in this account.")}</p>
                 )}
               </div>
             ) : (
-              <p className="text-[11px] text-stone-400">{L("Entre na sua conta para usar a carteira de testnet.", "Sign in to use your testnet account wallet.")}</p>
+              <p className="text-[11px] text-stone-400">{L("Entre na sua conta para usar a conta de testnet.", "Sign in to use your testnet account.")}</p>
             )
           ) : wallets.length === 0 ? (
             <form onSubmit={(e) => { e.preventDefault(); onEmailChange(emailInput); onLoadWallets(emailInput); }} className="flex gap-2">
@@ -2552,7 +2552,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
           {submitting ? L("Aplicando…", "Supplying…") : L(`Aplicar ${amount || ""}`, `Supply ${amount || ""}`)}
         </button>
-        {!email && !wallets.length && <p className="mt-2 text-[11px] text-stone-400">{L("Informe seu e-mail acima para carregar sua carteira.", "Enter your email above to load your wallet.")}</p>}
+        {!email && !wallets.length && <p className="mt-2 text-[11px] text-stone-400">{L("Informe seu e-mail acima para carregar sua conta.", "Enter your email above to load your account.")}</p>}
         {errSubmit && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {errSubmit}</div>
         )}
@@ -2571,7 +2571,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
       </div>
 
       <p className="text-center text-xs text-stone-400">
-        {L("Rendimento custodial pela sua carteira; APY variável conforme a demanda.", "Custodial yield from your wallet; variable APY based on demand.")}
+        {L("Rendimento custodial pela sua conta; APY variável conforme a demanda.", "Custodial yield from your account; variable APY based on demand.")}
       </p>
     </div>
   );

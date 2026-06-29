@@ -381,7 +381,7 @@ export default function GlobalTransferClient() {
       },
       {
         label: "PIX customer ready",
-        detail: `${anchorProfiles[anchorProvider].label} receives the customer, wallet and KYC reference.`,
+        detail: `${anchorProfiles[anchorProvider].label} receives the customer, account and KYC reference.`,
         icon: ShieldCheck,
         status: anchorStatusRank[anchorStatus] >= 1 ? "complete" : "ready",
       },
@@ -405,7 +405,7 @@ export default function GlobalTransferClient() {
       },
       {
         label: "Stellar settlement",
-        detail: "Wallet sends USDC with transaction hash and memo tied to the internal ledger.",
+        detail: "Account sends USDC with transaction hash and memo tied to the internal ledger.",
         icon: Network,
         status: externalStatusRank[externalStatus] >= 2 || simulationStarted ? "complete" : anchorStatusRank[anchorStatus] >= 4 ? "ready" : "waiting",
       },

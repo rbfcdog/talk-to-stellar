@@ -507,7 +507,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     }
     if (!data?.customer_id || !destinationAddress) {
       setSendStatus("error");
-      setSendError(L("Carteira de destino não encontrada. Gere uma carteira primeiro.", "Destination wallet not found. Generate a wallet first."));
+      setSendError(L("Conta de destino não encontrada. Gere uma conta primeiro.", "Destination account not found. Generate an account first."));
       return;
     }
     // Use the wallet the user selected as the source; fall back sensibly.
@@ -521,14 +521,14 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
       if (destChain === "stellar") {
         setSendStatus("error");
         setSendError(L(
-          "Esta conta envia direto para sua carteira. O envio automático deve ocorrer quando o depósito for processado. Se já foi recebido e não chegou, aguarde ou entre em contato pelo WhatsApp.",
-          "This account routes directly to your wallet. Auto-routing should happen when the deposit is processed. If received but not arrived, please wait or contact us on WhatsApp."
+          "Esta conta envia direto para sua conta. O envio automático deve ocorrer quando o depósito for processado. Se já foi recebido e não chegou, aguarde ou entre em contato pelo WhatsApp.",
+          "This account routes directly to your account. Auto-routing should happen when the deposit is processed. If received but not arrived, please wait or contact us on WhatsApp."
         ));
       } else {
         setSendStatus("error");
         setSendError(L(
-          "Nenhuma carteira Bridge encontrada para esta conta. Entre em contato pelo WhatsApp para verificar.",
-          "No Bridge wallet found for this account. Contact us on WhatsApp to check."
+          "Nenhuma conta Bridge encontrada para esta conta. Entre em contato pelo WhatsApp para verificar.",
+          "No Bridge account found for this account. Contact us on WhatsApp to check."
         ));
       }
       return;
@@ -846,7 +846,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
               <Wallet className="h-5 w-5 text-tts-muted" />
               <div>
                 <p className="text-sm font-bold text-tts-deep">
-                  {L("Carteiras vinculadas", "Linked wallets")}
+                  {L("Contas vinculadas", "Linked accounts")}
                 </p>
                 <p className="text-[11px] text-tts-muted mt-0.5">
                   {L("Usadas como destino das contas Bridge", "Used as destination for Bridge accounts")}
@@ -893,8 +893,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
                 <p className="text-xs text-tts-muted leading-relaxed">
                   {L(
-                    "Essas carteiras mainnet podem ser usadas como destino das suas contas Bridge. Para vincular uma nova, use o comando no chat.",
-                    "These mainnet wallets can be used as destination for your Bridge accounts. To link a new one, use the chat command."
+                    "Essas contas mainnet podem ser usadas como destino das suas contas Bridge. Para vincular uma nova, use o comando no chat.",
+                    "These mainnet accounts can be used as destination for your Bridge accounts. To link a new one, use the chat command."
                   )}
                 </p>
               </div>
@@ -912,10 +912,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                   <Send className="h-5 w-5 text-tts-muted" />
                   <div>
                     <p className="text-sm font-bold text-tts-deep">
-                      {L("Enviar para sua carteira", "Send to your wallet")}
+                      {L("Enviar para sua conta", "Send to your account")}
                     </p>
                     <p className="text-[11px] text-tts-muted mt-0.5">
-                      {L("Envie manualmente os fundos da Bridge para sua carteira", "Manually send Bridge funds to your wallet")}
+                      {L("Envie manualmente os fundos da Bridge para sua conta", "Manually send Bridge funds to your account")}
                     </p>
                   </div>
                 </div>
@@ -924,7 +924,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                 <div className="mb-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-                      {L("Carteira de destino", "Destination wallet")}
+                      {L("Conta de destino", "Destination account")}
                     </label>
                     <button
                       type="button"
@@ -937,14 +937,14 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                       ) : (
                         <Wallet className="h-3 w-3" />
                       )}
-                      {genStatus === "generating" ? L("Gerando...", "Generating...") : L("Gerar carteira", "Generate wallet")}
+                      {genStatus === "generating" ? L("Gerando...", "Generating...") : L("Gerar conta", "Generate account")}
                     </button>
                   </div>
 
                   {walletsLoading ? (
                     <div className="flex items-center gap-2 text-xs text-tts-muted px-1 py-2">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      {L("Carregando carteiras...", "Loading wallets...")}
+                      {L("Carregando contas...", "Loading accounts...")}
                     </div>
                   ) : destWallets.length > 0 ? (
                     <select
@@ -974,7 +974,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                     </div>
                   ) : (
                     <p className="rounded-lg bg-amber-50/40 dark:bg-amber-900/10 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-400">
-                      {L("Nenhuma carteira ainda. Gere uma para receber seus dólares.", "No wallet yet. Generate one to receive your dollars.")}
+                      {L("Nenhuma conta ainda. Gere uma para receber seus dólares.", "No account yet. Generate one to receive your dollars.")}
                     </p>
                   )}
 
@@ -984,7 +984,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                   {selectedDestWallet && (!selectedDestWallet.exists_on_mainnet || !selectedDestWallet.has_usdc_trustline) && (
                     <div className="rounded-lg border border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2.5">
                       <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
-                        {L("Carteira criada — falta ativar", "Wallet created — needs activation")}
+                        {L("Conta criada — falta ativar", "Account created — needs activation")}
                       </p>
                       <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed">
                         {L(
@@ -1006,7 +1006,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                         ) : (
                           <>
                             <BadgeCheck className="h-4 w-4 mr-2" />
-                            {L("Ativar carteira (patrocinado)", "Activate wallet (sponsored)")}
+                            {L("Ativar conta (patrocinado)", "Activate account (sponsored)")}
                           </>
                         )}
                       </Button>
@@ -1081,13 +1081,13 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           ))}
                         </Stage>
 
-                        <Stage n={2} title={L("Carteira de recebimento · USDC", "Receiver wallet · USDC")} done={stage2Done} active={settling}>
+                        <Stage n={2} title={L("Conta de recebimento · USDC", "Receiver account · USDC")} done={stage2Done} active={settling}>
                           {pipeline.wallets.length === 0 ? (
                             <div className="rounded-lg border border-tts-border bg-tts-bg/60 p-2.5 space-y-2">
                               <p className="text-[11px] text-tts-muted leading-relaxed">
                                 {L(
-                                  "Nenhuma carteira conectada à conta virtual. Crie uma carteira Base para receber os dólares convertidos.",
-                                  "No wallet connected to the virtual account. Create a Base wallet to receive the converted dollars.",
+                                  "Nenhuma conta conectada à conta virtual. Crie uma conta Base para receber os dólares convertidos.",
+                                  "No account connected to the virtual account. Create a Base account to receive the converted dollars.",
                                 )}
                               </p>
                               <Button
@@ -1099,7 +1099,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                                 {createWalletStatus === "creating" ? (
                                   <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />{L("Conectando...", "Connecting...")}</>
                                 ) : (
-                                  <><Wallet className="h-3.5 w-3.5 mr-2" />{L("Conectar carteira", "Connect wallet")}</>
+                                  <><Wallet className="h-3.5 w-3.5 mr-2" />{L("Conectar conta", "Connect account")}</>
                                 )}
                               </Button>
                               {createWalletError && <p className="text-[10px] text-red-500">{createWalletError}</p>}
@@ -1107,7 +1107,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           ) : (
                             <div className="space-y-2">
                               <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted">
-                                {pipeline.wallets.length} {pipeline.wallets.length === 1 ? L("carteira", "wallet") : L("carteiras", "wallets")} · {L("toque para enviar desta", "tap to send from")}
+                                {pipeline.wallets.length} {pipeline.wallets.length === 1 ? L("conta", "account") : L("contas", "accounts")} · {L("toque para enviar desta", "tap to send from")}
                               </p>
                               {pipeline.wallets.map((w) => {
                                 const nonZero = w.balances.filter((b) => Number(b.amount) > 0);
@@ -1171,7 +1171,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                                 {createWalletStatus === "creating" ? (
                                   <><Loader2 className="h-3 w-3 animate-spin" />{L("Conectando...", "Connecting...")}</>
                                 ) : (
-                                  <><Wallet className="h-3 w-3" />{L("Conectar outra carteira", "Connect another wallet")}</>
+                                  <><Wallet className="h-3 w-3" />{L("Conectar outra conta", "Connect another account")}</>
                                 )}
                               </button>
                               {createWalletError && <p className="text-[10px] text-red-500">{createWalletError}</p>}
@@ -1187,7 +1187,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                           )}
                         </Stage>
 
-                        <Stage n={3} title={L("Carteira TalkToStellar · USDC", "TalkToStellar wallet · USDC")} done={stage3Done} active={stage2Done && !stage3Done}>
+                        <Stage n={3} title={L("Conta TalkToStellar · USDC", "TalkToStellar account · USDC")} done={stage3Done} active={stage2Done && !stage3Done}>
                           <p className="text-sm font-bold tabular-nums text-tts-deep">{fmt(stellarUsdc)} <span className="text-xs font-medium text-tts-muted">USDC</span></p>
                           <p className="text-[10px] font-mono text-tts-muted break-all">
                             {destinationAddress ? `${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-6)}` : L("nenhuma selecionada", "none selected")}
@@ -1296,8 +1296,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                     {/* Settlement-time disclaimer */}
                     <p className="text-[11px] text-tts-muted/70 text-center leading-relaxed">
                       {L(
-                        "A transferência pode levar de alguns minutos a algumas horas para chegar na carteira Stellar.",
-                        "Transfers can take from a few minutes up to a few hours to arrive in the Stellar wallet.",
+                        "A transferência pode levar de alguns minutos a algumas horas para chegar na conta Stellar.",
+                        "Transfers can take from a few minutes up to a few hours to arrive in the Stellar account.",
                       )}
                     </p>
                   </div>
@@ -1351,8 +1351,8 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
                     <Info className="h-3.5 w-3.5 text-tts-muted shrink-0 mt-0.5" />
                     <p className="text-xs text-tts-muted leading-relaxed">
                       {L(
-                        "Esse envio transfere o saldo USDC da sua carteira Bridge para sua carteira Stellar. Use caso o roteamento automático não tenha ocorrido.",
-                        "This sends your Bridge wallet USDC balance to your Stellar wallet. Use if auto-routing did not occur."
+                        "Esse envio transfere o saldo USDC da sua conta Bridge para sua conta Stellar. Use caso o roteamento automático não tenha ocorrido.",
+                        "This sends your Bridge account USDC balance to your Stellar account. Use if auto-routing did not occur."
                       )}
                     </p>
                   </div>
