@@ -1464,7 +1464,6 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
               <PortfolioOverview
                 language={language}
                 rows={rows}
-                isTestnet={isTestnet}
                 availableBalance={availableBalance}
                 activeWindow={activeWindow}
                 analysisWindow={analysisWindow}
@@ -1516,10 +1515,9 @@ function formatApy(rate: number) {
   return rate > 0 ? `${rate.toFixed(2)}%` : "—";
 }
 
-function PortfolioOverview({ language, rows, isTestnet, availableBalance, activeWindow, analysisWindow, onAnalysisWindowChange }: {
+function PortfolioOverview({ language, rows, availableBalance, activeWindow, analysisWindow, onAnalysisWindowChange }: {
   language: AppLanguage;
   rows: InvestmentRow[];
-  isTestnet: boolean;
   availableBalance: number | null;
   activeWindow: (typeof ANALYSIS_WINDOWS)[number];
   analysisWindow: AnalysisWindow;
@@ -1575,7 +1573,7 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
             </p>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:min-w-[30rem]">
+        <div className="grid grid-cols-3 gap-2 sm:min-w-[24rem]">
           <StatCard
             label={L("Saldo", "Balance")}
             value={availableBalance !== null ? <AnimatedNumber value={availableBalance} format={(n) => formatPrecise(n, language)} /> : "—"}
@@ -1583,7 +1581,6 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
           />
           <StatCard label="APY" value={formatApy(weightedRate)} sub={totalInvested > 0 ? L("média", "average") : L("melhor taxa", "best rate")} />
           <StatCard label={L("Produtos", "Products")} value={String(rows.length)} sub={L("disponíveis", "available")} />
-          <StatCard label={L("Ambiente", "Environment")} value={isTestnet ? L("Teste", "Demo") : L("Ativo", "Live")} sub={isTestnet ? L("estimado", "estimated") : L("real", "real")} />
         </div>
       </div>
 
