@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-// Unified dollars screen (Receive / Send), opened on the Send tab.
-import DollarsClient from "@/app/dollars/dollars-client";
+import DollarsClient from "./dollars-client";
 
 export const metadata: Metadata = {
-  title: "Sacar em Dólar | TalkToStellar",
-  description: "Saque seus dólares para uma conta bancária nos EUA via ACH ou wire.",
+  title: "Dólar | TalkToStellar",
+  description: "Receba ou envie dólares para uma conta bancária nos EUA — numa única tela.",
 };
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -21,11 +20,13 @@ function serializeSearchParams(sp?: SearchParams) {
   return params.toString();
 }
 
-export default async function UsdWithdrawPage({
+export default async function DollarsPage({
   searchParams,
 }: {
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await Promise.resolve(searchParams || {});
-  return <DollarsClient initialQuery={serializeSearchParams(resolved)} initialMode="send" />;
+  const modeParam = String((resolved as SearchParams).mode || "").toLowerCase();
+  const initialMode = modeParam === "send" ? "send" : "receive";
+  return <DollarsClient initialQuery={serializeSearchParams(resolved)} initialMode={initialMode} />;
 }

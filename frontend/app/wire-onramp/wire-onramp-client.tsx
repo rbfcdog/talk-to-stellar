@@ -165,7 +165,7 @@ function dedupName(name: string): string {
   return trimmed;
 }
 
-const EMAIL_CACHE_KEY = "tts:wire-onramp:email";
+const EMAIL_CACHE_KEY = "tts:dollars:email";
 
 function readCachedEmail() {
   if (typeof window === "undefined") return "";
@@ -226,7 +226,7 @@ function CopyBtn({ value, label }: { value: string; label?: string }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?: string }) {
+export default function WireOnrampClient({ initialQuery = "", modeSwitcher }: { initialQuery?: string; modeSwitcher?: ReactNode }) {
   const searchParams = useSearchParams();
   const qp = new URLSearchParams(initialQuery || searchParams.toString());
 
@@ -602,6 +602,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
             "Sign in with your dollar-account email and password."
           )}
         />
+        {modeSwitcher}
         {amount && (
           <div className="flex items-center gap-2 rounded-md border border-tts-gold/30 bg-tts-gold-bg px-3 py-2">
             <ArrowDownToLine className="h-4 w-4 text-amber-600 shrink-0" />
@@ -776,6 +777,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </div>
         }
       />
+      {modeSwitcher}
 
       {/* Received summary — the only number the user cares about up front */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -788,7 +790,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
         <OperationalStat
           label={L("Titular da conta", "Account holder")}
           value={beneficiaryName || "—"}
-          detail={loggedEmail || emailInput}
+          detail={beneficiaryName ? L("verificado", "verified") : undefined}
           tone={beneficiaryName ? "confirm" : "default"}
         />
       </div>

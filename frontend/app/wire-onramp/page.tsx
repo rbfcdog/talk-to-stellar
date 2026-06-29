@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import WireOnrampClient from "./wire-onramp-client";
+// Unified dollars screen (Receive / Send), opened on the Receive tab.
+import DollarsClient from "@/app/dollars/dollars-client";
 
 export const metadata: Metadata = {
   title: "Depositar em Dólar | TalkToStellar",
@@ -30,5 +31,5 @@ export default async function WireOnrampPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await resolveSearchParams(searchParams);
-  return <WireOnrampClient initialQuery={serializeSearchParams(resolved)} />;
+  return <DollarsClient initialQuery={serializeSearchParams(resolved)} initialMode="receive" />;
 }
