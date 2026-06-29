@@ -17,7 +17,6 @@ import {
   LogOut,
   RefreshCw,
   Send,
-  TriangleAlert,
   User,
   Wallet,
 } from "lucide-react";
@@ -147,10 +146,6 @@ function fmt(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function isActive(va: UsdVA) {
-  return ["active", "enabled", "activated"].includes(String(va.status).toLowerCase());
-}
-
 /** Deduplicate a name that appears stacked (e.g. "John Doe John Doe" → "John Doe"). */
 function dedupName(name: string): string {
   const trimmed = name.trim();
@@ -229,202 +224,6 @@ function CopyBtn({ value, label }: { value: string; label?: string }) {
 
 // ── Field row ──────────────────────────────────────────────────────────────────
 
-function Field({
-  label,
-  value,
-  mono = true,
-  masked = false,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  masked?: boolean;
-  highlight?: boolean;
-}) {
-  const [revealed, setRevealed] = useState(!masked);
-  const display = masked && !revealed ? "•".repeat(Math.max(0, value.length - 4)) + value.slice(-4) : value;
-
-  return (
-    <div className={`flex items-center justify-between gap-4 px-4 py-3 border-b border-tts-border/40 last:border-0
-                     ${highlight ? "bg-amber-50/30 dark:bg-amber-900/10" : ""}`}>
-      <span className="text-xs text-tts-muted uppercase tracking-wide shrink-0 w-36">{label}</span>
-      <div className="flex items-center gap-1 min-w-0 ml-auto">
-        {highlight && <TriangleAlert className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
-        <span className={`text-sm font-semibold truncate ${mono ? "font-mono" : ""} ${highlight ? "text-amber-700 dark:text-amber-400" : "text-tts-deep"}`}>
-          {display}
-        </span>
-        {masked && (
-          <button
-            onClick={() => setRevealed((r) => !r)}
-            className="ml-1 text-xs text-tts-muted hover:text-tts-deep"
-          >
-            {revealed ? "hide" : "show"}
-          </button>
-        )}
-        <CopyBtn value={value} label={label} />
-      </div>
-    </div>
-  );
-}
-
-// ── VA Card ────────────────────────────────────────────────────────────────────
-
-function VaCard({ va }: { va: UsdVA }) {
-  const instr = va.source_deposit_instructions;
-  const active = isActive(va);
-  const received = va.total_received_usd ?? 0;
-  const balanceRows = va.balance_summaries ?? [];
-
-  const rail = instr?.payment_rail?.toUpperCase() ?? "WIRE";
-  const allRails = instr?.payment_rails?.map((r) => r.toUpperCase()).join(" · ") ?? rail;
-  const reference = instr?.wire_reference || instr?.deposit_message;
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-tts-border bg-tts-surface shadow-sm">
-
-      {/* VA header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-tts-border/60 bg-tts-bg/50">
-        <div className="flex items-center gap-2.5">
-          <Building2 className="h-5 w-5 text-tts-muted" />
-          <div>
-            <p className="text-sm font-bold text-tts-deep">
-              {instr?.bank_name ?? "US Bank Account"}
-            </p>
-            <p className="text-[11px] text-tts-muted mt-0.5">{allRails}</p>
-          </div>
-        </div>
-        <span className={`flex items-center gap-1.5 text-[11px] font-bold uppercase px-2.5 py-1 rounded-full border
-          ${active
-            ? "border-tts-confirm/30 bg-tts-confirm/10 text-tts-confirm"
-            : "border-amber-400/40 bg-amber-50/40 text-amber-600 dark:text-amber-400"
-          }`}>
-          {active
-            ? <BadgeCheck className="h-3 w-3" />
-            : <Clock className="h-3 w-3" />
-          }
-          {active ? "Active" : va.status}
-        </span>
-      </div>
-
-      {/* Balance */}
-      <div className="px-5 py-5 border-b border-tts-border/40">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted mb-1">
-          Total received
-        </p>
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold tabular-nums text-tts-deep">
-            {fmt(received)}
-          </span>
-          <span className="text-base font-bold text-tts-muted">USD</span>
-        </div>
-        {!active && (
-          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-            Account pending activation — transfers may be held until KYC is approved.
-          </p>
-        )}
-        {balanceRows.length > 0 && (
-          <div className="mt-3 grid gap-1">
-            {balanceRows.map((b, index) => (
-              <div key={`${b.source}-${index}`} className="flex items-center justify-between rounded bg-tts-bg/70 px-2 py-1 text-xs">
-                <span className="text-tts-muted">{b.label || b.source || "Balance"}</span>
-                <span className="font-mono font-bold text-tts-deep">
-                  {fmt(Number(b.amount || 0))} {(b.currency || "USD").toUpperCase()}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Instructions */}
-      {instr && (
-        <div>
-          <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-tts-muted">
-              Wire / ACH details
-            </p>
-            <CopyBtn
-              label="all details"
-              value={[
-                instr.bank_name && `Bank: ${instr.bank_name}`,
-                instr.bank_routing_number && `Routing number: ${instr.bank_routing_number}`,
-                instr.bank_account_number && `Account number: ${instr.bank_account_number}`,
-                instr.bank_beneficiary_name && `Beneficiary: ${dedupName(instr.bank_beneficiary_name)}`,
-                instr.bank_beneficiary_address && `Beneficiary address: ${instr.bank_beneficiary_address}`,
-                instr.iban && `IBAN: ${instr.iban}`,
-                instr.bic && `BIC / SWIFT: ${instr.bic}`,
-                reference && `Reference / Memo: ${reference}`,
-                instr.bank_address && `Bank address: ${instr.bank_address}`,
-              ].filter(Boolean).join("\n")}
-            />
-          </div>
-
-          {instr.bank_name && (
-            <Field label="Bank" value={instr.bank_name} mono={false} />
-          )}
-          {instr.bank_routing_number && (
-            <Field label="Routing number" value={instr.bank_routing_number} />
-          )}
-          {instr.bank_account_number && (
-            <Field label="Account number" value={instr.bank_account_number} masked />
-          )}
-          {instr.bank_beneficiary_name && (
-            <Field label="Beneficiary" value={dedupName(instr.bank_beneficiary_name)} mono={false} />
-          )}
-          {instr.bank_beneficiary_address && (
-            <Field label="Beneficiary address" value={instr.bank_beneficiary_address} mono={false} />
-          )}
-          {instr.iban && (
-            <Field label="IBAN" value={instr.iban} />
-          )}
-          {instr.bic && (
-            <Field label="BIC / SWIFT" value={instr.bic} />
-          )}
-          {reference && (
-            <Field
-              label="Reference / Memo"
-              value={reference}
-              highlight
-            />
-          )}
-          {instr.bank_address && (
-            <Field label="Bank address" value={instr.bank_address} mono={false} />
-          )}
-        </div>
-      )}
-
-      {/* How to guide */}
-      <div className="px-5 py-4 bg-tts-bg/50 border-t border-tts-border/40">
-        <div className="flex items-center gap-2 mb-3">
-          <Info className="h-3.5 w-3.5 text-tts-muted shrink-0" />
-          <p className="text-[11px] font-bold uppercase tracking-wide text-tts-muted">
-            How to deposit
-          </p>
-        </div>
-        <ol className="space-y-2">
-          {[
-            "Log into your US bank or wire service.",
-            "Create a new wire or ACH transfer to the account above.",
-            reference ? (
-              <span key="ref">In the <strong className="text-tts-deep">Reference / Memo</strong> field, enter <span className="font-mono font-semibold text-amber-700 dark:text-amber-400">{reference}</span> exactly — required for routing.</span>
-            ) : "Include a memo if your bank requests one.",
-            "Funds typically arrive within 1–2 business days.",
-          ].map((step, i) => (
-            <li key={i} className="flex gap-3 text-xs text-tts-muted">
-              <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full border border-tts-border bg-tts-surface text-[10px] font-bold text-tts-deep">
-                {i + 1}
-              </span>
-              <span className="leading-relaxed">{step}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </div>
-  );
-}
-
-
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?: string }) {
@@ -451,7 +250,9 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   const [emailInput, setEmailInput] = useState(emailParam);
   const [loggedEmail, setLoggedEmail] = useState("");
   const [cachedEmail, setCachedEmail] = useState("");
-  const [accountIndex, setAccountIndex] = useState(0);
+  // VA deposit details render in the single WalletsSuiteCard list now; the page
+  // just targets the first VA for the manual sweep / route hints.
+  const accountIndex = 0;
   const didAuto = useRef(false);
 
   // Destination wallets (generated + stored by Bridge email)
@@ -1116,47 +917,10 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
           </OperationalCard>
         )}
 
-        {/* VA cards */}
+        {/* Deposit-account details now live in the single WalletsSuiteCard list
+            above (no duplicate VA carousel here). We keep the manual sweep. */}
         {usdAccounts.length > 0 && activeVa ? (
           <>
-            <VaCard key={activeVa.id} va={activeVa} />
-
-            {usdAccounts.length > 1 && (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAccountIndex((i) => (i - 1 + usdAccounts.length) % usdAccounts.length)}
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    {L("Anterior", "Prev")}
-                  </Button>
-                  <span className="text-xs font-mono text-tts-muted tabular-nums">
-                    {safeIndex + 1} / {usdAccounts.length}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAccountIndex((i) => (i + 1) % usdAccounts.length)}
-                  >
-                    {L("Próximo", "Next")}
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
-                <OperationalCard>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wide text-tts-muted">
-                      {L("Total todas as contas", "Total all accounts")}
-                    </span>
-                    <span className="text-sm font-bold tabular-nums text-tts-deep">
-                      {fmt(totalReceived)} <span className="text-tts-muted font-medium">USD</span>
-                    </span>
-                  </div>
-                </OperationalCard>
-              </>
-            )}
-
             {showDetails && status === "ready" && (
               <OperationalCard>
                 <div className="flex items-center gap-2.5 mb-4">
