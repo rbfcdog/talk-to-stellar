@@ -3589,19 +3589,18 @@ export class BridgeController {
 
       const totalUsdc = defindexUsdc + blendUsdc;
 
-      // Best-effort: snapshot the invested balance into FIXED 10-minute buckets
-      // so the chart advances one stable point per interval. DeFindex yield grows
+      // Best-effort: snapshot the invested balance into FIXED 1-minute buckets
+      // so the chart advances one stable point per minute. DeFindex yield grows
       // continuously, so writing live values on every read makes the latest point
-      // jitter constantly. Instead we FIX each 10-min point at its first read and
-      // never overwrite it for the rest of the interval — the value stays put,
-      // and a new bucket only starts every 10 minutes.
+      // jitter constantly. Instead we FIX each 1-min point at its first read and
+      // never overwrite it for the rest of that minute — the value stays put,
+      // and a new bucket only starts each minute.
       // Never let a snapshot failure (e.g. table not migrated) break the read.
       try {
         const now = new Date();
-        // Floor "now" to the 10-minute boundary (…:00, :10, :20, …).
+        // Floor "now" to the start of the current minute (zero out seconds/ms).
         const bucket = new Date(now);
         bucket.setUTCSeconds(0, 0);
-        bucket.setUTCMinutes(Math.floor(now.getUTCMinutes() / 10) * 10);
         const snapshotDate = bucket.toISOString();
 
         // Has this 10-min point already been fixed? If so, leave it untouched.

@@ -19,6 +19,7 @@ import {
   Loader2,
   LockKeyhole,
   Plus,
+  RefreshCw,
   Wallet,
   WalletCards,
 } from "lucide-react";
@@ -221,7 +222,7 @@ function formatChartAmount(value: unknown, profile: { short: string }, language:
   return `${formatPrecise(value, language)} ${profile.short}`;
 }
 
-const TEN_MINUTES_MS = 10 * 60 * 1000;
+const ONE_MINUTE_MS = 60 * 1000;
 
 // Timestamp label including the hour, so the 4-hour cadence reads clearly in the
 // tooltip (the X axis itself is hidden).
@@ -261,11 +262,11 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
   if (beforeStart) lastKnown = normalizeDecimal(beforeStart.amount);
   else if (sorted.length) lastKnown = normalizeDecimal(sorted[0].amount);
 
-  // Sample on a 10-minute grid (matching the backend's fixed 10-min snapshots)
-  // so the line advances one point every 10 minutes. Cap the point count for
-  // wider windows so a 7-day view stays light.
+  // Sample on a 1-minute grid (matching the backend's fixed 1-min snapshots) so
+  // the line advances one point every minute. Cap the point count (~1500) so a
+  // wider window (e.g. 7 days) stays light while the 1-day view stays 1-minute.
   const windowMs = now - start;
-  const step = Math.max(TEN_MINUTES_MS, Math.floor(windowMs / 200));
+  const step = Math.max(ONE_MINUTE_MS, Math.ceil(windowMs / 1500));
 
   let idx = 0;
   const points: ChartPoint[] = [];
@@ -611,6 +612,8 @@ export default function RendimentosClient({
   // Bridge email wallet used on mainnet).
   const [sessionWallet, setSessionWallet] = useState<{ public_key: string; testnet_usdc: number; testnet_xlm: number } | null>(null);
   const loadPositionsToken = useRef(""); // stale-response guard for positions/history
+  const [refreshing, setRefreshing] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0); // bump to re-run effect-based loaders
 
   async function loadSessionWallet() {
     try {
@@ -910,6 +913,28 @@ export default function RendimentosClient({
   // Resolve the login/session wallet (for testnet yield).
   useEffect(() => { if (session.authenticated) loadSessionWallet(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [session.authenticated, session.sessionId, walletEmail]);
 
+  // Manual refresh of the yield data (balances, positions, history, APY).
+  async function refreshYield() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setReloadTick((t) => t + 1); // re-runs the testnet positions/history effect
+    try {
+      const tasks: Promise<unknown>[] = [];
+      if (session.authenticated) tasks.push(loadSessionWallet());
+      if (walletEmail.trim()) tasks.push(loadEmailWallets(walletEmail));
+      if (networkView === "mainnet" && walletEmail && selectedWalletKey) tasks.push(loadPositions(walletEmail, selectedWalletKey));
+      tasks.push(
+        fetch("/api/blend/pool/info?network=mainnet", { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { const apy = d?.usdc?.supplyApy ?? d?.data?.usdc?.supplyApy; if (Number.isFinite(Number(apy))) setBlendApy(Number(apy)); })
+          .catch(() => {}),
+      );
+      await Promise.allSettled(tasks);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   useEffect(() => { setYieldResult(null); setPin(""); }, [action, amount, actionableOption?.vault_address, safeSelectedCode]);
   useEffect(() => {
     if (!session.authenticated || !options.length || !channelPinUnlocked) return;
@@ -942,7 +967,7 @@ export default function RendimentosClient({
       }
     })).then((entries) => { if (!cancelled) setPositionHistories(Object.fromEntries(entries)); });
     return () => { cancelled = true; };
-  }, [session.authenticated, session.sessionSource, options, language, channelPinUnlocked]);
+  }, [session.authenticated, session.sessionSource, options, language, channelPinUnlocked, reloadTick]);
 
   async function unlockChannelReturns() {
     const nextPin = returnsPin.replace(/\D/g, "").slice(0, 8);
@@ -1132,10 +1157,21 @@ export default function RendimentosClient({
         ) : (
           <div className="space-y-8">
             <section id="portfolio" className="scroll-mt-4">
-              <SuiteSectionHeader
-                eyebrow={L("Sua conta", "Your portfolio")}
-                title={L("Rendimentos", "Returns")}
-              />
+              <div className="flex items-start justify-between gap-3">
+                <SuiteSectionHeader
+                  eyebrow={L("Sua conta", "Your portfolio")}
+                  title={L("Rendimentos", "Returns")}
+                />
+                <button
+                  type="button"
+                  onClick={refreshYield}
+                  disabled={refreshing}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-tts-border bg-tts-surface px-3 py-2 text-xs font-bold text-tts-deep transition hover:border-tts-deep/40 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                  {refreshing ? L("Atualizando…", "Refreshing…") : L("Atualizar", "Refresh")}
+                </button>
+              </div>
               <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
                 positionBalances={positionBalances} positionHistories={positionHistories} isTestnet={networkView === "testnet" && isTestnetYield}
@@ -1533,12 +1569,9 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
               : L("Nenhum produto com saldo aplicado ainda.", "No product has an invested balance yet.")}
           </p>
           {totalInvested > 0 && weightedRate > 0 && (
-            <p className="mt-2 rounded-lg border border-tts-confirm/20 bg-tts-confirm/5 px-3 py-2 text-xs font-semibold text-tts-deep">
-              {L("Em 1 ano", "In 1 year")} <span className="text-tts-muted">(≈{formatApy(weightedRate)})</span>:{" "}
-              <span className="tabular-nums">{formatPrecise(totalInvested, language)}</span>
-              {" → "}
-              <span className="font-bold tabular-nums text-tts-confirm">{formatPrecise(totalInvested * (1 + weightedRate / 100), language)}</span>
-              <span className="ml-1 text-tts-confirm">(+{formatPrecise(totalInvested * (weightedRate / 100), language)})</span>
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-tts-confirm/20 bg-tts-confirm/5 px-3 py-2 text-xs font-semibold text-tts-muted">
+              {L("Em 1 ano", "In 1 year")}
+              <span className="font-bold tabular-nums text-tts-confirm">+{formatPrecise(totalInvested * (weightedRate / 100), language)} {rows[0]?.profile.short || "USD"}</span>
             </p>
           )}
         </div>
