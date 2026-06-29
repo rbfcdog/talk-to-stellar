@@ -1186,7 +1186,7 @@ export default function RendimentosClient({
               <section id="blend" className="scroll-mt-4">
                 <SuiteSectionHeader
                   eyebrow={L("Produto selecionado", "Selected product")}
-                  title={L("Blend · Rendimento em USDC", "Blend · USDC yield")}
+                  title={L("Rendimento em USDC", "USDC yield")}
                 />
                 <div className="space-y-4">
                   <button
@@ -1233,7 +1233,7 @@ export default function RendimentosClient({
                   <div>
                     <SuiteSectionHeader
                       eyebrow={L("Maior rendimento", "Higher yield")}
-                      title={L("Outros mercados do Blend", "Other Blend markets")}
+                      title={L("Outros mercados", "Other markets")}
                     />
                     <BlendInlinePanel
                       language={language}
@@ -1358,7 +1358,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
         }
       : { loading: false, points: [], error: "" };
     rows.push({
-      option: { asset_code: "USDC", vault_address: "blend", label: "Blend USDC" } as YieldOption,
+      option: { asset_code: "USDC", vault_address: "blend", label: localCopy(language, "Rendimento USDC", "USDC yield") } as YieldOption,
       code: "BLEND",
       profile: moneyProfile("USDC"),
       amount: blendInvested ?? 0,
@@ -2163,7 +2163,7 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
                       <p className="text-[10px] font-bold text-emerald-400">{p.fee.toFixed(2)}% {L("taxa", "fee")}</p>
                     </>
                   ) : (
-                    <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-400">{L("Soroswap", "Soroswap")}</span>
+                    <span className="rounded-full border border-stone-700 bg-stone-800/60 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-400">{L("Liquidez", "Liquidity")}</span>
                   )}
                 </div>
               </button>
@@ -2214,7 +2214,7 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
                 <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
                   <CheckCircle2 className="h-3.5 w-3.5" /> {L("Liquidez adicionada!", "Liquidity added!")}
                   {lpOk.hash && (
-                    <a href={`https://stellar.expert/explorer/public/tx/${lpOk.hash}`} target="_blank" rel="noreferrer" className="underline">tx {lpOk.hash.slice(0, 8)}…</a>
+                    <a href={`https://stellar.expert/explorer/public/tx/${lpOk.hash}`} target="_blank" rel="noreferrer" className="underline">{L("comprovante", "receipt")} {lpOk.hash.slice(0, 8)}…</a>
                   )}
                 </p>
               )}
@@ -2222,16 +2222,16 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
           ) : (
             <div>
               <p className="text-[11px] text-stone-400">
-                {L("Esta pool BRL é roteada pela Soroswap.", "This BRL pool is routed via Soroswap.")}
+                {L("Esta pool BRL é processada externamente.", "This BRL pool is processed externally.")}
               </p>
               <a href="https://app.soroswap.finance" target="_blank" rel="noopener noreferrer" className={BTN_PRIMARY + " mt-3 w-full"}>
-                <Plus className="h-4 w-4" /> {L("Abrir na Soroswap →", "Open on Soroswap →")}
+                <Plus className="h-4 w-4" /> {L("Abrir provedor de liquidez →", "Open liquidity provider →")}
               </a>
             </div>
           )}
         </div>
         <p className="mt-2 text-center text-[11px] text-stone-500">
-          {L("Rotas agregadas: Soroswap · Aqua · Phoenix · SDEX", "Aggregated routes: Soroswap · Aqua · Phoenix · SDEX")}
+          {L("Melhor rota agregada automaticamente.", "Best route aggregated automatically.")}
         </p>
       </div>
     </div>
@@ -2390,8 +2390,8 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
       <div className="rounded-2xl border-2 border-stone-700 bg-stone-900 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Empréstimos & Rendimentos", "Lending & Yield")}</p>
-            <h3 className="text-lg font-bold mt-0.5 text-white">{isAdvanced ? L("Outros mercados do Blend", "Other Blend markets") : L("Aplicar no Blend", "Supply to Blend")}</h3>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">{L("Rendimentos", "Earnings")}</p>
+            <h3 className="text-lg font-bold mt-0.5 text-white">{isAdvanced ? L("Outros mercados", "Other markets") : L("Render em USDC", "Earn on USDC")}</h3>
             <p className="mt-0.5 text-[11px] text-stone-400">{isAdvanced ? L("Maior APY — supridos direto da sua carteira.", "Higher APY — supplied straight from your wallet.") : L("Direto da sua carteira — sem extensões.", "Straight from your wallet — no extensions.")}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -2550,7 +2550,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
         {/* Supply (custodial — one tap, no Freighter) */}
         <button onClick={supply} disabled={!canSupply} className={BTN_PRIMARY}>
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
-          {submitting ? L("Aplicando…", "Supplying…") : L(`Aplicar ${amount || ""} no Blend`, `Supply ${amount || ""} to Blend`)}
+          {submitting ? L("Aplicando…", "Supplying…") : L(`Aplicar ${amount || ""}`, `Supply ${amount || ""}`)}
         </button>
         {!email && !wallets.length && <p className="mt-2 text-[11px] text-stone-400">{L("Informe seu e-mail acima para carregar sua carteira.", "Enter your email above to load your wallet.")}</p>}
         {errSubmit && (
@@ -2562,8 +2562,8 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
             <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Valor", "Amount")}</span><span className="font-bold text-white">{result.amount} USDC</span></div>
             {result.hash && (
               <>
-                <div className="flex justify-between text-xs"><span className="text-stone-400">Hash</span><span className="font-mono font-bold text-white">{String(result.hash).slice(0, 16)}…</span></div>
-                <a href={`https://stellar.expert/explorer/${network === "testnet" ? "testnet" : "public"}/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver no StellarExpert", "View on StellarExpert")}</a>
+                <div className="flex justify-between text-xs"><span className="text-stone-400">{L("Comprovante", "Receipt")}</span><span className="font-mono font-bold text-white">{String(result.hash).slice(0, 16)}…</span></div>
+                <a href={`https://stellar.expert/explorer/${network === "testnet" ? "testnet" : "public"}/tx/${result.hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-amber-300 hover:underline mt-1"><ExternalLink className="h-3 w-3" /> {L("Ver comprovante", "View receipt")}</a>
               </>
             )}
           </div>
@@ -2571,7 +2571,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
       </div>
 
       <p className="text-center text-xs text-stone-400">
-        {L("Blend — protocolo de empréstimos na Stellar. Execução custodial pela sua carteira; APY variável conforme a demanda.", "Blend — lending protocol on Stellar. Custodial execution from your wallet; variable APY based on demand.")}
+        {L("Rendimento custodial pela sua carteira; APY variável conforme a demanda.", "Custodial yield from your wallet; variable APY based on demand.")}
       </p>
     </div>
   );

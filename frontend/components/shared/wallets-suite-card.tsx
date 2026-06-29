@@ -220,14 +220,14 @@ export function WalletsSuiteCard({
       } else if (isStellarAddr) {
         list.push({ ...base, kind: "stellar", sub: short(addr), address: addr });
       } else if (matchCustodial) {
-        list.push({ ...base, kind: "custodial", sub: `${matchCustodial.chain || "base"} · ${short(addr)}`, walletId: matchCustodial.id });
+        list.push({ ...base, kind: "custodial", sub: short(addr), walletId: matchCustodial.id });
       }
     });
-    custodialSorted.forEach((w) => {
+    custodialSorted.forEach((w, i) => {
       list.push({
         uid: `cw:${w.id}`,
         kind: "custodial", origin: "custodial",
-        label: `${(w.chain || "custodial").toString()}`,
+        label: `${L("Recebimento", "Receiver")} ${i + 1}`,
         sub: short(w.address || w.id),
         walletId: w.id,
         address: w.address || undefined,
@@ -265,7 +265,9 @@ export function WalletsSuiteCard({
   const [createBusy, setCreateBusy] = useState("");
   const [createErr, setCreateErr] = useState("");
   const [createOk, setCreateOk] = useState("");
-  const [newChain, setNewChain] = useState("base");
+  // Receiver wallets are always created on the single supported network; the
+  // user never chooses (the chain is an implementation detail, kept hidden).
+  const newChain = "base";
   const [vaWalletId, setVaWalletId] = useState("");
 
   async function runCreate(kind: string, okMsg: string, fn: () => Promise<Response>) {
@@ -374,7 +376,7 @@ export function WalletsSuiteCard({
             <div className="mb-3 flex items-center gap-2">
               <select className={`${createSelectCls} flex-1`} value={vaWalletId} onChange={(e) => setVaWalletId(e.target.value)}>
                 <option value="">{L("Nova conta → carteira de recebimento", "New account → receiver wallet")}</option>
-                {custodialSorted.map((w) => <option key={w.id} value={w.id}>{(w.chain || "custodial")} · {short(w.address || w.id)}</option>)}
+                {custodialSorted.map((w, i) => <option key={w.id} value={w.id}>{L("Carteira de recebimento", "Receiver wallet")} {i + 1} · {short(w.address || w.id)}</option>)}
               </select>
               <button type="button" onClick={createVA} disabled={!vaWalletId || !!createBusy}
                 className="inline-flex items-center gap-1 rounded-lg bg-tts-deep px-3 py-1.5 text-xs font-bold text-tts-surface transition hover:opacity-90 disabled:opacity-40">
@@ -417,8 +419,6 @@ export function WalletsSuiteCard({
                     <Field label={L("Beneficiário", "Beneficiary")} value={beneficiary} />
                     <Field label={L("Conta", "Account number")} value={account} copy />
                     <Field label={L("Routing", "Routing")} value={routing} copy />
-                    <Field label={L("Rede destino", "Destination network")} value={va.destination_chain} />
-                    <Field label={L("Endereço destino", "Destination address")} value={va.destination_address} copy />
                     <Field label={L("Endereço do banco", "Bank address")} value={bankAddress} />
                     <Field label={L("Beneficiário (endereço)", "Beneficiary address")} value={beneficiaryAddress} />
                     <Field label={L("Referência", "Reference")} value={reference} />
@@ -447,15 +447,10 @@ export function WalletsSuiteCard({
               <Layers className="h-3.5 w-3.5" /> {L("Carteiras de recebimento", "Receiver wallets")}
             </p>
             {customerId && (
-              <div className="flex items-center gap-1.5">
-                <select className={createSelectCls} value={newChain} onChange={(e) => setNewChain(e.target.value)}>
-                  {["base", "ethereum", "solana", "tempo", "tron"].map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <button type="button" onClick={createCustodial} disabled={!!createBusy}
-                  className="inline-flex items-center gap-1 rounded-lg border border-tts-border px-2.5 py-1.5 text-xs font-bold text-tts-deep transition hover:bg-tts-bg disabled:opacity-40">
-                  {createBusy === "custodial" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Nova", "New")}
-                </button>
-              </div>
+              <button type="button" onClick={createCustodial} disabled={!!createBusy}
+                className="inline-flex items-center gap-1 rounded-lg border border-tts-border px-2.5 py-1.5 text-xs font-bold text-tts-deep transition hover:bg-tts-bg disabled:opacity-40">
+                {createBusy === "custodial" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Nova", "New")}
+              </button>
             )}
           </div>
           {custodial.length === 0 && (
@@ -472,8 +467,8 @@ export function WalletsSuiteCard({
                     <div className="flex items-center gap-2">
                       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-deep/10 text-tts-deep"><Layers className="h-4 w-4" /></span>
                       <div>
-                        <p className="text-base font-bold capitalize text-tts-deep">{w.chain || "—"}</p>
-                        <p className="text-[11px] font-semibold text-tts-muted">{L("Carteira de recebimento", "Receiver wallet")}</p>
+                        <p className="text-base font-bold text-tts-deep">{L("Carteira de recebimento", "Receiver wallet")}</p>
+                        <p className="font-mono text-[11px] font-semibold text-tts-muted">{short(w.address || w.id)}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -595,7 +590,7 @@ function TransferPanel({
 
   const customValid = /^G[A-Z2-7]{55}$/.test(customAddr.trim());
   const to = useCustom
-    ? (customValid ? ({ uid: "custom", kind: "stellar", label: "Stellar", sub: short(customAddr), address: customAddr.trim(), usdc: 0 } as TransferAccount) : null)
+    ? (customValid ? ({ uid: "custom", kind: "stellar", label: L("Outra carteira", "Other wallet"), sub: short(customAddr), address: customAddr.trim(), usdc: 0 } as TransferAccount) : null)
     : accounts.find((a) => a.uid === toUid) || null;
 
   // custodial legs require the customer id; stellar→stellar does not.
@@ -689,7 +684,7 @@ function TransferPanel({
             <div className="mb-1 flex items-center justify-between">
               <p className="text-[10px] font-bold uppercase tracking-wider text-tts-muted">{L("Para", "To")}</p>
               <button type="button" onClick={() => setUseCustom((v) => !v)} className="text-[11px] font-bold text-tts-deep hover:underline">
-                {useCustom ? L("Escolher conta", "Pick account") : L("Outro endereço Stellar", "Other Stellar address")}
+                {useCustom ? L("Escolher conta", "Pick account") : L("Outro endereço", "Other address")}
               </button>
             </div>
             {useCustom ? (
@@ -738,8 +733,8 @@ function TransferPanel({
           {from && to && (
             <p className="text-center text-[10px] text-tts-muted">
               {from.kind === "stellar" && to.kind === "stellar"
-                ? L("Pagamento USDC on-chain na Stellar.", "On-chain USDC payment on Stellar.")
-                : L("Liquidado pela Bridge entre as carteiras.", "Settled by Bridge across the wallets.")}
+                ? L("Transferência instantânea de USDC.", "Instant USDC transfer.")
+                : L("Liquidado entre as carteiras.", "Settled across the wallets.")}
             </p>
           )}
       </div>
