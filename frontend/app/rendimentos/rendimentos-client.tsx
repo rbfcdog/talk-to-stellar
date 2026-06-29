@@ -221,7 +221,7 @@ function formatChartAmount(value: unknown, profile: { short: string }, language:
   return `${formatPrecise(value, language)} ${profile.short}`;
 }
 
-const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 // Timestamp label including the hour, so the 4-hour cadence reads clearly in the
 // tooltip (the X axis itself is hidden).
@@ -261,9 +261,15 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
   if (beforeStart) lastKnown = normalizeDecimal(beforeStart.amount);
   else if (sorted.length) lastKnown = normalizeDecimal(sorted[0].amount);
 
+  // Sample on a 10-minute grid (matching the backend's fixed 10-min snapshots)
+  // so the line advances one point every 10 minutes. Cap the point count for
+  // wider windows so a 7-day view stays light.
+  const windowMs = now - start;
+  const step = Math.max(TEN_MINUTES_MS, Math.floor(windowMs / 200));
+
   let idx = 0;
   const points: ChartPoint[] = [];
-  for (let t = start; t <= now; t += FOUR_HOURS_MS) {
+  for (let t = start; t <= now; t += step) {
     while (idx < sorted.length && Date.parse(String(sorted[idx].date || "")) <= t) {
       lastKnown = normalizeDecimal(sorted[idx].amount);
       idx += 1;
@@ -272,17 +278,19 @@ function buildPositionLinePoints(history: PositionHistoryState | undefined, curr
     points.push({ label: formatChartStamp(iso, language), date: iso, value: Math.max(0, lastKnown) });
   }
 
-  // The final slot reflects the live balance "now".
+  // The final point uses the LAST FIXED SNAPSHOT — not the live balance — so it
+  // stays put within the current 10-minute interval instead of jittering on
+  // every read. Falls back to the live amount only when there's no history yet.
   while (idx < sorted.length) {
     lastKnown = normalizeDecimal(sorted[idx].amount);
     idx += 1;
   }
-  const liveValue = Math.max(0, currentAmount || lastKnown);
+  const fixedValue = Math.max(0, sorted.length ? lastKnown : currentAmount);
   const nowIso = new Date(now).toISOString();
   if (points.length) {
-    points[points.length - 1] = { label: localCopy(language, "Agora", "Now"), date: nowIso, value: liveValue };
+    points[points.length - 1] = { label: localCopy(language, "Agora", "Now"), date: nowIso, value: fixedValue };
   } else {
-    points.push({ label: localCopy(language, "Agora", "Now"), date: nowIso, value: liveValue });
+    points.push({ label: localCopy(language, "Agora", "Now"), date: nowIso, value: fixedValue });
   }
 
   // Convert the balance series into a CUMULATIVE GAIN series: only yield counts,
