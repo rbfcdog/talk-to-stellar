@@ -105,11 +105,16 @@ export default function UsdWithdrawClient({ initialQuery = "" }: { initialQuery?
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<{ id?: string; state?: string } | null>(null);
 
-  // Available USD = the Bridge Stellar wallets' USDC (USDC ≈ USD). The withdrawal
-  // is sent from the primary Bridge wallet (the associated mainnet wallet).
-  const primaryBridge = bridgeWallets.find((w) => w.is_primary) || bridgeWallets[0] || null;
-  const availableUsd = bridgeWallets.reduce((sum, w) => sum + (Number(w.usdc_balance) || 0), 0);
-  const fromAddress = primaryBridge?.public_key || "";
+  // The withdrawal is sent from ONE source account, so the available cap must be
+  // that single account's balance — not the sum of every account (otherwise
+  // "Withdraw all" fills more than the source can cover and Bridge rejects it).
+  // Pick the funded account (most USDC), falling back to the primary.
+  const sourceBridge =
+    [...bridgeWallets].sort((a, b) => (Number(b.usdc_balance) || 0) - (Number(a.usdc_balance) || 0))[0]
+    || bridgeWallets.find((w) => w.is_primary)
+    || null;
+  const availableUsd = Number(sourceBridge?.usdc_balance) || 0;
+  const fromAddress = sourceBridge?.public_key || "";
   const customerId = data?.customer_id || "";
 
   const amountNum = Math.max(0, Number(amount) || 0);

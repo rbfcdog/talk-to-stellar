@@ -209,18 +209,22 @@ export function WalletsSuiteCard({
       const matchCustodial = addr
         ? custodial.find((w) => String(w.address || "").toLowerCase() === addr.toLowerCase())
         : undefined;
-      const received = Number(va.total_received_usd) || 0;
       const base = {
         uid: `va:${va.id}`, origin: "va" as const,
         label: `${L("Depósito", "Deposit")} ${va.currency || "USD"}`,
-        usdc: received,
       };
+      // IMPORTANT: the spendable cap is the LIVE USDC in the resolved destination
+      // wallet — NOT `total_received_usd` (cumulative fiat ever received, which may
+      // already be swept/unconverted). Using fiat-received would let the user
+      // request more than the wallet can actually send.
       if (va.bridge_wallet_id) {
-        list.push({ ...base, kind: "custodial", sub: short(va.bridge_wallet_id), walletId: va.bridge_wallet_id });
+        const cw = custodial.find((w) => w.id === va.bridge_wallet_id);
+        list.push({ ...base, kind: "custodial", sub: short(va.bridge_wallet_id), walletId: va.bridge_wallet_id, usdc: cw ? custodialUsdc(cw) : 0 });
       } else if (isStellarAddr) {
-        list.push({ ...base, kind: "stellar", sub: short(addr), address: addr });
+        const sw = stellar.find((w) => w.public_key === addr);
+        list.push({ ...base, kind: "stellar", sub: short(addr), address: addr, usdc: sw ? stellarUsdc(sw) : 0 });
       } else if (matchCustodial) {
-        list.push({ ...base, kind: "custodial", sub: short(addr), walletId: matchCustodial.id });
+        list.push({ ...base, kind: "custodial", sub: short(addr), walletId: matchCustodial.id, usdc: custodialUsdc(matchCustodial) });
       }
     });
     custodialSorted.forEach((w, i) => {
@@ -245,7 +249,7 @@ export function WalletsSuiteCard({
       });
     });
     return list;
-  }, [virtualAccounts, custodial, custodialSorted, stellarSorted, isEn]);
+  }, [virtualAccounts, custodial, stellar, custodialSorted, stellarSorted, isEn]);
 
   const canTransfer = transferAccounts.length >= 1 && (Boolean(customerId) || stellar.length >= 1);
 

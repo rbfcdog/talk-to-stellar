@@ -775,7 +775,10 @@ export default function RendimentosClient({
       : balances.find((item) => normalizeUiAssetCode(item.asset_code) === safeSelectedCode);
   const requestedAmount = normalizeDecimal(amount);
   const selectedBalanceAmount = normalizeDecimal(balanceForSelected?.balance || "0");
-  const selectedBalanceInsufficient = Boolean(session.authenticated && requestedAmount > 0 && (!balanceForSelected || selectedBalanceAmount + 0.0000001 < requestedAmount));
+  // Idle-balance "insufficient" + Convert/PIX prompts only make sense when
+  // DEPOSITING. On a withdrawal the money lives in the vault (idle balance ≈ 0),
+  // so this must not fire — otherwise every withdraw wrongly nags "insufficient".
+  const selectedBalanceInsufficient = Boolean(action === "deposit" && session.authenticated && requestedAmount > 0 && (!balanceForSelected || selectedBalanceAmount + 0.0000001 < requestedAmount));
   const alternativeConversionBalance = useMemo(() => {
     return [...balances].filter((item: BalanceLine) => { const c = normalizeUiAssetCode(item.asset_code); return Boolean(c && c !== safeSelectedCode && normalizeDecimal(item.balance) > 0.0000001); }).sort((a, b) => normalizeDecimal(b.balance) - normalizeDecimal(a.balance))[0] || null;
   }, [balances, safeSelectedCode]);
@@ -1500,7 +1503,7 @@ function PortfolioOverview({ language, rows, isTestnet, availableBalance, active
     <section className="tts-op-shell p-5">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-gold">{L("Rendimentos totais", "Total earnings")}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-tts-gold">{L("Saldo total aplicado", "Total balance")}</p>
           <div className="mt-2 flex items-baseline gap-2">
             <p className="text-3xl font-bold tabular-nums text-tts-deep">
               {formatPrecise(totalInvested, language)}
