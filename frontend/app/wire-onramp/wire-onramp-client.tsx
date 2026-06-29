@@ -481,7 +481,11 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
   // The selected source wallet's USDC drives the spendable amount.
   const selectedSourceWallet = pipeline?.wallets.find((w) => w.id === selectedSourceWalletId) || null;
   const sourceUsdcBalance = selectedSourceWallet ? Number(selectedSourceWallet.usdc_balance) : 0;
-  const totalAvailableBalance = sourceUsdcBalance > 0 ? sourceUsdcBalance : (bridgeUsdcBalance > 0 ? bridgeUsdcBalance : vaAvailableBalance);
+  // Spendable = USDC actually sitting in a sendable account. Money still in the VA
+  // (received as fiat, not yet converted/swept) is NOT spendable here — using it as
+  // the cap let users "send" funds that aren't in an account yet. The settling hint
+  // below covers that case.
+  const totalAvailableBalance = sourceUsdcBalance > 0 ? sourceUsdcBalance : bridgeUsdcBalance;
 
   // Destination = selected generated wallet, else the session's linked wallet
   const selectedDestWallet = destWallets.find((w) => w.public_key === selectedWalletKey) || null;
@@ -503,6 +507,12 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
     if (amountNum < 1) {
       setSendStatus("error");
       setSendError(L("O valor mínimo é US$ 1,00.", "Minimum amount is $1.00."));
+      return;
+    }
+    // Never let the user send more than the source account actually holds.
+    if (amountNum > totalAvailableBalance + 1e-7) {
+      setSendStatus("error");
+      setSendError(L("Valor acima do saldo disponível.", "Amount exceeds available balance."));
       return;
     }
     if (!data?.customer_id || !destinationAddress) {
@@ -1273,7 +1283,7 @@ export default function WireOnrampClient({ initialQuery = "" }: { initialQuery?:
 
                     <Button
                       onClick={handleSendToStellar}
-                      disabled={sendStatus === "sending" || !sendAmount || Number(sendAmount) <= 0 || !destinationAddress}
+                      disabled={sendStatus === "sending" || !sendAmount || Number(sendAmount) <= 0 || Number(sendAmount) > totalAvailableBalance + 1e-7 || !destinationAddress}
                       className="w-full"
                     >
                       {sendStatus === "sending" ? (
