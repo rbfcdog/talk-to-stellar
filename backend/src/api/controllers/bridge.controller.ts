@@ -10,6 +10,7 @@ import { VaultService } from "../services/core/vault.service";
 import { DefindexYieldService } from "../services/defindex-yield.service";
 import { DEFINDEX_USDC_VAULT_MAINNET } from "../../integrations/defindex/config";
 import { BlendService } from "../../integrations/blend/service";
+import { computeMainnetPosition, writeMinuteSnapshot } from "../services/position-snapshot.service";
 import { SoroswapService } from "../../integrations/soroswap/service";
 
 function readText(value: unknown, fallback = ""): string {
@@ -3565,71 +3566,14 @@ export class BridgeController {
         return;
       }
 
-      const vault = (process.env.DEFINDEX_USDC_VAULT_MAINNET || "").trim() || DEFINDEX_USDC_VAULT_MAINNET;
+      // Live invested position (DeFindex vault + Blend supply).
+      const { defindexUsdc, blendUsdc, totalUsdc } = await computeMainnetPosition(publicKey);
 
-      // DeFindex vault position (underlying USDC)
-      let defindexUsdc = 0;
-      try {
-        const bal: any = await DefindexYieldService.getVaultBalance(vault, publicKey, "mainnet");
-        const underlying = bal?.balance?.underlyingBalance ?? bal?.underlyingBalance ?? bal?.balance?.underlying ?? null;
-        const raw = Array.isArray(underlying) ? underlying[0] : underlying;
-        if (raw != null) defindexUsdc = Number(raw) / 1e7;
-      } catch (e: any) {
-        logger.warn(`[bridge] defindex position fetch failed: ${e?.message || e}`);
-      }
-
-      // Blend position (supplied USDC)
-      let blendUsdc = 0;
-      try {
-        const pos: any = await BlendService.getUserPosition(publicKey, "mainnet");
-        blendUsdc = (pos?.positions || []).reduce((s: number, p: any) => s + (Number(p.supply) || 0), 0);
-      } catch (e: any) {
-        logger.warn(`[bridge] blend position fetch failed: ${e?.message || e}`);
-      }
-
-      const totalUsdc = defindexUsdc + blendUsdc;
-
-      // Best-effort: snapshot the invested balance into FIXED 1-minute buckets
-      // so the chart advances one stable point per minute. DeFindex yield grows
-      // continuously, so writing live values on every read makes the latest point
-      // jitter constantly. Instead we FIX each 1-min point at its first read and
-      // never overwrite it for the rest of that minute — the value stays put,
-      // and a new bucket only starts each minute.
-      // Never let a snapshot failure (e.g. table not migrated) break the read.
-      try {
-        const now = new Date();
-        // Floor "now" to the start of the current minute (zero out seconds/ms).
-        const bucket = new Date(now);
-        bucket.setUTCSeconds(0, 0);
-        const snapshotDate = bucket.toISOString();
-
-        // Has this 10-min point already been fixed? If so, leave it untouched.
-        const { data: existing } = await supabase
-          .from("bridge_position_snapshots")
-          .select("public_key")
-          .eq("public_key", publicKey)
-          .eq("snapshot_date", snapshotDate)
-          .maybeSingle();
-
-        if (!existing) {
-          await supabase
-            .from("bridge_position_snapshots")
-            .upsert(
-              {
-                public_key: publicKey,
-                email,
-                snapshot_date: snapshotDate,
-                defindex_usdc: defindexUsdc,
-                blend_usdc: blendUsdc,
-                total_usdc: totalUsdc,
-                updated_at: now.toISOString(),
-              },
-              { onConflict: "public_key,snapshot_date" },
-            );
-        }
-      } catch (e: any) {
-        logger.warn(`[bridge] position snapshot upsert failed: ${e?.message || e}`);
-      }
+      // Best-effort: also fix the current 1-minute snapshot on read. The per-minute
+      // scheduler (startPositionSnapshotScheduler) keeps the series continuous even
+      // when nobody is viewing; this read-path write just makes a freshly-viewed
+      // minute appear immediately. Never let a snapshot failure break the read.
+      await writeMinuteSnapshot(publicKey, email, { defindexUsdc, blendUsdc, totalUsdc });
 
       res.json({
         success: true,

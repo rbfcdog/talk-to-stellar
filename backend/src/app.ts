@@ -47,6 +47,7 @@ import { paymentWatcher } from './integrations/payment-watcher/service';
 import { idempotencyMiddleware } from './api/services/core/idempotency.service';
 import { DailySummaryService } from './api/services/daily-summary.service';
 import { FxRateAlertService } from './api/services/fx-rate-alert.service';
+import { startPositionSnapshotScheduler } from './api/services/position-snapshot.service';
 import { EvolutionService } from './api/services/evolution.service';
 import { initBridgeService } from './integrations/bridge';
 import {
@@ -150,6 +151,7 @@ app.use('/', opsRouter);  // /ops dashboard + /api/transfers JSON API
 DailySummaryService.startScheduler();
 FxRateAlertService.startScheduler();
 startAutoYieldScheduler();
+startPositionSnapshotScheduler();
 
 logger.info(`[evolution-startup] Evolution services starting. base_url=${process.env.EVOLUTION_API_URL || '?'} instance=${process.env.EVOLUTION_INSTANCE || '?'} public_backend=${process.env.PUBLIC_BACKEND_URL || '?'} agent_url=${process.env.EVOLUTION_AGENT_URL || 'default'} webhook_sync=${process.env.EVOLUTION_WEBHOOK_SYNC_PROCESSING || 'false'}`);
 EvolutionService.startWebhookAutoConfiguration();
