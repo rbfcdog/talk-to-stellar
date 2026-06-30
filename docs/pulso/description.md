@@ -1,18 +1,16 @@
 # TalkToStellar — DoraHacks BUIDL Submission
 
-> **The invisible Stellar bank.** Users chat. Soroswap, DeFindex, Blend, and Bridge do the work.
+> **The invisible Stellar bank.** Users chat. Bridge, DeFindex, Blend, and Soroswap do the work — chained into one money lifecycle.
 
 | | |
 |---|---|
 | **Project** | TalkToStellar |
 | **Tagline** | A bank you talk to — real dollars, real yield, real cash-out, all from a chat. |
 | **Category** | DeFi · Payments · Consumer · AI / Conversational |
-| **Network** | Stellar (testnet live, mainnet-ready) |
-| **Live app** | https://talk-to-stellar-owxg.vercel.app |
-| **Chat** | https://talk-to-stellar-owxg.vercel.app/chat |
+| **Network** | Stellar mainnet — wire/ACH + DeFindex + Blend live; Pix in compliance |
+| **Live app** | https://talktostellar.com |
+| **Chat** | https://talktostellar.com/chat |
 | **GitHub** | https://github.com/rbfcdog/talk-to-stellar |
-| **Pitch deck** | https://docs.google.com/presentation/d/1QjniT8MyUwDwbDIfWl797Mscottl4tdPCIDI_vZNJ3Y/edit |
-| **Customer interviews (PT-BR)** | https://drive.google.com/drive/u/0/folders/1HnMCFOUPH1FSmTptT2hlhcuTNkxyrV9M |
 
 ---
 
@@ -21,61 +19,139 @@
 Stellar is one of the most capable payment and DeFi networks in the world — and almost
 nobody uses it directly.
 
-Not because it isn't good enough, but because **the surface is wrong**. Users don't want
-to manage trustlines, path-find routes, sign XDR envelopes, or choose between Soroswap,
-Phoenix, and Aqua. They want to **send money, earn yield, and convert currencies**. The
-complexity sits between the intent and the action.
+Not because it isn't good enough, but because **the surface is wrong**. The pieces a real
+financial life needs are all there — a fiat ramp (Bridge), yield (DeFindex, Blend), a DEX
+(Soroswap), settlement (Stellar core) — but they're **separate products**, each with its
+own wallet, trustlines, XDR envelopes, contract addresses, and chain mechanics. To go from
+"dollars in my US bank" to "dollars earning yield" to "dollars back in my bank", a user
+today has to stitch four protocols together by hand.
 
-The result: Stellar's infrastructure is underutilized. Soroswap liquidity goes untapped,
-DeFindex and Blend yield without retail deposits, and Bridge's wire/ACH rails sit idle for
-most users. **The ecosystem is built — the access layer isn't.**
+So they don't. The result is an ecosystem that is **built but underused**: Soroswap
+liquidity goes untapped, DeFindex and Blend yield without retail deposits, and Bridge's
+wire/ACH rails sit idle for most people. **The infrastructure exists — the layer that
+makes it act as one product doesn't.**
 
 Our customer interviews in Brazil, Argentina, and Colombia pointed at the same wall:
 
 > *"I'd use it if it felt like Nubank and lived in WhatsApp."*
 
-So that's what we built.
+The job isn't to build another protocol frontend. It's to make the protocols that already
+exist **compose into a single thing a person can actually use** — and hide every seam.
 
 ---
 
 ## What TalkToStellar is
 
-TalkToStellar is a **conversational financial platform built entirely on Stellar
-infrastructure — where the infrastructure is completely invisible to the user.**
+TalkToStellar is a **conversational financial platform that chains Stellar's ecosystem
+into one money lifecycle — where the infrastructure is completely invisible to the user.**
 
-The user sends a WhatsApp, Telegram, or web-chat message:
+The user sends a WhatsApp, Telegram, or web-chat message; an AI agent maps the intent to
+the right integration, builds the transaction (signed server-side with the user's vaulted
+key), and replies in one line with a link. The user never sees a DEX, a vault, a route, a
+chain, or a contract.
 
 ```
-"quero trazer dólares do meu banco americano"   → receive USD by wire/ACH
-"converte 200 reais pra dólar"                    → BRL → USD via PIX
-"aplica 50 dólares"                               → earn yield on USDC
-"troca 50 XLM por USDC"                           → swap
-"saldo"                                           → balance
+"quero trazer dólares do meu banco americano"   → receive USD by wire/ACH   (Bridge)
+"aplica meus dólares"                            → earn yield on USDC        (DeFindex + Blend)
+"converte 50 XLM pra dólar"                      → swap / convert            (Soroswap)
+"saca 100 dólares pro meu banco"                 → cash out wire/ACH         (Bridge, auto-redeem)
+"saldo"                                          → balance                   (Stellar core)
 ```
-
-The AI agent understands the intent, picks the right tool (Bridge wire, Soroswap DEX,
-DeFindex/Blend yield, PIX anchor), builds the transaction or the right interface, and
-replies in one line with a link. The user never sees a DEX, a vault, a route, a chain, or
-a contract.
 
 **Stellar does the work. The user just chats.**
 
 ---
 
-## The 60-second demo flow
+## How the integrations come together
 
-The story arc judges see in the demo video: *money arrives → money grows → money out.*
+This is the core of the project: the integrations aren't a feature list, they're a
+**pipeline**. Follow a single dollar through the stack — every leg is load-bearing, every
+leg settles on Stellar, and the handoffs are automatic.
 
-| Step | Screen | What happens |
-|---|---|---|
-| 1 | **Chat** | "I want to receive dollars" → agent returns a link |
-| 2 | **Receive dollars** (`/wire-onramp`) | Real US bank details (routing + account); a normal wire/ACH lands dollars in the user's account |
-| 3 | **Returns** (`/rendimentos`) | Balance + APY, gain-only chart; tap a product → supply USDC in one tap → ✓ confirmed |
-| 4 | **Withdraw** (`/usd-withdraw`) | Send dollars back to a US bank over ACH/wire |
-| 5 | **Chat** | Receipt and history land back in the conversation |
+```
+   US bank ──wire/ACH──►  ① BRIDGE on-ramp
+                              │  USD → USDC into the user's custodial Stellar wallet
+                              ▼
+                          ② STELLAR custody
+                              │  per-user key in Supabase Vault · platform-sponsored gas
+                              ▼
+                          ③ AUTO-YIELD orchestrator
+                              │  sweeps idle USDC and splits it…
+                 ┌────────────┼─────────────┐
+                 ▼            ▼              ▼
+            DEFINDEX       BLEND         SOROSWAP
+            (vault)      (lending)   (convert idle XLM→USDC,
+                 │            │        LP zap, path payments)
+                 └────────────┼─────────────┘
+                              ▼
+                          ④ Money now lives in yield by default
+                              │
+        any spend ──────────► ⑤ AUTO-REDEEM
+                              │  pulls exactly the shortfall back out of
+                              │  DeFindex → Blend, the mirror of step ③
+                              ▼
+                          ⑥ BRIDGE off-ramp ──wire/ACH──► US bank
+```
 
-Throughout, the UI speaks the user's language — "account", "deposit", "earnings" — never
-"wallet", "chain", "vault", or a protocol name.
+1. **In — Bridge.** A virtual US account gives the user real routing/account numbers. A
+   normal wire or ACH lands **USDC in their own custodial Stellar wallet** (live on mainnet).
+2. **Custody — Stellar.** Each user gets one isolated Stellar key, generated server-side and
+   encrypted in **Supabase Vault**; gas is **sponsored by the platform**, so the user never
+   holds or thinks about XLM.
+3. **Earn (automatic) — DeFindex + Blend + Soroswap.** Idle USDC is swept and **split across
+   DeFindex (vault) and Blend (lending)** by the auto-yield orchestrator. **Soroswap** handles
+   any conversion in the path — e.g. swapping idle XLM into USDC first, or zapping a single
+   USDC amount into balanced XLM/USDC liquidity — all via path payments.
+4. **Hold — yield by default.** The user's balance doesn't sit idle; it's working across
+   protocols, with a live per-minute gain curve and APY.
+5. **Spend (automatic) — auto-redeem.** Because the money is always in yield, the instant any
+   transaction needs USDC the system **redeems exactly the shortfall** back out of DeFindex,
+   then Blend — the exact inverse of the initial allocation. The user never manually "exits"
+   a position.
+6. **Out — Bridge.** The off-ramp sends USDC back to the user's US bank over **wire or ACH**.
+
+Every signing leg uses the wallet's vaulted key; every settlement, hash, and receipt is on
+Stellar. The agent chooses the tool; the chaining is the product.
+
+---
+
+## The integrations, one by one
+
+### Bridge.xyz — the dollar rail (on/off-ramp) · **live on mainnet**
+- Virtual US account → the user receives USD by **wire/ACH**, arriving as **USDC on Stellar**.
+- **Off-ramp** back to a US bank over wire/ACH; the off-ramp **auto-redeems from yield** first.
+- Per-email **custodial Stellar wallets** with the signing key in a vault.
+- A **unified internal transfer** moves USDC across every account (custodial⇄custodial,
+  custodial→stellar, stellar→stellar, stellar→custodial), signing the Stellar legs server-side.
+- *Pix (BRL) is in Bridge's compliance phase — wired in, but not yet enabled for mainnet.*
+
+### DeFindex — yield vault (Soroban) · **live on mainnet**
+- One-tap USDC deposits into an auto-optimized vault; `buildVaultAction` → sign → submit.
+- The first leg the auto-yield split funds, and the first it redeems on a spend.
+- Vault address, strategy, and contract details stay invisible — the user sees "aplicação".
+
+### Blend — lending pool (Soroban) · **live on mainnet**
+- USDC supplied directly into Blend's lending market for variable APY (`buildSupplyXdr` + submit).
+- Sits beside DeFindex in the split; the home view shows simple **USDC yield**, higher-APY
+  Blend markets live behind **Advanced** (more markets rolling out).
+
+### Soroswap — conversion & liquidity (Soroban + path payments)
+- **Internal conversion:** swaps happen behind the scenes via path payments — the user thinks
+  "dollars", not token pairs.
+- **Liquidity zap:** invest a single USDC amount into an XLM/USDC pool (swap half → add
+  balanced liquidity). *Integration is being wired in / expanded now.*
+
+### Auto-yield — the orchestrator that ties three protocols together
+- Sweeps idle USDC and splits it across **DeFindex + Blend** (configurable split), optionally
+  swapping idle XLM (above a gas reserve) via **Soroswap** first.
+- Its inverse — **auto-redeem on spend** — is what makes "money always earning" safe for a
+  bank-like UX. Runs on both networks and on a scheduler.
+
+### Stellar native — custody & settlement
+- Per-user isolated keys, encrypted in **Supabase Vault**; signing gated by **PIN (bcrypt)** or
+  **Passkey (WebAuthn / P-256)**; platform-sponsored reserves so users never hold XLM.
+- A 13-state transfer-orchestration engine with an append-only audit log; every operation
+  carries a Stellar hash for verifiable evidence.
 
 ---
 
@@ -91,16 +167,16 @@ WhatsApp / Telegram / Web Chat
 ┌──────────────────────────────────────────────┐
 │  Tool layer  (invisible to the user)          │
 │                                               │
-│  • Soroswap     — DEX aggregator / swaps      │
+│  • Bridge.xyz   — wire / ACH USD rails        │
 │  • DeFindex     — Soroban yield vaults         │
 │  • Blend        — Soroban lending pools        │
-│  • Bridge.xyz   — wire / ACH USD rails         │
-│  • Etherfuse    — PIX BRL on/off-ramp (SEP-24) │
+│  • Soroswap     — swaps / liquidity (paths)    │
+│  • Auto-yield   — orchestrates the three above │
 │  • Stellar RPC / Horizon — settlement          │
 └──────────────────────────────────────────────┘
             │
             ▼
-   Stellar testnet / mainnet-ready
+   Stellar mainnet  (wire/ACH + DeFindex + Blend live)
             │
             ▼
    Frontend confirmation pages  (PIN / Passkey / WebAuthn)
@@ -109,43 +185,6 @@ WhatsApp / Telegram / Web Chat
 The agent uses **intent routing via system prompt** — each integration is described to the
 LLM as a natural-language routing spec, and the model picks the right tool via function
 calling. New integrations are added by extending the spec, not by writing parsers.
-
----
-
-## Stellar ecosystem integrations
-
-### Soroswap — DEX aggregator
-- Token swaps routed through Soroswap's aggregator (covers Phoenix, Aqua, SDEX).
-- Live quote → XDR build → sign → submit; the user only sees the output amount.
-- Agent routes via `open_swap_interface`; pair, amount, and trade type pre-filled from chat.
-
-### DeFindex — Soroban yield vaults
-- Users earn yield on USDC deposits with a single tap.
-- Agent calls `prepare_yield_action` → `confirm_yield_action`.
-- Vault address, strategy, and contract details stay invisible.
-- User sees: *"50 USDC prontos pra render. 👇 https://…"*
-
-### Blend — Soroban lending pools
-- USDC supplied directly into Blend's lending market for variable APY.
-- One-tap custodial supply from the user's account — no extensions, no signing pop-ups.
-- The home view shows the simple **USDC yield**; higher-APY markets live behind *Advanced*.
-
-### Bridge.xyz — wire / ACH USD rails
-- Users receive USD from a US bank account (wire or ACH) and cash back out the same way.
-- Agent calls `open_wire_onramp_interface`; routing number, account number, and bank name
-  come from a Bridge virtual account scoped to the session.
-- User sees: *"Dados pra receber dólar de US$ 500 via banco americano. 👇 https://…"*
-
-### Etherfuse — PIX on/off-ramp
-- BRL deposits via PIX → USDC on Stellar, and BRL withdrawals from USDC → PIX key.
-- Full anchor integration over the SEP-24 interactive flow.
-
-### Stellar native — custody & settlement
-- Per-user isolated keys, generated server-side and stored encrypted in **Supabase Vault**
-  — keys never live in app tables.
-- Signing is gated by the user's **PIN (bcrypt)** or **Passkey (WebAuthn / P-256)**.
-- Smart accounts via OpenZeppelin Soroban contracts.
-- A 13-state transfer-orchestration engine with an append-only audit log.
 
 ---
 
@@ -160,13 +199,13 @@ Every integration follows the same UX rule:
 | DEX / Soroswap route | "troca direta" + the output amount |
 | DeFindex / Blend | "aplicação" / "rendimento" |
 | Bridge wire | "banco americano" |
-| Stellar / Base / chain | "conta" (account) — the chain is hidden |
+| Stellar / chain | "conta" (account) — the chain is hidden |
 | Wallet | "conta" — never "wallet" |
 | XDR envelope | a confirmation button |
 
 This isn't hiding complexity for its own sake — it's the **correct product abstraction**:
 users buy outcomes, not mechanisms. Stellar's infrastructure delivers the outcome;
-TalkToStellar is the translation layer.
+TalkToStellar is the translation layer that makes the four protocols feel like one bank.
 
 ---
 
@@ -178,62 +217,29 @@ TalkToStellar is the translation layer.
   confirmation happens on a dedicated page, not in chat.
 - **Defense in depth:** Row-Level Security on 48+ tables, idempotency on money routes,
   one-time/expiring secure links for confirmation, and an append-only transfer audit log.
-- **Honest about the demo:** the hackathon build runs a shared-access gate on the Bridge
-  console for fast iteration; productionizing per-user authorization on the money routes is
-  the top item on the roadmap below.
-
----
-
-## What's been built
-
-| Feature | Status |
-|---|---|
-| WhatsApp integration (Evolution API) | Production |
-| Telegram integration | Production |
-| LangChain AI agent with intent routing | Production |
-| Soroswap swap interface (quote + XDR build) | Built |
-| DeFindex yield (deposit / withdraw / balance) | Production (testnet) |
-| Blend lending supply (USDC + advanced markets) | Built (mainnet) |
-| Bridge.xyz wire/ACH virtual accounts (on + off-ramp) | Built |
-| PIX on-ramp / off-ramp (Etherfuse) | Production (sandbox) |
-| Conversion engine (BRL ↔ USDC ↔ XLM ↔ EURC) | Production |
-| Per-user vaulted-key architecture (Supabase Vault) | Production |
-| PIN + Passkey / WebAuthn auth | Production |
-| Smart accounts (Soroban / OpenZeppelin) | Production |
-| 13-state cross-border transfer FSM | Production |
-| Account-first UI (no wallet/chain/protocol jargon) | Production |
-| 45+ frontend pages (Next.js) | Production |
-| Row-Level Security on 48+ tables | Production |
-| Multi-provider email (SES / Resend / SendGrid) | Production |
-| Transaction history + receipts with Stellar hash | Production |
-| P2P payments to saved contacts | Production |
-| Payment links (pay-anyone flow) | Production |
-| Mainnet console (read-only account view) | Production |
 
 ---
 
 ## Why this matters for Stellar
 
-Every user of TalkToStellar is a user of Soroswap, DeFindex, Blend, Bridge, and Stellar —
-they just don't know it. **That's the point.**
+Every user of TalkToStellar is a user of Bridge, DeFindex, Blend, and Soroswap at once —
+they just don't know it. **That's the point.** The value isn't any single integration; it's
+that they're **chained into one lifecycle** a non-crypto user can run from a chat box.
 
 Retail adoption of DeFi infrastructure doesn't come from better UX on protocol frontends.
-It comes from **embedding the protocol inside products people already use** — like WhatsApp.
-
-TalkToStellar is a proof that Stellar's ecosystem can be packaged into a chat-first
-experience that **feels like a bank, works like DeFi, and requires zero crypto knowledge**
-from the end user.
+It comes from **composing the protocols into a product people already use** — like WhatsApp —
+so that a dollar can ramp in, earn across two yield markets, and ramp out, without the user
+ever meeting a wallet, a route, or a contract.
 
 ---
 
 ## Roadmap
 
-- **Per-user authorization** on all money-movement endpoints (session-token + ownership
-  checks) — replacing the demo's shared-access gate.
-- **Receipts & insights in chat** — shareable receipt images and a "you saved R$ X vs a
-  bank" summary after each operation (the backend already computes these).
-- **Projected earnings** on the yield screen — "in 1 year this becomes $X".
-- **Mainnet GA** for the wire/ACH and yield flows once authorization hardening lands.
+- **Pix (BRL) on mainnet** once Bridge clears compliance — the flow is already wired in.
+- **More Blend markets** in Advanced, and **deeper Soroswap** conversion/LP integration.
+- **Per-user authorization** hardening on all money-movement endpoints.
+- **Receipts & insights in chat** — shareable receipts and a "you saved R$ X vs a bank"
+  summary after each operation (the backend already computes these).
 
 ---
 
@@ -250,15 +256,14 @@ Solo project by **Rodrigo** — full-stack developer, building on Stellar.
 
 | | |
 |---|---|
-| **Live app** | https://talk-to-stellar-owxg.vercel.app |
-| **Chat** | https://talk-to-stellar-owxg.vercel.app/chat |
-| **PIX flow** | https://talk-to-stellar-owxg.vercel.app/pix-on |
-| **Swap UI** | https://talk-to-stellar-owxg.vercel.app/swap |
-| **Wire / ACH UI** | https://talk-to-stellar-owxg.vercel.app/wire-onramp |
-| **Yield UI** | https://talk-to-stellar-owxg.vercel.app/yield |
-| **Mainnet console** | https://talk-to-stellar-owxg.vercel.app/mainnet |
+| **Live app** | https://talktostellar.com |
+| **Chat** | https://talktostellar.com/chat |
+| **Wire / ACH UI** | https://talktostellar.com/wire-onramp |
+| **Yield UI** | https://talktostellar.com/rendimentos |
+| **Withdraw UI** | https://talktostellar.com/usd-withdraw |
+| **Mainnet console** | https://talktostellar.com/mainnet |
 | **GitHub** | https://github.com/rbfcdog/talk-to-stellar |
 
 ---
 
-*Built on Stellar. Powered by Soroswap, DeFindex, Blend, and Bridge. Delivered by chat.*
+*Built on Stellar. Bridge ramps it in, DeFindex and Blend make it earn, Soroswap moves it, and the chain settles it — delivered by chat.*
