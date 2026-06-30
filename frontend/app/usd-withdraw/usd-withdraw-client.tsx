@@ -88,6 +88,9 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
   // The Bridge Stellar wallets for this email — these ARE the mainnet wallets
   // that hold the dollars and are the source of the withdrawal.
   const [bridgeWallets, setBridgeWallets] = useState<BridgeStellarWallet[]>([]);
+  // Invested (yield) USDC per wallet — auto-redeemed on withdrawal, so it counts
+  // toward the available balance.
+  const [investedByWallet, setInvestedByWallet] = useState<Record<string, number>>({});
 
   // Destination accounts
   const [extAccounts, setExtAccounts] = useState<ExternalAccount[]>([]);
@@ -105,12 +108,14 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
   // The withdrawal is sent from ONE source account, so the available cap must be
   // that single account's balance — not the sum of every account (otherwise
   // "Withdraw all" fills more than the source can cover and Bridge rejects it).
-  // Pick the funded account (most USDC), falling back to the primary.
+  // Balance = idle USDC + invested (yield) USDC, since the backend auto-redeems
+  // from yield when the withdrawal runs. Pick the account with the most total.
+  const walletTotal = (w: BridgeStellarWallet) => (Number(w.usdc_balance) || 0) + (investedByWallet[w.public_key] || 0);
   const sourceBridge =
-    [...bridgeWallets].sort((a, b) => (Number(b.usdc_balance) || 0) - (Number(a.usdc_balance) || 0))[0]
+    [...bridgeWallets].sort((a, b) => walletTotal(b) - walletTotal(a))[0]
     || bridgeWallets.find((w) => w.is_primary)
     || null;
-  const availableUsd = Number(sourceBridge?.usdc_balance) || 0;
+  const availableUsd = sourceBridge ? walletTotal(sourceBridge) : 0;
   const fromAddress = sourceBridge?.public_key || "";
   const customerId = data?.customer_id || "";
 
@@ -145,6 +150,19 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
       const json = await res.json().catch(() => ({}));
       const list: BridgeStellarWallet[] = (json.wallets ?? []).filter(Boolean);
       setBridgeWallets(list);
+      // Money lives in yield by default, so the withdrawable balance is idle
+      // USDC PLUS what's invested (the backend auto-redeems from yield when the
+      // withdrawal runs). Pull each wallet's invested position so "Available"
+      // and "Withdraw all" reflect the full balance, not just idle funds.
+      Promise.all(
+        list.map(async (w) => {
+          try {
+            const r = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(w.public_key)}&t=${Date.now()}`, { cache: "no-store" });
+            const j = await r.json().catch(() => ({}));
+            return [w.public_key, j?.success ? Number(j.total_invested_usdc) || 0 : 0] as const;
+          } catch { return [w.public_key, 0] as const; }
+        }),
+      ).then((entries) => setInvestedByWallet(Object.fromEntries(entries)));
     } catch { /* non-blocking */ }
   }, []);
 
