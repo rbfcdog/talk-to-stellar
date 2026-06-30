@@ -241,16 +241,6 @@ ever meeting a wallet, a route, or a contract.
 - **Receipts & insights in chat** — shareable receipts and a "you saved R$ X vs a bank"
   summary after each operation (the backend already computes these).
 
----
-
-## Team
-
-Solo project by **Rodrigo** — full-stack developer, building on Stellar.
-
-- GitHub: https://github.com/rbfcdog
-- Contact: contact.andreloubet@gmail.com
-
----
 
 ## Links
 
