@@ -2,7 +2,7 @@
 
 **The invisible Stellar bank.** Users chat. Bridge, DeFindex, Blend, and Soroswap do the work — chained into one money lifecycle.
 
-| Field | Value |
+| | |
 |---|---|
 | **Project** | TalkToStellar |
 | **Tagline** | A bank you talk to — real dollars, real yield, real cash-out, all from a chat. |
