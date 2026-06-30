@@ -69,6 +69,51 @@ type TransferAccount = {
 const f2 = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const short = (k?: string | null) => (k && k.length > 12 ? `${k.slice(0, 6)}…${k.slice(-6)}` : k || "—");
 
+// Collapse a name/string that arrives stacked ("John Doe John Doe" → "John Doe").
+function dedupName(value?: string | null): string {
+  const t = String(value || "").trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  const h = Math.floor(t.length / 2);
+  if (t[h] === " " && t.slice(0, h).trim() === t.slice(h + 1).trim()) return t.slice(0, h).trim();
+  const mid = t.lastIndexOf(" ", Math.ceil(t.length / 2));
+  if (mid > 0) {
+    const a = t.slice(0, mid).trim();
+    const b = t.slice(mid).trim();
+    if (a && a === b) return a;
+  }
+  return t;
+}
+
+// A prominent, copy-friendly deposit-instruction field (bank, account, routing…).
+function BigField({ label, value, mono = false, copy = false }: {
+  label: string;
+  value?: string | null;
+  mono?: boolean;
+  copy?: boolean;
+}) {
+  const [done, setDone] = useState(false);
+  if (value == null || String(value).trim() === "") return null;
+  const v = String(value);
+  return (
+    <div className="rounded-xl border border-tts-border bg-tts-surface px-3 py-2.5">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-tts-muted">{label}</p>
+      <div className="mt-0.5 flex items-center justify-between gap-2">
+        <p className={`break-all text-sm font-bold text-tts-deep ${mono ? "font-mono" : ""}`}>{v}</p>
+        {copy && (
+          <button
+            type="button"
+            onClick={() => { try { navigator.clipboard.writeText(v); setDone(true); setTimeout(() => setDone(false), 1200); } catch { /* */ } }}
+            className="shrink-0 text-tts-muted transition hover:text-tts-deep"
+            aria-label="copy"
+          >
+            {done ? <Check className="h-4 w-4 text-tts-confirm" /> : <Copy className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function depositField(va: SuiteVA, ...keys: string[]): string | null {
   const sources = [va.source_deposit_instructions, va.deposit_instructions];
   for (const src of sources) {
@@ -362,23 +407,8 @@ export function WalletsSuiteCard({
         </div>
       )}
 
-      {/* Move money panel */}
-      {canTransfer && (
-        <div ref={panelRef}>
-          <TransferPanel
-            isEn={isEn}
-            accounts={transferAccounts}
-            customerId={customerId}
-            email={email}
-            onDone={onTransferDone}
-            fromUid={fromUid}
-            setFromUid={setFromUid}
-            toUid={toUid}
-            setToUid={setToUid}
-          />
-        </div>
-      )}
-
+      {/* Deposit accounts (VA) first — these are the wire/ACH details the
+          on-ramp user needs front-and-center. */}
       {/* Virtual accounts — full detail card */}
       {virtualAccounts.length > 0 && (
         <div className="mb-5">
@@ -411,13 +441,13 @@ export function WalletsSuiteCard({
               const reference = depositField(va, "deposit_message", "reference", "payment_reference");
               const uid = `va:${va.id}`;
               return (
-                <div className="rounded-2xl border border-tts-border bg-tts-bg/60 p-4">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-tts-confirm/15 text-tts-confirm"><Banknote className="h-4 w-4" /></span>
+                <div className="rounded-2xl border-2 border-tts-confirm/40 bg-tts-confirm/[0.06] p-5 shadow-sm">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-tts-confirm/20 text-tts-confirm"><Banknote className="h-5 w-5" /></span>
                       <div>
-                        <p className="text-base font-bold uppercase text-tts-deep">{va.currency || "USD"}</p>
-                        <p className="text-[11px] font-semibold text-tts-muted">{L("Conta de depósito", "Deposit account")}</p>
+                        <p className="text-base font-bold text-tts-deep">{L("Envie seu wire/ACH para esta conta", "Send your wire/ACH here")}</p>
+                        <p className="text-[11px] font-semibold text-tts-muted">{L("Conta de depósito", "Deposit account")} · {va.currency || "USD"}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -426,15 +456,20 @@ export function WalletsSuiteCard({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* The fields you actually wire to — large + one-tap copy. */}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <BigField label={L("Banco", "Bank")} value={bank} />
+                    <BigField label={L("Beneficiário", "Beneficiary")} value={dedupName(beneficiary)} />
+                    <BigField label={L("Número da conta", "Account number")} value={account} mono copy />
+                    <BigField label={L("Routing", "Routing number")} value={routing} mono copy />
+                  </div>
+
+                  {/* Secondary details. */}
+                  <div className="mt-3 grid grid-cols-2 gap-3 border-t border-tts-border/50 pt-3">
                     <Field label={L("Status", "Status")} value={va.status} />
                     <Field label="ID" value={va.id} copy />
-                    <Field label={L("Banco", "Bank")} value={bank} />
-                    <Field label={L("Beneficiário", "Beneficiary")} value={beneficiary} />
-                    <Field label={L("Conta", "Account number")} value={account} copy />
-                    <Field label={L("Routing", "Routing")} value={routing} copy />
                     <Field label={L("Endereço do banco", "Bank address")} value={bankAddress} />
-                    <Field label={L("Beneficiário (endereço)", "Beneficiary address")} value={beneficiaryAddress} />
+                    <Field label={L("Beneficiário (endereço)", "Beneficiary address")} value={dedupName(beneficiaryAddress)} />
                     <Field label={L("Referência", "Reference")} value={reference} />
                   </div>
 
@@ -449,6 +484,23 @@ export function WalletsSuiteCard({
                 </div>
               );
             }}
+          />
+        </div>
+      )}
+
+      {/* Move money panel */}
+      {canTransfer && (
+        <div ref={panelRef}>
+          <TransferPanel
+            isEn={isEn}
+            accounts={transferAccounts}
+            customerId={customerId}
+            email={email}
+            onDone={onTransferDone}
+            fromUid={fromUid}
+            setFromUid={setFromUid}
+            toUid={toUid}
+            setToUid={setToUid}
           />
         </div>
       )}
