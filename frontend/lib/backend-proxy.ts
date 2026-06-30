@@ -88,6 +88,10 @@ export async function proxyBackendApi(
   const init: RequestInit = {
     method: req.method,
     headers,
+    // Never let Next.js's Data Cache serve a stale backend response — these are
+    // live, per-request reads (balances, positions, history). Without this a
+    // polled GET (same URL each minute) keeps returning the first response.
+    cache: "no-store",
   };
 
   if (body !== undefined) init.body = body;
@@ -98,6 +102,8 @@ export async function proxyBackendApi(
     const response = passthroughResponseWithSession(text, res.status, res.headers.get("content-type") || "application/json", requestSource);
     response.headers.set("x-request-id", res.headers.get("x-request-id") || requestId);
     response.headers.set("x-correlation-id", res.headers.get("x-correlation-id") || correlationId);
+    // Stop any CDN/browser from caching the proxied response.
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     return response;
   } catch (error: any) {
     console.error("[backend-proxy] request failed", { target, error: error?.message || error });
