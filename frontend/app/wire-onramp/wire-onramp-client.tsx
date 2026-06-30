@@ -811,6 +811,7 @@ export default function WireOnrampClient({ initialQuery = "", modeSwitcher }: { 
       <WalletsSuiteCard
         isEn={isEn}
         customerId={data?.customer_id ?? ""}
+        kycStatus={data?.kyc_status || data?.customer_status || ""}
         email={loggedEmail}
         virtualAccounts={(data?.virtual_accounts ?? []) as any}
         custodial={data?.bridge_wallets ?? []}
