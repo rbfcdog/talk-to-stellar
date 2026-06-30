@@ -50,6 +50,32 @@ The user sends a WhatsApp, Telegram, or web-chat message; an AI agent maps the i
 
 ---
 
+## What was already there — and what each integration added
+
+We didn't start from zero. TalkToStellar was already a **working conversational bank for Brazil**, and the hackathon work was about **plugging Stellar's ecosystem into that existing product** — reusing the same rails, not rebuilding them.
+
+**What the product already had (the base):**
+
+- A **conversational AI agent** (WhatsApp / Telegram / web) with intent routing.
+- **Per-user custodial Stellar wallets** with the signing key in **Supabase Vault**.
+- **PIN (bcrypt) + Passkey (WebAuthn)** auth and dedicated **confirmation pages**.
+- **PIX on/off-ramp (BRL)**, a **conversion engine** (BRL / USDC / XLM / CETES), **saved contacts**, **P2P payments**, **payment links**.
+- **Balance, history, and receipts** with a Stellar hash; a 13-state transfer FSM, RLS, idempotency, and an audit log.
+
+The key point: **every integration plugged into those existing rails** — the same agent spec, the same vaulted-key custody, the same PIN/passkey confirmation pages, the same receipts and history. Adding a protocol meant *extending the agent's routing spec and dropping in one tool*, not standing up new infrastructure.
+
+| Already had | The integration that built on it | What it added |
+|---|---|---|
+| BRL-only ramp (PIX) + custodial wallets | **Bridge.xyz** | A **real USD rail** — virtual US accounts (wire/ACH in), USD off-ramp, and a full custodial account suite. Turned a BRL bank into a **dollar** bank. |
+| Idle USDC sitting in the wallet | **DeFindex** | **Yield** — one-tap deposit/withdraw into an auto-optimized vault. Idle dollars now earn. |
+| A single yield source | **Blend** | A **second yield market** (lending) running beside DeFindex, plus higher-APY markets under Advanced. |
+| A "convert" UX backed by simple swaps | **Soroswap** | Real **DEX conversion via path payments** and **XLM/USDC liquidity (zap)** behind the same "convert" button. |
+| Manual deposit/withdraw per protocol | **Auto-yield** | The **orchestration** that chains DeFindex + Blend + Soroswap — auto-allocate idle USDC and **auto-redeem on spend**, so money is always earning yet always spendable. |
+
+The sum is bigger than the parts: the existing conversational/custody/security layer **multiplied** every integration, because each one inherited a finished UX, a signer, and a confirmation flow on day one.
+
+---
+
 ## How the integrations come together
 
 This is the core of the project: the integrations aren't a feature list, they're a **pipeline**. Follow a single dollar through the stack — every leg is load-bearing, every leg settles on Stellar, and the handoffs are automatic.
@@ -67,33 +93,32 @@ Every signing leg uses the wallet's vaulted key; every settlement, hash, and rec
 
 ## The integrations, one by one
 
+Each entry: what it **added** to the existing product, and what it **plugged into**.
+
 ### Bridge.xyz — the dollar rail (on/off-ramp) · live on mainnet
-- Virtual US account: the user receives USD by **wire/ACH**, arriving as **USDC on Stellar**.
-- **Off-ramp** back to a US bank over wire/ACH; the off-ramp **auto-redeems from yield** first.
-- Per-email **custodial Stellar wallets** with the signing key in a vault.
-- A **unified internal transfer** moves USDC across every account (custodial-to-custodial, custodial-to-stellar, stellar-to-stellar, stellar-to-custodial), signing the Stellar legs server-side.
+- **Added:** a real **USD rail**. Virtual US account → the user receives USD by **wire/ACH**, arriving as **USDC on Stellar**; **off-ramp** back to a US bank (wire/ACH) that **auto-redeems from yield** first; per-email **custodial Stellar wallets** with the key vaulted; a **unified internal transfer** across every account (custodial-to-custodial, custodial-to-stellar, stellar-to-stellar, stellar-to-custodial).
+- **Plugged into:** the existing custodial-wallet model and confirmation flow — so a BRL-only conversational bank became a **dollar** bank without a new UX.
 - *Pix (BRL) is in Bridge's compliance phase — wired in, but not yet enabled for mainnet.*
 
 ### DeFindex — yield vault (Soroban) · live on mainnet
-- One-tap USDC deposits into an auto-optimized vault; `buildVaultAction` -> sign -> submit.
-- The first leg the auto-yield split funds, and the first it redeems on a spend.
-- Vault address, strategy, and contract details stay invisible — the user sees "aplicacao".
+- **Added:** **yield on idle dollars**. One-tap USDC deposit/withdraw into an auto-optimized vault; `buildVaultAction` -> sign -> submit.
+- **Plugged into:** the vaulted-key signer and PIN/passkey confirmation — the user just sees "aplicacao", never a vault address or contract. It's the first leg the auto-yield split funds and the first it redeems on a spend.
 
 ### Blend — lending pool (Soroban) · live on mainnet
-- USDC supplied directly into Blend's lending market for variable APY (`buildSupplyXdr` + submit).
-- Sits beside DeFindex in the split; the home view shows simple **USDC yield**, higher-APY Blend markets live behind **Advanced** (more markets rolling out).
+- **Added:** a **second yield market** (lending) beside DeFindex, with live APY and higher-APY markets under **Advanced** (`buildSupplyXdr` + signed submit).
+- **Plugged into:** the same one-tap supply UX and auto-yield split — two protocols, one "rendimento" surface.
 
 ### Soroswap — conversion & liquidity (Soroban + path payments)
-- **Internal conversion:** swaps happen behind the scenes via path payments — the user thinks "dollars", not token pairs.
-- **Liquidity zap:** invest a single USDC amount into an XLM/USDC pool (swap half, then add balanced liquidity). *Integration is being wired in / expanded now.*
+- **Added:** real **on-chain conversion** behind the existing "convert" button — swaps via path payments — plus **XLM/USDC liquidity (zap)** from a single USDC amount.
+- **Plugged into:** the product's conversion engine and quote/fee UX — the user keeps thinking "dollars", not token pairs. *Being wired in / expanded now.*
 
 ### Auto-yield — the orchestrator that ties three protocols together
-- Sweeps idle USDC and splits it across **DeFindex + Blend** (configurable split), optionally swapping idle XLM (above a gas reserve) via **Soroswap** first.
-- Its inverse — **auto-redeem on spend** — is what makes "money always earning" safe for a bank-like UX. Runs on both networks and on a scheduler.
+- **Added:** the **glue**. Sweeps idle USDC and splits it across **DeFindex + Blend** (configurable split), optionally swapping idle XLM (above a gas reserve) via **Soroswap** first; its inverse — **auto-redeem on spend** — makes "money always earning" safe for a bank-like UX. Runs on both networks and on a scheduler.
+- **Plugged into:** the transfer FSM and the spend paths — so every off-ramp/transfer pulls exactly what it needs back out of yield automatically.
 
-### Stellar native — custody & settlement
+### Stellar native — custody & settlement (the base every integration reuses)
 - Per-user isolated keys, encrypted in **Supabase Vault**; signing gated by **PIN (bcrypt)** or **Passkey (WebAuthn / P-256)**; platform-sponsored reserves so users never hold XLM.
-- A 13-state transfer-orchestration engine with an append-only audit log; every operation carries a Stellar hash for verifiable evidence.
+- A 13-state transfer-orchestration engine with an append-only audit log; every operation carries a Stellar hash for verifiable evidence. **This is the layer the four integrations above plugged into — it's why each one shipped fast and felt finished.**
 
 ---
 
