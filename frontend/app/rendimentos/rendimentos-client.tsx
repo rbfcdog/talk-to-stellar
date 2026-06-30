@@ -913,6 +913,22 @@ export default function RendimentosClient({
   // Resolve the login/session wallet (for testnet yield).
   useEffect(() => { if (session.authenticated) loadSessionWallet(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [session.authenticated, session.sessionId, walletEmail]);
 
+  // Auto-refresh every minute so the chart + numbers advance live, matching the
+  // backend's per-minute snapshots. Silent (no spinner); skips backgrounded tabs.
+  useEffect(() => {
+    if (!session.authenticated) return;
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (networkView === "mainnet") {
+        if (walletEmail && selectedWalletKey) { loadPositions(walletEmail, selectedWalletKey); loadEmailWallets(walletEmail); }
+      } else {
+        loadSessionWallet();
+      }
+    }, 60_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.authenticated, networkView, walletEmail, selectedWalletKey]);
+
   // Manual refresh of the yield data (balances, positions, history, APY).
   async function refreshYield() {
     if (refreshing) return;
