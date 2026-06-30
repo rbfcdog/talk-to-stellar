@@ -7,24 +7,20 @@ import {
   Banknote,
   Building2,
   CheckCircle2,
-  Clock,
   Landmark,
   Loader2,
   Plus,
-  Zap,
 } from "lucide-react";
 import {
   OperationalCard,
   OperationalHeader,
   OperationalPage,
-  OperationalStat,
   StatusPill,
 } from "@/components/layout/OperationalShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { BridgeAccountLogin, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
-import { WalletsSuiteCard } from "@/components/shared/wallets-suite-card";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +97,7 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
 
   // Withdrawal
   const [amount, setAmount] = useState(amountParam);
-  const [rail, setRail] = useState<Rail>("ach");
+  const [rail] = useState<Rail>("ach");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<{ id?: string; state?: string } | null>(null);
@@ -276,22 +272,14 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
       />
       {modeSwitcher}
 
-      {/* Available balance */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <OperationalStat label={L("Disponível", "Available")} value={<AnimatedNumber value={availableUsd} format={(n) => `$${fmtUsd(n)}`} />} detail="USD" tone={availableUsd > 0 ? "confirm" : "default"} />
-        <OperationalStat label={L("Conta", "Account")} value={loggedEmail || "—"} detail={customerId ? "Loaded" : "—"} tone={customerId ? "confirm" : "gold"} />
-      </div>
-
-      {/* Full account suite — VAs + custodial + the Bridge Stellar wallets (by email) */}
-      <WalletsSuiteCard
-        isEn={isEn}
-        customerId={customerId}
-        email={loggedEmail}
-        virtualAccounts={data?.virtual_accounts ?? []}
-        custodial={data?.bridge_wallets ?? []}
-        stellar={bridgeWallets.map((w) => ({ public_key: w.public_key, label: w.label, is_primary: w.is_primary, usdc_balance: w.usdc_balance }))}
-        onTransferDone={() => { if (loggedEmail) { load(loggedEmail); loadBridgeWallets(loggedEmail); } }}
-      />
+      {/* Wallet money — the balance available to withdraw, on top */}
+      <OperationalCard className="space-y-1 border-2 border-tts-confirm/40 bg-tts-confirm/[0.06]">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("Saldo disponível para saque", "Money available to withdraw")}</p>
+        <p className="text-3xl font-extrabold text-tts-deep">
+          <AnimatedNumber value={availableUsd} format={(n) => `$${fmtUsd(n)}`} />
+        </p>
+        <p className="text-xs text-tts-muted">{loggedEmail || "—"}</p>
+      </OperationalCard>
 
       {result ? (
         <OperationalCard className="space-y-4 text-center duration-500 animate-in fade-in zoom-in-95">
@@ -313,31 +301,10 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
         </OperationalCard>
       ) : (
         <OperationalCard className="space-y-5">
-          {/* Step 1 — rail (speed) — at the top */}
-          <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("1 · Velocidade", "1 · Speed")}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {([
-                { id: "ach" as Rail, icon: Clock, title: "ACH", sub: L("1–2 dias · taxa menor", "1–2 days · lower fee") },
-                { id: "wire" as Rail, icon: Zap, title: "Wire", sub: L("Mesmo dia · mais rápido", "Same-day · faster") },
-              ]).map((r) => {
-                const on = rail === r.id;
-                const Icon = r.icon;
-                return (
-                  <button key={r.id} type="button" onClick={() => setRail(r.id)} aria-pressed={on}
-                    className={`flex flex-col items-start gap-1 rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-amber-500 bg-amber-500" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}>
-                    <span className={`flex items-center gap-1.5 text-sm font-bold ${on ? "text-stone-950" : "text-tts-deep"}`}><Icon className="h-4 w-4" /> {r.title}</span>
-                    <span className={`text-xs ${on ? "text-stone-900/80" : "text-tts-muted"}`}>{r.sub}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Step 2 — destination */}
+          {/* Step 1 — destination */}
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-              <Landmark className="h-3.5 w-3.5" /> {L("2 · Conta de destino", "2 · Destination account")}
+              <Landmark className="h-3.5 w-3.5" /> {L("1 · Conta de destino", "1 · Destination account")}
             </p>
             {extLoading ? (
               <div className="flex items-center gap-2 text-sm text-tts-muted"><Loader2 className="h-4 w-4 animate-spin" /> {L("Carregando contas…", "Loading accounts…")}</div>
@@ -374,7 +341,7 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
           {/* Step 3 — amount */}
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-              <Banknote className="h-3.5 w-3.5" /> {L("3 · Valor", "3 · Amount")}
+              <Banknote className="h-3.5 w-3.5" /> {L("2 · Valor", "2 · Amount")}
             </p>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-tts-muted">$</span>
