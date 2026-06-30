@@ -192,15 +192,6 @@ Retail adoption of DeFi infrastructure doesn't come from better UX on protocol f
 
 ---
 
-## Team
-
-Solo project by **Rodrigo** — full-stack developer, building on Stellar.
-
-- GitHub: https://github.com/rbfcdog
-- Contact: contact.andreloubet@gmail.com
-
----
-
 ## Links
 
 | Surface | URL |
