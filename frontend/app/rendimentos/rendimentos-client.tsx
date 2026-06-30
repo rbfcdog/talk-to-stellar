@@ -167,10 +167,16 @@ function formatSignedAmount(value: number, profile: { short: string }, language:
 }
 function formatSignedPercent(value: number, language: AppLanguage) {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  const abs = Math.abs(Number.isFinite(value) ? value : 0);
+  // Show ALL meaningful decimals: a steady ~6% APY on a few dollars moves the
+  // balance by a tiny fraction of a percent per minute/hour, so rounding to 2
+  // decimals would collapse a real gain to "+0.0%". Keep up to 7 fractional
+  // digits (matching the 7-decimal balance precision) without padding large
+  // values (minimumFractionDigits stays 1, so 6.74% stays "6.74%").
   const formatted = new Intl.NumberFormat(isPortuguese(language) ? "pt-BR" : "en-US", {
     minimumFractionDigits: 1,
-    maximumFractionDigits: 2,
-  }).format(Math.abs(Number.isFinite(value) ? value : 0));
+    maximumFractionDigits: 7,
+  }).format(abs);
   return `${sign}${formatted}%`;
 }
 function ReturnPeriodGrid({ language, rate }: { language: AppLanguage; rate: number }) {
@@ -259,11 +265,14 @@ function formatChartStamp(value: unknown, language: AppLanguage) {
 }
 
 // Percentage change across the plotted balance line (last vs first non-zero value).
-function seriesChangePercent(points: ChartPoint[]): number {
-  const first = points.find((point) => point.value > 0)?.value ?? points[0]?.value ?? 0;
-  const last = points[points.length - 1]?.value ?? 0;
-  if (!first) return 0;
-  return ((last - first) / first) * 100;
+// The chart series is CUMULATIVE GAIN (starts at 0), so the last point IS the
+// total gain over the window. Express it as a share of the TOTAL BALANCE — not
+// of the first tiny gain increment (which is ~0 and produced absurd numbers
+// like +5,725%). gain / balance * 100.
+function seriesGainPercentOfBalance(points: ChartPoint[], totalBalance: number): number {
+  const lastGain = points[points.length - 1]?.value ?? 0;
+  if (!(totalBalance > 0)) return 0;
+  return (lastGain / totalBalance) * 100;
 }
 
 // Plot the real balance on a 4-hour grid across the window. Snapshots are
@@ -395,7 +404,7 @@ function InvestmentGraphs({ language, row, days }: { language: AppLanguage; row:
   // The window matches the Total returns plot (same `days`), so the product line
   // starts at the same point — one shared time control, no separate selector.
   const historyPoints = buildPositionLinePoints(row.history, row.amount, language, days);
-  const changePct = seriesChangePercent(historyPoints);
+  const changePct = seriesGainPercentOfBalance(historyPoints, row.amount);
 
   return (
     <div className="space-y-3">
