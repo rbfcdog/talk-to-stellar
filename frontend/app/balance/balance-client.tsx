@@ -77,6 +77,9 @@ export default function BalanceClient() {
   const [message, setMessage] = useState("");
   const [balances, setBalances] = useState<BalanceLine[]>([]);
   const [updatedAt, setUpdatedAt] = useState("");
+  // Demo (testnet) = the session/Etherfuse wallet; Real (mainnet) = the Bridge
+  // dollar wallet. Mirrors the toggle on the yield screen.
+  const [networkView, setNetworkView] = useState<"testnet" | "mainnet">("testnet");
 
   useEffect(() => {
     getClientSession().then(({ sessionId: sid, authenticated: isAuthenticated, sessionSource: source }) => {
@@ -88,17 +91,45 @@ export default function BalanceClient() {
     });
   }, []);
 
-  async function loadBalances(source = sessionSource) {
+  const stamp = () => new Date().toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+
+  async function loadBalances(source = sessionSource, network = networkView) {
     setStatus("loading");
     setMessage("");
     try {
+      if (network === "mainnet") {
+        // Real money = the Bridge dollar wallet, resolved by session. Returns the
+        // mainnet USDC + XLM balances; needs the dollar-account access unlocked.
+        const params = new URLSearchParams();
+        if (sessionId) params.set("session_id", sessionId);
+        const response = await fetch(`/api/bridge/session/stellar-balances?${params.toString()}`, { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.message || "Não foi possível carregar o saldo real.");
+        }
+        if (!payload?.mainnet_public_key) {
+          setBalances([]);
+          setStatus("error");
+          setMessage("Você ainda não tem uma conta de dólar ativa. Receba dólar para ativá-la.");
+          return;
+        }
+        const m = payload?.mainnet || {};
+        setBalances([
+          { asset_code: "USDC", balance: String(m.usdc ?? "0") },
+          { asset_code: "XLM", balance: String(m.xlm ?? "0") },
+        ]);
+        setUpdatedAt(stamp());
+        setStatus("ready");
+        return;
+      }
+
       const response = await fetch(scopedPath("etherfuse/wallet-balances", source), { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.success) {
         throw new Error(payload?.message || "Não foi possível carregar o saldo.");
       }
       setBalances(Array.isArray(payload?.balances) ? payload.balances : []);
-      setUpdatedAt(new Date().toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }));
+      setUpdatedAt(stamp());
       setStatus("ready");
     } catch (error) {
       setBalances([]);
@@ -156,6 +187,27 @@ export default function BalanceClient() {
               void loadBalances();
             }}
           />
+        ) : null}
+
+        {pinVerified ? (
+          <div className="flex items-center justify-end">
+            <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.06] p-0.5">
+              <button
+                type="button"
+                onClick={() => { setNetworkView("testnet"); void loadBalances(sessionSource, "testnet"); }}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition ${networkView === "testnet" ? "bg-white text-black" : "text-white/55 hover:text-white"}`}
+              >
+                Demonstração
+              </button>
+              <button
+                type="button"
+                onClick={() => { setNetworkView("mainnet"); void loadBalances(sessionSource, "mainnet"); }}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition ${networkView === "mainnet" ? "bg-white text-black" : "text-white/55 hover:text-white"}`}
+              >
+                Dinheiro real
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {pinVerified ? (

@@ -1490,7 +1490,7 @@ export const toolDefinitions = [
   },
   {
     name: "open_wire_onramp_interface",
-    description: "Return the frontend URL for the USD wire/ACH deposit screen. Use when the user wants to bring dollars from a US bank account via wire transfer or ACH. Opens the dedicated wire onramp page with their USD bank account deposit details.",
+    description: "Return the frontend URL for the dollar account / USD wire-ACH deposit screen (the Bridge dollar account). Use when the user wants to bring dollars from a US bank account via wire transfer or ACH, OR simply wants to SEE / OPEN their dollar account, the deposit details, or 'the bridge'. Examples: 'quero receber dólares', 'trazer dólar do meu banco americano', 'see my dollar account', 'quero ver a bridge', 'want to see bridge', 'ver minha conta de dólar', 'show me the bridge', 'abrir conta de dólar', 'minhas contas de dólar'. Opens the dedicated dollar-account page with their virtual US account deposit details (routing + account number) and the account suite.",
     parameters: {
       type: "object",
       properties: {
