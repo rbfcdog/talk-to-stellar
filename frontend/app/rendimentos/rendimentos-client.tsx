@@ -225,6 +225,26 @@ function formatChartAmount(value: unknown, profile: { short: string }, language:
 
 const ONE_MINUTE_MS = 60 * 1000;
 
+// Backend snapshot timestamps come back WITHOUT a timezone (e.g.
+// "2026-06-30T15:06:00"), so the browser parses them in LOCAL time. In a
+// UTC-3 timezone that pushes every history point 3 hours into the future,
+// which makes the minute grid (built from Date.now(), UTC) lag behind the real
+// snapshots and the final "Now" point snap forward — a fake spike on every
+// refresh. Force these naive timestamps to UTC so the whole pipeline agrees.
+function toUtcIso(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return raw;
+  // Already has a timezone designator (Z or ±hh:mm) — leave it alone.
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) return raw;
+  // Date-time without zone → treat as UTC.
+  if (/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)) return `${raw.replace(" ", "T")}Z`;
+  return raw;
+}
+
+function normalizeHistoryPoints<T extends { date?: unknown }>(points: T[]): T[] {
+  return points.map((p) => ({ ...p, date: toUtcIso(p.date) }));
+}
+
 // Timestamp label including the hour, so the 4-hour cadence reads clearly in the
 // tooltip (the X axis itself is hidden).
 function formatChartStamp(value: unknown, language: AppLanguage) {
@@ -679,7 +699,7 @@ export default function RendimentosClient({
       const hr = await fetch(`/api/bridge/stellar-wallets/position-history?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}&t=${Date.now()}`, { cache: "no-store" });
       const hj = await hr.json().catch(() => ({}));
       if (loadPositionsToken.current === token && hj?.success) {
-        setMainnetHistory({ loading: false, points: Array.isArray(hj.points) ? hj.points : [], error: "", source: String(hj.source || "") });
+        setMainnetHistory({ loading: false, points: normalizeHistoryPoints(Array.isArray(hj.points) ? hj.points : []), error: "", source: String(hj.source || "") });
         setLastUpdated(Date.now());
       }
     } catch {
@@ -986,7 +1006,7 @@ export default function RendimentosClient({
         const payload = await yieldApi(`defindex/yield/history?asset_code=${encodeURIComponent(o.asset_code)}&vault_address=${encodeURIComponent(o.vault_address)}`, undefined, 22000, session.sessionSource);
         return [code, {
           loading: false,
-          points: Array.isArray(payload?.points) ? payload.points : [],
+          points: normalizeHistoryPoints(Array.isArray(payload?.points) ? payload.points : []),
           error: "",
           source: String(payload?.source || ""),
         }] as const;
