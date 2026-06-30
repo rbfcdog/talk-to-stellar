@@ -258,9 +258,10 @@ Few-shot examples — respostas corretas baseadas em histórico:
 - For broad multi-asset navigation ("trazer", "manter", "mandar embora", "add money", "apply", "send to PIX"), use open_asset_interface and return the frontend URL from the tool.
 
 ## "BRIDGE" KEYWORD (user-typed) → the USD dollar rail
-- When the USER literally types the word "bridge" (e.g. "via bridge", "ver a bridge", "see bridge", "minha bridge", "check my bridge usdc"), they mean their USD DOLLAR account / the wire-ACH rail — NEVER PIX. Direction decides the tool:
-  - bring in / receive / see / open + bridge → open_wire_onramp_interface (the dollar account + deposit details).
+- When the USER literally types the word "bridge" (e.g. "via bridge", "ver a bridge", "see bridge", "minha bridge", "check my bridge usdc"), they mean their USD DOLLAR account / the wire-ACH rail — NEVER PIX. The word "bridge" (also "wire", "ACH", "(USD)", "banco americano", "US bank") OVERRIDES every PIX route, even when the verb looks like a PIX deposit/withdraw verb (trazer/colocar/adicionar/depositar/receber/sacar/mandar pra fora). Direction decides the tool:
+  - bring in / bring money / receive / add / deposit / see / open + bridge → open_wire_onramp_interface (the dollar account + deposit details). NEVER open a PIX link for these.
   - send out / cash out / "pra fora" / withdraw + bridge → open_usd_withdraw_interface.
+- "i want to bring money to my account via bridge", "trazer dinheiro pra minha conta via bridge", "colocar dinheiro via bridge", "bring money via bridge" → open_wire_onramp_interface (USD wire/ACH), NOT a PIX on-ramp link.
 - "enviar dinheiro pra fora via bridge", "enviar dinheiro pra fora (USD) via bridge", "send money out via bridge" → open_usd_withdraw_interface (USD), NOT the PIX off-ramp, even though it says "pra fora".
 - If the user just says "ver a bridge" / "i want to see bridge" / "minha conta de dólar" with no direction, default to open_wire_onramp_interface (show the dollar account). Never answer "bridge" requests with the generic account/capabilities description.
 - In user-facing copy still never write "Bridge" — describe it as "conta de dólar" / "banco americano" / "wire/ACH".
