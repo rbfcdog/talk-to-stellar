@@ -20,7 +20,7 @@ Soroban contracts).
 
 | Integration | Stellar layer | What it carries (load-bearing) | Network |
 | --- | --- | --- | --- |
-| **Bridge.xyz** | USDC SAC + custodial accounts | Real dollar on/off-ramp: virtual accounts (USD/EUR/MXN/GBP/COP/BRL), per-email Stellar wallets with a vaulted key, ACH/wire/pix withdrawal, and internal transfers across every account | Mainnet |
+| **Bridge.xyz** | USDC SAC + custodial accounts | Real dollar on/off-ramp: virtual accounts (USD), per-email Stellar wallets with a vaulted key, wire/ACH withdrawal in USDC, and internal transfers across every account. Pix (BRL) is in the compliance phase at Bridge and not yet live on mainnet. | Mainnet (wire/ACH live; Pix pending) |
 | **DeFindex** | Soroban contract | "Put your dollars to work": deposit/withdraw into an auto-optimized USDC vault, signed with the wallet's key | Mainnet + Testnet |
 | **Blend** | Soroban contract | Lending yield: supply USDC into a pool, with live APY | Mainnet + Testnet |
 | **Soroswap** | Soroban + path payments | Internal conversion (the user thinks "dollars", not token pairs) and XLM/USDC liquidity provision via zap | Mainnet |
@@ -29,6 +29,10 @@ Soroban contracts).
 
 > Technical detail for each integration is in the
 > [Stellar Integrations (Product Core)](#stellar-integrations-product-core) section.
+
+> **Pix status:** wire/ACH on/off-ramp for USD is live on mainnet through Bridge.
+> Pix (BRL) is still in the compliance phase at Bridge and is not yet enabled for
+> mainnet — it is wired in the product but stays disabled until Bridge clears it.
 
 ## Live Product
 
@@ -151,6 +155,8 @@ Pix is the natural entry point for Brazilian users.
 
 The product prepares the Pix flow, shows the fee, guides confirmation, updates the operation state, and delivers the receipt. In sandbox/Testnet, this demonstrates the operating model safely. In production, this layer should be connected to regulated Pix/FX partners.
 
+Note: on the Bridge rail, Pix (BRL) is still in the compliance phase and not yet enabled for mainnet — the flow is wired into the product but stays disabled until Bridge clears it. Wire/ACH (USD) on/off-ramp is already live on mainnet.
+
 ### Payments To Saved Contacts
 
 The product requires recipient clarity.
@@ -239,6 +245,8 @@ bank.
   (`vault_secret_id`) — the user never touches a secret key.
 - **Real off-ramp:** `crypto-to-{ach,wire,pix,rtp,sepa,spei}` via liquidation
   addresses — USDC leaves the wallet and lands in the user's bank account.
+  Wire/ACH (USD) is live on mainnet; the Pix (BRL) rail is in Bridge's
+  compliance phase and not yet enabled for mainnet.
 - **Unified internal transfer (`/internal-transfer`):** moves USDC between any
   account in the suite — custodial⇄custodial, custodial→stellar,
   stellar→stellar, stellar→custodial — signing the Stellar legs with the
@@ -632,7 +640,7 @@ Controls already handled or planned in the design:
 | Integration | Current use | Note |
 | --- | --- | --- |
 | Stellar SDK/Horizon | Account, balance, XDR, submit, and public history | Testnet and custodial execution on Mainnet |
-| Bridge.xyz | Dollar on/off-ramp, virtual accounts, custodial wallets, internal transfers | Mainnet movement behind an access password and confirmation |
+| Bridge.xyz | Dollar on/off-ramp, virtual accounts, custodial wallets, internal transfers | Wire/ACH (USD) live on mainnet behind an access password; Pix (BRL) in Bridge's compliance phase, not yet enabled for mainnet |
 | DeFindex | USDC yield vault (Soroban) | Mainnet + testnet; vault configurable via env |
 | Blend | USDC lending pool (Soroban) | Live APY; joins the auto-yield split |
 | Soroswap | Conversion (path payments) and XLM/USDC liquidity provision | Add-liquidity requires USDC+XLM funded in the wallet |
