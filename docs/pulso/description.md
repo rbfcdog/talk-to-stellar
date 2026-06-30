@@ -1,4 +1,4 @@
-# TalkToStellar — DoraHacks BUIDL Submission
+# TalkToStellar
 
 **The invisible Stellar bank.** Users chat. Bridge, DeFindex, Blend, and Soroswap do the work — chained into one money lifecycle.
 
@@ -54,28 +54,6 @@ The user sends a WhatsApp, Telegram, or web-chat message; an AI agent maps the i
 
 This is the core of the project: the integrations aren't a feature list, they're a **pipeline**. Follow a single dollar through the stack — every leg is load-bearing, every leg settles on Stellar, and the handoffs are automatic.
 
-```
-US bank --(wire/ACH)--> [1] BRIDGE on-ramp
-                            USD becomes USDC in the user's custodial Stellar wallet
-                              |
-                              v
-                        [2] STELLAR custody
-                            per-user key in Supabase Vault + platform-sponsored gas
-                              |
-                              v
-                        [3] AUTO-YIELD orchestrator -- splits idle USDC across:
-                            DeFindex (vault)  +  Blend (lending)  +  Soroswap (convert idle XLM, LP zap)
-                              |
-                              v
-                        [4] Money now lives in yield by default
-                              |
-   any spend --(needs USDC)-> [5] AUTO-REDEEM
-                            pulls exactly the shortfall back out: DeFindex then Blend (mirror of [3])
-                              |
-                              v
-                        [6] BRIDGE off-ramp --(wire/ACH)--> US bank
-```
-
 1. **In — Bridge.** A virtual US account gives the user real routing/account numbers. A normal wire or ACH lands **USDC in their own custodial Stellar wallet** (live on mainnet).
 2. **Custody — Stellar.** Each user gets one isolated Stellar key, generated server-side and encrypted in **Supabase Vault**; gas is **sponsored by the platform**, so the user never holds or thinks about XLM.
 3. **Earn (automatic) — DeFindex + Blend + Soroswap.** Idle USDC is swept and **split across DeFindex (vault) and Blend (lending)** by the auto-yield orchestrator. **Soroswap** handles any conversion in the path — e.g. swapping idle XLM into USDC first, or zapping a single USDC amount into balanced XLM/USDC liquidity — all via path payments.
@@ -121,27 +99,18 @@ Every signing leg uses the wallet's vaulted key; every settlement, hash, and rec
 
 ## Architecture
 
-```
-WhatsApp / Telegram / Web Chat
-      |
-      v
-LangChain AI agent  (intent router via system prompt -- no regex, no parsers)
-      |
-      v
-Tool layer  (invisible to the user)
-   - Bridge.xyz   wire / ACH USD rails
-   - DeFindex     Soroban yield vaults
-   - Blend        Soroban lending pools
-   - Soroswap     swaps / liquidity (path payments)
-   - Auto-yield   orchestrates the three above
-   - Stellar RPC / Horizon   settlement
-      |
-      v
-Stellar mainnet  (wire/ACH + DeFindex + Blend live)
-      |
-      v
-Frontend confirmation pages  (PIN / Passkey / WebAuthn)
-```
+A message comes in over **WhatsApp, Telegram, or web chat**. A **LangChain AI agent** routes the intent (via system prompt — no regex, no parsers) to an invisible **tool layer**, which signs and settles on **Stellar mainnet** and returns a one-line reply with a confirmation link.
+
+The tool layer:
+
+- **Bridge.xyz** — wire / ACH USD rails
+- **DeFindex** — Soroban yield vaults
+- **Blend** — Soroban lending pools
+- **Soroswap** — swaps / liquidity (path payments)
+- **Auto-yield** — orchestrates the three above
+- **Stellar RPC / Horizon** — settlement
+
+Money-moving actions finish on a dedicated **frontend confirmation page** (PIN / Passkey / WebAuthn), never in chat.
 
 The agent uses **intent routing via system prompt** — each integration is described to the LLM as a natural-language routing spec, and the model picks the right tool via function calling. New integrations are added by extending the spec, not by writing parsers.
 
