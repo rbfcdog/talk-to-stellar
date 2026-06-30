@@ -70,7 +70,9 @@ export function analyzePortfolioPeriod(input: {
   now?: number | Date;
 }): PortfolioPeriodAnalysis {
   const currentAmount = Math.max(0, Number.isFinite(input.currentAmount) ? input.currentAmount : 0);
-  const days = Math.max(1, Number.isFinite(input.days) ? input.days : 1);
+  // Allow sub-day windows (e.g. the 1-hour "Live" view = 1/24) — only fall back
+  // to 1 day when the input is missing/invalid, not when it's a small fraction.
+  const days = Number.isFinite(input.days) && input.days > 0 ? input.days : 1;
   const nowMs = input.now instanceof Date ? input.now.getTime() : Number(input.now || Date.now());
   const cutoff = nowMs - days * 24 * 60 * 60 * 1000;
   const history = sortedHistoryPoints(input.historyPoints || []);

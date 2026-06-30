@@ -81,7 +81,7 @@ type InvestmentRow = {
   history: PositionHistoryState;
 };
 type YieldSuccessNotice = { action: "deposit" | "withdraw"; reviewedAmount: string; reviewedAsset: string; vaultAmount?: string; vaultAsset?: string; hash?: string; };
-type AnalysisWindow = "daily" | "weekly";
+type AnalysisWindow = "live" | "daily" | "weekly";
 
 const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: string }> = {
   USDC: { namePt: "Dólares", nameEn: "Dollars", short: "USD" },
@@ -145,6 +145,7 @@ const RETURN_PERIODS = [
   { key: "12m", years: 1, labelPt: "12 meses", labelEn: "12 months" },
 ];
 const ANALYSIS_WINDOWS: Array<{ key: AnalysisWindow; days: number; labelPt: string; labelEn: string; detailPt: string; detailEn: string }> = [
+  { key: "live", days: 1 / 24, labelPt: "Ao vivo", labelEn: "Live", detailPt: "Última hora", detailEn: "Last hour" },
   { key: "daily", days: 1, labelPt: "Diário", labelEn: "Daily", detailPt: "Últimas 24h", detailEn: "Last 24h" },
   { key: "weekly", days: 7, labelPt: "Semanal", labelEn: "Weekly", detailPt: "Últimos 7 dias", detailEn: "Last 7 days" },
 ];
@@ -1453,7 +1454,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
     });
   }
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>("daily");
+  const [analysisWindow, setAnalysisWindow] = useState<AnalysisWindow>("live");
   const activeWindow = ANALYSIS_WINDOWS.find((item) => item.key === analysisWindow) || ANALYSIS_WINDOWS[0];
   const rowSignature = rows.map((row) => row.code).join("|");
   const selectedRow = selectedCode ? rows.find((row) => row.code === selectedCode) || null : null;
