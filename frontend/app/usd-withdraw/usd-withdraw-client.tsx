@@ -313,10 +313,31 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
         </OperationalCard>
       ) : (
         <OperationalCard className="space-y-5">
-          {/* Step 1 — destination */}
+          {/* Step 1 — rail (speed) — at the top */}
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("1 · Velocidade", "1 · Speed")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: "ach" as Rail, icon: Clock, title: "ACH", sub: L("1–2 dias · taxa menor", "1–2 days · lower fee") },
+                { id: "wire" as Rail, icon: Zap, title: "Wire", sub: L("Mesmo dia · mais rápido", "Same-day · faster") },
+              ]).map((r) => {
+                const on = rail === r.id;
+                const Icon = r.icon;
+                return (
+                  <button key={r.id} type="button" onClick={() => setRail(r.id)} aria-pressed={on}
+                    className={`flex flex-col items-start gap-1 rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-amber-500 bg-amber-500" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}>
+                    <span className={`flex items-center gap-1.5 text-sm font-bold ${on ? "text-stone-950" : "text-tts-deep"}`}><Icon className="h-4 w-4" /> {r.title}</span>
+                    <span className={`text-xs ${on ? "text-stone-900/80" : "text-tts-muted"}`}>{r.sub}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Step 2 — destination */}
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-              <Landmark className="h-3.5 w-3.5" /> {L("1 · Conta de destino", "1 · Destination account")}
+              <Landmark className="h-3.5 w-3.5" /> {L("2 · Conta de destino", "2 · Destination account")}
             </p>
             {extLoading ? (
               <div className="flex items-center gap-2 text-sm text-tts-muted"><Loader2 className="h-4 w-4 animate-spin" /> {L("Carregando contas…", "Loading accounts…")}</div>
@@ -330,13 +351,13 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
                       key={a.id}
                       type="button"
                       onClick={() => setSelectedExtId(a.id)}
-                      className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-tts-gold bg-tts-gold-bg" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}
+                      className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-amber-500 bg-amber-500" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}
                     >
                       <div>
-                        <p className="text-sm font-bold text-tts-deep">{a.bank_name || a.account_name || a.beneficiary_name || L("Banco americano", "US bank")}</p>
-                        <p className="text-xs text-tts-muted">{a.account_type || "checking"}{last4 ? ` · ••${last4}` : ""}</p>
+                        <p className={`text-sm font-bold ${on ? "text-stone-950" : "text-tts-deep"}`}>{a.bank_name || a.account_name || a.beneficiary_name || L("Banco americano", "US bank")}</p>
+                        <p className={`text-xs ${on ? "text-stone-900/80" : "text-tts-muted"}`}>{a.account_type || "checking"}{last4 ? ` · ••${last4}` : ""}</p>
                       </div>
-                      {on && <CheckCircle2 className="h-5 w-5 text-tts-deep" />}
+                      {on && <CheckCircle2 className="h-5 w-5 text-stone-950" />}
                     </button>
                   );
                 })}
@@ -350,10 +371,10 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
             {showAddForm && <AddUsBankForm customerId={customerId} language={lang} onAdded={(acct) => { setExtAccounts((p) => [acct, ...p]); setSelectedExtId(acct.id); setShowAddForm(false); }} />}
           </div>
 
-          {/* Step 2 — amount */}
+          {/* Step 3 — amount */}
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-tts-muted">
-              <Banknote className="h-3.5 w-3.5" /> {L("2 · Valor", "2 · Amount")}
+              <Banknote className="h-3.5 w-3.5" /> {L("3 · Valor", "3 · Amount")}
             </p>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-tts-muted">$</span>
@@ -364,27 +385,6 @@ export default function UsdWithdrawClient({ initialQuery = "", modeSwitcher }: {
                 {L("Sacar tudo", "Withdraw all")} (${fmtUsd(availableUsd)})
               </button>
               {overBalance && <span className="text-xs font-semibold text-tts-error">{L("Acima do saldo", "Over balance")}</span>}
-            </div>
-          </div>
-
-          {/* Step 3 — rail */}
-          <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-tts-muted">{L("3 · Velocidade", "3 · Speed")}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {([
-                { id: "ach" as Rail, icon: Clock, title: "ACH", sub: L("1–2 dias · taxa menor", "1–2 days · lower fee") },
-                { id: "wire" as Rail, icon: Zap, title: "Wire", sub: L("Mesmo dia · mais rápido", "Same-day · faster") },
-              ]).map((r) => {
-                const on = rail === r.id;
-                const Icon = r.icon;
-                return (
-                  <button key={r.id} type="button" onClick={() => setRail(r.id)} aria-pressed={on}
-                    className={`flex flex-col items-start gap-1 rounded-xl border-2 px-4 py-3 text-left transition-colors ${on ? "border-tts-gold bg-tts-gold-bg" : "border-tts-border bg-tts-surface hover:border-tts-deep/40"}`}>
-                    <span className="flex items-center gap-1.5 text-sm font-bold text-tts-deep"><Icon className={`h-4 w-4 ${on ? "text-tts-gold" : ""}`} /> {r.title}</span>
-                    <span className="text-xs text-tts-muted">{r.sub}</span>
-                  </button>
-                );
-              })}
             </div>
           </div>
 
