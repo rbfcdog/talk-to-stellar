@@ -1047,6 +1047,26 @@ export default function RendimentosClient({
 
   async function prepareYield() {
     if (!actionableOption) return;
+    // Mainnet invest/redeem runs on the custodial Bridge wallet (the one that
+    // actually holds the position) via the bridge endpoints — NOT the channel/
+    // session wallet that defindex/yield/prepare would use (that wallet has no
+    // mainnet position, which is what produced the "PIN confirmation
+    // unavailable" / account-not-found error). No PIN needed: the vault key is
+    // server-side. Skip the prepare round-trip and go straight to review.
+    if (networkView === "mainnet") {
+      setYieldResult({
+        success: true,
+        prepared: true,
+        review_only: false,
+        execution_ready: true,
+        action,
+        amount,
+        vault: { ...actionableOption, display_asset_code: optionCode(actionableOption) },
+      });
+      setActiveStep("review");
+      setApiState({ loading: false, message: "", error: "" });
+      return;
+    }
     setApiState({ loading: true, message: "", error: "" });
     setYieldResult(null);
     try {
@@ -1086,6 +1106,31 @@ export default function RendimentosClient({
     if (yieldBusyRef.current) return; // re-entrancy guard — custodial deposit
     yieldBusyRef.current = true;
     setApiState({ loading: true, message: "", error: "" });
+    // Mainnet: invest/redeem on the custodial Bridge wallet (no PIN). Withdraw →
+    // redeem endpoint, deposit → invest endpoint. Both operate on the wallet
+    // that holds the real position, so the cash-out actually settles.
+    if (networkView === "mainnet") {
+      try {
+        const endpoint = action === "withdraw" ? "stellar-wallets/redeem" : "stellar-wallets/invest";
+        const res = await fetch(`/api/bridge/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: (walletEmail || "").trim().toLowerCase(), public_key: selectedWalletKey, amount, protocol: "defindex", network: "mainnet" }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
+        setYieldResult({ ...yieldResult, submitted: true, hash: data.hash });
+        setPin("");
+        setSuccessNotice({ action, reviewedAmount: amount, reviewedAsset: selectedProfile.short, vaultAmount: amount, vaultAsset: "USDC", hash: String(data.hash || "").trim() });
+        setApiState({ loading: false, message: L("Operação confirmada.", "Operation confirmed."), error: "" });
+        if (walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey);
+      } catch (error) {
+        setApiState({ loading: false, message: "", error: String(error instanceof Error ? error.message : error) });
+      } finally {
+        yieldBusyRef.current = false;
+      }
+      return;
+    }
     try {
       const payload = await yieldApi("defindex/yield/execute", { method: "POST", body: JSON.stringify({ action, amount, source_asset_code: safeSelectedCode, asset_code: actionableOption.asset_code, vault_address: actionableOption.vault_address, slippage_bps: variationBps, pin, wallet_pin: pin, network: networkView }) }, 60000, session.sessionSource);
       setYieldResult(payload);
@@ -1280,6 +1325,7 @@ export default function RendimentosClient({
                     pin={pin} onPinChange={setPin} variationBps={variationBps} onVariationBpsChange={setVariationBps}
                     onPrepare={prepareYield} onConfirm={confirmYield}
                     convertAssetsUrl={convertAssetsUrl} pixTopUpUrl={pixTopUpUrl}
+                    pinRequired={networkView !== "mainnet"}
                   />
                 </div>
               </section>
@@ -1837,7 +1883,7 @@ function SelectedYieldDetail({ language, row, isTestnet, activeWindow, sessionLi
   );
 }
 
-function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmountChange, amountPresets, action, selectedCode, selectedOption, selectedProfile, options, onSelectCode, selectedHasYield, selectedExecutionBlocked, selectedBalanceInsufficient, balanceForSelected, alternativeConversionCode, activeStep, setActiveStep, yieldResult, canPrepare, confirmationEnabled, configured, pin, onPinChange, variationBps, onVariationBpsChange, onPrepare, onConfirm, convertAssetsUrl, pixTopUpUrl }: {
+function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmountChange, amountPresets, action, selectedCode, selectedOption, selectedProfile, options, onSelectCode, selectedHasYield, selectedExecutionBlocked, selectedBalanceInsufficient, balanceForSelected, alternativeConversionCode, activeStep, setActiveStep, yieldResult, canPrepare, confirmationEnabled, configured, pin, onPinChange, variationBps, onVariationBpsChange, onPrepare, onConfirm, convertAssetsUrl, pixTopUpUrl, pinRequired = true }: {
   language: AppLanguage; session: SessionState; sessionLoading: boolean; apiState: ApiState;
   amount: string; onAmountChange: (v: string) => void; amountPresets: string[];
   action: "deposit" | "withdraw";
@@ -1852,6 +1898,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   variationBps: string; onVariationBpsChange: (v: string) => void;
   onPrepare: () => void; onConfirm: () => void;
   convertAssetsUrl: string; pixTopUpUrl: string;
+  pinRequired?: boolean;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   const selectedAvailableDisplay = formatPositionAmount(balanceForSelected?.balance || "0", selectedProfile, language);
@@ -1862,7 +1909,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   const submitted = Boolean(yieldResult?.submitted || yieldResult?.hash);
   const preparedBlocked = Boolean(hasPrepared && yieldResult?.execution_ready === false);
   const confirmAvailable = hasPrepared && !preparedBlocked && !selectedExecutionBlocked;
-  const canConfirm = confirmAvailable && !submitted && pin.length >= 4 && !apiState.loading;
+  const canConfirm = confirmAvailable && !submitted && (!pinRequired || pin.length >= 4) && !apiState.loading;
   const blockedCode = String(yieldResult?.execution_blocked_code || "").trim();
   const blockedReason = String(
     yieldResult?.execution_blocked_reason ||
@@ -2044,7 +2091,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
 
           <ReturnPeriodPanel language={language} rate={selectedRate} assetLabel={selectedAssetLabel} />
 
-          {hasPrepared && !submitted && (
+          {hasPrepared && !submitted && pinRequired && (
             <div className="border border-tts-border bg-tts-bg p-4">
               <label className="text-xs font-bold text-tts-muted uppercase tracking-wide mb-2 block">PIN</label>
               <input value={pin} onChange={(e) => onPinChange(e.target.value.replace(/\D/g, "").slice(0, 8))}
@@ -2061,7 +2108,7 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
             {confirmAvailable ? (
               <button onClick={onConfirm} disabled={!canConfirm}
                 className="flex-1 py-3 bg-tts-deep text-tts-surface font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 transition">
-                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : L("Confirmar investimento", "Confirm investment")}
+                {apiState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />} {apiState.loading ? L("Confirmando...", "Confirming...") : (action === "withdraw" ? L("Confirmar retirada", "Confirm withdrawal") : L("Confirmar investimento", "Confirm investment"))}
               </button>
             ) : (
               <div className="flex-1 border border-tts-gold bg-tts-gold-bg px-4 py-3 text-sm font-bold text-tts-gold">

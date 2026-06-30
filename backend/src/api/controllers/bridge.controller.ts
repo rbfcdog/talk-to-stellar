@@ -757,8 +757,13 @@ async function executeYieldSupply(params: {
   amountUsdc: number;
   network: "mainnet" | "testnet";
   assetId?: string;
+  // "deposit" (default) supplies into the vault/pool; "withdraw" redeems back to
+  // the wallet's idle USDC. Both run on the SAME custodial wallet that holds the
+  // position, so the mainnet redeem matches where the deposit lives.
+  action?: "deposit" | "withdraw";
 }): Promise<{ hash: string | null; target: string; result: any }> {
   const { keypair, publicKey, protocol, amountUsdc, network, assetId: reqAsset } = params;
+  const action = params.action === "withdraw" ? "withdraw" : "deposit";
   const passphrase = network === "testnet" ? Networks.TESTNET : Networks.PUBLIC;
 
   if (protocol === "blend") {
@@ -768,7 +773,9 @@ async function executeYieldSupply(params: {
       : pool.usdc?.assetId;
     if (!assetId) throw new Error(`Blend USDC reserve not available on ${network}.`);
     const amountStroops = String(Math.floor(amountUsdc * 1e7));
-    const built = await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network });
+    const built = action === "withdraw"
+      ? await BlendService.buildWithdrawXdr({ userAddress: publicKey, assetId, amount: amountStroops, network })
+      : await BlendService.buildSupplyXdr({ userAddress: publicKey, assetId, amount: amountStroops, network });
     const tx = TransactionBuilder.fromXDR(built.xdr, passphrase);
     tx.sign(keypair);
     const submit = await BlendService.submitSignedXdr(tx.toXDR(), network);
@@ -781,7 +788,7 @@ async function executeYieldSupply(params: {
   if (!target) throw new Error(`No DeFindex USDC vault configured for ${network}.`);
   const amountUnits = DefindexYieldService.amountToContractUnits(amountUsdc.toFixed(7), 7);
   const { xdr } = await DefindexYieldService.buildVaultAction({
-    action: "deposit", vaultAddress: target, caller: publicKey, amountUnits, network, invest: true,
+    action, vaultAddress: target, caller: publicKey, amountUnits, network, invest: true,
   });
   const tx = TransactionBuilder.fromXDR(xdr, passphrase);
   tx.sign(keypair);
@@ -3358,6 +3365,64 @@ export class BridgeController {
     } catch (error: any) {
       const raw = error?.response?.data?.error || error?.message || "Failed to invest on mainnet.";
       logger.error(`[bridge] investStellarWallet failed: ${raw}`);
+      res.status(statusFromError(error)).json({ success: false, message: friendlyYieldError(raw) });
+    }
+  }
+
+  /**
+   * Redeem (withdraw) a Bridge-linked Stellar wallet's invested USDC back to its
+   * idle balance — the inverse of investStellarWallet. Runs on the SAME custodial
+   * wallet that holds the position, so the mainnet cash-out works regardless of
+   * the app's network/session wallet. Body: { email?, public_key, amount,
+   * protocol?: "defindex"|"blend", asset_id?, network? }.
+   */
+  static async redeemStellarWallet(req: Request, res: Response): Promise<void> {
+    try {
+      const email = await BridgeController.resolveBridgeEmail(req);
+      const publicKey = readText(req.body?.public_key ?? req.body?.publicKey);
+      const amount = readText(req.body?.amount);
+
+      if (!publicKey) {
+        res.status(400).json({ success: false, message: "public_key is required." });
+        return;
+      }
+      const amountNum = Number(amount);
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        res.status(400).json({ success: false, message: "A positive amount is required." });
+        return;
+      }
+
+      const keypair = await resolveWalletKeypair(email, publicKey);
+      if (!keypair) {
+        res.status(404).json({ success: false, message: "Wallet not found for this account." });
+        return;
+      }
+
+      const network = (readText(req.body?.network) || "mainnet").toLowerCase() === "testnet" ? "testnet" : "mainnet";
+
+      // The redeem still costs Soroban fees — make sure the wallet can pay them.
+      if (network === "testnet") await ensureWalletGasTestnet(publicKey);
+      else await ensureWalletGasMainnet(publicKey, 1);
+
+      const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase() === "blend" ? "blend" : "defindex";
+      const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId) || undefined;
+
+      const { hash, target, result } = await executeYieldSupply({ keypair, publicKey, protocol, amountUsdc: amountNum, network, assetId: requestedAsset, action: "withdraw" });
+      logger.info(`[bridge] ${network} ${protocol} redeem ${amount} USDC from ${target} -> ${publicKey} hash=${hash}`);
+
+      res.status(201).json({
+        success: true,
+        network,
+        protocol,
+        vault: target,
+        public_key: publicKey,
+        amount,
+        hash,
+        result,
+      });
+    } catch (error: any) {
+      const raw = error?.response?.data?.error || error?.message || "Failed to withdraw on mainnet.";
+      logger.error(`[bridge] redeemStellarWallet failed: ${raw}`);
       res.status(statusFromError(error)).json({ success: false, message: friendlyYieldError(raw) });
     }
   }
