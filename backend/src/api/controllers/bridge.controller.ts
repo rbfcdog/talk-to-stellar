@@ -17,6 +17,22 @@ function readText(value: unknown, fallback = ""): string {
   return String(value ?? fallback).trim();
 }
 
+/**
+ * Snapshot timestamps live in a `timestamp without time zone` column, so
+ * Postgres returns the UTC wall-clock with NO zone marker (e.g.
+ * "2026-06-30T15:06:00"). A client in a negative-offset timezone (UTC-3) parses
+ * that as local time and shifts every point hours into the future, which
+ * desyncs the chart's minute grid and creates a fake spike on the final point.
+ * Re-attach the UTC designator so the value is unambiguous to every client.
+ */
+function toUtcIso(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return raw;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) return raw; // already zoned
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(raw)) return `${raw.replace(" ", "T")}Z`;
+  return raw;
+}
+
 function looksLikeEmail(value: unknown): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
@@ -3659,7 +3675,7 @@ export class BridgeController {
         if (error) throw error;
         points = (data || [])
           .map((r: any) => ({
-            date: String(r.snapshot_date),
+            date: toUtcIso(r.snapshot_date),
             amount: String(r.total_usdc ?? 0),
             defindex_usdc: Number(r.defindex_usdc) || 0,
             blend_usdc: Number(r.blend_usdc) || 0,
