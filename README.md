@@ -374,30 +374,14 @@ This is not just a landing page. The repository contains a full-stack product, c
 
 ## High-Level Architecture
 
-```text
-WhatsApp / Telegram / Web
-        |
-        v
-Conversational agent
-        |
-        v
-Quote, fee, contact, Pix, and payment tools
-        |
-        v
-Orchestration backend and transactional state
-        |
-        v
-Stellar integrations  ──  Bridge (on/off-ramp + custody)
-                      ──  DeFindex / Blend (yield, Soroban)
-                      ──  Soroswap (conversion + liquidity)
-                      ──  Auto-yield (orchestrates the three)
-        |
-        v
-Stellar settlement / evidence / receipts
-        |
-        v
-History, reconciliation, and notifications
-```
+A message arrives over **WhatsApp, Telegram, or web**. The **conversational agent** turns it into an intent and calls the quote / fee / contact / Pix / payment tools. The **orchestration backend** holds the transactional state and drives the **Stellar integrations**:
+
+- **Bridge** — on/off-ramp + custody
+- **DeFindex / Blend** — yield (Soroban)
+- **Soroswap** — conversion + liquidity
+- **Auto-yield** — orchestrates the three
+
+Everything settles on **Stellar** (evidence + receipts), which then feeds **history, reconciliation, and notifications**.
 
 Main components:
 
