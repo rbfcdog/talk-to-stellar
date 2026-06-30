@@ -3649,16 +3649,22 @@ export class BridgeController {
           .select("snapshot_date, total_usdc, defindex_usdc, blend_usdc")
           .eq("public_key", publicKey);
         if (email) query = query.eq("email", email);
+        // Fetch the NEWEST points (descending + limit), then flip back to
+        // chronological order for the chart. Ascending+limit would drop the
+        // newest points once more than `limit` snapshots accumulate, freezing
+        // the chart on stale data.
         const { data, error } = await query
-          .order("snapshot_date", { ascending: true })
-          .limit(400);
+          .order("snapshot_date", { ascending: false })
+          .limit(600);
         if (error) throw error;
-        points = (data || []).map((r: any) => ({
-          date: String(r.snapshot_date),
-          amount: String(r.total_usdc ?? 0),
-          defindex_usdc: Number(r.defindex_usdc) || 0,
-          blend_usdc: Number(r.blend_usdc) || 0,
-        }));
+        points = (data || [])
+          .map((r: any) => ({
+            date: String(r.snapshot_date),
+            amount: String(r.total_usdc ?? 0),
+            defindex_usdc: Number(r.defindex_usdc) || 0,
+            blend_usdc: Number(r.blend_usdc) || 0,
+          }))
+          .reverse();
       } catch (e: any) {
         logger.warn(`[bridge] position history fetch failed: ${e?.message || e}`);
       }

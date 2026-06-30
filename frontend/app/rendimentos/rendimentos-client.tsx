@@ -923,7 +923,7 @@ export default function RendimentosClient({
     const poll = () => {
       if (typeof document !== "undefined" && document.hidden) return;
       if (networkView === "mainnet") {
-        if (walletEmail && selectedWalletKey) { loadPositions(walletEmail, selectedWalletKey); loadEmailWallets(walletEmail); }
+        if (walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey);
       } else {
         loadSessionWallet();
       }
