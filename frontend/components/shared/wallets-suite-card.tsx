@@ -12,6 +12,7 @@ import {
   Loader2,
   Plus,
   Send,
+  ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -213,6 +214,7 @@ export function WalletsSuiteCard({
   className = "",
   customerId = "",
   email = "",
+  kycStatus = "",
   onTransferDone,
 }: {
   virtualAccounts?: SuiteVA[];
@@ -222,6 +224,7 @@ export function WalletsSuiteCard({
   className?: string;
   customerId?: string;
   email?: string;
+  kycStatus?: string;
   onTransferDone?: () => void;
 }) {
   const L = (pt: string, en: string) => (isEn ? en : pt);
@@ -312,7 +315,6 @@ export function WalletsSuiteCard({
     const w = stellar.find((s) => s.is_primary) || stellar[0];
     return w ? `st:${w.public_key}` : "";
   }, [stellar]);
-  const primaryCustodialUid = useMemo(() => (custodialSorted[0] ? `cw:${custodialSorted[0].id}` : ""), [custodialSorted]);
 
   // ── Create actions (used per-section) ──────────────────────────────────────
   const [createBusy, setCreateBusy] = useState("");
@@ -356,6 +358,31 @@ export function WalletsSuiteCard({
       }));
   };
   const createSelectCls = "rounded-lg border border-tts-border bg-tts-bg px-2 py-1.5 text-xs font-semibold text-tts-deep focus:border-tts-deep focus:outline-none";
+
+  // ── KYC ─────────────────────────────────────────────────────────────────────
+  // Only nudge the user when verification ISN'T already done; a verified account
+  // shows nothing here.
+  const kycVerified = ["active", "approved", "verified", "complete", "completed"].includes(String(kycStatus || "").trim().toLowerCase());
+  const [kycBusy, setKycBusy] = useState(false);
+  const [kycErr, setKycErr] = useState("");
+  async function startKyc() {
+    if (!customerId || kycBusy) return;
+    setKycBusy(true); setKycErr("");
+    try {
+      const res = await fetch(`/api/bridge?_path=${encodeURIComponent(`/customers/${customerId}/kyc-link`)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const json = await res.json().catch(() => ({}));
+      const k = json?.kyc_link ?? json;
+      const link = (typeof k === "string" ? k : (k?.kyc_link || k?.url || k?.link)) || json?.url;
+      if (!link) throw new Error(json.message || L("Link de verificação indisponível.", "Verification link unavailable."));
+      window.open(String(link), "_blank", "noopener,noreferrer");
+    } catch (e: any) {
+      setKycErr(e?.message ?? String(e));
+    } finally {
+      setKycBusy(false);
+    }
+  }
 
   // Prefill the transfer panel from a card and scroll up to it.
   function requestTransfer(from: string, to?: string) {
@@ -402,6 +429,24 @@ export function WalletsSuiteCard({
         )}
       </div>
 
+      {/* KYC nudge — shown only while verification is still pending. */}
+      {customerId && !kycVerified && (
+        <div className="mb-4 flex flex-col gap-2 rounded-2xl border-2 border-tts-gold/40 bg-tts-gold/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tts-gold/15 text-tts-gold"><ShieldCheck className="h-5 w-5" /></span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-tts-deep">{L("Verifique sua identidade", "Verify your identity")}</p>
+              <p className="text-[11px] font-semibold text-tts-muted">{L("Conclua a verificação para receber e enviar dólares sem limites.", "Finish verification to receive and send dollars without limits.")}</p>
+              {kycErr && <p className="mt-1 text-[11px] font-semibold text-tts-error">{kycErr}</p>}
+            </div>
+          </div>
+          <button type="button" onClick={startKyc} disabled={kycBusy}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-tts-deep px-4 py-2.5 text-xs font-bold text-tts-surface transition hover:opacity-90 disabled:opacity-40">
+            {kycBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {L("Verificar agora", "Verify now")}
+          </button>
+        </div>
+      )}
+
       {createErr && <p className="mb-3 text-[11px] font-semibold text-tts-error">{createErr}</p>}
       {createOk && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-tts-confirm/30 bg-tts-confirm/10 px-3 py-2">
@@ -421,15 +466,21 @@ export function WalletsSuiteCard({
             <span className="tabular-nums text-tts-deep">{f2(vaReceived)} {L("recebido", "received")}</span>
           </p>
           {customerId && (
-            <div className="mb-3 flex items-center gap-2">
-              <select className={`${createSelectCls} flex-1`} value={vaWalletId} onChange={(e) => setVaWalletId(e.target.value)}>
-                <option value="">{L("Nova conta → conta de recebimento", "New account → receiver account")}</option>
-                {custodialSorted.map((w, i) => <option key={w.id} value={w.id}>{L("Conta de recebimento", "Receiver account")} {i + 1} · {short(w.address || w.id)}</option>)}
-              </select>
-              <button type="button" onClick={createVA} disabled={!vaWalletId || !!createBusy}
-                className="inline-flex items-center gap-1 rounded-lg bg-tts-deep px-3 py-1.5 text-xs font-bold text-tts-surface transition hover:opacity-90 disabled:opacity-40">
-                {createBusy === "va" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Criar", "Create")}
-              </button>
+            <div className="mb-3 rounded-2xl border border-dashed border-tts-confirm/40 bg-tts-confirm/[0.04] p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-tts-deep">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-tts-confirm/15 text-tts-confirm"><Plus className="h-3.5 w-3.5" /></span>
+                {L("Nova conta de depósito", "New deposit account")}
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select className={`${createSelectCls} flex-1`} value={vaWalletId} onChange={(e) => setVaWalletId(e.target.value)}>
+                  <option value="">{L("Vincular a uma conta de recebimento…", "Link to a receiver account…")}</option>
+                  {custodialSorted.map((w, i) => <option key={w.id} value={w.id}>{L("Conta de recebimento", "Receiver account")} {i + 1} · {short(w.address || w.id)}</option>)}
+                </select>
+                <button type="button" onClick={createVA} disabled={!vaWalletId || !!createBusy}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-tts-confirm px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40">
+                  {createBusy === "va" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} {L("Criar conta", "Create account")}
+                </button>
+              </div>
             </div>
           )}
           <Paginated
@@ -443,7 +494,6 @@ export function WalletsSuiteCard({
               const beneficiaryAddress = depositField(va, "beneficiary_address", "account_holder_address", "bank_beneficiary_address");
               const bankAddress = depositField(va, "bank_address");
               const reference = depositField(va, "deposit_message", "reference", "payment_reference");
-              const uid = `va:${va.id}`;
               return (
                 <div className="rounded-2xl border-2 border-tts-confirm/40 bg-tts-confirm/[0.06] p-5 shadow-sm">
                   <div className="mb-4 flex items-start justify-between gap-3">
@@ -468,22 +518,15 @@ export function WalletsSuiteCard({
                     <BigField label={L("Routing", "Routing number")} value={routing} mono copy />
                   </div>
 
-                  {/* Secondary details. */}
+                  {/* Secondary details. A deposit account is an inflow rail only,
+                      so it has no "send" action here — money moves from the
+                      receiver / TalkToStellar accounts below. */}
                   <div className="mt-3 grid grid-cols-2 gap-3 border-t border-tts-border/50 pt-3">
                     <Field label={L("Status", "Status")} value={va.status} />
                     <Field label="ID" value={va.id} copy />
                     <Field label={L("Endereço do banco", "Bank address")} value={bankAddress} />
                     <Field label={L("Beneficiário (endereço)", "Beneficiary address")} value={dedupName(beneficiaryAddress)} />
                     <Field label={L("Referência", "Reference")} value={reference} />
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {primaryCustodialUid && (
-                      <TransferButton uid={uid} to={primaryCustodialUid} label={L("Enviar para conta de recebimento", "Send to receiver account")} />
-                    )}
-                    {primaryStellarUid && (
-                      <TransferButton uid={uid} to={primaryStellarUid} label={L("Enviar para conta TalkToStellar", "Send to TalkToStellar account")} />
-                    )}
                   </div>
                 </div>
               );
