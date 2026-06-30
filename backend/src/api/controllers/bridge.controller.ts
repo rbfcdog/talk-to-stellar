@@ -942,6 +942,87 @@ async function sponsorExistingWallet(publicKey: string, vaultSecretId: string): 
 // whose secret we can resolve from the vault. Used by the account-to-account
 // transfer matrix for every Stellar-sourced leg (Stellar→Stellar directly, and
 // Stellar→custodial by paying the Bridge-provided deposit address).
+/** Poll the wallet's idle USDC until it covers `needed` (or attempts run out). */
+async function waitForIdleUsdc(publicKey: string, needed: number, attempts = 8): Promise<number> {
+  let idle = 0;
+  for (let i = 0; i < attempts; i += 1) {
+    const bal = await readWalletBalances(publicKey, "mainnet");
+    idle = bal.usdc;
+    if (idle + 1e-7 >= needed) return idle;
+    await new Promise((r) => setTimeout(r, 2500)); // let the redeem settle on Horizon
+  }
+  return idle;
+}
+
+/**
+ * Make sure the wallet holds at least `neededUsdc` of IDLE USDC, pulling the
+ * shortfall out of the yield positions first (DeFindex, then Blend). This is the
+ * mirror of the initial auto-allocation: money lives in yield by default and is
+ * automatically redeemed the moment a transaction needs to spend it. Best-effort
+ * — if the positions can't cover the gap, the caller's own balance check still
+ * surfaces the shortfall.
+ */
+async function ensureIdleUsdcMainnet(
+  keypair: Keypair,
+  publicKey: string,
+  neededUsdc: number,
+): Promise<{ redeemed: number; steps: any[] }> {
+  const steps: any[] = [];
+  if (!(neededUsdc > 0)) return { redeemed: 0, steps };
+
+  let bal = await readWalletBalances(publicKey, "mainnet");
+  if (bal.usdc + 1e-7 >= neededUsdc) return { redeemed: 0, steps }; // already liquid
+
+  await ensureWalletGasMainnet(publicKey, 1); // redeems cost Soroban fees
+  const FEE_BUFFER = 0.02; // redeem a hair extra to absorb rounding/Bridge fees
+  let redeemedTotal = 0;
+
+  const pull = async (protocol: "defindex" | "blend", available: number): Promise<void> => {
+    const idleNow = (await readWalletBalances(publicKey, "mainnet")).usdc;
+    const shortfall = neededUsdc - idleNow;
+    if (shortfall <= 1e-7 || available <= 1e-7) return;
+    // Redeem the shortfall (+buffer), capped at what this protocol holds.
+    const amount = Math.min(available, Math.ceil((shortfall + FEE_BUFFER) * 1e7) / 1e7);
+    if (amount <= 0) return;
+    try {
+      const r = await executeYieldSupply({ keypair, publicKey, protocol, amountUsdc: amount, network: "mainnet", action: "withdraw" });
+      if (!r.hash) throw new Error("redeem did not confirm (no hash)");
+      redeemedTotal += amount;
+      steps.push({ step: `redeem_${protocol}`, amount, hash: r.hash });
+      logger.info(`[bridge] auto-redeem ${protocol} ${amount} USDC -> ${publicKey} hash=${r.hash}`);
+      await waitForIdleUsdc(publicKey, neededUsdc);
+    } catch (e: any) {
+      steps.push({ step: `redeem_${protocol}`, amount, error: e?.message || String(e) });
+      logger.warn(`[bridge] auto-redeem ${protocol} failed: ${e?.message || e}`);
+    }
+  };
+
+  const pos = await computeMainnetPosition(publicKey);
+  await pull("defindex", pos.defindexUsdc);
+  bal = await readWalletBalances(publicKey, "mainnet");
+  if (bal.usdc + 1e-7 < neededUsdc) {
+    const pos2 = await computeMainnetPosition(publicKey);
+    await pull("blend", pos2.blendUsdc);
+  }
+  return { redeemed: redeemedTotal, steps };
+}
+
+/**
+ * Resolve a wallet's signing key and top its idle USDC up from yield before a
+ * spend. Used by the off-ramp/transfer flows where Bridge pulls USDC from the
+ * source address — the funds must be liquid (out of yield) by the time it does.
+ */
+async function autoRedeemForSpend(email: string, stellarAddress: string, amountUsdc: number): Promise<void> {
+  if (!stellarAddress || !(amountUsdc > 0)) return;
+  try {
+    const keypair = await resolveWalletKeypair(email, stellarAddress);
+    if (!keypair) return;
+    await ensureIdleUsdcMainnet(keypair, stellarAddress, amountUsdc);
+  } catch (e: any) {
+    logger.warn(`[bridge] auto-redeem-for-spend skipped (${stellarAddress}): ${e?.message || e}`);
+  }
+}
+
 async function sendUsdcOnChainMainnet(
   keypair: Keypair,
   fromAddress: string,
@@ -949,6 +1030,10 @@ async function sendUsdcOnChainMainnet(
   amount: string,
   memo?: string,
 ): Promise<string> {
+  // Money lives in yield by default — pull what this payment needs back into
+  // idle USDC first (mirror of the initial auto-allocation). Best-effort: if it
+  // can't cover the amount, submitTransaction surfaces the real shortfall.
+  await ensureIdleUsdcMainnet(keypair, fromAddress, Number(amount)).catch(() => {});
   const account = await mainnetServer.loadAccount(fromAddress);
   const builder = new TransactionBuilder(account, {
     fee: "10000",
@@ -2328,6 +2413,11 @@ export class BridgeController {
 
       assertBridgeAmountInRange(amount, service.config.minUsdAmount, service.config.maxUsdAmount, "USD");
 
+      // Money sits in yield by default — redeem what this withdrawal needs back
+      // into idle USDC so it's liquid when Bridge pulls from the source address.
+      const email = await BridgeController.resolveBridgeEmail(req).catch(() => "");
+      await autoRedeemForSpend(email, stellarAddress, Number(amount));
+
       const transfer = await service.createTransfer({
         on_behalf_of: customerId,
         developer_fee_percent: readText(req.body?.developer_fee_percent) || undefined,
@@ -2359,6 +2449,10 @@ export class BridgeController {
 
       assertBridgeAmountInRange(amount, service.config.minUsdAmount, service.config.maxUsdAmount, "USD");
 
+      // Redeem from yield so the source wallet is liquid before Bridge pulls.
+      const email = await BridgeController.resolveBridgeEmail(req).catch(() => "");
+      await autoRedeemForSpend(email, stellarAddress, Number(amount));
+
       const transfer = await service.createWireOffRamp(
         customerId, stellarAddress, amount, externalAccountId, wireMessage,
       );
@@ -2380,6 +2474,10 @@ export class BridgeController {
       const rail = readText(req.body?.payment_rail, "rtp") as any;
 
       assertBridgeAmountInRange(amount, service.config.minUsdAmount, service.config.maxUsdAmount, "USD");
+
+      // Redeem from yield so the source wallet is liquid before Bridge pulls.
+      const email = await BridgeController.resolveBridgeEmail(req).catch(() => "");
+      await autoRedeemForSpend(email, stellarAddress, Number(amount));
 
       const transfer = await service.createTransfer({
         on_behalf_of: customerId,
