@@ -1,512 +1,500 @@
 # TalkToStellar
 
-TalkToStellar é um produto financeiro conversacional para converter reais em dólares digitais e movimentar valor usando Pix, Stellar e uma experiência simples por chat.
+TalkToStellar is a conversational financial product that turns reais into digital dollars and moves value using Pix, Stellar, and a simple chat experience.
 
-O usuário não precisa entender carteira cripto, issuer, trustline, XDR, pathfinding, anchor ou blockchain. Ele conversa pelo WhatsApp, Telegram ou chat web, consulta saldo, simula custo, coloca dinheiro via Pix, envia para contatos, converte saldo, acompanha histórico e recebe comprovantes.
+The user doesn't need to understand crypto wallets, issuers, trustlines, XDR, pathfinding, anchors, or blockchain. They chat over WhatsApp, Telegram, or web chat: check balance, simulate cost, add money via Pix, send to contacts, convert balance, track history, and receive receipts.
 
-Em uma frase:
+In one sentence:
 
 ```text
-TalkToStellar transforma Pix em uma rota conversacional de conversão BRL -> USD, usando Stellar como trilho de liquidação, transparência de taxas e evidência verificável.
+TalkToStellar turns Pix into a conversational BRL -> USD conversion route, using Stellar as the settlement rail, with fee transparency and verifiable evidence.
 ```
 
-## Integrações Stellar (O Coração Do Projeto)
+## Stellar Integrations (The Heart Of The Project)
 
-Tudo neste produto roda sobre integrações Stellar **load-bearing** — elas movem
-dinheiro de verdade e são o que faz o produto funcionar, não enfeite de slide.
-Um dólar entra, é custodiado, colocado para render e sacado inteiramente por
-estas peças, com liquidação na Stellar (USDC SAC, path payments e contratos
-Soroban).
+Everything in this product runs on **load-bearing** Stellar integrations — they
+move real money and are what makes the product work, not slideware. A dollar
+comes in, is custodied, put to work earning yield, and withdrawn entirely
+through these pieces, with settlement on Stellar (USDC SAC, path payments, and
+Soroban contracts).
 
-| Integração | Camada Stellar | O que ela sustenta (load-bearing) | Rede |
+| Integration | Stellar layer | What it carries (load-bearing) | Network |
 | --- | --- | --- | --- |
-| **Bridge.xyz** | USDC SAC + contas custodiais | On/off-ramp de dólar real: virtual accounts (USD/EUR/MXN/GBP/COP/BRL), carteiras Stellar por e-mail com chave em cofre, saque ACH/wire/pix e transferência interna entre todas as contas | Mainnet |
-| **DeFindex** | Contrato Soroban | "Coloque seu dólar para render": deposit/withdraw em cofre auto-otimizado de USDC, assinado com a chave da carteira | Mainnet + Testnet |
-| **Blend** | Contrato Soroban | Rendimento por empréstimo: supply de USDC numa pool, com APY ao vivo | Mainnet + Testnet |
-| **Soroswap** | Soroban + path payments | Conversão interna (o usuário pensa "dólar", não par de tokens) e provisão de liquidez XLM/USDC via zap | Mainnet |
-| **Auto-yield** | Orquestra DeFindex + Blend + Soroswap | Varre o saldo parado e divide automaticamente em rendimento; roda nas duas redes e por agendador | Mainnet + Testnet |
-| **Stellar SDK / Horizon / RPC** | Núcleo de protocolo | Conta, saldo, trustline, build/sign/submit de XDR, histórico público e evidência | Mainnet + Testnet |
+| **Bridge.xyz** | USDC SAC + custodial accounts | Real dollar on/off-ramp: virtual accounts (USD/EUR/MXN/GBP/COP/BRL), per-email Stellar wallets with a vaulted key, ACH/wire/pix withdrawal, and internal transfers across every account | Mainnet |
+| **DeFindex** | Soroban contract | "Put your dollars to work": deposit/withdraw into an auto-optimized USDC vault, signed with the wallet's key | Mainnet + Testnet |
+| **Blend** | Soroban contract | Lending yield: supply USDC into a pool, with live APY | Mainnet + Testnet |
+| **Soroswap** | Soroban + path payments | Internal conversion (the user thinks "dollars", not token pairs) and XLM/USDC liquidity provision via zap | Mainnet |
+| **Auto-yield** | Orchestrates DeFindex + Blend + Soroswap | Sweeps idle balance and automatically splits it into yield; runs on both networks and on a scheduler | Mainnet + Testnet |
+| **Stellar SDK / Horizon / RPC** | Protocol core | Account, balance, trustline, XDR build/sign/submit, public history and evidence | Mainnet + Testnet |
 
-> Detalhamento técnico de cada integração na seção
-> [Integrações Stellar (Núcleo Do Produto)](#integrações-stellar-núcleo-do-produto).
+> Technical detail for each integration is in the
+> [Stellar Integrations (Product Core)](#stellar-integrations-product-core) section.
 
-Como isso bate com os critérios do PULSO:
+## Live Product
 
-- **Profundidade de integração e complexidade técnica:** 5 integrações Stellar
-  encadeadas (ramp -> custódia -> rendimento -> liquidez -> saque), com
-  assinatura por chave em cofre e contratos Soroban.
-- **Impacto no ecossistema Stellar:** traz Pix/BRL e dólar de varejo para
-  trilhos Stellar com UX de conversa, sem o usuário tocar em cripto.
-- **Deploy em testnet/mainnet:** execução custodial ao vivo em Mainnet e fluxo
-  completo em Testnet.
-
-## Produto Ao Vivo
-
-| Superfície | Link |
+| Surface | Link |
 | --- | --- |
-| Landing page | https://talk-to-stellar-owxg.vercel.app |
-| Chat web | https://talk-to-stellar-owxg.vercel.app/chat |
-| Fluxo Pix | https://talk-to-stellar-owxg.vercel.app/pix-on |
-| Histórico | https://talk-to-stellar-owxg.vercel.app/transactions |
-| Console Stellar Mainnet | https://talk-to-stellar-owxg.vercel.app/mainnet |
+| Landing page | https://talktostellar.com |
+| Web chat | https://talktostellar.com/chat |
+| Pix flow | https://talktostellar.com/pix-on |
+| History | https://talktostellar.com/transactions |
+| Stellar Mainnet console | https://talktostellar.com/mainnet |
 
-O produto já demonstra experiência real de usuário, pagamentos e conversões em ambiente seguro de Testnet/sandbox, integração conversacional e uma camada Mainnet read-only para visualizar carteiras públicas da Stellar sem pedir secret key.
+The product already demonstrates a real user experience, payments and conversions in a secure Testnet/sandbox environment, conversational integration, and a read-only Mainnet layer for viewing public Stellar wallets without asking for a secret key.
 
-Movimentação real irrestrita em Mainnet permanece bloqueada por design até existirem signer seguro, limites, aprovação operacional, compliance e parceiros regulados.
+Unrestricted real movement on Mainnet remains blocked by design until there are a secure signer, limits, operational approval, compliance, and regulated partners.
 
-## Resumo Executivo
+## Executive Summary
 
-O Brasil tem uma das melhores infraestruturas de pagamento doméstico do mundo com o Pix. Mesmo assim, converter BRL em USD e entregar esse valor em contas internacionais ainda é caro, fragmentado e pouco transparente.
+Brazil has one of the best domestic payment infrastructures in the world with Pix. Even so, converting BRL into USD and delivering that value into international accounts is still expensive, fragmented, and opaque.
 
-O usuário muitas vezes já tem um destino preferido para dólares: Wise, conta global, banco internacional, corretora, conta de investimento, conta empresarial ou outro provedor. O TalkToStellar não precisa substituir esses destinos.
+The user often already has a preferred destination for dollars: Wise, a global account, an international bank, a brokerage, an investment account, a business account, or another provider. TalkToStellar doesn't need to replace those destinations.
 
-A tese é mais direta:
-
-```text
-Ser a rota mais barata, simples e transparente antes do dinheiro chegar ao destino escolhido pelo usuário.
-```
-
-TalkToStellar combina:
-
-- Pix como entrada familiar em BRL;
-- Stellar como camada de liquidação e evidência;
-- USDC/dólar digital como infraestrutura de valor em USD;
-- WhatsApp, Telegram e web chat como interface;
-- taxas e economia visíveis como gatilho de conversão.
-
-O usuário pede:
+The thesis is more direct:
 
 ```text
-"quanto custa enviar 5000 reais?"
-"quero mandar 100 dólares para Ana"
-"saldo"
-"quanto eu economizei esse ano?"
+Be the cheapest, simplest, and most transparent route before the money reaches the destination the user already chose.
 ```
 
-O sistema responde com cotação, taxa, economia frente a métodos tradicionais, link de confirmação e comprovante com evidência Stellar quando aplicável.
+TalkToStellar combines:
 
-## Problema
+- Pix as a familiar BRL entry point;
+- Stellar as the settlement and evidence layer;
+- USDC / digital dollar as USD value infrastructure;
+- WhatsApp, Telegram, and web chat as the interface;
+- visible fees and savings as the conversion trigger.
 
-Mover dinheiro do Brasil para valor em dólar ainda exige etapas demais.
-
-O problema não é só a conta final. O problema é o caminho até o dinheiro chegar lá:
-
-- bancos escondem custo em spread cambial;
-- usuários comparam cotações manualmente;
-- Pix, câmbio, stablecoins, conta global, comprovante e suporte ficam separados;
-- produtos cripto exigem conhecimento técnico;
-- o usuário raramente sabe a taxa real paga;
-- pequenas empresas não têm uma camada programável simples para BRL -> USD.
-
-No fundo, a intenção do usuário é simples:
+The user asks:
 
 ```text
-"Tenho reais e quero dólares utilizáveis em outro lugar."
+"how much does it cost to send 5000 reais?"
+"I want to send 100 dollars to Ana"
+"balance"
+"how much did I save this year?"
 ```
 
-## Solução
+The system responds with a quote, fee, savings versus traditional methods, a confirmation link, and a receipt with Stellar evidence when applicable.
 
-TalkToStellar é uma camada conversacional de conversão e movimentação BRL -> USD.
+## Problem
 
-O usuário não opera uma carteira manualmente. O produto traduz linguagem natural em fluxo financeiro guiado:
+Moving money from Brazil into dollar value still takes too many steps.
+
+The problem isn't only the final account. It's the path the money takes to get there:
+
+- banks hide cost in the FX spread;
+- users compare quotes manually;
+- Pix, FX, stablecoins, a global account, the receipt, and support live in separate places;
+- crypto products require technical knowledge;
+- the user rarely knows the real fee paid;
+- small businesses lack a simple programmable layer for BRL -> USD.
+
+At its core, the user's intent is simple:
 
 ```text
-Usuário envia uma mensagem
--> TalkToStellar entende a intenção
--> backend calcula cotação e taxas
--> usuário financia ou confirma com Pix/PIN
--> valor é liquidado ou evidenciado via Stellar
--> comprovante volta no mesmo canal de conversa
+"I have reais and I want usable dollars somewhere else."
 ```
 
-O foco do produto é deixar o valor financeiro óbvio:
+## Solution
 
-- quanto o usuário envia;
-- quanto chega;
-- qual taxa foi paga;
-- quanto um método tradicional cobraria;
-- quanto o usuário economizou;
-- onde a transação pode ser verificada.
+TalkToStellar is a conversational BRL -> USD conversion and movement layer.
 
-Isso posiciona o TalkToStellar como produto de pagamento, conversão e confiança.
-
-## Experiência Do Produto
-
-### Entrada Por Conversa
-
-O usuário começa pelo WhatsApp, Telegram ou chat web.
-
-- Links assinados para onboarding e confirmação.
-- Validação de expiração e payload dos tokens.
-- Confirmação de pagamento protegida por PIN.
-- Reset de PIN com token temporário e invalidação de uso.
-- Logs de auditoria para eventos críticos.
-- `POST /api/agent/query` exige `x-agent-ingest-secret` quando `source` é `telegram` ou `whatsapp`. Prefira `AGENT_INGEST_SECRET` com o mesmo valor em backend e adapters. Para compatibilidade, o backend e o Telegram tambem aceitam `INTERNAL_API_SECRET` ou `TELEGRAM_NOTIFY_SECRET` como fallback resolvido; sem um segredo compartilhado, o backend recusa a requisicao.
+The user doesn't operate a wallet manually. The product translates natural language into a guided financial flow:
 
 ```text
-saldo
-contatos
-quanto custa enviar 5000 reais?
-quero mandar 100 dólares para Ana
-quero colocar 100 reais via Pix
-quero retirar 50 reais para meu Pix
-quanto eu economizei esse ano?
+User sends a message
+-> TalkToStellar understands the intent
+-> backend computes quote and fees
+-> user funds or confirms with Pix/PIN
+-> value is settled or evidenced via Stellar
+-> receipt comes back in the same conversation channel
 ```
 
-A linguagem é financeira e familiar, não cripto. O produto fala em saldo, Pix, dólares, contatos, taxas, histórico, comprovante e economia.
+The product's focus is to make the financial value obvious:
 
-### Pix Como Porta De Entrada
+- how much the user sends;
+- how much arrives;
+- what fee was paid;
+- what a traditional method would charge;
+- how much the user saved;
+- where the transaction can be verified.
 
-Pix é o ponto de entrada natural para usuários brasileiros.
+This positions TalkToStellar as a payment, conversion, and trust product.
 
-O produto prepara o fluxo Pix, mostra a taxa, guia a confirmação, atualiza o estado da operação e entrega o comprovante. Em sandbox/Testnet, isso demonstra o modelo operacional com segurança. Em produção, essa camada deve ser conectada a parceiros Pix/FX regulados.
+## Product Experience
 
-### Pagamento Para Contatos Salvos
+### Conversational Entry
 
-O produto exige clareza de destinatário.
+The user starts on WhatsApp, Telegram, or web chat.
 
-Se o usuário pede para pagar Ana, Ana precisa ser um contato salvo real na conta dele. Isso reduz erro operacional e cria uma experiência mais próxima de banco:
-
-- valida contato salvo;
-- valida destino;
-- valida valor;
-- mostra taxa;
-- pede confirmação;
-- registra comprovante.
-
-### Taxas E Economia Como Parte Do Produto
-
-O TalkToStellar não deve esconder a taxa no número final.
-
-A experiência é construída em torno de uma mensagem simples:
+- Signed links for onboarding and confirmation.
+- Token expiry and payload validation.
+- PIN-protected payment confirmation.
+- PIN reset with a temporary token and single-use invalidation.
+- Audit logs for critical events.
+- `POST /api/agent/query` requires `x-agent-ingest-secret` when `source` is `telegram` or `whatsapp`. Prefer `AGENT_INGEST_SECRET` with the same value on the backend and adapters. For compatibility, the backend and Telegram also accept `INTERNAL_API_SECRET` or `TELEGRAM_NOTIFY_SECRET` as a resolved fallback; without a shared secret, the backend refuses the request.
 
 ```text
-Você pagou esta taxa.
-Um banco tradicional cobraria isso.
-Você economizou isso.
+balance
+contacts
+how much does it cost to send 5000 reais?
+I want to send 100 dollars to Ana
+I want to add 100 reais via Pix
+I want to withdraw 50 reais to my Pix
+how much did I save this year?
 ```
 
-Esse conceito aparece em:
+The language is financial and familiar, not crypto. The product talks about balance, Pix, dollars, contacts, fees, history, receipt, and savings.
 
-- simulações de custo;
-- telas Pix;
-- previews de conversão;
-- comprovantes;
-- resumos de economia;
-- contexto de saldo.
+### Pix As The Entry Point
 
-O objetivo é fazer a economia aparecer toda vez que o usuário interage com dinheiro.
+Pix is the natural entry point for Brazilian users.
 
-### Comprovante Com Evidência
+The product prepares the Pix flow, shows the fee, guides confirmation, updates the operation state, and delivers the receipt. In sandbox/Testnet, this demonstrates the operating model safely. In production, this layer should be connected to regulated Pix/FX partners.
 
-Depois de pagamento ou conversão, o usuário recebe um comprovante no mesmo canal.
+### Payments To Saved Contacts
 
-O comprovante pode incluir:
+The product requires recipient clarity.
 
-- horário da operação;
-- destinatário;
-- valor enviado;
-- valor entregue;
-- taxa paga;
-- economia estimada;
-- hash Stellar quando houver;
-- link de histórico;
-- link de comprovante.
+If the user asks to pay Ana, Ana has to be a real saved contact on their account. This reduces operational error and creates a more bank-like experience:
 
-Para o usuário, parece um comprovante financeiro simples. Para o avaliador técnico, existe evidência verificável por trás.
+- validates the saved contact;
+- validates the destination;
+- validates the amount;
+- shows the fee;
+- asks for confirmation;
+- records a receipt.
 
-## Por Que Stellar
+### Fees And Savings As Part Of The Product
 
-Stellar faz sentido porque o problema aqui não é especulação. É liquidação, interoperabilidade, baixo custo e rastreabilidade.
+TalkToStellar should not hide the fee in the final number.
 
-TalkToStellar usa Stellar como infraestrutura:
+The experience is built around a simple message:
 
-- liquidação rápida;
-- custo de rede baixo;
-- suporte a stablecoins;
-- evidência pública de transação;
-- Testnet para desenvolvimento seguro;
-- preparação para Mainnet com leitura de carteiras públicas e execução futura controlada.
+```text
+You paid this fee.
+A traditional bank would charge this.
+You saved this.
+```
 
-O produto não vende "cripto" para o usuário. Ele vende economia, clareza e conveniência. Stellar fica nos bastidores como o trilho que permite essa experiência.
+This concept shows up in:
 
-## Integrações Stellar (Núcleo Do Produto)
+- cost simulations;
+- Pix screens;
+- conversion previews;
+- receipts;
+- savings summaries;
+- balance context.
 
-As integrações abaixo são **load-bearing**: elas movem dinheiro de verdade e
-sustentam o produto, não aparecem só no slide. Cada dólar que entra é
-on-ramped, custodiado, colocado para render e sacado por essas peças — toda a
-liquidação acontece na Stellar (USDC SAC + path payments + contratos Soroban).
+The goal is to make savings appear every time the user interacts with money.
 
-### Bridge.xyz — entrada e saída de dólar (on/off-ramp)
+### Receipt With Evidence
 
-Trilho fiat<>USDC que dá ao usuário uma conta em dólar real sem precisar de
-banco nos EUA.
+After a payment or conversion, the user receives a receipt in the same channel.
 
-- **Virtual accounts (USD/EUR/MXN/GBP/COP/BRL):** o usuário recebe dados de
-  wire/ACH e o dinheiro chega como USDC na Stellar.
-- **Carteiras custodiais por e-mail (`bridge_stellar_wallets`):** carteira
-  Stellar mainnet por conta, com a chave assinante guardada em cofre
-  (`vault_secret_id`) — o usuário nunca toca em secret key.
-- **Off-ramp real:** `crypto-to-{ach,wire,pix,rtp,sepa,spei}` via liquidation
-  addresses — USDC sai da carteira e cai na conta bancária do usuário.
-- **Transferência interna unificada (`/internal-transfer`):** move USDC entre
-  qualquer conta da suíte — custodial⇄custodial, custodial→stellar,
-  stellar→stellar, stellar→custodial — assinando as pernas Stellar com a chave
-  cofre da carteira.
+The receipt can include:
 
-### DeFindex — cofre de rendimento (Soroban)
+- operation time;
+- recipient;
+- amount sent;
+- amount delivered;
+- fee paid;
+- estimated savings;
+- Stellar hash when present;
+- history link;
+- receipt link.
 
-Cofre auto-otimizado de USDC. O backend constrói a operação de deposit/withdraw
-(`buildVaultAction`), assina com a chave da carteira e submete — em mainnet e
-testnet. É a base do "coloque seu dólar para render".
+To the user it looks like a simple financial receipt. To the technical reviewer, there's verifiable evidence behind it.
 
-### Blend — pool de empréstimo (Soroban)
+## Why Stellar
 
-Supply direto de USDC numa pool Blend (`buildSupplyXdr` + submit assinado).
-Aparece lado a lado com a DeFindex, com APY ao vivo, e entra na divisão do
-auto-investimento.
+Stellar makes sense because the problem here isn't speculation. It's settlement, interoperability, low cost, and traceability.
 
-### Soroswap — liquidez e conversão (Soroban + path payments)
+TalkToStellar uses Stellar as infrastructure:
 
-- **Conversão interna:** swaps e conversões acontecem nos bastidores via path
-  payments (o usuário pensa em "dólar", não em par de tokens).
-- **Provisão de liquidez (zap):** investir numa pool XLM/USDC a partir de um
-  único valor em USDC — o backend troca metade por XLM e adiciona liquidez
-  balanceada (`buildAddLiquidityXdr`), tudo assinado com a chave cofre.
-- **Dados ao vivo:** TVL/taxa/reservas lidos da Horizon para o simulador de
-  rendimento de LP.
+- fast settlement;
+- low network cost;
+- stablecoin support;
+- public transaction evidence;
+- Testnet for safe development;
+- Mainnet readiness with public-wallet reads and controlled future execution.
 
-### Auto-yield — colocar o saldo parado para trabalhar
+The product doesn't sell "crypto" to the user. It sells savings, clarity, and convenience. Stellar stays behind the scenes as the rail that enables the experience.
 
-Varre o USDC parado da carteira e divide entre DeFindex e Blend (split
-configurável); opcionalmente troca XLM parado (acima da reserva de gás) por
-USDC antes. Funciona nas duas redes e roda também por agendador.
+## Stellar Integrations (Product Core)
 
-### Arquitetura de duas carteiras
+The integrations below are **load-bearing**: they move real money and hold the
+product up, they aren't just on the slide. Every dollar that comes in is
+on-ramped, custodied, put to work earning yield, and withdrawn by these pieces —
+all settlement happens on Stellar (USDC SAC + path payments + Soroban contracts).
 
-- **Testnet = carteira de sessão** (login/`wallets`, por `session_id`) para
-  demonstração segura.
-- **Mainnet = carteira Bridge** (`bridge_stellar_wallets`, encontrada por
-  e-mail) onde o dólar real vive. Gás patrocinado pela plataforma (sponsored
-  reserves), então o usuário não precisa segurar XLM.
+### Bridge.xyz — dollar in and out (on/off-ramp)
 
-| Integração | Camada Stellar | O que ela sustenta |
+A fiat<>USDC rail that gives the user a real dollar account without needing a US
+bank.
+
+- **Virtual accounts (USD/EUR/MXN/GBP/COP/BRL):** the user receives wire/ACH
+  details and the money arrives as USDC on Stellar.
+- **Per-email custodial wallets (`bridge_stellar_wallets`):** a mainnet Stellar
+  wallet per account, with the signing key kept in a vault
+  (`vault_secret_id`) — the user never touches a secret key.
+- **Real off-ramp:** `crypto-to-{ach,wire,pix,rtp,sepa,spei}` via liquidation
+  addresses — USDC leaves the wallet and lands in the user's bank account.
+- **Unified internal transfer (`/internal-transfer`):** moves USDC between any
+  account in the suite — custodial⇄custodial, custodial→stellar,
+  stellar→stellar, stellar→custodial — signing the Stellar legs with the
+  wallet's vaulted key.
+
+### DeFindex — yield vault (Soroban)
+
+An auto-optimized USDC vault. The backend builds the deposit/withdraw operation
+(`buildVaultAction`), signs it with the wallet's key, and submits — on mainnet
+and testnet. It's the foundation of "put your dollars to work."
+
+### Blend — lending pool (Soroban)
+
+Direct USDC supply into a Blend pool (`buildSupplyXdr` + signed submit). It sits
+side by side with DeFindex, with live APY, and joins the auto-investment split.
+
+### Soroswap — liquidity and conversion (Soroban + path payments)
+
+- **Internal conversion:** swaps and conversions happen behind the scenes via
+  path payments (the user thinks "dollars", not token pairs).
+- **Liquidity provision (zap):** invest into an XLM/USDC pool from a single USDC
+  amount — the backend swaps half into XLM and adds balanced liquidity
+  (`buildAddLiquidityXdr`), all signed with the vaulted key.
+- **Live data:** TVL/fee/reserves read from Horizon for the LP yield simulator.
+
+### Auto-yield — put idle balance to work
+
+Sweeps the wallet's idle USDC and splits it between DeFindex and Blend
+(configurable split); optionally swaps idle XLM (above the gas reserve) into
+USDC first. Works on both networks and also runs on a scheduler.
+
+### Two-wallet architecture
+
+- **Testnet = session wallet** (login/`wallets`, by `session_id`) for safe
+  demos.
+- **Mainnet = Bridge wallet** (`bridge_stellar_wallets`, found by email) where
+  the real dollars live. Gas is sponsored by the platform (sponsored reserves),
+  so the user doesn't need to hold XLM.
+
+| Integration | Stellar layer | What it carries |
 | --- | --- | --- |
-| Bridge.xyz | USDC SAC / contas custodiais | Entrada e saída de dólar, suíte de contas, transferências internas |
-| DeFindex | Contrato Soroban | Rendimento em cofre auto-otimizado |
-| Blend | Contrato Soroban | Rendimento por empréstimo (lending) |
-| Soroswap | Soroban + path payments | Conversão interna e provisão de liquidez (LP) |
-| Auto-yield | Orquestra DeFindex+Blend+Soroswap | Põe saldo parado para render automaticamente |
+| Bridge.xyz | USDC SAC / custodial accounts | Dollar in and out, account suite, internal transfers |
+| DeFindex | Soroban contract | Yield in an auto-optimized vault |
+| Blend | Soroban contract | Lending yield |
+| Soroswap | Soroban + path payments | Internal conversion and liquidity provision (LP) |
+| Auto-yield | Orchestrates DeFindex+Blend+Soroswap | Automatically puts idle balance to work |
 
-## Mercado
+## Market
 
-Públicos iniciais:
+Initial audiences:
 
-- brasileiros que dolarizam patrimônio;
-- viajantes que abastecem contas globais;
-- freelancers que pagam ou recebem serviços internacionais;
-- startups e pequenas empresas com necessidade de USD;
-- fintechs que precisam de uma camada Pix -> USD programável;
-- usuários que já têm Wise, Revolut, Mercury, corretora ou banco internacional.
+- Brazilians who dollarize their savings;
+- travelers who top up global accounts;
+- freelancers who pay or get paid for international services;
+- startups and small businesses with a USD need;
+- fintechs that need a programmable Pix -> USD layer;
+- users who already have Wise, Revolut, Mercury, a brokerage, or an international bank.
 
-A estratégia não é competir de frente com contas globais.
+The strategy isn't to compete head-on with global accounts.
 
-A estratégia é se tornar a rota de conversão que o usuário confia antes de enviar para essas contas.
+The strategy is to become the conversion route the user trusts before sending to those accounts.
 
-## Modelo De Negócio
+## Business Model
 
-Possíveis receitas:
+Possible revenue streams:
 
-- taxa transparente por conversão;
-- fee de Pix on-ramp/off-ramp;
-- fee por transferência B2B;
-- API/SaaS para empresas;
-- reconciliação e relatórios premium;
-- receita com parceiros regulados de off-ramp/payout;
-- produtos financeiros próprios depois que houver confiança e volume.
+- transparent fee per conversion;
+- Pix on-ramp/off-ramp fee;
+- fee per B2B transfer;
+- API/SaaS for businesses;
+- premium reconciliation and reporting;
+- revenue from regulated off-ramp/payout partners;
+- in-house financial products once there's trust and volume.
 
-O produto deve ganhar pela economia entregue ao usuário, não por margem escondida em câmbio confuso.
+The product should win by the savings it delivers to the user, not by margin hidden in confusing FX.
 
-## Estratégia De Entrada
+## Go-To-Market
 
-A primeira promessa é simples:
+The first promise is simple:
 
 ```text
-Converta mais barato e envie para o destino que você já usa.
+Convert cheaper and send to the destination you already use.
 ```
 
-Isso cria confiança e volume transacional.
+This builds trust and transactional volume.
 
-Depois que o usuário reconhece o TalkToStellar como a rota mais barata e prática para sair de BRL para USD, o produto pode expandir para:
+Once the user recognizes TalkToStellar as the cheapest, most practical route from BRL to USD, the product can expand into:
 
-- destinos internacionais salvos;
-- fluxos B2B;
-- liquidação entre instituições;
-- tesouraria e reconciliação;
-- produtos financeiros nativos dentro do ecossistema TalkToStellar.
+- saved international destinations;
+- B2B flows;
+- inter-institution settlement;
+- treasury and reconciliation;
+- native financial products inside the TalkToStellar ecosystem.
 
-A entrada é economia. A oportunidade de longo prazo é controle do fluxo financeiro.
+The entry point is savings. The long-term opportunity is control of the financial flow.
 
-## Produto Construído Até Agora
+## Product Built So Far
 
-O projeto já inclui:
+The project already includes:
 
-- landing page ao vivo;
-- chat web;
-- integração com WhatsApp via Evolution API;
-- integração com Telegram;
-- onboarding por link;
-- confirmação por PIN;
-- contatos salvos;
-- links de confirmação de pagamento;
-- fluxo Pix on-ramp/off-ramp;
-- on/off-ramp de dólar via Bridge.xyz (virtual accounts USD + saque ACH/wire);
-- carteiras Stellar custodiais por e-mail com chave em cofre;
-- suíte de contas (virtual accounts, custodiais, Stellar) com transferência interna entre elas;
-- rendimento em DeFindex (cofre) e Blend (empréstimo) com APY ao vivo;
-- provisão de liquidez Soroswap (zap XLM/USDC) dentro do app;
-- auto-yield que coloca o saldo parado para render nas duas redes;
-- UX orientada a taxas e economia;
-- histórico de transações;
-- geração de comprovantes;
-- infraestrutura Stellar Testnet e execução custodial em Mainnet;
-- arquitetura de payout adapters;
-- modelos de reconciliação e evidência de settlement;
-- documentação de demo, deploy, taxas, segurança e Mainnet readiness.
+- a live landing page;
+- web chat;
+- WhatsApp integration via the Evolution API;
+- Telegram integration;
+- link-based onboarding;
+- PIN confirmation;
+- saved contacts;
+- payment confirmation links;
+- Pix on-ramp/off-ramp flow;
+- dollar on/off-ramp via Bridge.xyz (USD virtual accounts + ACH/wire withdrawal);
+- per-email custodial Stellar wallets with a vaulted key;
+- an account suite (virtual accounts, custodial, Stellar) with internal transfers between them;
+- yield in DeFindex (vault) and Blend (lending) with live APY;
+- Soroswap liquidity provision (XLM/USDC zap) inside the app;
+- auto-yield that puts idle balance to work on both networks;
+- fee- and savings-oriented UX;
+- transaction history;
+- receipt generation;
+- Stellar Testnet infrastructure and custodial execution on Mainnet;
+- payout adapter architecture;
+- reconciliation and settlement-evidence models;
+- documentation for demo, deploy, fees, security, and Mainnet readiness.
 
-Isso não é apenas uma landing page. O repositório contém produto full-stack, integração conversacional e infraestrutura de liquidação em evolução.
+This is not just a landing page. The repository contains a full-stack product, conversational integration, and evolving settlement infrastructure.
 
-## Arquitetura Em Alto Nível
+## High-Level Architecture
 
 ```text
 WhatsApp / Telegram / Web
         |
         v
-Agente conversacional
+Conversational agent
         |
         v
-Ferramentas de cotação, taxa, contato, Pix e pagamento
+Quote, fee, contact, Pix, and payment tools
         |
         v
-Backend de orquestração e estado transacional
+Orchestration backend and transactional state
         |
         v
-Integrações Stellar  ──  Bridge (on/off-ramp + custódia)
-                     ──  DeFindex / Blend (rendimento, Soroban)
-                     ──  Soroswap (conversão + liquidez)
-                     ──  Auto-yield (orquestra os três)
+Stellar integrations  ──  Bridge (on/off-ramp + custody)
+                      ──  DeFindex / Blend (yield, Soroban)
+                      ──  Soroswap (conversion + liquidity)
+                      ──  Auto-yield (orchestrates the three)
         |
         v
-Stellar settlement / evidência / recibos
+Stellar settlement / evidence / receipts
         |
         v
-Histórico, reconciliação e notificações
+History, reconciliation, and notifications
 ```
 
-Componentes principais:
+Main components:
 
-- `frontend/`: interface Next.js;
-- `backend/`: API TypeScript, agente, Stellar services, Pix adapters e fee services;
-- `telegram/`: adaptador Telegram;
-- `evolution/`: suporte a WhatsApp/Evolution;
-- `docs/`: guias de demo, deploy, segurança, UX, taxas e Mainnet.
+- `frontend/`: Next.js interface;
+- `backend/`: TypeScript API, agent, Stellar services, Pix adapters, and fee services;
+- `telegram/`: Telegram adapter;
+- `evolution/`: WhatsApp/Evolution support;
+- `docs/`: demo, deploy, security, UX, fees, and Mainnet guides.
 
-## Posição Atual De Mainnet
+## Current Mainnet Position
 
-O produto possui uma superfície Mainnet ao vivo:
+The product has a live Mainnet surface:
 
 ```text
-https://talk-to-stellar-owxg.vercel.app/mainnet
+https://talktostellar.com/mainnet
 ```
 
-Estado atual:
+Current state:
 
-- o usuário pode anexar uma chave pública Stellar Mainnet;
-- o app consulta saldos e operações públicas;
-- secret keys nunca são solicitadas;
-- pagamentos Mainnet ficam desativados até existir signer, limites, aprovação manual, compliance e operação com parceiros.
+- the user can attach a Stellar Mainnet public key;
+- the app reads public balances and operations;
+- secret keys are never requested;
+- Mainnet payments stay disabled until there's a signer, limits, manual approval, compliance, and operation with partners.
 
-Esse é o estágio correto para demonstrar preparação Mainnet sem assumir risco prematuro de movimentar valor real.
+This is the right stage to demonstrate Mainnet readiness without taking on premature risk of moving real value.
 
-## Realidade Regulatória E Operacional
+## Regulatory And Operational Reality
 
-TalkToStellar não deve ser apresentado como banco, instituição de pagamento licenciada ou operação de remessa internacional pronta para escala sem parceiros adequados.
+TalkToStellar should not be presented as a bank, a licensed payment institution, or an international remittance operation ready to scale without proper partners.
 
-O caminho de produção exige:
+The path to production requires:
 
-- parceiro Pix/FX regulado;
+- a regulated Pix/FX partner;
 - KYC/KYB;
-- screening de sanções;
-- monitoramento transacional;
-- revisão de IOF e tratamento tributário;
-- provedor de payout/off-ramp;
-- limites e revisão manual;
-- signer seguro e controles de tesouraria;
-- revisão jurídica e compliance.
+- sanctions screening;
+- transaction monitoring;
+- IOF and tax-treatment review;
+- a payout/off-ramp provider;
+- limits and manual review;
+- a secure signer and treasury controls;
+- legal and compliance review.
 
-O framing correto hoje é:
+The right framing today is:
 
 ```text
-Produto vivo e infraestrutura em validação para conversão conversacional BRL -> USD usando Stellar.
+A live product and infrastructure in validation for conversational BRL -> USD conversion using Stellar.
 ```
 
 ## Roadmap
 
-### Fase 1 - Validação De Produto
+### Phase 1 - Product Validation
 
-- melhorar UX WhatsApp-first;
-- fortalecer fluxos Pix;
-- tornar economia visível em toda interação;
-- validar usuários reais com leitura de carteiras públicas Mainnet;
-- coletar feedback sobre intenção de conversão e confiança no comprovante.
+- improve WhatsApp-first UX;
+- strengthen Pix flows;
+- make savings visible in every interaction;
+- validate real users with public Mainnet wallet reads;
+- collect feedback on conversion intent and trust in the receipt.
 
-### Fase 2 - Piloto Com Parceiros
+### Phase 2 - Partner Pilot
 
-- integrar parceiro Pix/FX/off-ramp regulado;
-- habilitar fluxos controlados de baixo valor;
-- adicionar checks de compliance;
-- expandir reconciliação e painel operacional;
-- suportar usuários empresariais e destinos internacionais salvos.
+- integrate a regulated Pix/FX/off-ramp partner;
+- enable controlled low-value flows;
+- add compliance checks;
+- expand reconciliation and the operations dashboard;
+- support business users and saved international destinations.
 
-### Fase 3 - Infraestrutura De Liquidação
+### Phase 3 - Settlement Infrastructure
 
-- roteamento entre instituições;
+- inter-institution routing;
 - payout provider adapters;
-- instruções de entrega USD;
-- controles de tesouraria;
-- API para empresas.
+- USD delivery instructions;
+- treasury controls;
+- an API for businesses.
 
-### Fase 4 - Ecossistema Financeiro Próprio
+### Phase 4 - Native Financial Ecosystem
 
-- reter mais valor dentro do TalkToStellar;
-- lançar controles de conta próprios;
-- ampliar produtos B2B;
-- explorar produtos financeiros nativos em Stellar.
+- retain more value inside TalkToStellar;
+- launch in-house account controls;
+- broaden B2B products;
+- explore native financial products on Stellar.
 
-## Tese Para Investidor
+## Investor Thesis
 
-TalkToStellar combina três comportamentos fortes:
+TalkToStellar combines three strong behaviors:
 
-1. Brasileiros já usam Pix todos os dias.
-2. Usuários e empresas querem cada vez mais exposição e uso de dólares.
-3. Interfaces conversacionais reduzem fricção em ações financeiras.
+1. Brazilians already use Pix every day.
+2. Users and businesses increasingly want dollar exposure and usage.
+3. Conversational interfaces reduce friction in financial actions.
 
-A tese de produto é prática: reduzir fricção de conversão e mostrar economia de forma clara.
+The product thesis is practical: reduce conversion friction and show savings clearly.
 
-A tese de infraestrutura é mais profunda: usar Stellar como trilho de liquidação e evidência por trás de uma experiência familiar de chat.
+The infrastructure thesis is deeper: use Stellar as the settlement and evidence rail behind a familiar chat experience.
 
-Se o TalkToStellar ganhar confiança como a forma mais simples e barata de sair de BRL para USD, pode evoluir de "rota de conversão" para "camada operacional financeira" para pessoas e empresas.
+If TalkToStellar earns trust as the simplest and cheapest way to go from BRL to USD, it can evolve from "conversion route" into "financial operating layer" for people and businesses.
 
-## Como Rodar Localmente
+## Running Locally
 
-Subida local:
+Local startup:
 
 ```bash
 chmod +x start-local.sh
 ./start-local.sh
 ```
 
-URLs locais:
+Local URLs:
 
 ```text
 Frontend: http://localhost:3000
@@ -527,184 +515,184 @@ cd frontend
 npm run build
 ```
 
-Evals do agente:
+Agent evals:
 
 ```bash
 cd backend
 npm run eval:agent
 ```
 
-## Apêndice De Negócio E Tecnologia
+## Business And Technology Appendix
 
-Esta seção resume o projeto de um ponto de vista mais operacional: qual negócio o produto quer ser, quais fluxos já existem, como o sistema é montado e quais decisões precisam estar claras antes de produção.
+This section summarizes the project from a more operational point of view: what business the product wants to be, which flows already exist, how the system is assembled, and which decisions need to be clear before production.
 
-### Proposta Comercial
+### Commercial Proposition
 
-TalkToStellar é uma camada de conversão, pagamento e evidência para usuários que começam em BRL e precisam chegar a USD, Pix, contatos ou uma public key externa sem operar infraestrutura cripto diretamente.
+TalkToStellar is a conversion, payment, and evidence layer for users who start in BRL and need to reach USD, Pix, contacts, or an external public key without operating crypto infrastructure directly.
 
-O produto captura valor em três momentos:
+The product captures value at three moments:
 
-- antes da operação, mostrando cotação, taxa, destino e economia estimada;
-- durante a operação, reduzindo fricção com chat, links curtos, PIN e telas de revisão;
-- depois da operação, entregando histórico, comprovante e rastreabilidade.
+- before the operation, by showing quote, fee, destination, and estimated savings;
+- during the operation, by reducing friction with chat, short links, PIN, and review screens;
+- after the operation, by delivering history, receipt, and traceability.
 
-O diferencial não é apenas "usar Stellar". O diferencial é esconder a complexidade certa e revelar a informação financeira que importa: quanto sai, quanto chega, qual taxa foi paga e onde a operação pode ser auditada.
+The differentiator isn't just "using Stellar". The differentiator is hiding the right complexity and revealing the financial information that matters: how much leaves, how much arrives, what fee was paid, and where the operation can be audited.
 
-### Personas Prioritárias
+### Priority Personas
 
-| Persona | Dor principal | Valor entregue |
+| Persona | Main pain | Value delivered |
 | --- | --- | --- |
-| Usuário pessoa física | Converter BRL para USD sem comparar várias plataformas | Cotação clara, Pix, saldo, histórico e comprovante |
-| Freelancer ou creator | Receber/pagar em dólar com menos fricção | Fluxo conversacional, contatos e confirmação segura |
-| Pequena empresa | Reconciliar pagamentos e conversões recorrentes | Histórico, evidência e relatório operacional |
-| Produto fintech/API | Adicionar rota Pix -> USD sem construir tudo do zero | Backend modular, adapters e endpoints reaproveitáveis |
+| Individual user | Convert BRL to USD without comparing several platforms | Clear quote, Pix, balance, history, and receipt |
+| Freelancer or creator | Receive/pay in dollars with less friction | Conversational flow, contacts, and secure confirmation |
+| Small business | Reconcile recurring payments and conversions | History, evidence, and operational reporting |
+| Fintech/API product | Add a Pix -> USD route without building it all | Modular backend, adapters, and reusable endpoints |
 
-### Fluxos Centrais Do Produto
+### Core Product Flows
 
-1. **Conta e sessão**
-   O usuário entra por chat, link ou web. O backend cria ou recupera sessão, carteira e estado de conversa. A sessão é protegida por token, cookies HttpOnly no frontend e validações no backend.
+1. **Account and session**
+   The user enters via chat, link, or web. The backend creates or retrieves the session, wallet, and conversation state. The session is protected by a token, HttpOnly cookies on the frontend, and backend validations.
 
-2. **Saldo e histórico**
-   A experiência mostra saldos em linguagem simples e consulta histórico consolidado a partir de operações, logs de pagamento e comprovantes.
+2. **Balance and history**
+   The experience shows balances in simple language and queries consolidated history from operations, payment logs, and receipts.
 
 3. **Pix on-ramp**
-   O usuário coloca reais por Pix. O sistema cria a intenção, acompanha status, atualiza saldo e mantém a experiência separada de detalhes técnicos do provedor.
+   The user adds reais via Pix. The system creates the intent, tracks status, updates the balance, and keeps the experience separate from the provider's technical details.
 
-4. **Conversão**
-   O usuário escolhe origem, destino e valor. A tela de conversão pede rota real ao backend, mostra estimativa e só depois libera confirmação.
+4. **Conversion**
+   The user picks source, destination, and amount. The conversion screen asks the backend for a real route, shows an estimate, and only then unlocks confirmation.
 
-5. **Pagamento para contato**
-   O usuário escolhe um contato salvo, revisa valor e destino, confirma com PIN e recebe comprovante. Isso evita envio para destinatários ambíguos.
+5. **Payment to a contact**
+   The user picks a saved contact, reviews amount and destination, confirms with PIN, and receives a receipt. This avoids sending to ambiguous recipients.
 
-6. **Envio externo**
-   O usuário envia para uma public key externa em uma tela dedicada. A interface valida chave, saldo, destino e PIN antes de submeter.
+6. **External send**
+   The user sends to an external public key on a dedicated screen. The interface validates the key, balance, destination, and PIN before submitting.
 
 7. **Pix off-ramp**
-   O usuário informa uma chave Pix e revisa quanto sai do saldo e quanto chega em reais. Se faltar saldo, a tela deve oferecer conversão ou complemento por Pix.
+   The user provides a Pix key and reviews how much leaves the balance and how much arrives in reais. If the balance is short, the screen should offer conversion or a Pix top-up.
 
-### Arquitetura Técnica
+### Technical Architecture
 
-O sistema é dividido em superfícies de experiência, orquestração financeira e infraestrutura de integração.
+The system is split into experience surfaces, financial orchestration, and integration infrastructure.
 
-| Camada | Responsabilidade | Diretórios principais |
+| Layer | Responsibility | Main directories |
 | --- | --- | --- |
-| Frontend | Telas web, confirmação, Pix, conversão, histórico, conta e UX de chat | `frontend/app`, `frontend/components`, `frontend/lib` |
-| Agente | Interpretação de intenção, escolha de tools e resposta conversacional | `backend/src/api/agent` |
-| Backend API | Sessão, carteira, pagamentos, conversão, Pix, recibos e auditoria | `backend/src/api` |
-| Stellar | XDR, assinatura, submit, path payment, saldos e evidência | `backend/src/api/services/stellar.service.ts` |
-| Provedores | Pix, WhatsApp, Telegram, e-mail, payout e integrações externas | `backend/src/integrations`, `telegram`, `evolution` |
-| Dados | Estado de sessão, carteiras, operações, contatos, links e comprovantes | Supabase/Postgres via repositories |
+| Frontend | Web screens, confirmation, Pix, conversion, history, account, and chat UX | `frontend/app`, `frontend/components`, `frontend/lib` |
+| Agent | Intent interpretation, tool selection, and conversational response | `backend/src/api/agent` |
+| Backend API | Session, wallet, payments, conversion, Pix, receipts, and audit | `backend/src/api` |
+| Stellar | XDR, signing, submit, path payment, balances, and evidence | `backend/src/api/services/stellar.service.ts` |
+| Providers | Pix, WhatsApp, Telegram, email, payout, and external integrations | `backend/src/integrations`, `telegram`, `evolution` |
+| Data | Session state, wallets, operations, contacts, links, and receipts | Supabase/Postgres via repositories |
 
-Fluxo simplificado de uma operação:
+Simplified flow of an operation:
 
 ```text
-Mensagem ou tela web
--> normalização de intenção e parâmetros
--> criação de preview/cotação
--> revisão em página dedicada
--> PIN/passkey quando aplicável
--> execução backend
--> submit Stellar/provedor externo
--> log transacional
--> comprovante e resposta ao usuário
+Message or web screen
+-> intent and parameter normalization
+-> preview/quote creation
+-> review on a dedicated page
+-> PIN/passkey when applicable
+-> backend execution
+-> Stellar/external provider submit
+-> transaction log
+-> receipt and response to the user
 ```
 
-### Modelo De Dados Operacional
+### Operational Data Model
 
-As principais entidades do produto são:
+The product's main entities are:
 
-- `agent_sessions`: estado de sessão, usuário, canal e token;
-- `wallets`: carteira Stellar vinculada à sessão/usuário;
-- `contacts`: destinatários salvos e chaves de entrega;
-- `operations`: operações financeiras internas e status;
-- `payment_logs`: pagamentos, conversões, hashes e metadados de execução;
-- `payment_confirmations`: links de confirmação de uso único;
-- `short_links`: links públicos curtos com expiração;
-- `activity_feed`: histórico amigável para a interface;
-- `user_passkeys` e `passkey_challenges`: credenciais e desafios WebAuthn quando habilitados.
+- `agent_sessions`: session, user, channel, and token state;
+- `wallets`: Stellar wallet linked to the session/user;
+- `contacts`: saved recipients and delivery keys;
+- `operations`: internal financial operations and status;
+- `payment_logs`: payments, conversions, hashes, and execution metadata;
+- `payment_confirmations`: single-use confirmation links;
+- `short_links`: short public links with expiry;
+- `activity_feed`: friendly history for the interface;
+- `user_passkeys` and `passkey_challenges`: WebAuthn credentials and challenges when enabled.
 
-Na prática, `operations` é a camada de controle operacional e `payment_logs` é a camada de evidência de pagamentos/conversões. As telas devem preferir dados consolidados e nunca expor erros crus do banco.
+In practice, `operations` is the operational control layer and `payment_logs` is the payments/conversions evidence layer. Screens should prefer consolidated data and never expose raw database errors.
 
-### Segurança E Controles
+### Security And Controls
 
-Controles já tratados ou previstos no desenho:
+Controls already handled or planned in the design:
 
-- links assinados e expiráveis para onboarding, login e confirmação;
-- PIN obrigatório para confirmação sensível;
-- passkey/WebAuthn como caminho de autenticação forte;
-- cookies HttpOnly para sessão web;
-- `x-agent-ingest-secret` para proteger ingestão vinda de WhatsApp/Telegram;
-- idempotency key em operações mutáveis;
-- logs de auditoria para eventos críticos;
-- mensagens públicas sanitizadas para não expor schema, constraint ou stack trace;
-- Mainnet em modo read-only até existir signer e operação aprovada.
+- signed, expirable links for onboarding, login, and confirmation;
+- mandatory PIN for sensitive confirmation;
+- passkey/WebAuthn as a strong authentication path;
+- HttpOnly cookies for web sessions;
+- `x-agent-ingest-secret` to protect ingestion from WhatsApp/Telegram;
+- idempotency keys on mutating operations;
+- audit logs for critical events;
+- sanitized public messages so schema, constraints, or stack traces aren't exposed;
+- read-only Mainnet until there's a signer and approved operation.
 
-### Integrações Externas
+### External Integrations
 
-| Integração | Uso atual | Observação |
+| Integration | Current use | Note |
 | --- | --- | --- |
-| Stellar SDK/Horizon | Conta, saldo, XDR, submit e histórico público | Testnet e execução custodial em Mainnet |
-| Bridge.xyz | On/off-ramp de dólar, virtual accounts, carteiras custodiais, transferências internas | Movimentação Mainnet atrás de senha de acesso e confirmação |
-| DeFindex | Cofre de rendimento de USDC (Soroban) | Mainnet + testnet; vault configurável por env |
-| Blend | Pool de empréstimo de USDC (Soroban) | APY ao vivo; entra na divisão do auto-yield |
-| Soroswap | Conversão (path payments) e provisão de liquidez XLM/USDC | Add-liquidity exige USDC+XLM funded na carteira |
-| Supabase | Banco operacional, sessão, carteiras, snapshots e logs | Precisa migrations aplicadas fora do startup |
-| Evolution API | WhatsApp | Requer instância e secrets alinhados |
-| Telegram/Telegraf | Bot Telegram | Token inválido gera `401 Unauthorized` no startup |
-| Etherfuse sandbox | Pix/on-ramp/off-ramp e assets sandbox | Produção exige parceiro e enquadramento regulatório |
-| SendGrid/e-mail | Confirmações e recuperação | Opcional conforme fluxo habilitado |
+| Stellar SDK/Horizon | Account, balance, XDR, submit, and public history | Testnet and custodial execution on Mainnet |
+| Bridge.xyz | Dollar on/off-ramp, virtual accounts, custodial wallets, internal transfers | Mainnet movement behind an access password and confirmation |
+| DeFindex | USDC yield vault (Soroban) | Mainnet + testnet; vault configurable via env |
+| Blend | USDC lending pool (Soroban) | Live APY; joins the auto-yield split |
+| Soroswap | Conversion (path payments) and XLM/USDC liquidity provision | Add-liquidity requires USDC+XLM funded in the wallet |
+| Supabase | Operational database, session, wallets, snapshots, and logs | Needs migrations applied outside startup |
+| Evolution API | WhatsApp | Requires an instance and aligned secrets |
+| Telegram/Telegraf | Telegram bot | An invalid token throws `401 Unauthorized` at startup |
+| Etherfuse sandbox | Pix/on-ramp/off-ramp and sandbox assets | Production requires a partner and regulatory framing |
+| SendGrid/email | Confirmations and recovery | Optional depending on the enabled flow |
 
-### Critérios De Produção
+### Production Criteria
 
-Antes de tratar o produto como operação financeira em produção, estes pontos precisam estar fechados:
+Before treating the product as a financial operation in production, these points need to be settled:
 
-- parceiro Pix/FX/off-ramp regulado e contrato operacional;
-- KYC/KYB e screening adequados ao país do usuário;
-- limites por usuário, operação, dia e destino;
-- rotina de monitoramento, alerta e revisão manual;
-- reconciliação entre banco, provedor, Stellar e banco de dados;
-- política de chargeback/refund/erro operacional;
-- signer seguro, segregação de chaves e plano de recuperação;
-- termos, política de privacidade e disclosure de risco;
-- observabilidade com correlação entre `request_id`, sessão, operação e hash.
+- a regulated Pix/FX/off-ramp partner and an operational contract;
+- KYC/KYB and screening appropriate to the user's country;
+- limits per user, operation, day, and destination;
+- a monitoring, alerting, and manual-review routine;
+- reconciliation across bank, provider, Stellar, and database;
+- a chargeback/refund/operational-error policy;
+- a secure signer, key segregation, and a recovery plan;
+- terms, privacy policy, and risk disclosure;
+- observability correlating `request_id`, session, operation, and hash.
 
-### Métricas Que Importam
+### Metrics That Matter
 
-Métricas de negócio:
+Business metrics:
 
-- volume convertido;
-- número de usuários ativos por canal;
-- taxa de conclusão de Pix, conversão e pagamento;
-- economia estimada entregue ao usuário;
-- receita por operação;
-- recorrência por usuário.
+- converted volume;
+- active users per channel;
+- completion rate for Pix, conversion, and payment;
+- estimated savings delivered to the user;
+- revenue per operation;
+- per-user recurrence.
 
-Métricas técnicas:
+Technical metrics:
 
-- erro por fluxo e por provedor;
-- tempo de cotação;
-- tempo até confirmação;
-- tempo até submit/settlement;
-- falhas de idempotência;
-- divergência de saldo;
-- taxa de links expirados ou usados duas vezes.
+- error per flow and per provider;
+- quote time;
+- time to confirmation;
+- time to submit/settlement;
+- idempotency failures;
+- balance divergence;
+- rate of expired or double-used links.
 
-### O Que Este Repo Não Deve Prometer Ainda
+### What This Repo Should Not Promise Yet
 
-Este repositório não deve ser apresentado como:
+This repository should not be presented as:
 
-- banco;
-- conta global regulada pronta;
-- remessa internacional irrestrita;
-- custodiante Mainnet sem controles adicionais;
-- substituto de compliance, KYC, parceiro Pix/FX ou parecer jurídico.
+- a bank;
+- a ready, regulated global account;
+- unrestricted international remittance;
+- a Mainnet custodian without additional controls;
+- a substitute for compliance, KYC, a Pix/FX partner, or legal counsel.
 
-O posicionamento correto é: produto full-stack vivo, com UX real e infraestrutura de conversão/pagamento em validação, pronto para evoluir para piloto regulado com parceiros.
+The correct positioning is: a live full-stack product, with real UX and conversion/payment infrastructure in validation, ready to evolve into a regulated pilot with partners.
 
-## Resumo
+## Summary
 
-TalkToStellar está construindo uma rota conversacional BRL -> USD para o Brasil.
+TalkToStellar is building a conversational BRL -> USD route for Brazil.
 
-O produto não pede que o usuário vire especialista em cripto. Ele usa canais familiares, Pix, contatos, taxas transparentes e comprovantes, enquanto Stellar fornece liquidação, baixo custo e evidência verificável nos bastidores.
+The product doesn't ask the user to become a crypto expert. It uses familiar channels, Pix, contacts, transparent fees, and receipts, while Stellar provides settlement, low cost, and verifiable evidence behind the scenes.
 
-A oportunidade de curto prazo é conversão mais barata. A oportunidade de longo prazo é se tornar a camada de fluxo financeiro para pessoas e empresas que transitam entre reais e dólares.
+The short-term opportunity is cheaper conversion. The long-term opportunity is to become the financial-flow layer for people and businesses moving between reais and dollars.
