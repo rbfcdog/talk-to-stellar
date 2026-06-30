@@ -614,6 +614,7 @@ export default function RendimentosClient({
   const loadPositionsToken = useRef(""); // stale-response guard for positions/history
   const [refreshing, setRefreshing] = useState(false);
   const [reloadTick, setReloadTick] = useState(0); // bump to re-run effect-based loaders
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null); // wall-clock of last successful load
 
   async function loadSessionWallet() {
     try {
@@ -665,7 +666,7 @@ export default function RendimentosClient({
     const token = `${e}:${publicKey}`;
     loadPositionsToken.current = token;
     try {
-      const res = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
+      const res = await fetch(`/api/bridge/stellar-wallets/positions?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}&t=${Date.now()}`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
       if (loadPositionsToken.current === token && json?.success) setPositions({ defindex_usdc: Number(json.defindex_usdc) || 0, blend_usdc: Number(json.blend_usdc) || 0, total_invested_usdc: Number(json.total_invested_usdc) || 0 });
     } catch {
@@ -674,10 +675,11 @@ export default function RendimentosClient({
     // Load the persisted daily history (best-effort; reading positions above
     // also writes today's snapshot, so the series grows one point per day).
     try {
-      const hr = await fetch(`/api/bridge/stellar-wallets/position-history?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}`, { cache: "no-store" });
+      const hr = await fetch(`/api/bridge/stellar-wallets/position-history?email=${encodeURIComponent(e)}&public_key=${encodeURIComponent(publicKey)}&t=${Date.now()}`, { cache: "no-store" });
       const hj = await hr.json().catch(() => ({}));
       if (loadPositionsToken.current === token && hj?.success) {
         setMainnetHistory({ loading: false, points: Array.isArray(hj.points) ? hj.points : [], error: "", source: String(hj.source || "") });
+        setLastUpdated(Date.now());
       }
     } catch {
       // non-critical
@@ -913,19 +915,28 @@ export default function RendimentosClient({
   // Resolve the login/session wallet (for testnet yield).
   useEffect(() => { if (session.authenticated) loadSessionWallet(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [session.authenticated, session.sessionId, walletEmail]);
 
-  // Auto-refresh every minute so the chart + numbers advance live, matching the
-  // backend's per-minute snapshots. Silent (no spinner); skips backgrounded tabs.
+  // Auto-refresh so the chart + numbers advance live, matching the backend's
+  // per-minute snapshots. Silent (no spinner). Polls every 30s, and also the
+  // moment the tab regains focus/visibility (so returning to it updates at once).
   useEffect(() => {
     if (!session.authenticated) return;
-    const id = setInterval(() => {
+    const poll = () => {
       if (typeof document !== "undefined" && document.hidden) return;
       if (networkView === "mainnet") {
         if (walletEmail && selectedWalletKey) { loadPositions(walletEmail, selectedWalletKey); loadEmailWallets(walletEmail); }
       } else {
         loadSessionWallet();
       }
-    }, 60_000);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(poll, 30_000);
+    const onFocus = () => poll();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.authenticated, networkView, walletEmail, selectedWalletKey]);
 
@@ -1178,15 +1189,23 @@ export default function RendimentosClient({
                   eyebrow={L("Sua conta", "Your portfolio")}
                   title={L("Rendimentos", "Returns")}
                 />
-                <button
-                  type="button"
-                  onClick={refreshYield}
-                  disabled={refreshing}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-tts-border bg-tts-surface px-3 py-2 text-xs font-bold text-tts-deep transition hover:border-tts-deep/40 disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                  {refreshing ? L("Atualizando…", "Refreshing…") : L("Atualizar", "Refresh")}
-                </button>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={refreshYield}
+                    disabled={refreshing}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-tts-border bg-tts-surface px-3 py-2 text-xs font-bold text-tts-deep transition hover:border-tts-deep/40 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                    {refreshing ? L("Atualizando…", "Refreshing…") : L("Atualizar", "Refresh")}
+                  </button>
+                  {lastUpdated && (
+                    <span className="flex items-center gap-1 text-[10px] font-semibold text-tts-muted">
+                      <span className="h-1.5 w-1.5 rounded-full bg-tts-confirm" />
+                      {L("Atualizado", "Updated")} {new Date(lastUpdated).toLocaleTimeString(isPortuguese(language) ? "pt-BR" : "en-US")}
+                    </span>
+                  )}
+                </div>
               </div>
               <CurrentInvestmentsPage
                 language={language} session={session} sessionLoading={sessionLoading} options={options}
