@@ -2997,8 +2997,25 @@ export class BridgeController {
       const dstWalletId = readText(destination.wallet_id || (destination as any).walletId);
       const dstAddress = readText(destination.address);
       const dstMemo = readText(destination.blockchain_memo || (destination as any).blockchainMemo);
+      const dstChainHint = readText(destination.chain || (destination as any).chainName);
 
       assertBridgeAmountInRange(amount, service.config.minUsdcAmount, service.config.maxUsdcAmount, "USDC");
+
+      // For a bridge_wallet destination, Bridge requires destination.payment_rail
+      // to be the wallet's CHAIN (e.g. "base"), not the literal "bridge_wallet".
+      // Prefer the chain the client sent, else look it up, else fall back.
+      const resolveDstChain = async (): Promise<string> => {
+        if (dstChainHint) return dstChainHint;
+        if (customerId && dstWalletId) {
+          try {
+            const wallets = (await service.listWallets(customerId)) as unknown as Array<Record<string, unknown>>;
+            const w = (wallets || []).find((x) => readText(x.id) === dstWalletId);
+            const chain = readText(w?.chain);
+            if (chain) return chain;
+          } catch { /* fall through to default */ }
+        }
+        return service.config.defaultSourceChain;
+      };
 
       // ── custodial source: pushed by Bridge ──────────────────────────────────
       if (srcKind === "custodial") {
@@ -3016,7 +3033,7 @@ export class BridgeController {
         } else if (dstKind === "custodial") {
           if (!dstWalletId) { res.status(400).json({ success: false, message: "destination.wallet_id is required." }); return; }
           if (dstWalletId === srcWalletId) { res.status(400).json({ success: false, message: "Source and destination wallets are the same." }); return; }
-          destinationPayload = { amount, payment_rail: "bridge_wallet", currency: "usdc", bridge_wallet_id: dstWalletId };
+          destinationPayload = { amount, payment_rail: await resolveDstChain(), currency: "usdc", bridge_wallet_id: dstWalletId };
         } else {
           res.status(400).json({ success: false, message: `Unsupported destination kind: ${dstKind || "?"}` });
           return;
@@ -3055,7 +3072,7 @@ export class BridgeController {
           const transfer = await service.createTransfer({
             on_behalf_of: customerId,
             source: { payment_rail: "stellar", currency: "usdc" },
-            destination: { amount, payment_rail: "bridge_wallet", currency: "usdc", bridge_wallet_id: dstWalletId } as any,
+            destination: { amount, payment_rail: await resolveDstChain(), currency: "usdc", bridge_wallet_id: dstWalletId } as any,
           });
           const instr = ((transfer as any).source_deposit_instructions || (transfer as any).source?.deposit_instructions || {}) as Record<string, unknown>;
           const depositAddress = readText(instr.to_address || instr.address || (instr as any).deposit_address);

@@ -62,6 +62,9 @@ type TransferAccount = {
   label: string;
   sub: string;
   walletId?: string;
+  // Chain of a custodial (Bridge) wallet — Bridge needs it as the destination
+  // payment_rail when crediting a bridge_wallet_id.
+  chain?: string;
   address?: string;
   usdc: number;
 };
@@ -279,6 +282,7 @@ export function WalletsSuiteCard({
         label: `${L("Recebimento", "Receiver")} ${i + 1}`,
         sub: short(w.address || w.id),
         walletId: w.id,
+        chain: w.chain || undefined,
         address: w.address || undefined,
         usdc: custodialUsdc(w),
       });
@@ -679,7 +683,7 @@ function TransferPanel({
           customer_id: customerId,
           amount: String(amountNum),
           source: from.kind === "custodial" ? { kind: "custodial", wallet_id: from.walletId } : { kind: "stellar", address: from.address },
-          destination: to.kind === "custodial" ? { kind: "custodial", wallet_id: to.walletId } : { kind: "stellar", address: to.address },
+          destination: to.kind === "custodial" ? { kind: "custodial", wallet_id: to.walletId, chain: to.chain } : { kind: "stellar", address: to.address },
           confirm_mainnet: true,
         }),
       });
