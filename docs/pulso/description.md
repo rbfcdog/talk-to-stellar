@@ -21,7 +21,7 @@ For someone in Latin America, getting savings into dollars and making them work 
 
 The building blocks already exist on Stellar: a fiat ramp (Bridge), yield (DeFindex, Blend), a DEX (Soroswap), and settlement on the network itself. But each one is a **separate product**, with its own wallet, trustlines, XDR envelopes, contract addresses, and chain mechanics. To go from "dollars in my US bank" to "dollars earning yield" to "dollars back in my bank", a person has to stitch four protocols together by hand, learn crypto along the way, and trust themselves not to make a costly mistake. Most won't.
 
-Our customer interviews in Brazil, Argentina, and Colombia pointed at the same wall:
+Our customer interviews in Brazil pointed at the same wall:
 
 > *"I'd use it if it felt like Nubank and lived in WhatsApp."*
 
@@ -36,11 +36,11 @@ TalkToStellar is a **conversational financial platform that chains Stellar's eco
 The user sends a WhatsApp, Telegram, or web-chat message; an AI agent maps the intent to the right integration, builds the transaction (signed server-side with the user's vaulted key), and replies in one line with a link. The user never sees a DEX, a vault, a route, a chain, or a contract.
 
 ```
-"quero trazer dolares do meu banco americano"  ->  receive USD by wire/ACH   (Bridge)
-"aplica meus dolares"                          ->  earn yield on USDC        (DeFindex + Blend)
-"converte 50 XLM pra dolar"                    ->  swap / convert            (Soroswap)
-"saca 100 dolares pro meu banco"               ->  cash out wire/ACH         (Bridge, auto-redeem)
-"saldo"                                        ->  balance                   (Stellar core)
+"bring dollars from my US bank"  ->  receive USD by wire/ACH   (Bridge)
+"put my dollars to work"         ->  earn yield on USDC        (DeFindex + Blend)
+"convert 50 XLM to dollars"      ->  swap / convert            (Soroswap)
+"cash out 100 dollars to my bank"->  cash out wire/ACH         (Bridge, auto-redeem)
+"balance"                        ->  balance                   (Stellar core)
 ```
 
 **Stellar does the work. The user just chats.**
@@ -185,7 +185,7 @@ Retail adoption of DeFi infrastructure doesn't come from better UX on protocol f
 ## Pitch & research
 
 - **Pitch deck:** https://docs.google.com/presentation/d/1QjniT8MyUwDwbDIfWl797Mscottl4tdPCIDI_vZNJ3Y/edit
-- **Customer interviews (PT-BR):** https://drive.google.com/drive/u/0/folders/1HnMCFOUPH1FSmTptT2hlhcuTNkxyrV9M - recorded interviews across Brazil / Argentina / Colombia that shaped the "feels like Nubank, lives in WhatsApp" thesis.
+- **Customer interviews (PT-BR):** https://drive.google.com/drive/u/0/folders/1HnMCFOUPH1FSmTptT2hlhcuTNkxyrV9M - recorded interviews in Brazil that shaped the "feels like Nubank, lives in WhatsApp" thesis.
 
 ---
 
