@@ -182,27 +182,4 @@ Retail adoption of DeFi infrastructure doesn't come from better UX on protocol f
 
 ---
 
-## Pitch & research
-
-- **Pitch deck:** https://docs.google.com/presentation/d/1QjniT8MyUwDwbDIfWl797Mscottl4tdPCIDI_vZNJ3Y/edit
-- **Customer interviews (PT-BR):** https://drive.google.com/drive/u/0/folders/1HnMCFOUPH1FSmTptT2hlhcuTNkxyrV9M - recorded interviews in Brazil that shaped the "feels like Nubank, lives in WhatsApp" thesis.
-
----
-
-## Links
-
-| Surface | URL |
-|---|---|
-| **Live app** | https://talktostellar.com |
-| **Chat** | https://talktostellar.com/chat |
-| **Wire / ACH UI** | https://talktostellar.com/wire-onramp |
-| **Yield UI** | https://talktostellar.com/rendimentos |
-| **Withdraw UI** | https://talktostellar.com/usd-withdraw |
-| **Mainnet console** | https://talktostellar.com/mainnet |
-| **Pitch deck** | https://docs.google.com/presentation/d/1QjniT8MyUwDwbDIfWl797Mscottl4tdPCIDI_vZNJ3Y/edit |
-| **Customer interviews (PT-BR)** | https://drive.google.com/drive/u/0/folders/1HnMCFOUPH1FSmTptT2hlhcuTNkxyrV9M |
-| **GitHub** | https://github.com/rbfcdog/talk-to-stellar |
-
----
-
 *Built on Stellar. Bridge ramps it in, DeFindex and Blend make it earn, Soroswap moves it, and the chain settles it - delivered by chat.*
