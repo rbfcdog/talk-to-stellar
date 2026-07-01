@@ -56,7 +56,7 @@ We didn't start from zero. TalkToStellar was already a **working conversational 
 - A **conversational AI agent** (WhatsApp / Telegram / web) with intent routing.
 - **Per-user custodial Stellar wallets** with the signing key in **Supabase Vault**.
 - **PIN (bcrypt) + Passkey (WebAuthn)** auth and dedicated **confirmation pages**.
-- **PIX on/off-ramp (BRL)**, a **conversion engine** (BRL / USDC / XLM / CETES), **saved contacts**, **P2P payments**, **payment links**.
+- **PIX on/off-ramp (BRL)** via the **Etherfuse anchor (SEP-24), already working on testnet**, a **conversion engine** (BRL / USDC / XLM / CETES), **saved contacts**, **P2P payments**, **payment links**.
 - **Balance, history, and receipts** with a Stellar hash; a 13-state transfer FSM, RLS, idempotency, and an audit log.
 
 The key point: **every integration plugged into those existing rails** - the same agent spec, the same vaulted-key custody, the same PIN/passkey confirmation pages, the same receipts and history. Adding a protocol meant *extending the agent's routing spec and dropping in one tool*, not standing up new infrastructure.
