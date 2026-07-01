@@ -98,16 +98,16 @@ Each entry: what it **added** to the existing product, and what it **plugged int
 - *Pix (BRL) is in Bridge's compliance phase - wired in, not yet enabled.*
 
 ### DeFindex - yield vault (Soroban) · live on mainnet
-- **Added:** **yield on idle dollars**. One-tap USDC deposit/withdraw into an auto-optimized vault; `buildVaultAction` -> sign -> submit.
-- **Plugged into:** the vaulted-key signer and PIN/passkey confirmation - the user just sees "aplicacao", never a vault address or contract. It's the first leg the auto-yield split funds and the first it redeems on a spend.
+- **Added:** **a way to earn on idle dollars**. One tap to put dollars to work, one tap to take them back out.
+- **Plugged into:** the vaulted-key signer and PIN/passkey confirmation. The user just sees an "earnings" balance, never a vault or a contract. It's the first place the auto-yield split puts money, and the first it pulls from on a spend.
 
 ### Blend - lending pool (Soroban) · live on mainnet
-- **Added:** a **second yield market** (lending) beside DeFindex, with live APY and higher-APY markets under **Advanced** (`buildSupplyXdr` + signed submit).
-- **Plugged into:** the same one-tap supply UX and auto-yield split - two protocols, one "rendimento" surface.
+- **Added:** a **second place to earn** (lending) beside DeFindex, with live rates and higher-rate markets under **Advanced**.
+- **Plugged into:** the same one-tap earn UX and auto-yield split. Two protocols, one "earnings" surface.
 
 ### Soroswap - conversion & liquidity (Soroban + path payments)
-- **Added:** real **on-chain conversion** behind the existing "convert" button - swaps via path payments - plus **XLM/USDC liquidity (zap)** from a single USDC amount.
-- **Plugged into:** the product's conversion engine and quote/fee UX - the user keeps thinking "dollars", not token pairs. *Being wired in / expanded now.*
+- **Added:** real **behind-the-scenes conversion** under the existing "convert" button, plus the option to **provide XLM/USDC liquidity** from a single dollar amount.
+- **Plugged into:** the product's conversion and fee UX. The user keeps thinking in "dollars", not token pairs. *Being wired in / expanded now.*
 
 ### Auto-yield - the orchestrator that ties three protocols together
 - **Added:** the **glue**. Sweeps idle USDC and splits it across **DeFindex + Blend** (configurable split), optionally swapping idle XLM (above a gas reserve) via **Soroswap** first; its inverse - **auto-redeem on spend** - makes "money always earning" safe for a bank-like UX. Runs on both networks and on a scheduler.
@@ -146,12 +146,12 @@ Every integration follows the same UX rule:
 
 | Under the hood | What the user sees |
 |---|---|
-| DEX / Soroswap route | "troca direta" + the output amount |
-| DeFindex / Blend | "aplicacao" / "rendimento" |
-| Bridge wire | "banco americano" |
-| Stellar / chain | "conta" (account) - the chain is hidden |
-| Wallet | "conta" - never "wallet" |
-| XDR envelope | a confirmation button |
+| DEX / Soroswap route | "convert" + the amount you get |
+| DeFindex / Blend | "earnings" |
+| Bridge wire | "US bank" |
+| Stellar / chain | "account" (the chain is hidden) |
+| Wallet | "account" (never "wallet") |
+| Signed transaction | a confirmation button |
 
 This isn't hiding complexity for its own sake - it's the **correct product abstraction**: users buy outcomes, not mechanisms. Stellar's infrastructure delivers the outcome; TalkToStellar is the translation layer that makes the four protocols feel like one bank.
 
