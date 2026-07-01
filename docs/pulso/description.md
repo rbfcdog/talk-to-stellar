@@ -6,7 +6,7 @@
 |---|---|
 | **Tagline** | A bank you talk to: real dollars, real yield, real cash-out, all from a chat. |
 | **Category** | DeFi · Payments · Consumer · AI / Conversational |
-| **Network** | Stellar mainnet - wire/ACH + DeFindex + Blend live; Pix in compliance |
+| **Network** | Stellar mainnet - wire/ACH + DeFindex + Blend live |
 | **Live app** | https://talktostellar.com |
 | **Chat** | https://talktostellar.com/chat |
 | **Pitch deck** | https://docs.google.com/presentation/d/1QjniT8MyUwDwbDIfWl797Mscottl4tdPCIDI_vZNJ3Y/edit |
@@ -64,8 +64,8 @@ The key point: **every integration plugged into those existing rails** - the sam
 | Already had | The integration that built on it | What it added |
 |---|---|---|
 | BRL-only ramp (PIX) + custodial wallets | **Bridge.xyz** | A **real USD rail** - virtual US accounts (wire/ACH in), USD off-ramp, and a full custodial account suite. Turned a BRL bank into a **dollar** bank. |
-| Idle USDC sitting in the wallet | **DeFindex** | **Yield** - one-tap deposit/withdraw into an auto-optimized vault. Idle dollars now earn. |
-| A single yield source | **Blend** | A **second yield market** (lending) running beside DeFindex, plus higher-APY markets under Advanced. |
+| Idle USDC with no way to earn (no yield at all) | **DeFindex** | **Yield, brand new** - one-tap deposit/withdraw into an auto-optimized vault. Idle dollars earn for the first time. |
+| The just-added DeFindex vault | **Blend** | A **second yield market** (lending) beside DeFindex, plus higher-APY markets under Advanced. |
 | A "convert" UX backed by simple swaps | **Soroswap** | Real **DEX conversion via path payments** and **XLM/USDC liquidity (zap)** behind the same "convert" button. |
 | Manual deposit/withdraw per protocol | **Auto-yield** | The **orchestration** that chains DeFindex + Blend + Soroswap - auto-allocate idle USDC and **auto-redeem on spend**, so money is always earning yet always spendable. |
 
@@ -95,7 +95,7 @@ Each entry: what it **added** to the existing product, and what it **plugged int
 ### Bridge.xyz - the dollar rail (on/off-ramp) · live on mainnet
 - **Added:** a real **USD rail**. Virtual US account → the user receives USD by **wire/ACH**, arriving as **USDC on Stellar**; **off-ramp** back to a US bank (wire/ACH) that **auto-redeems from yield** first; per-email **custodial Stellar wallets** with the key vaulted; a **unified internal transfer** across every account (custodial-to-custodial, custodial-to-stellar, stellar-to-stellar, stellar-to-custodial).
 - **Plugged into:** the existing custodial-wallet model and confirmation flow - so a BRL-only conversational bank became a **dollar** bank without a new UX.
-- *Pix (BRL) is in Bridge's compliance phase - wired in, but not yet enabled for mainnet.*
+- *Pix (BRL) is in Bridge's compliance phase - wired in, not yet enabled.*
 
 ### DeFindex - yield vault (Soroban) · live on mainnet
 - **Added:** **yield on idle dollars**. One-tap USDC deposit/withdraw into an auto-optimized vault; `buildVaultAction` -> sign -> submit.
@@ -175,7 +175,7 @@ Retail adoption of DeFi infrastructure doesn't come from better UX on protocol f
 
 ## Roadmap
 
-- **Pix (BRL) on mainnet** once Bridge clears compliance - the flow is already wired in.
+- **Pix (BRL)** live once Bridge clears compliance - the flow is already wired in.
 - **More Blend markets** in Advanced, and **deeper Soroswap** conversion/LP integration.
 - **Per-user authorization** hardening on all money-movement endpoints.
 - **Receipts & insights in chat** - shareable receipts and a "you saved R$ X vs a bank" summary after each operation (the backend already computes these).
