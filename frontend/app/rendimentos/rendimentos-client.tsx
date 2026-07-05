@@ -1370,7 +1370,7 @@ export default function RendimentosClient({
               <section id="blend" className="scroll-mt-4">
                 <SuiteSectionHeader
                   eyebrow={L("Produto selecionado", "Selected product")}
-                  title={L("Rendimento em USDC", "USDC yield")}
+                  title={L("Pool de USDC (Blend)", "USDC Pool (Blend)")}
                 />
                 <div className="space-y-4">
                   <button
@@ -1542,7 +1542,7 @@ function CurrentInvestmentsPage({ language, session, sessionLoading, options, po
         }
       : { loading: false, points: [], error: "" };
     rows.push({
-      option: { asset_code: "USDC", vault_address: "blend", label: localCopy(language, "Rendimento USDC", "USDC yield") } as YieldOption,
+      option: { asset_code: "USDC", vault_address: "blend", label: localCopy(language, "Pool de USDC (Blend)", "USDC Pool (Blend)") } as YieldOption,
       code: "BLEND",
       profile: moneyProfile("USDC"),
       amount: blendInvested ?? 0,
