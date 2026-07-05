@@ -733,9 +733,16 @@ export default function RendimentosClient({
       const wallets: EmailWallet[] = Array.isArray(json?.wallets) ? json.wallets : [];
       setEmailWallets(wallets);
       setSelectedWalletKey((cur) => {
-        if (cur && wallets.some((w) => w.public_key === cur)) return cur;
-        const primary = wallets.find((w) => w.is_primary) || wallets.find((w) => Number(w.usdc_balance) > 0) || wallets[0];
-        return primary?.public_key || "";
+        // Default to the wallet that actually holds money so deposits/withdraws
+        // never target an empty (auto-created) wallet. Keep the current pick only
+        // if it still has funds; otherwise switch to the richest, then the
+        // primary, then the first available.
+        const funded = [...wallets]
+          .sort((a, b) => Number(b.usdc_balance || 0) - Number(a.usdc_balance || 0))
+          .find((w) => Number(w.usdc_balance || 0) > 0);
+        const curWallet = cur ? wallets.find((w) => w.public_key === cur) : undefined;
+        if (curWallet && Number(curWallet.usdc_balance || 0) > 0) return cur;
+        return (funded || wallets.find((w) => w.is_primary) || wallets[0])?.public_key || "";
       });
     } catch {
       setEmailWallets([]);
@@ -829,7 +836,6 @@ export default function RendimentosClient({
   const alternativeConversionCode = normalizeUiAssetCode(alternativeConversionBalance?.asset_code);
   const smartConvertSourceCode = selectedBalanceInsufficient ? alternativeConversionCode || (safeSelectedCode === "TESOURO" ? "USDC" : "TESOURO") : safeSelectedCode;
   const smartConvertDestCode = selectedBalanceInsufficient ? actionableOptionCode || safeSelectedCode || bestOptionCode || "USDC" : bestOptionCode || actionableOptionCode || "USDC";
-  const returnsUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "returns", amount, asset: safeSelectedCode, ...sessionLinkContext, lang: language }), [amount, safeSelectedCode, sessionLinkContext, language]);
   const newApplicationUrl = useMemo(() => buildMoneyUrl("/rendimentos", { view: "application", action: "deposit", amount, asset: safeSelectedCode, ...sessionLinkContext, lang: language }), [amount, safeSelectedCode, sessionLinkContext, language]);
   const convertAssetsUrl = useMemo(() => buildMoneyUrl("/convert", {
     amount,
@@ -1168,7 +1174,7 @@ export default function RendimentosClient({
 
   return (
     <main className="tts-op-page min-h-screen bg-tts-bg text-tts-deep">
-      {successNotice && <SuccessDialog language={language} notice={successNotice} returnsHref={returnsUrl} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }} />}
+      {successNotice && <SuccessDialog language={language} notice={successNotice} onClose={() => setSuccessNotice(null)} onRefresh={() => { setSuccessNotice(null); if (networkView === "mainnet" && walletEmail && selectedWalletKey) loadPositions(walletEmail, selectedWalletKey); }} />}
 
       <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-8">
         {/* Calm, single-page header with a light quick-jump (no tabs) */}
@@ -2139,8 +2145,8 @@ function ApplyTab({ language, session, sessionLoading, apiState, amount, onAmoun
   );
 }
 
-function SuccessDialog({ language, notice, returnsHref, onClose, onRefresh }: {
-  language: AppLanguage; notice: YieldSuccessNotice; returnsHref: string; onClose: () => void; onRefresh: () => void;
+function SuccessDialog({ language, notice, onClose, onRefresh }: {
+  language: AppLanguage; notice: YieldSuccessNotice; onClose: () => void; onRefresh: () => void;
 }) {
   const L = (pt: string, en: string) => localCopy(language, pt, en);
   return (
@@ -2151,9 +2157,8 @@ function SuccessDialog({ language, notice, returnsHref, onClose, onRefresh }: {
         </div>
         <h2 className="text-xl font-bold mb-2">{L("Confirmado", "Confirmed")}</h2>
         <p className="text-sm text-tts-muted mb-6">{L("Operação enviada para a rede.", "Operation sent to the network.")}</p>
-        <div className="flex gap-2">
-          <a href={returnsHref} className="flex-1 py-3 bg-tts-deep text-tts-surface text-sm font-bold">{L("Ver posições", "View positions")}</a>
-          <button onClick={onClose} className="flex-1 py-3 border border-tts-border text-sm font-bold">{L("Fechar", "Close")}</button>
+        <div className="flex">
+          <button onClick={onClose} className="flex-1 py-3 bg-tts-deep text-tts-surface text-sm font-bold">{L("Voltar", "Back")}</button>
         </div>
       </div>
     </div>
