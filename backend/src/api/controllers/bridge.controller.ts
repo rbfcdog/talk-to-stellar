@@ -3481,6 +3481,20 @@ export class BridgeController {
       const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase() === "blend" ? "blend" : "defindex";
       const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId) || undefined;
 
+      // Preflight: a deposit can only supply IDLE USDC the wallet already holds.
+      // If the selected wallet is empty/underfunded the on-chain deposit reverts
+      // (and, before the success-flag fix, reported a phantom success while the
+      // vault balance never moved). Fail early with an actionable message that
+      // names the wallet, so the user can add funds or pick the funded wallet.
+      const { usdc: idleUsdc } = await readWalletBalances(publicKey, network);
+      if (idleUsdc + 1e-7 < amountNum) {
+        res.status(400).json({
+          success: false,
+          message: `This account holds ${idleUsdc.toFixed(2)} USDC available — not enough to invest ${amountNum.toFixed(2)} USDC. Add USDC to this wallet (${publicKey.slice(0, 4)}…${publicKey.slice(-4)}) or select the wallet that holds your balance.`,
+        });
+        return;
+      }
+
       const { hash, target, result } = await executeYieldSupply({ keypair, publicKey, protocol, amountUsdc: amountNum, network, assetId: requestedAsset });
       logger.info(`[bridge] ${network} ${protocol} supply ${amount} USDC from ${publicKey} -> ${target} hash=${hash}`);
 
@@ -3538,6 +3552,22 @@ export class BridgeController {
 
       const protocol = (readText(req.body?.protocol) || "defindex").toLowerCase() === "blend" ? "blend" : "defindex";
       const requestedAsset = readText(req.body?.asset_id ?? req.body?.assetId) || undefined;
+
+      // Preflight: you can only redeem what THIS wallet actually has invested. If
+      // the selected wallet has no position (e.g. an empty second wallet), the
+      // on-chain withdraw reverts and the vault balance never changes. Fail early
+      // with the real invested figure so the user can fix the amount/wallet.
+      if (network === "mainnet") {
+        const pos = await computeMainnetPosition(publicKey);
+        const invested = protocol === "blend" ? pos.blendUsdc : pos.defindexUsdc;
+        if (invested + 1e-7 < amountNum) {
+          res.status(400).json({
+            success: false,
+            message: `This account has ${invested.toFixed(2)} USDC invested in ${protocol === "blend" ? "Blend" : "the vault"} — not enough to withdraw ${amountNum.toFixed(2)} USDC. Withdraw ${invested.toFixed(2)} USDC or less, or select the wallet that holds the position.`,
+          });
+          return;
+        }
+      }
 
       const { hash, target, result } = await executeYieldSupply({ keypair, publicKey, protocol, amountUsdc: amountNum, network, assetId: requestedAsset, action: "withdraw" });
       logger.info(`[bridge] ${network} ${protocol} redeem ${amount} USDC from ${target} -> ${publicKey} hash=${hash}`);
