@@ -794,6 +794,20 @@ async function executeYieldSupply(params: {
   tx.sign(keypair);
   const result = await DefindexYieldService.sendSignedTransaction(tx.toXDR(), network);
   const hash = result?.hash || result?.txHash || result?.transactionHash || null;
+  // The DeFindex /send response reports the FINAL on-chain status. A returned
+  // hash alone does NOT mean the deposit applied — if `success` is false the
+  // transaction reverted on-chain (e.g. slippage, insufficient idle USDC, or a
+  // failed strategy allocation) and the vault balance won't change. Without this
+  // guard the endpoint reports a phantom success while nothing actually moved.
+  if (result && result.success === false) {
+    const reason =
+      result?.error ||
+      result?.result?.error ||
+      result?.resultXdr ||
+      result?.status ||
+      "transaction reverted on-chain";
+    throw new Error(`DeFindex ${action} did not apply (${reason})${hash ? ` [tx ${hash}]` : ""}`);
+  }
   return { hash, target, result };
 }
 
