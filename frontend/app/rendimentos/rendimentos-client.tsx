@@ -36,7 +36,7 @@ import { extractDefindexPositionAmount } from "@/lib/defindex-position";
 import { useLanguage, type AppLanguage } from "@/lib/i18n";
 import { analyzePortfolioPeriod } from "@/lib/portfolio-period-analysis";
 import { currentPageSessionSource, getClientSession } from "@/lib/session";
-import { BridgeAccessField, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
+import { BridgeAccountLogin, useBridgeAccess } from "@/components/shared/bridge-auth-gate";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 
 type ApiState = { loading: boolean; message: string; error: string };
@@ -1220,28 +1220,35 @@ export default function RendimentosClient({
               </div>
             </div>
 
-            {/* Link your dollar account — associate a Bridge email with this wallet.
-                Shown until linked so the clean default stays uncluttered. */}
-            {!linkState.linked && !walletEmail && session.authenticated && (
-              <BridgeLinkCard
-                language={language}
-                defaultEmail={walletEmail}
-                state={linkState}
-                onLink={linkBridgeEmail}
-              />
-            )}
+            {/* Access your dollar account. The real-money account needs BOTH the
+                account email and the access password, so ask for them in one form
+                and submit together — one click links the email and unlocks the
+                account, reaching the same wallet every time. On testnet (Demo) the
+                session wallet is used, so only the optional email link is offered. */}
+            {networkView === "mainnet"
+              ? (session.authenticated && returnsPinVerified && (!bridgeUnlocked || !walletEmail) && (
+                  <div className="mb-5">
+                    <BridgeAccountLogin
+                      defaultEmail={walletEmail}
+                      title={L("Conta em dólar", "USD account")}
+                      description={L("Informe o e-mail e a senha de acesso da sua conta em dólar.", "Enter your dollar-account email and access password.")}
+                      emailLabel={L("E-mail da conta", "Account email")}
+                      passwordLabel={L("Senha de acesso", "Access password")}
+                      submitLabel={L("Acessar conta", "Access account")}
+                      onAuthenticated={(email) => { unlockBridge(); linkBridgeEmail(email); }}
+                    />
+                    {linkState.error && <p className="mt-2 text-xs font-semibold text-tts-error">{linkState.error}</p>}
+                  </div>
+                ))
+              : (!linkState.linked && !walletEmail && session.authenticated && (
+                  <BridgeLinkCard
+                    language={language}
+                    defaultEmail={walletEmail}
+                    state={linkState}
+                    onLink={linkBridgeEmail}
+                  />
+                ))}
           </>
-        )}
-
-        {/* Bridge wallet — access gate (mainnet only). The real-money wallet is
-            password-protected; testnet and the returns view stay open. */}
-        {networkView === "mainnet" && returnsPinVerified && !bridgeUnlocked && (
-          <BridgeAccessField
-            className="mb-5"
-            onUnlock={() => { unlockBridge(); if (walletEmail.trim()) loadEmailWallets(walletEmail); }}
-            title={L("Conta em dólar — restrita", "USD account — restricted")}
-            description={L("Senha de acesso necessária para gerenciar esta conta.", "Access password required to manage this account.")}
-          />
         )}
 
         {!sessionReady ? (
