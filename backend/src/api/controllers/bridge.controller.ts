@@ -3247,6 +3247,19 @@ export class BridgeController {
         return;
       }
 
+      // The email is unique across sessions (idx_agent_sessions_email_lower_unique).
+      // A returning user on a new device (e.g. logging in on their phone) gets a
+      // fresh session, so this email may still be attached to an older session —
+      // which would make the update below collide with the unique index. Detach
+      // it from any other session first so this session can claim it. The dollar
+      // wallets are keyed by email (bridge_stellar_wallets.email), so re-claiming
+      // the email resolves the exact same wallet on the new device.
+      await supabase
+        .from("agent_sessions")
+        .update({ email: null })
+        .ilike("email", email)
+        .neq("session_id", sessionId);
+
       // Persist the link on the session.
       const { error: updErr } = await supabase
         .from("agent_sessions").update({ email }).eq("session_id", sessionId);
