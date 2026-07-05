@@ -3250,20 +3250,28 @@ export class BridgeController {
       // The email is unique across sessions (idx_agent_sessions_email_lower_unique).
       // A returning user on a new device (e.g. logging in on their phone) gets a
       // fresh session, so this email may still be attached to an older session —
-      // which would make the update below collide with the unique index. Detach
-      // it from any other session first so this session can claim it. The dollar
+      // which would make the claim below collide with the unique index. Detach it
+      // from any other session first so this session can claim it. The dollar
       // wallets are keyed by email (bridge_stellar_wallets.email), so re-claiming
-      // the email resolves the exact same wallet on the new device.
-      await supabase
-        .from("agent_sessions")
-        .update({ email: null })
-        .ilike("email", email)
-        .neq("session_id", sessionId);
+      // the email resolves the exact same wallet/account on the new device.
+      try {
+        await supabase
+          .from("agent_sessions")
+          .update({ email: null })
+          .ilike("email", email)
+          .neq("session_id", sessionId);
+      } catch { /* best-effort detach */ }
 
-      // Persist the link on the session.
+      // Claim the email on this session. If it still collides with the unique
+      // index (race, or a stored variant the detach didn't match), do NOT fail
+      // the request — every later call passes the email explicitly, so the user
+      // still reaches the same account. Persisting on the session is only a
+      // convenience, never a gate.
       const { error: updErr } = await supabase
         .from("agent_sessions").update({ email }).eq("session_id", sessionId);
-      if (updErr) throw updErr;
+      if (updErr && !/duplicate key|unique constraint|idx_agent_sessions_email/i.test(updErr.message || "")) {
+        throw updErr;
+      }
 
       // Best-effort backlink on the Bridge customer side (non-blocking).
       try {
