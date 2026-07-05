@@ -94,6 +94,18 @@ const MONEY_PROFILES: Record<string, { namePt: string; nameEn: string; short: st
 
 function isPortuguese(language: AppLanguage) { return language === "pt-BR"; }
 function localCopy(language: AppLanguage, pt: string, en: string) { return isPortuguese(language) ? pt : en; }
+// Yield deposits/withdrawals are legitimately repeatable (invest $1 again, cash
+// out $1 again). The backend proxy otherwise derives an Idempotency-Key from the
+// request body, so two identical operations collide and the second is replayed
+// from cache without ever executing — the vault balance never moves. A fresh key
+// per click makes each operation unique so it actually runs on-chain.
+function freshIdempotencyKey(): string {
+  try {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    if (uuid) return `yield_${uuid}`;
+  } catch { /* randomUUID unavailable */ }
+  return `yield_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+}
 function profileName(profile: { namePt: string; nameEn: string }, language: AppLanguage) { return isPortuguese(language) ? profile.namePt : profile.nameEn; }
 function moneyProfile(code?: string) {
   const n = String(code || "").trim().toUpperCase();
@@ -1129,7 +1141,7 @@ export default function RendimentosClient({
         const endpoint = action === "withdraw" ? "stellar-wallets/redeem" : "stellar-wallets/invest";
         const res = await fetch(`/api/bridge/${endpoint}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "Idempotency-Key": freshIdempotencyKey() },
           body: JSON.stringify({ email: (walletEmail || "").trim().toLowerCase(), public_key: selectedWalletKey, amount, protocol: "defindex", network: "mainnet" }),
         });
         const data = await res.json().catch(() => ({}));
@@ -2302,7 +2314,7 @@ function SwapInlinePanel({ language, email = "", walletKey = "" }: { language: A
     try {
       const res = await fetch("/api/bridge/stellar-wallets/add-liquidity", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": freshIdempotencyKey() },
         body: JSON.stringify({ email, public_key: walletKey, amount: String(amt) }),
       });
       const json = await res.json().catch(() => ({}));
@@ -2539,7 +2551,7 @@ function BlendInlinePanel({ language, network, email, wallets, defaultWallet, wa
     try {
       const res = await fetch("/api/bridge/stellar-wallets/invest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": freshIdempotencyKey() },
         body: JSON.stringify({ email: (email || "").trim().toLowerCase(), public_key: walletAddress, amount: String(amount), protocol: "blend", asset_id: assetId, network }),
       });
       const data = await res.json().catch(() => ({}));
