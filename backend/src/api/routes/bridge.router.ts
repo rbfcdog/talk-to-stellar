@@ -117,6 +117,16 @@ router.get(
   "/virtual-accounts/:virtualAccountId",
   BridgeController.getVirtualAccount,
 );
+// Bridge needs the customer id to (de)activate a VA. Preferred customer-scoped
+// routes; the legacy bare routes still work when customerId is sent in the body.
+router.post(
+  "/customers/:id/virtual-accounts/:virtualAccountId/deactivate",
+  BridgeController.deactivateVirtualAccount,
+);
+router.post(
+  "/customers/:id/virtual-accounts/:virtualAccountId/reactivate",
+  BridgeController.reactivateVirtualAccount,
+);
 router.post(
   "/virtual-accounts/:virtualAccountId/deactivate",
   BridgeController.deactivateVirtualAccount,

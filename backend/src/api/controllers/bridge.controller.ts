@@ -1990,7 +1990,12 @@ export class BridgeController {
 
   static async deactivateVirtualAccount(req: Request, res: Response): Promise<void> {
     try {
-      await getBridgeService().deactivateVirtualAccount(String(req.params.virtualAccountId));
+      const customerId = String(req.params.id || req.body?.customerId || req.query?.customerId || "");
+      if (!customerId) {
+        res.status(400).json({ success: false, message: "customerId is required to deactivate a virtual account." });
+        return;
+      }
+      await getBridgeService().deactivateVirtualAccount(customerId, String(req.params.virtualAccountId));
       res.json({ success: true });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to deactivate virtual account." });
@@ -1999,7 +2004,12 @@ export class BridgeController {
 
   static async reactivateVirtualAccount(req: Request, res: Response): Promise<void> {
     try {
-      await getBridgeService().reactivateVirtualAccount(String(req.params.virtualAccountId));
+      const customerId = String(req.params.id || req.body?.customerId || req.query?.customerId || "");
+      if (!customerId) {
+        res.status(400).json({ success: false, message: "customerId is required to reactivate a virtual account." });
+        return;
+      }
+      await getBridgeService().reactivateVirtualAccount(customerId, String(req.params.virtualAccountId));
       res.json({ success: true });
     } catch (error: any) {
       res.status(statusFromError(error)).json({ success: false, message: error?.message || "Failed to reactivate virtual account." });

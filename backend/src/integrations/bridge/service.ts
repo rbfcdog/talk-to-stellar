@@ -195,12 +195,22 @@ export class BridgeService {
     return this.client.get(`/virtual_accounts/${encodeURIComponent(customerId)}`);
   }
 
-  async deactivateVirtualAccount(accountId: string): Promise<void> {
-    await this.client.post(`/virtual_accounts/${encodeURIComponent(accountId)}/deactivate`);
+  async deactivateVirtualAccount(customerId: string, accountId: string): Promise<void> {
+    // Bridge requires the customer-scoped path — the bare
+    // /virtual_accounts/{id}/deactivate route returns 401 Unauthorized.
+    await this.client.post(
+      `/customers/${encodeURIComponent(customerId)}/virtual_accounts/${encodeURIComponent(accountId)}/deactivate`,
+      {},
+      BridgeClient.idempotencyKey('va-deactivate'),
+    );
   }
 
-  async reactivateVirtualAccount(accountId: string): Promise<void> {
-    await this.client.post(`/virtual_accounts/${encodeURIComponent(accountId)}/reactivate`);
+  async reactivateVirtualAccount(customerId: string, accountId: string): Promise<void> {
+    await this.client.post(
+      `/customers/${encodeURIComponent(customerId)}/virtual_accounts/${encodeURIComponent(accountId)}/reactivate`,
+      {},
+      BridgeClient.idempotencyKey('va-reactivate'),
+    );
   }
 
   // ── External Accounts (Off-Ramp Destinations) ─────────────────
