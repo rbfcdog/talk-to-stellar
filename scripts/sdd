@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec python3 "$REPOSITORY_ROOT/.agents/skills/sdd-workflow/scripts/sdd.py" "$@"
