@@ -41,7 +41,13 @@ describe('PagfinanceService.ensureUser', () => {
     });
     await service.ensureUser(PUBKEY, { name: 'Ana' });
 
-    expect(post).toHaveBeenCalledWith('/api/v1/users', 'hmac', { pubkey: PUBKEY, name: 'Ana' });
+    expect(post).toHaveBeenCalledWith('/api/v1/users', 'hmac', {
+      uid: PUBKEY,
+      pubkey: PUBKEY,
+      blockchain: 'stellar',
+      name: 'Ana',
+      displayName: 'Ana',
+    });
     expect(patch).toHaveBeenCalledWith(`/api/v1/users/${PUBKEY}/kyc`, 'hmac', {
       kycLevel: 1,
       kycStatus: 'APPROVED',

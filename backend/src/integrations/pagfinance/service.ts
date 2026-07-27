@@ -69,7 +69,13 @@ export class PagfinanceService {
 
   /**
    * Ensure the pubkey exists on PagFinance with KYC level 1 APPROVED.
-   * Creation is idempotent by pubkey (CONFLICT counts as success).
+   *
+   * Real sandbox contract (differs from the partner guide, verified live):
+   * the create body is `{uid, pubkey, blockchain}` — `uid` is the primary
+   * identifier and `pubkey` is only stored when `blockchain` is present
+   * (`'stellar'` is accepted). We use the Stellar G-key as both uid and
+   * pubkey. Creation is idempotent by uid and does NOT update an existing
+   * record, so the pubkey must be set on first creation.
    */
   async ensureUser(pubkey: string, profile?: PagfinanceUserProfile): Promise<void> {
     this.assertEnabled();
@@ -77,8 +83,10 @@ export class PagfinanceService {
 
     try {
       await this.client.post<PagfinanceEnvelope<PagfinanceUser>>('/api/v1/users', 'hmac', {
+        uid: pubkey,
         pubkey,
-        ...(profile?.name ? { name: profile.name } : {}),
+        blockchain: 'stellar',
+        ...(profile?.name ? { name: profile.name, displayName: profile.name } : {}),
         ...(profile?.email ? { email: profile.email } : {}),
         ...(profile?.phone ? { phone: profile.phone } : {}),
         ...(profile?.taxId ? { taxId: profile.taxId } : {}),
