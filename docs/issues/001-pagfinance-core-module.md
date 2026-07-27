@@ -22,9 +22,9 @@ rotas, webhook) só consome este módulo.
 ## Surface
 
 - [x] Application code
-- [x] Data or infrastructure
+- [ ] Data or infrastructure
 - [x] Tests
-- [x] Documentation
+- [ ] Documentation
 
 ## Spec coverage
 

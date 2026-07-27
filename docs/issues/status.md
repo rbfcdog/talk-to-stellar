@@ -5,7 +5,7 @@
 | Issue | Title | Spec | Status |
 |---|---|---|---|
 | ISS-001 | Core do módulo PagFinance | SPEC-pagfinance-pix-cashin | completed |
-| ISS-002 | Perna de crédito USDC em duas redes | SPEC-pagfinance-pix-cashin | pending |
+| ISS-002 | Perna de crédito USDC em duas redes | SPEC-pagfinance-pix-cashin | completed |
 | ISS-003 | API de sessão para cash-in Pix | SPEC-pagfinance-pix-cashin | pending |
 | ISS-004 | Webhook CASHIN_COMPLETED e crédito | SPEC-pagfinance-pix-cashin | pending |
 | ISS-005 | Scripts operacionais e E2E | SPEC-pagfinance-pix-cashin | pending |
@@ -16,7 +16,7 @@
 
 - total: 7
 - blocked: 0
-- completed: 1
+- completed: 2
 - in_progress: 0
-- pending: 6
+- pending: 5
 - planned: 0

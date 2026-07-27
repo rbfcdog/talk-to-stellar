@@ -217,6 +217,10 @@ export function initPagfinanceService(): PagfinanceService {
   _instance = new PagfinanceService();
   if (_instance.enabled) {
     logger.info(`[pagfinance] enabled base_url=${_instance.settings.baseUrl}`);
+    // Lazy import avoids pulling Stellar deps into boot when disabled.
+    import('./credit')
+      .then(({ validateCreditReadiness }) => validateCreditReadiness())
+      .catch((err) => logger.warn(`[pagfinance] credit readiness check failed: ${err?.message || err}`));
   } else {
     logger.info('[pagfinance] disabled (missing env or PAGFINANCE_ENABLED != true)');
   }

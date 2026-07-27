@@ -17,6 +17,14 @@ export type { PagfinanceConfig } from './config';
 export { PagfinanceClient } from './client';
 export { PagfinanceService, getPagfinanceService, initPagfinanceService } from './service';
 export {
+  creditUsdcToUser,
+  ensureUsdcTrustlineForCredit,
+  resolveCreditDestination,
+  resolveTreasurySecret,
+  validateCreditReadiness,
+} from './credit';
+export type { CreditDestination, CreditDestinationResult, CreditResult } from './credit';
+export {
   buildAuthorizationHeader,
   canonicalString,
   deriveSigningKey,
