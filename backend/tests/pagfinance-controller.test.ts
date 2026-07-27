@@ -54,6 +54,12 @@ jest.mock('../src/api/services/brl-reference-rate.service', () => ({
   BrlReferenceRateService: { quoteBrlToUsdc: jest.fn() },
 }));
 
+jest.mock('../src/integrations/pagfinance/settlement', () => ({
+  claimOperationForCredit: jest.fn(),
+  settleCashinOperation: jest.fn().mockResolvedValue(undefined),
+  findOperationByPagfinanceIntentId: jest.fn(),
+}));
+
 const mockService: any = {
   enabled: true,
   settings: {
@@ -323,6 +329,66 @@ describe('createCashinIntent', () => {
     await PagfinanceController.createCashinIntent(fakeReq({ body: { amount_brl: 50 } }), res);
     expect(res.statusCode).toBe(429);
     expect(res.body.retry_after_ms).toBe(7000);
+  });
+});
+
+describe('getCashinIntent poll recovery', () => {
+  const { claimOperationForCredit, settleCashinOperation } = jest.requireMock(
+    '../src/integrations/pagfinance/settlement',
+  );
+
+  it('claims and settles when the remote intent completed but the local one is PENDING', async () => {
+    mockDb.tables.operations = [
+      {
+        id: 'op-9',
+        type: 'PIX_ONRAMP',
+        status: 'PENDING',
+        source_session_id: 's1',
+        amount: 50,
+        context: JSON.stringify({
+          provider: 'pagfinance',
+          pagfinance_intent_id: 'int-9',
+          value_cents: 5000,
+          usdc_net: 9.9,
+          expires_at: new Date(Date.now() + 600_000).toISOString(),
+        }),
+      },
+    ];
+    mockService.getIntent.mockResolvedValue({ intentId: 'int-9', status: 'COMPLETED' });
+    claimOperationForCredit.mockResolvedValue(true);
+
+    const res = fakeRes();
+    await PagfinanceController.getCashinIntent(fakeReq({ params: { intentId: 'int-9' } }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe('CREDITING');
+    expect(claimOperationForCredit).toHaveBeenCalledWith('op-9', ['PENDING', 'FAILED']);
+    expect(settleCashinOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'op-9' }),
+      { trigger: 'poll' },
+    );
+  });
+
+  it('does not re-claim an expired operation', async () => {
+    mockDb.tables.operations = [
+      {
+        id: 'op-10',
+        type: 'PIX_ONRAMP',
+        status: 'FAILED',
+        source_session_id: 's1',
+        amount: 50,
+        context: JSON.stringify({
+          provider: 'pagfinance',
+          pagfinance_intent_id: 'int-10',
+          failure_reason: 'expired',
+        }),
+      },
+    ];
+    mockService.getIntent.mockResolvedValue({ intentId: 'int-10', status: 'COMPLETED' });
+
+    const res = fakeRes();
+    await PagfinanceController.getCashinIntent(fakeReq({ params: { intentId: 'int-10' } }), res);
+    expect(claimOperationForCredit).not.toHaveBeenCalled();
   });
 });
 

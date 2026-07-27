@@ -17,6 +17,10 @@ import {
   PagfinanceApiError,
   PagfinanceClient,
 } from '../../integrations/pagfinance';
+import {
+  claimOperationForCredit,
+  settleCashinOperation,
+} from '../../integrations/pagfinance/settlement';
 import { BrlReferenceRateService } from '../services/brl-reference-rate.service';
 import { PlatformFeeService } from '../services/fees/platform-fee.service';
 import { getStellarNetworkName } from '../../config/assets';
@@ -491,6 +495,22 @@ export class PagfinanceController {
         } as any);
         localStatus = 'FAILED';
         context.failure_reason = 'expired';
+      }
+
+      // Recovery path: PagFinance says the Pix was paid but we never credited
+      // (missed webhook, or a previous credit attempt failed for a transient
+      // reason). Same atomic claim as the webhook — credits exactly once.
+      if (
+        remoteCompleted &&
+        (localStatus === 'PENDING' || (localStatus === 'FAILED' && context.failure_reason !== 'expired'))
+      ) {
+        const claimed = await claimOperationForCredit(operation.id, ['PENDING', 'FAILED']);
+        if (claimed) {
+          localStatus = 'CREDITING';
+          void settleCashinOperation(operation, { trigger: 'poll' }).catch((e: any) =>
+            logger.warn(`[pagfinance] poll settlement failed for ${operation.id}: ${e?.message || e}`),
+          );
+        }
       }
 
       const status =
