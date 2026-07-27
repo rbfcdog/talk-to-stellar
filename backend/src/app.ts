@@ -50,6 +50,7 @@ import { FxRateAlertService } from './api/services/fx-rate-alert.service';
 import { startPositionSnapshotScheduler } from './api/services/position-snapshot.service';
 import { EvolutionService } from './api/services/evolution.service';
 import { initBridgeService } from './integrations/bridge';
+import { initPagfinanceService } from './integrations/pagfinance';
 import {
   buildCorsOptions,
   globalRateLimit,
@@ -158,6 +159,7 @@ EvolutionService.startWebhookAutoConfiguration();
 EvolutionService.startInboundWebhookWorker();
 EvolutionService.startOutboundDeliveryWorker();
 initBridgeService();
+initPagfinanceService();
 paymentWatcher.start().catch((err: any) => {
   logger.warn(`[payment-watcher] Could not start: ${err.message}`);
 });
