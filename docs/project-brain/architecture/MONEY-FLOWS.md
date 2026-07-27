@@ -175,3 +175,39 @@ Structured JSON logs are emitted per transition
 **Circle readiness on 2026-06-16**: backend env has Circle sandbox API key, source wallet, linked wire destination, and execution gate enabled. Non-mutating Circle API checks confirmed balances HTTP 200, wire-bank list HTTP 200, and destination status `complete`. TTS created Circle sandbox payout instruction `circle_instruction_e0be3785-0b35-4690-9eb6-5f99b66167ab` for transfer `tr_d2_circle_stellar_payment_2`, backed by a 64-character Stellar testnet hash, persisted the provider response in `international_payout_instructions`, and observed Circle provider status `completed` by protected status polling.
 
 **Replay behavior**: Etherfuse retries with the same `e2e_id`/`txid` and Stellar retries with the same `tx_hash` append `idempotent_replay` events without changing state.
+
+## 7. On-Ramp: PIX → USDC (PagFinance rail)
+
+> Parallel to flow 1 (Etherfuse, testnet-only). Active when `PAGFINANCE_ENABLED=true`;
+> the `/pix-on` page switches provider via `GET /api/pagfinance/cashin/config`.
+
+```
+User: "quero colocar 50 reais via Pix" → agent builds /pix-on link (unchanged)
+  ↓
+/pix-on → PixOnSwitch → PagfinanceOnrampClient (frontend/app/pix-on/)
+  ↓ POST /api/pagfinance/cashin/intent (session proxy injects headers)
+PagfinanceController.createCashinIntent (backend/src/api/controllers/pagfinance.controller.ts)
+  ├── validates amount + customer {name, CPF} (stored in external_accounts.data)
+  ├── locks OUR BRL→USDC rate (BrlReferenceRateService; mainnet fallback env)
+  ├── lazy-provisions the PagFinance user {uid, pubkey, blockchain:'stellar'} + KYC override
+  ├── creates the PagFinance intent (Idempotency-Key) → brCode/QR (Woovi)
+  └── persists operations row: type=PIX_ONRAMP, status=PENDING, context has
+      pagfinance_intent_id, value_cents, usdc_net/fee/gross, rate_locked_at
+  ↓ user pays the Pix QR
+POST /webhook/pagfinance ← CASHIN_COMPLETED (HMAC over RAW body; fail-closed)
+  ├── atomic claim: operations.status PENDING→CREDITING (duplicates ack + no-op)
+  ├── ack 200, then async settleCashinOperation (integrations/pagfinance/settlement.ts)
+  ├── resolveCreditDestination (testnet: session wallet; mainnet: Horizon →
+  │   stellar_mainnet_wallets → bridge_stellar_wallets by email)
+  ├── creditUsdcToUser: treasury pays user + platform fee in ONE Stellar tx
+  ├── COMPLETED + stellar_transaction_hash (dedupes history vs Horizon)
+  └── PaymentReceiptService.sendReceipt (chat + Telegram/WhatsApp, dedupeKey pix-onramp:<op>)
+  ↓ recovery paths
+GET /cashin/intent/:id poll: remote COMPLETED + local PENDING/FAILED → same claim
+scripts/pagfinance-e2e.ts --replay-webhook <intentId>: signed synthetic delivery
+```
+
+**Expiry**: PagFinance emits NO webhook on expiry — the intent poll marks the
+operation FAILED/expired after `expires_at`.
+
+**Sequence files**: `backend/src/integrations/pagfinance/{service,credit,settlement}.ts`, `backend/src/api/controllers/pagfinance.controller.ts`, `backend/src/api/controllers/pagfinance-webhook.controller.ts`, `frontend/app/pix-on/pagfinance-onramp-client.tsx`. Verified contract + rollout checklist: `docs/integrations/PAGFINANCE.md`.

@@ -431,7 +431,7 @@
 
 ---
 
-## Cluster H — Reliability (19 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (21 incidents, SEVERITY: HIGH)
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -673,11 +673,29 @@ Ranked by frequency × severity across the 63 documented incidents:
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
 
+### #67 — Frontend Build Broken: Missing `@stellar/freighter-api` Install
+> **Quote**: (agent-discovered during ISS-006 build gate, 2026-07-27 — no founder quote)
+> **Gloss**: `npm run build` on the frontend failed on main: `key-integrations-client.tsx` imports `@stellar/freighter-api`, which was referenced but not installed in `node_modules`/lockfile.
+
+- **Where**: `frontend/app/key-integrations/key-integrations-client.tsx:131`, `frontend/package.json`.
+- **Root cause**: Commit `c4538a85` (key-integrations Freighter feature) shipped the import without a committed, installed dependency — every clean build of main failed with `Module not found`.
+- **Status**: **Fixed by `815b17a7`** (`npm install @stellar/freighter-api` → `^6.0.1` pinned in package.json + lockfile).
+- **Lesson**: **A feature commit must carry its dependency in the same commit** — CI building from a clean checkout would have caught this immediately.
+
+### #68 — 13 Frontend Unit Tests Failing on Main
+> **Quote**: (agent-discovered during ISS-006 validation, 2026-07-27 — no founder quote)
+> **Gloss**: `npx vitest run __tests__/unit` fails 13 tests across 5 files on a clean main checkout, independent of any PagFinance change (verified via stash baseline).
+
+- **Where**: `frontend/__tests__/unit/{lib/browser-storage,lib/session,secure-balance-surfaces,ux-copy,web-feedback}.test.*`.
+- **Root cause**: Not yet diagnosed — failures cluster around storage mocking and UX copy assertions; predates 2026-07-27.
+- **Status**: **Open**. Tracked in OPEN-ISSUES.md.
+- **Lesson**: A red baseline hides regressions — new work had to stash-diff to prove it added zero failures.
+
 ## Status Summary
 
-- **Confirmed fixed**: 38 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65, #66)
+- **Confirmed fixed**: 39 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65, #66, #67)
 - **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
-- **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
+- **Still open**: 23 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41, #68)
 - **Not verifiable in current code**: 0
 
 **Key**: 38 of 63 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
@@ -692,6 +710,7 @@ Fixing commits verified in codebase:
 | #6 | `9106c6a` | Resolve PIX recipients from user DB beyond saved contacts |
 | #7 | `749d906` | Show sender identity on PIX-funded receipts |
 | #9 | `bd6b73d` | Normalize SVG letter-spacing, kerning, text-rendering |
+| #67 | `815b17a7` | Install missing @stellar/freighter-api dependency (frontend build) |
 | #10 | `916fcb6` | Respect recipient language for receipts and notifications |
 | #11 | `dcec791` | Exclude cashflows from investment return analysis |
 | #12 | `d4b1d98` | Add weekly/monthly chart time window toggles |

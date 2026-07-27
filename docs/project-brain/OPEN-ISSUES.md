@@ -46,6 +46,13 @@ PAIN-POINTS.md currently records 38 fixed, 22 still open, and 3 partially-fixed 
 
 ## Priority: P1 (Blocks Good UX)
 
+### #68 — 13 frontend unit tests failing on main
+- **Evidence**: `npx vitest run __tests__/unit` → 13 failed across `lib/browser-storage`, `lib/session`, `secure-balance-surfaces`, `ux-copy`, `web-feedback` (baseline verified via stash on 2026-07-27, unrelated to PagFinance work)
+- **Suspected**: storage mocking setup drift + stale UX copy assertions
+- **Suggested fix**: triage per file; either fix the code the assertions protect or update assertions that describe intentionally-changed copy; restore a green baseline so new regressions are visible
+- **Files**: `frontend/__tests__/unit/*`
+
+
 ### #17, #18, #20, #23 — Flow State Machine
 - **Issues**: Back-navigation breaks flow (#17), auto-advance without Confirm (#18), no Nubank-style multi-step (#20), conversion screen too long (#23)
 - **Suggested fix**: Implement server-authoritative flow state. Client reads state, doesn't write it. Every step requires explicit Continue. Split conversion into: (1) input assets/amount, (2) review quote + fee, (3) PIN confirmation.

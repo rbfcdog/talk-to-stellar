@@ -22,7 +22,7 @@ porque entrega a experiência completa sem tocar no `pix-ramp-client.tsx`.
 
 - [x] Application code
 - [ ] Data or infrastructure
-- [ ] Tests
+- [x] Tests
 - [ ] Documentation
 
 ## Spec coverage

@@ -10,13 +10,13 @@
 | ISS-004 | Webhook CASHIN_COMPLETED e crédito | SPEC-pagfinance-pix-cashin | completed |
 | ISS-005 | Scripts operacionais e E2E | SPEC-pagfinance-pix-cashin | completed |
 | ISS-006 | Frontend /pix-on com provider PagFinance | SPEC-pagfinance-pix-cashin | completed |
-| ISS-007 | Docs, env e checklist de rollout | SPEC-pagfinance-pix-cashin | pending |
+| ISS-007 | Docs, env e checklist de rollout | SPEC-pagfinance-pix-cashin | completed |
 
 ## Summary
 
 - total: 7
 - blocked: 0
-- completed: 6
+- completed: 7
 - in_progress: 0
-- pending: 1
+- pending: 0
 - planned: 0

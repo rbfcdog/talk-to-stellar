@@ -35,6 +35,22 @@ You are working on **TalkToStellar**, a conversational money platform (PIX → S
 | Money flow lifecycles | `docs/project-brain/architecture/MONEY-FLOWS.md` |
 | Grant status | `docs/project-brain/funding/GRANTS.md` |
 
+## SDD Workflow (specs + issues)
+
+Structured feature work uses the SDD workflow (ported from eyon-platform):
+approved specs live in `docs/specs/`, dependency-ordered issues in
+`docs/issues/` (stages: spec → break → plan → execute → review). Tooling:
+
+```bash
+./scripts/sdd new-spec <slug> --title "Title"
+./scripts/sdd new-issue <spec-path> <slug> --title "Title"
+./scripts/sdd validate
+./scripts/sdd status --write
+```
+
+Full stage instructions: `.agents/skills/sdd-workflow/SKILL.md`. Do not edit
+`docs/issues/status.md` manually (auto-generated).
+
 ## Tone
 
 - Write docs in English (EN). Keep user-facing quotes in original PT.
