@@ -12,6 +12,8 @@ import passkeyRouter from './api/routes/passkey.router';
 import securityRouter from './api/routes/security.router';
 import financialRouter from './api/routes/financial.router';
 import rampRouter from './api/routes/ramp.router';
+import pagfinanceRouter from './api/routes/pagfinance.router';
+import pagfinanceWebhookRouter from './api/routes/pagfinance-webhook.router';
 import evolutionRouter from './api/routes/evolution.router';
 import bridgeWebhookRouter from './api/routes/bridge-webhook.router';
 import bridgeRouter from './api/routes/bridge.router';
@@ -50,6 +52,7 @@ import { FxRateAlertService } from './api/services/fx-rate-alert.service';
 import { startPositionSnapshotScheduler } from './api/services/position-snapshot.service';
 import { EvolutionService } from './api/services/evolution.service';
 import { initBridgeService } from './integrations/bridge';
+import { initPagfinanceService } from './integrations/pagfinance';
 import {
   buildCorsOptions,
   globalRateLimit,
@@ -80,7 +83,15 @@ function corsUnlessOpsBrowserRoute(req: express.Request, res: express.Response, 
 
 app.use(corsUnlessOpsBrowserRoute);
 app.options('*', corsUnlessOpsBrowserRoute);
-app.use(express.json());
+app.use(
+  express.json({
+    // Keep the raw request bytes for webhook HMAC verification (PagFinance
+    // signs the exact body; re-serializing req.body would not round-trip).
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 app.use(globalRateLimit);
 app.use(['/api/passkeys', '/api/security', '/api/external/recovery', '/api/external/link-existing', '/api/auth', '/api/early-access'], sensitiveRateLimit);
@@ -114,6 +125,7 @@ app.use('/api/passkeys', passkeyRouter);
 app.use('/api/security', securityRouter);
 app.use('/api/financial', financialRouter);
 app.use('/api/ramp', rampRouter);
+app.use('/api/pagfinance', pagfinanceRouter);
 app.use('/api/quotes', quotesRouter);
 app.use('/api/early-access', earlyAccessRouter);
 app.use('/api/transfers', internationalTransfersRouter);
@@ -121,6 +133,7 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/evolution', evolutionRouter);
 app.use('/webhook/evolution', evolutionRouter);
 app.use('/webhook/bridge', bridgeWebhookRouter);
+app.use('/webhook/pagfinance', pagfinanceWebhookRouter);
 app.use('/api/bridge', bridgeRouter);
 app.use('/api/stellar', stellarWalletsRouter);
 app.use('/api/sep24', sep24Router);
@@ -158,6 +171,7 @@ EvolutionService.startWebhookAutoConfiguration();
 EvolutionService.startInboundWebhookWorker();
 EvolutionService.startOutboundDeliveryWorker();
 initBridgeService();
+initPagfinanceService();
 paymentWatcher.start().catch((err: any) => {
   logger.warn(`[payment-watcher] Could not start: ${err.message}`);
 });

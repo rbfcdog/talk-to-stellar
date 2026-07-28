@@ -2,6 +2,16 @@
 
 > **Living document.** Updated when integrations change, new services are added, or failure modes are discovered.
 
+## PagFinance (PIX Cash-In → USDC, sandbox + production-ready)
+
+- **Endpoint**: `https://sandbox.brlp.io` (sandbox; production = same code, different `PAGFINANCE_*` envs)
+- **Auth**: HMAC-SHA256 partner auth (signingKey = `SHA256(rawSecret:partnerId)`) + per-user JWTs minted via `/api/v1/auth/token`
+- **Client**: `backend/src/integrations/pagfinance/` (hmac, client with retry, service, credit, settlement)
+- **Features**: Pix cash-in intents (QR/brCode via Woovi), `CASHIN_COMPLETED` webhook → WE credit USDC from our treasury on Stellar (both networks, `STELLAR_NETWORK` decides); KYC via sandbox manual override
+- **Contract caveat**: the partner guide is out of date — `POST /users` requires `{uid, pubkey, blockchain}` (`blockchain:"stellar"` accepted); verified contract in `docs/integrations/PAGFINANCE.md`
+- **Failure modes**: intent expiry emits NO webhook (poll recovers); webhook duplicates by design (atomic PENDING→CREDITING claim dedupes); sandbox Pix is dry-run (use `pagfinance:e2e -- --replay-webhook`); 10 req/min per pubkey rate limit on cashin POSTs
+- **Config**: `PAGFINANCE_ENABLED`, `PAGFINANCE_BASE_URL`, `PAGFINANCE_PARTNER_ID`, `PAGFINANCE_RAW_SECRET`, `PAGFINANCE_WEBHOOK_SECRET`, `PAGFINANCE_USDC_TREASURY_SECRET`, `PAGFINANCE_FALLBACK_BRL_PER_USDC` (see `backend/.env.example`)
+
 ## Etherfuse (PIX On/Off-Ramp)
 
 - **Endpoint**: `https://api.sand.etherfuse.com` (sandbox)

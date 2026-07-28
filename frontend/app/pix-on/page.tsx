@@ -1,4 +1,4 @@
-import PixRampClient from "../pix-ramp/pix-ramp-client";
+import PixOnSwitch from "./pix-on-switch";
 
 export const metadata = {
   title: "PIX On-Ramp",
@@ -30,5 +30,5 @@ export default async function PixOnPage({
   searchParams?: SearchParams | Promise<SearchParams>;
 }) {
   const resolved = await resolveSearchParams(searchParams);
-  return <PixRampClient initialQuery={serializeSearchParams(resolved)} lockedMode="onramp" />;
+  return <PixOnSwitch initialQuery={serializeSearchParams(resolved)} />;
 }

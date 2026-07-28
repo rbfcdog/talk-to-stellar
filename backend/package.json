@@ -42,6 +42,8 @@
     "defindex:env": "ts-node scripts/setup-defindex-env.ts",
     "passkey:smart-account": "ts-node scripts/setup-passkey-smart-account.ts",
     "evolution:configure-webhook": "ts-node scripts/configure-evolution-webhook.ts",
+    "pagfinance:setup-webhook": "ts-node scripts/setup-pagfinance-webhook.ts",
+    "pagfinance:e2e": "ts-node scripts/pagfinance-e2e.ts",
     "migrate:required": "ts-node scripts/run-required-migrations.ts",
     "ops:hash-password": "ts-node scripts/hash-ops-admin-password.ts",
     "circle:payout-readiness": "ts-node scripts/circle-payout-readiness.ts",
