@@ -551,7 +551,7 @@
 - **Lesson**: **Fallbacks must declare whether they are executable**. If Soroswap has no liquidity route but Horizon can build a trusted path payment, the page should expose that signable XDR; if only display pricing is available, keep build disabled.
 
 ### #61 — Wire On-Ramp Short Link Shows Processing Despite Existing Account
-> **Quote**: "https://www.talktostellar.com/wire-onramp?currency=USD&from=chat&lang=en&source=whatsapp&session_scope=whatsapp&short_link_code=synthetic-short-link
+> **Quote**: "https://www.talktostellar.com/wire-onramp?currency=USD&from=chat&lang=en&source=whatsapp&session_scope=whatsapp&short_link_code=[REDACTED]
 >
 > in this page giving
 >
@@ -565,6 +565,7 @@
 >
 > even through i actally have the account, make so this page is like bridge-test/ also make so cache the login email on browser"
 > **Gloss**: A WhatsApp short-link opened `/wire-onramp` without `session_id` or `email`, so the page showed a generic processing state even though the Bridge customer and USD virtual account existed.
+> **Privacy note**: Only the customer-specific short-link token has been redacted from the historical quote; the remaining wording is preserved.
 
 - **Where**: `frontend/app/wire-onramp/wire-onramp-client.tsx`, `backend/src/api/controllers/bridge.controller.ts`, `backend/tests/bridge.routes.test.ts`.
 - **Root cause**: The wire-onramp page only auto-loaded account data from `session_id` or `email`. The backend session USD account endpoint did not accept `short_link_code`, did not resolve `short_links` back to `agent_sessions`, and when the live Bridge VA list was empty did not fall back to `bridge_va_cache`.

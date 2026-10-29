@@ -26,7 +26,7 @@ Any major US bank works:
 ## Step-by-Step Flow
 
 ### Step 1 — Login
-Go to `/bridge-test`. Enter `rodtretinhsynthetic.customer@example.com` and press **Find or create account**. If the customer doesn't exist yet, fill in a name and click **Create customer**, then complete KYC.
+Go to `/bridge-test`. Enter the email of your own authorized test customer and press **Find or create account**. `synthetic.customer@example.com` is a synthetic documentation placeholder, not an existing account. If the customer doesn't exist yet, fill in the authorized customer's name and click **Create customer**, then complete the provider's required KYC flow.
 
 ### Step 2 — Set Stellar Wallet
 In the "Stellar Wallet" card, paste your Stellar G-address and click **Set wallet**. This will be the address that receives USDC after the on-ramp.
@@ -42,7 +42,7 @@ Bridge will return:
 ```
 Bank: Lead Bank
 Address: 1801 Main St., Kansas City, MO 64108
-Routing: 101019644
+Routing: SYNTHETIC_ROUTING_NUMBER
 Account number: [unique to your customer]
 Beneficiary name: [your KYC name]
 Payment rails: ach_push, fednow, wire
@@ -57,7 +57,7 @@ Log in to your US bank and initiate a **domestic wire transfer** with these deta
 | Field | Value |
 |---|---|
 | Bank name | Lead Bank |
-| Routing number | `101019644` |
+| Routing number | `SYNTHETIC_ROUTING_NUMBER` |
 | Account number | (from `source_deposit_instructions.bank_account_number`) |
 | Beneficiary name | (from `source_deposit_instructions.bank_beneficiary_name`) |
 | Amount | $50–$200 (minimum $5) |

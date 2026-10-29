@@ -3,14 +3,21 @@
  * Tests the complete user registration and wallet setup process
  */
 
-jest.mock('../src/api/services/stellar.service', () => ({
-  StellarService: {
-    createTestAccount: jest.fn(async () => ({
-      publicKey: 'GCF5VFWXAY4UAXUEBNEGRSVHDAFUQJ6PEXBV3XOXBERC7Z6FFC4IAERX',
-      secret: 'REDACTED_PRIVATE_KEY',
-    })),
-  },
-}));
+jest.mock('../src/api/services/stellar.service', () => {
+  const { Keypair } = jest.requireActual<typeof import('@stellar/stellar-sdk')>('@stellar/stellar-sdk');
+
+  return {
+    StellarService: {
+      createTestAccount: jest.fn(async () => {
+        const keypair = Keypair.random();
+        return {
+          publicKey: keypair.publicKey(),
+          secret: keypair.secret(),
+        };
+      }),
+    },
+  };
+});
 
 jest.mock('../src/api/services/contact-seed.service', () => ({
   ContactSeedService: {

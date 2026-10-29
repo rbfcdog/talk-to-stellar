@@ -12,29 +12,31 @@ TalkToStellar turns Pix into a conversational BRL -> USD conversion route, using
 
 ## Stellar Integrations (The Heart Of The Project)
 
-Everything in this product runs on **load-bearing** Stellar integrations — they
-move real money and are what makes the product work, not slideware. A dollar
-comes in, is custodied, put to work earning yield, and withdrawn entirely
-through these pieces, with settlement on Stellar (USDC SAC, path payments, and
-Soroban contracts).
+The repository implements Stellar-backed payment, custody, conversion, and yield
+paths; these are more than presentation-only integrations. **Code capability is
+not evidence of current production use, settled customer funds, provider approval,
+or regulatory readiness.** Deployment status and transaction volume require
+separate, dated operator/provider evidence.
 
-| Integration | Stellar layer | What it carries (load-bearing) | Network |
+| Integration | Stellar layer | Implemented capability | Network paths in code |
 | --- | --- | --- | --- |
-| **Bridge.xyz** | USDC SAC + custodial accounts | Real dollar on/off-ramp: virtual accounts (USD), per-email Stellar wallets with a vaulted key, wire/ACH withdrawal in USDC, and internal transfers across every account. Pix (BRL) is in the compliance phase at Bridge and not yet live on mainnet. | Mainnet (wire/ACH live; Pix pending) |
-| **DeFindex** | Soroban contract | "Put your dollars to work": deposit/withdraw into an auto-optimized USDC vault, signed with the wallet's key | Mainnet + Testnet |
-| **Blend** | Soroban contract | Lending yield: supply USDC into a pool, with live APY | Mainnet + Testnet |
-| **Soroswap** | Soroban + path payments | Internal conversion (the user thinks "dollars", not token pairs) and XLM/USDC liquidity provision via zap | Mainnet |
-| **Auto-yield** | Orchestrates DeFindex + Blend + Soroswap | Sweeps idle balance and automatically splits it into yield; runs on both networks and on a scheduler | Mainnet + Testnet |
-| **Stellar SDK / Horizon / RPC** | Protocol core | Account, balance, trustline, XDR build/sign/submit, public history and evidence | Mainnet + Testnet |
+| **Bridge.xyz** | USDC + custodial accounts | Virtual-account and payout APIs, vaulted per-email Stellar wallets, and internal transfers; rail availability depends on provider/customer eligibility and configuration | Mainnet wallet paths; provider sandbox/live configuration |
+| **DeFindex** | Soroban contract | Build, sign, and submit USDC vault deposits/withdrawals | Mainnet + Testnet |
+| **Blend** | Soroban contract | Build, sign, and submit lending-pool supply/withdrawal operations; query pool data | Mainnet + Testnet |
+| **Soroswap** | Soroban + path payments | Conversion routes and XLM/USDC liquidity provision | Mainnet liquidity path; network-aware conversion services |
+| **Auto-yield** | Orchestrates DeFindex + Blend + Soroswap | Allocate idle balance; optional scheduler and dry-run controls | Mainnet + Testnet paths, configuration-dependent |
+| **Stellar SDK / Horizon / RPC** | Protocol core | Account/balance/history reads and transaction build/sign/submit | Mainnet + Testnet |
 
-> Technical detail for each integration is in the
-> [Stellar Integrations (Product Core)](#stellar-integrations-product-core) section.
+> See [Stellar Integrations (Product Core)](#stellar-integrations-product-core)
+> for implementation details and [Current Mainnet Position](#current-mainnet-position)
+> for the different safeguards on each surface.
 
-> **Pix status:** wire/ACH on/off-ramp for USD is live on mainnet through Bridge.
-> Pix (BRL) is still in the compliance phase at Bridge and is not yet enabled for
-> mainnet — it is wired in the product but stays disabled until Bridge clears it.
+> **Rail status:** Bridge wire/ACH and Pix endpoints exist in code. That does not
+> establish that either rail is approved or live for this project. Earlier drafts
+> described Pix as pending compliance and wire/ACH as live; current availability
+> must be confirmed with the operator and Bridge, not inferred from this README.
 
-## Live Product
+## Product Links
 
 | Surface | Link |
 | --- | --- |
@@ -44,9 +46,10 @@ Soroban contracts).
 | History | https://talktostellar.com/transactions |
 | Stellar Mainnet console | https://talktostellar.com/mainnet |
 
-The product already demonstrates a real user experience, payments and conversions in a secure Testnet/sandbox environment, conversational integration, and a read-only Mainnet layer for viewing public Stellar wallets without asking for a secret key.
-
-Unrestricted real movement on Mainnet remains blocked by design until there are a secure signer, limits, operational approval, compliance, and regulated partners.
+These are project links, not a current uptime or production-verification report.
+The repository supports Testnet/sandbox validation and a public-key Mainnet
+wallet view. It also contains separate custodial Mainnet execution paths:
+**the read-only wallet view does not make the entire application read-only.**
 
 ## Executive Summary
 
@@ -155,7 +158,7 @@ Pix is the natural entry point for Brazilian users.
 
 The product prepares the Pix flow, shows the fee, guides confirmation, updates the operation state, and delivers the receipt. In sandbox/Testnet, this demonstrates the operating model safely. In production, this layer should be connected to regulated Pix/FX partners.
 
-Note: on the Bridge rail, Pix (BRL) is still in the compliance phase and not yet enabled for mainnet — the flow is wired into the product but stays disabled until Bridge clears it. Wire/ACH (USD) on/off-ramp is already live on mainnet.
+Bridge has Pix and wire/ACH API paths, but their current provider approval and production availability are not established by repository code. The earlier Pix-pending/wire-live description is a historical claim requiring dated operator/provider confirmation.
 
 ### Payments To Saved Contacts
 
@@ -222,35 +225,37 @@ TalkToStellar uses Stellar as infrastructure:
 - stablecoin support;
 - public transaction evidence;
 - Testnet for safe development;
-- Mainnet readiness with public-wallet reads and controlled future execution.
+- public-wallet Mainnet reads plus separate, configuration-dependent custodial execution paths.
 
 The product doesn't sell "crypto" to the user. It sells savings, clarity, and convenience. Stellar stays behind the scenes as the rail that enables the experience.
 
 ## Stellar Integrations (Product Core)
 
-The integrations below are **load-bearing**: they move real money and hold the
-product up, they aren't just on the slide. Every dollar that comes in is
-on-ramped, custodied, put to work earning yield, and withdrawn by these pieces —
-all settlement happens on Stellar (USDC SAC + path payments + Soroban contracts).
+These integrations implement the intended on-ramp → custody → optional yield →
+withdrawal lifecycle. On-chain legs use Stellar; fiat legs depend on external
+providers. The presence of these paths does not prove that every incoming dollar
+is invested, that any particular rail is live, or that a production transfer has
+settled.
 
 ### Bridge.xyz — dollar in and out (on/off-ramp)
 
-A fiat<>USDC rail that gives the user a real dollar account without needing a US
-bank.
+The backend implements fiat/USDC account and transfer operations, subject to
+provider enrollment, customer eligibility, funding, and deployment configuration:
 
-- **Virtual accounts (USD/EUR/MXN/GBP/COP/BRL):** the user receives wire/ACH
-  details and the money arrives as USDC on Stellar.
-- **Per-email custodial wallets (`bridge_stellar_wallets`):** a mainnet Stellar
-  wallet per account, with the signing key kept in a vault
-  (`vault_secret_id`) — the user never touches a secret key.
-- **Real off-ramp:** `crypto-to-{ach,wire,pix,rtp,sepa,spei}` via liquidation
-  addresses — USDC leaves the wallet and lands in the user's bank account.
-  Wire/ACH (USD) is live on mainnet; the Pix (BRL) rail is in Bridge's
-  compliance phase and not yet enabled for mainnet.
-- **Unified internal transfer (`/internal-transfer`):** moves USDC between any
-  account in the suite — custodial⇄custodial, custodial→stellar,
-  stellar→stellar, stellar→custodial — signing the Stellar legs with the
-  wallet's vaulted key.
+- **Virtual accounts:** routes for USD/EUR/MXN/GBP/COP/BRL account creation;
+  receiving instructions and available settlement routes are provider-dependent.
+- **Per-email custodial Stellar wallets (`bridge_stellar_wallets`):** keys are
+  generated by the backend and stored through Vault (`vault_secret_id`). This is
+  backend signing/custody capability, not a non-custodial guarantee.
+- **Off-ramp:** `crypto-to-{ach,wire,pix,rtp,sepa,spei}` transfer paths and
+  liquidation-address APIs. Code support is not proof of bank payout completion
+  or present provider approval.
+- **Unified internal transfer (`/internal-transfer`):** supports custodial and
+  Stellar account routes, including signing Stellar legs with a vaulted key.
+
+Sources: [Bridge routes](backend/src/api/routes/bridge.router.ts#L63),
+[custodial wallet creation](backend/src/api/controllers/bridge.controller.ts#L580),
+and [vaulted-key resolution](backend/src/api/controllers/bridge.controller.ts#L734).
 
 ### DeFindex — yield vault (Soroban)
 
@@ -278,13 +283,23 @@ Sweeps the wallet's idle USDC and splits it between DeFindex and Blend
 (configurable split); optionally swaps idle XLM (above the gas reserve) into
 USDC first. Works on both networks and also runs on a scheduler.
 
-### Two-wallet architecture
+### Wallet separation
 
-- **Testnet = session wallet** (login/`wallets`, by `session_id`) for safe
-  demos.
-- **Mainnet = Bridge wallet** (`bridge_stellar_wallets`, found by email) where
-  the real dollars live. Gas is sponsored by the platform (sponsored reserves),
-  so the user doesn't need to hold XLM.
+- **Session wallets:** `wallets`, resolved by `session_id`, serve the default
+  Testnet runtime.
+- **Bridge-linked custodial wallets:** `bridge_stellar_wallets`, resolved by
+  email, have separate Mainnet signing/execution paths even when the primary
+  runtime is Testnet.
+- **External public-key Mainnet wallets:** `stellar_mainnet_wallets` supports
+  attachment, public reads, and payment previews without storing a secret key.
+- **Sponsorship is conditional:** a funded sponsor can cover account/trustline
+  reserves; Soroban gas can be topped up separately. Without sponsorship, wallet
+  creation can return an unfunded address, not a ready-to-use account.
+
+Sources: [runtime isolation](backend/src/config/stellar.ts#L11),
+[wallet creation/sponsorship](backend/src/api/controllers/bridge.controller.ts#L580),
+[gas funding](backend/src/api/controllers/bridge.controller.ts#L680),
+and [external wallet metadata](backend/src/api/services/mainnet-wallet.service.ts#L195).
 
 | Integration | Stellar layer | What it carries |
 | --- | --- | --- |
@@ -381,7 +396,7 @@ A message arrives over **WhatsApp, Telegram, or web**. The **conversational agen
 - **Soroswap** — conversion + liquidity
 - **Auto-yield** — orchestrates the three
 
-Everything settles on **Stellar** (evidence + receipts), which then feeds **history, reconciliation, and notifications**.
+On-chain legs settle on **Stellar**; fiat legs depend on providers. Evidence and receipts feed **history, reconciliation, and notifications**.
 
 Main components:
 
@@ -393,20 +408,31 @@ Main components:
 
 ## Current Mainnet Position
 
-The product has a live Mainnet surface:
+The project links to `https://talktostellar.com/mainnet`; current deployment
+behavior has not been independently verified here. The code distinguishes:
 
-```text
-https://talktostellar.com/mainnet
-```
+| Surface | Implemented behavior | Safeguard scope |
+| --- | --- | --- |
+| Public-key Mainnet wallet view | Attach an external public key, read balances/operations, preview a payment; no secret-key storage or submission in this service | `MainnetWalletService` reports readiness/configuration; even `can_submit` in a preview is not an executed transaction |
+| Primary Stellar runtime | Testnet by default; PUBLIC startup requires explicit runtime activation | `STELLAR_MAINNET_ALLOW_RUNTIME_ACTIVATION` guards this runtime, not every separate Mainnet client |
+| Bridge transfers / virtual accounts | Provider API and custodial transfer paths | Selected routes use `BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT` and optional `confirm_mainnet`; current code defaults movement to **true**, manual confirmation to **false** |
+| Bridge wallet generation / investment / redemption / liquidity / auto-yield | Backend-vaulted signing and Mainnet submission paths; some accept Testnet explicitly | These wallet routes do **not** use the transfer movement middleware. The optional shared password is not a universal payment/compliance authorization control |
+| International-transfer USD payout adapters | Mock/compatibility instructions or configured provider API execution | `ENABLE_REAL_PAYOUT_EXECUTION=true` plus provider configuration enables API execution; this flag does not guard all Bridge/controller operations |
 
-Current state:
+The Bridge password gate is disabled when `BRIDGE_ACCESS_PASSWORD` is unset and
+has explicit session/Testnet/webhook/internal-caller exceptions. Testnet runtime
+selection alone is therefore **not a global no-real-money guarantee**. Production
+approval, limits, customer identity controls, provider authorization, and signer
+security need separate review for every execution path.
 
-- the user can attach a Stellar Mainnet public key;
-- the app reads public balances and operations;
-- secret keys are never requested;
-- Mainnet payments stay disabled until there's a signer, limits, manual approval, compliance, and operation with partners.
-
-This is the right stage to demonstrate Mainnet readiness without taking on premature risk of moving real value.
+Sources: [public wallet service](backend/src/api/services/mainnet-wallet.service.ts#L122),
+[payment preview](backend/src/api/services/mainnet-wallet.service.ts#L341),
+[runtime guard](backend/src/config/stellar.ts#L11),
+[Bridge defaults](backend/src/integrations/bridge/config.ts#L54),
+[password and movement middleware](backend/src/api/middlewares/bridge-mainnet.middleware.ts#L18),
+[wallet route coverage](backend/src/api/routes/bridge.router.ts#L11),
+[Mainnet investment path](backend/src/api/controllers/bridge.controller.ts#L3461),
+and [payout execution selection](backend/src/api/services/usd-payout-adapters.ts#L404).
 
 ## Regulatory And Operational Reality
 
@@ -479,40 +505,122 @@ If TalkToStellar earns trust as the simplest and cheapest way to go from BRL to 
 
 ## Running Locally
 
-Local startup:
+### Prerequisites and isolation
 
-```bash
-chmod +x start-local.sh
-./start-local.sh
+- Use a **fresh, isolated checkout** and a clean terminal without exported
+  production credentials. Do not reuse an existing `backend/.env`,
+  `frontend/.env*`, production database, customer records, sponsor/signing keys,
+  or provider credentials. Backend startup loads `.env`; the frontend also loads
+  its environment files. Do not run environment-generation helpers that copy
+  settings from another deployment.
+- Install Node.js **22.12+** (or a compatible newer LTS), npm, and PostgreSQL's
+  `psql` client. Install both packages from their tracked lockfiles:
+
+  ```bash
+  npm --prefix backend ci
+  npm --prefix frontend ci
+  ```
+
+- Provision an empty, **nonproduction Supabase project** with its Postgres
+  connection and Vault support. Obtain only that project's URL, service-role
+  key, and database connection string. Service-role/database secrets stay in the
+  backend; never use `NEXT_PUBLIC_*` for them.
+
+### Backend configuration and schema
+
+Create a new, untracked `backend/.env` with the following settings. Replace all
+angle-bracket values locally with the isolated project's credentials and a fresh
+random **local-only** JWT secret; these are not usable sample credentials.
+
+```dotenv
+NODE_ENV=development
+PORT=3001
+SUPABASE_URL=<nonproduction-supabase-url>
+SUPABASE_SERVICE_ROLE_KEY=<nonproduction-service-role-key>
+DATABASE_URL=<nonproduction-postgres-connection-string>
+JWT_SECRET=<new-random-local-only-secret-at-least-32-characters>
+STELLAR_NETWORK=TESTNET
+STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
+STELLAR_FRIENDBOT_URL=https://friendbot.stellar.org
+STELLAR_MAINNET_ENABLED=false
+STELLAR_MAINNET_ALLOW_RUNTIME_ACTIVATION=false
+STELLAR_MAINNET_SIGNER_MODE=disabled
+BRIDGE_ENABLED=false
+BRIDGE_ENABLE_MAINNET_MONEY_MOVEMENT=false
+BRIDGE_REQUIRE_MANUAL_CONFIRMATION=true
+ENABLE_REAL_PAYOUT_EXECUTION=false
+ETHERFUSE_BASE_URL=https://api.sand.etherfuse.com
+PAYOUT_PROVIDER=mock
+ALLOW_OPS_MOCKS=true
+ALLOW_MOCK_USD_PAYOUTS=true
+INTERNATIONAL_TRANSFER_ENABLE_MOCK_PIX=true
+AUTO_YIELD_ENABLED=false
+AUTO_YIELD_DRY_RUN=true
+POSITION_SNAPSHOT_ENABLED=false
+ENABLE_DAILY_SUMMARY=false
+ENABLE_FX_RATE_ALERTS=false
 ```
 
-Local URLs:
+The mock flags intentionally allow **synthetic ops evidence only**, not bank
+payments. Leave production/provider/sponsor keys absent. For an official Pix
+sandbox flow, separately obtain an Etherfuse **sandbox-only** API key and add it
+as `ETHERFUSE_API_KEY`; without it, provider-backed Pix is not configured. User
+mock fallbacks are not enabled by this quickstart.
 
-```text
-Frontend: http://localhost:3000
-Backend:  http://localhost:3001
-```
-
-Build backend:
+Apply the required SQL files **only to the empty nonproduction database** before
+using account/transfer screens. This command uses `psql`, loads `backend/.env`,
+and applies dated migration files in sorted order; startup does not migrate.
+Do not point it at an existing production database.
 
 ```bash
 cd backend
-npm run build
+npm run migrate:required
+npm run dev
 ```
 
-Build frontend:
+The backend listens at **http://localhost:3001**. `OPENAI_API_KEY` is optional for
+startup; agent/LLM features are limited without it. Add only a separate
+development key if needed. WhatsApp/Telegram/provider services require their
+own configuration and are not started by these package commands.
+
+### Frontend (second terminal)
+
+In the same isolated checkout, create a new `frontend/.env.local`:
+
+```dotenv
+BACKEND_URL=http://localhost:3001
+NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+NEXT_PUBLIC_STELLAR_NETWORK=TESTNET
+```
+
+Then, from the repository root:
 
 ```bash
-cd frontend
-npm run build
+npm --prefix frontend run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-Agent evals:
+Open **http://localhost:3000**. Keep both terminals running. Basic, non-mutating
+smoke requests from a third terminal:
 
 ```bash
-cd backend
-npm run eval:agent
+curl --fail http://localhost:3001/health
+curl --fail http://localhost:3000/
 ```
+
+These checks establish process reachability only, not a working funds flow.
+Do not send real money or enable Bridge/Mainnet execution for a local demo.
+AI evaluations (`npm --prefix backend run eval:agent`) are optional validation,
+**not startup**, and may require separate development AI credentials.
+
+Sources: [backend scripts](backend/package.json#L6),
+[frontend scripts](frontend/package.json#L5),
+[backend port/env loading](backend/src/server.ts#L1),
+[required Supabase configuration](backend/src/config/supabase.ts#L5),
+[JWT requirements](backend/src/config/secrets.ts#L11),
+[migration runner](backend/scripts/run-required-migrations.ts#L17),
+[mock policy](backend/src/config/mock-policy.ts#L9),
+[Pix sandbox configuration](backend/src/api/services/anchor.service.ts#L1588),
+and [frontend backend selection](frontend/next.config.mjs#L7).
 
 ## Business And Technology Appendix
 
@@ -617,14 +725,14 @@ Controls already handled or planned in the design:
 - idempotency keys on mutating operations;
 - audit logs for critical events;
 - sanitized public messages so schema, constraints, or stack traces aren't exposed;
-- read-only Mainnet until there's a signer and approved operation.
+- public-key Mainnet wallet reads/previews, distinct from custodial execution controls (see [Current Mainnet Position](#current-mainnet-position)).
 
 ### External Integrations
 
 | Integration | Current use | Note |
 | --- | --- | --- |
 | Stellar SDK/Horizon | Account, balance, XDR, submit, and public history | Testnet and custodial execution on Mainnet |
-| Bridge.xyz | Dollar on/off-ramp, virtual accounts, custodial wallets, internal transfers | Wire/ACH (USD) live on mainnet behind an access password; Pix (BRL) in Bridge's compliance phase, not yet enabled for mainnet |
+| Bridge.xyz | Dollar on/off-ramp APIs, virtual accounts, custodial wallets, internal transfers | Mainnet-capable code; optional password and route-specific gates do not establish provider approval or verified production use |
 | DeFindex | USDC yield vault (Soroban) | Mainnet + testnet; vault configurable via env |
 | Blend | USDC lending pool (Soroban) | Live APY; joins the auto-yield split |
 | Soroswap | Conversion (path payments) and XLM/USDC liquidity provision | Add-liquidity requires USDC+XLM funded in the wallet |
@@ -679,7 +787,7 @@ This repository should not be presented as:
 - a Mainnet custodian without additional controls;
 - a substitute for compliance, KYC, a Pix/FX partner, or legal counsel.
 
-The correct positioning is: a live full-stack product, with real UX and conversion/payment infrastructure in validation, ready to evolve into a regulated pilot with partners.
+The code-grounded positioning is: a full-stack product with conversion/payment infrastructure in validation and separate Mainnet-capable custodial paths. Current deployment, regulated-pilot approval, and production activity need dated external evidence.
 
 ## Summary
 

@@ -206,7 +206,7 @@ TalkToStellar is a **non-custodial platform**. The system never holds, controls,
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Bridge.xyz KYC completion | High | `synthetic.customer@example.com` customer needs Persona KYC + ToS acceptance to unblock money movement |
+| Bridge.xyz KYC completion | High | Authorized customers must complete required provider KYC + ToS acceptance before eligible money movement; no individual customer's status is documented here |
 | Avenia account activation | Medium | Account created (HTTP 201), login blocked — needs email verification or admin manual activation |
 | Production KYC/KYB policy document | Medium | Formal AML/KYC policy for regulatory submissions |
 | PEP/sanctions screening automation | Medium | Integrate compliance screening into onboarding flow |
@@ -297,6 +297,6 @@ TalkToStellar es una plataforma **no custodial** de pagos transfronterizos. El s
 - 45+ páginas frontend
 - Código de envío de email multi-proveedor (SES, Resend, SendGrid)
 
-**Pendiente principal**: KYC en Bridge.xyz para desbloquear movimiento de dinero real. Cliente `synthetic.customer@example.com` necesita completar Persona KYC + aceptar ToS.
+**Pendiente principal**: Los clientes autorizados deben completar los requisitos KYC y aceptar los términos de Bridge.xyz antes de los movimientos de dinero elegibles. Este documento no publica identidades ni verifica el estado de ningún cliente o despliegue.
 
 **Razón legal para ser no custodial**: La plataforma no califica como transmisor de dinero ni custodio. Cada usuario mantiene control total de sus fondos en su propia wallet Stellar. Esto simplifica obligaciones KYC/AML y reduce riesgo regulatorio.

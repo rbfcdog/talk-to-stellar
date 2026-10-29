@@ -5,7 +5,8 @@ Time budget: **~25s intro → ~40s the dollar account (in/out) → ~55s yield**.
 Read the narration in **bold**; the *italic* lines tell you what to show and click.
 
 > Tip: record each screen as a short clip, then stitch. Have a logged-in test
-> account ready (email `rodtretinhsynthetic.customer@example.com`) so balances are populated. The
+> account ready using an authorized demo identity so balances are populated; use
+> `synthetic.customer@example.com` only as a synthetic placeholder in written examples. The
 > first thing to show is a **WhatsApp message**, then the **link** opening a page —
 > make that hop obvious so it's clear the whole product lives in chat.
 > Target ~300 spoken words = ~2 min at a natural pace.

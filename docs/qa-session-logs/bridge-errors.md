@@ -52,7 +52,7 @@ Errors encountered during integration and their fixes.
 ## KYC Requirements (All Money Movement Blocked Without This)
 
 Customer `status: not_started` → needs:
-1. **ToS acceptance** — via `tos_link` → opens `compliance.bridge.xyz/accept-terms-of-service`
+1. **ToS acceptance** — use the account holder's freshly returned `tos_link` through the authorized flow; never publish customer-specific links or tokens.
 2. **Persona KYC** — via `kyc_link` → opens `bridge.withpersona.com/verify`
 3. Required fields: `tax_identification_number` (CPF), `date_of_birth`, `address_of_residence`, `min_age_18`, `government_id_document`, `selfie_verification`
 

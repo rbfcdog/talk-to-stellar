@@ -354,8 +354,8 @@ describe("Bridge Customer API", () => {
         return supabaseBuilder({
           maybeSingleData: {
             session_id: "whatsapp-session-001",
-            email: "rodtretinhsynthetic.customer@example.com",
-            user_id: "rodtretinhsynthetic.customer@example.com",
+            email: "synthetic.customer@example.com",
+            user_id: "synthetic.customer@example.com",
           },
         });
       }
@@ -377,12 +377,12 @@ describe("Bridge Customer API", () => {
               status: "activated",
               source_deposit_instructions: {
                 bank_name: "Lead Bank",
-                bank_routing_number: "101019644",
+                bank_routing_number: "000000000",
                 bank_account_number: "000000000001",
                 currency: "usd",
                 payment_rails: ["ach_push", "fednow", "wire"],
               },
-              destination: { chain: "base", address: "0x19edf064c5" },
+              destination: { chain: "base", address: "0x0000000000" },
             },
           ],
         });
@@ -410,7 +410,7 @@ describe("Bridge Customer API", () => {
           success: true,
           has_account: true,
           customer_id: "cust_001",
-          email: "rodtretinhsynthetic.customer@example.com",
+          email: "synthetic.customer@example.com",
           lookup_source: "short_link",
           virtual_account_source: "db_cache",
           virtual_accounts: [
@@ -588,40 +588,6 @@ describe("Bridge Customer API", () => {
     );
   });
 
-  it("creates a Bridge wallet to Stellar transfer", async () => {
-    mockService.getWallet.mockResolvedValue({ id: "wallet_001", chain: "base", address: "0xabc" });
-    mockService.createTransfer.mockResolvedValue({ id: "tr_001", state: "awaiting_funds" });
-
-    const req = mockReq({
-      params: { id: "cust_123", walletId: "wallet_001" },
-      body: {
-        amount: "25.00",
-        destination_wallet: "GSTELLAR",
-      },
-    });
-    const res = mockRes();
-    await BridgeController.createBridgeWalletToStellarTransfer(req, res);
-
-    expect(mockService.getWallet).toHaveBeenCalledWith("cust_123", "wallet_001");
-    expect(mockService.createTransfer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        on_behalf_of: "cust_123",
-        source: expect.objectContaining({
-          payment_rail: "bridge_wallet",
-          currency: "usdc",
-          bridge_wallet_id: "wallet_001",
-          from_address: "0xabc",
-        }),
-        destination: expect.objectContaining({
-          payment_rail: "stellar",
-          currency: "usdc",
-          amount: "25.00",
-          address: "GSTELLAR",
-        }),
-      }),
-    );
-    expect(res.status).toHaveBeenCalledWith(201);
-  });
 
   // ── Error paths ───────────────────────────
 

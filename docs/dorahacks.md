@@ -1,5 +1,15 @@
 # TalkToStellar — DoraHacks BUIDL Submission
 
+> **Historical submission draft — unverified.** Preserved for context, not a
+> current team, ownership, deployment, compliance, or eligibility attestation.
+> The original “solo project” wording conflicts with the appended three-person
+> bio draft below. Neither version establishes the present contributor roster
+> or rights. Resolve the discrepancy using contributor/owner records and the
+> applicable program's rules before reusing this submission. Historical
+> “Production” labels and custody descriptions below are not independently
+> verified; use [the current README](../README.md#current-mainnet-position) for
+> code-grounded capability and safeguard distinctions.
+
 ---
 
 ## Project Name
@@ -165,9 +175,14 @@ TalkToStellar is a proof of concept that Stellar's ecosystem can be packaged int
 
 ---
 
-### Team
+### Historical Team Draft — Unverified
 
-Solo project by **Rodrigo** — full-stack developer, building on Stellar since the hackathon started.
+The original submission described a “Solo project by **Rodrigo** — full-stack
+developer, building on Stellar since the hackathon started.” This is retained as
+historical draft wording, **not a statement of current sole ownership or absence
+of collaborators**. The appended bios name three people, so the draft itself is
+inconsistent. Current roles, contributions, IP rights, equity, and eligibility
+need confirmation with the relevant people and documentary records.
 
 - GitHub: https://github.com/rbfcdog
 - Contact: contact.andreloubet@gmail.com
@@ -192,8 +207,15 @@ Solo project by **Rodrigo** — full-stack developer, building on Stellar since 
 *Built on Stellar. Powered by Soroswap, DeFindex, and Bridge. Delivered by chat.*
 
 
-**Rodrigo Banin** — Engineer and product builder at the intersection of applied AI and blockchain. Formerly at BTG Pactual, where he built production multi-agent systems, and now building TalkToStellar, a WhatsApp-based AI agent that makes Stellar wallets and transactions accessible through natural language.
+### Appended Bio Draft — Historical and Unverified
 
-**André** — Software engineer and co-founder of EvidenceOne, an AI medical platform built from scratch and now used by 300+ doctors. Experienced in system architecture, LLMs, data pipelines, AWS infrastructure, and agentic coding workflows.
+These profiles appeared alongside the conflicting solo-project description.
+They are preserved as draft material, not verified biographies or evidence that
+any person currently owns, works on, or has rights in TalkToStellar. Confirm both
+the biographical claims and project relationships before a new submission:
 
-**João Pedro** — Engineer and entrepreneur with experience across physical and digital businesses. Built projects that generated over R$100K in revenue at age 18, combining strategy, data-driven execution, AI, technology, and investments to create scalable financial solutions.
+> **Rodrigo Banin** — Engineer and product builder at the intersection of applied AI and blockchain. Formerly at BTG Pactual, where he built production multi-agent systems, and now building TalkToStellar, a WhatsApp-based AI agent that makes Stellar wallets and transactions accessible through natural language.
+>
+> **André** — Software engineer and co-founder of EvidenceOne, an AI medical platform built from scratch and now used by 300+ doctors. Experienced in system architecture, LLMs, data pipelines, AWS infrastructure, and agentic coding workflows.
+>
+> **João Pedro** — Engineer and entrepreneur with experience across physical and digital businesses. Built projects that generated over R$100K in revenue at age 18, combining strategy, data-driven execution, AI, technology, and investments to create scalable financial solutions.
