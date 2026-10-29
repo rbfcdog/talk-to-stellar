@@ -443,3 +443,11 @@ GitHub secret scanning and push protection are enabled. Telegram secret-scanning
 - Collaborators must re-clone or carefully migrate their work onto the rewritten lineage, never merge or re-push the old history. The local `.git/filter-repo/commit-map` can translate pre-rewrite commit references.
 - Check whether any old shared Evolution instance token or static mock keypair was reused for an active account; replace/retire it if so. Expire or supersede sensitive onboarding links through authorized provider controls where applicable.
 - Program eligibility is still a separate decision because the application handles personal/financial information and is co-owned. Obtain organizer guidance before submitting or certifying. Do not represent the cleanup as “all historical copies everywhere removed” or “approved for the program.”
+
+### Native credential-output and shared-default controls
+
+Commit `73bfa54a` requires explicit Evolution API/database secrets in Compose, removes the shared Postgres password fallback, binds Postgres/Redis published ports to loopback, and disables `AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES`. The hosted entrypoint requires an API key before migrations and forces native key-list disclosure off. The instance-discovery consumer uses names, not returned authentication keys (`backend/src/api/services/notifications/evolution.service.ts`).
+
+An isolated invocation of the actual Compose CLI demonstrated that the previous model accepted omitted credentials, while the new model rejects missing API/database secrets and renders valid supplied configuration with loopback bindings and disclosure disabled. The actual hosted shell wrapper rejected a missing key before migrations, and its isolated handoff passed with disclosure forced off. These checks did not launch a real container, database, or hosted deployment.
+
+Generate fresh private secrets and rotate any running deployment that reused old defaults; changing configuration files or `POSTGRES_PASSWORD` does not change the password already stored in a Postgres volume. Do not delete existing data volumes as a shortcut.
