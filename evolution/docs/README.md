@@ -94,19 +94,25 @@ Welcome to the Evolution API, it is working!
 
 ## API Key
 
-Local API key from `.env`:
+Create fresh, separate API and instance tokens locally, for example with
+`openssl rand -hex 32`. Store them only in untracked `evolution/.env`:
 
-```text
-change-me-talktostellar-evolution-local
+```dotenv
+AUTHENTICATION_API_KEY=<fresh-api-key>
+EVOLUTION_API_KEY=<same-api-key>
+INSTANCE_TOKEN=<different-fresh-instance-token>
 ```
 
-Change `AUTHENTICATION_API_KEY` and `EVOLUTION_API_KEY` before exposing this server.
+These are configuration placeholders, not working credentials. The create-instance
+script requires `INSTANCE_TOKEN` and does not print or save the raw provider
+response, which may contain authentication data. Never reuse tokens from old
+repository snapshots.
 
 In the backend `.env`, set the Evolution values so the webhook can answer through the same instance:
 
 ```text
 EVOLUTION_API_URL=http://localhost:8080
-EVOLUTION_API_KEY=change-me-talktostellar-evolution-local
+EVOLUTION_API_KEY=<same-fresh-api-key-as-evolution>
 EVOLUTION_INSTANCE=main
 PUBLIC_BACKEND_URL=http://127.0.0.1:3001
 EVOLUTION_AGENT_URL=http://127.0.0.1:3001/api/agent/query
@@ -170,41 +176,47 @@ Open:
 http://localhost:8080/manager
 ```
 
-Use API key:
-
-```text
-change-me-talktostellar-evolution-local
-```
+Use your locally configured API key. No shared working key is published here.
 
 Create/connect instance `main` and request QR from the UI.
 
 ## Manual API Commands
 
-Create instance:
+From `evolution/`, load only your authorized local configuration:
 
 ```bash
-curl -X POST http://localhost:8080/instance/create \
+set -a
+. ./.env
+set +a
+```
+
+Create an instance without printing or saving the credential-bearing response:
+
+```bash
+curl --fail -sS -o /dev/null -X POST http://localhost:8080/instance/create \
   -H "Content-Type: application/json" \
-  -H "apikey: change-me-talktostellar-evolution-local" \
-  -d '{
-    "instanceName": "main",
-    "token": "REDACTED_REVOKED_CREDENTIAL",
-    "qrcode": true,
-    "integration": "WHATSAPP-BAILEYS",
-    "rejectCall": true,
-    "msgCall": "Não consigo atender chamadas por aqui. Envie uma mensagem.",
-    "groupsIgnore": true,
-    "alwaysOnline": true,
-    "readMessages": true,
-    "readStatus": true
-  }'
+  -H "apikey: ${EVOLUTION_API_KEY:?Set EVOLUTION_API_KEY locally}" \
+  --data-binary @- <<JSON
+{
+  "instanceName": "main",
+  "token": "${INSTANCE_TOKEN:?Set a fresh INSTANCE_TOKEN locally}",
+  "qrcode": true,
+  "integration": "WHATSAPP-BAILEYS",
+  "rejectCall": true,
+  "msgCall": "Não consigo atender chamadas por aqui. Envie uma mensagem.",
+  "groupsIgnore": true,
+  "alwaysOnline": true,
+  "readMessages": true,
+  "readStatus": true
+}
+JSON
 ```
 
 Connect and get QR:
 
 ```bash
 curl -X GET http://localhost:8080/instance/connect/main \
-  -H "apikey: change-me-talktostellar-evolution-local"
+  -H "apikey: ${EVOLUTION_API_KEY:?Set EVOLUTION_API_KEY locally}"
 ```
 
 If you set `OWNER_NUMBER=5511999999999` in `.env`, the script calls:
@@ -227,7 +239,7 @@ Manual curl:
 ```bash
 curl -X POST http://localhost:8080/message/sendText/main \
   -H "Content-Type: application/json" \
-  -H "apikey: change-me-talktostellar-evolution-local" \
+  -H "apikey: ${EVOLUTION_API_KEY:?Set EVOLUTION_API_KEY locally}" \
   -d '{
     "number": "5511999999999",
     "text": "TalkToStellar conectado."

@@ -10,7 +10,7 @@ set +a
 BASE_URL="${EVOLUTION_PUBLIC_URL:-http://localhost:${SERVER_PORT:-8080}}"
 API_KEY="${EVOLUTION_API_KEY:-${AUTHENTICATION_API_KEY:-}}"
 INSTANCE_NAME="${INSTANCE_NAME:-main}"
-INSTANCE_TOKEN="${INSTANCE_TOKEN:-REDACTED_REVOKED_CREDENTIAL}"
+INSTANCE_TOKEN="${INSTANCE_TOKEN:?Set a fresh INSTANCE_TOKEN in evolution/.env}"
 OWNER_NUMBER="${OWNER_NUMBER:-}"
 
 if [ -z "$API_KEY" ]; then
@@ -42,7 +42,6 @@ RESPONSE="$(request_with_retry 5 2 curl -sS -X POST "$BASE_URL/instance/create" 
     \"readStatus\": true$NUMBER_FIELD
   }")"
 
-printf '%s\n' "$RESPONSE" | tee /tmp/talktostellar-evolution-create-instance.json
 
 if printf '%s' "$RESPONSE" | grep -qi "already in use"; then
   echo
