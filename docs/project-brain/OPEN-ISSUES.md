@@ -4,9 +4,17 @@
 
 Every pain point from [PAIN-POINTS.md](./PAIN-POINTS.md) whose fix could NOT be verified in the current code. Only genuinely open issues listed here.
 
-PAIN-POINTS.md currently records 38 fixed, 22 still open, and 3 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
+PAIN-POINTS.md currently records 38 fixed, 22 still open, and 4 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
 
 ## Priority: P0 (Blocking Production)
+
+### #67 — Credential Exposure and Submission Certification Follow-Through
+- **Priority**: P0 security; public submission remains blocked pending confirmation.
+- **Evidence**: "fix all these issues and commit the fixes, dont commit the random stuff thats not commited, like the random mds"
+- **Completed**: `c82f18f5` sanitizes current credential/onboarding copies, replaces static private test keys with ephemeral fixtures, corrects conflicting disclosures, and repairs the local quickstart.
+- **Remaining**: Authorized operators must confirm revocation/rotation of exposed Bridge, BlindPay, and Telegram credentials; coordinate historical and cached-copy removal; verify personal-data provenance; and confirm legal ownership, funding restrictions, and financial-data eligibility with the organizers. Confirm that old static mock keypairs were never reused for funded accounts, or retire those accounts securely.
+- **Suggested fix**: Follow `operations/RUNBOOK.md` section 23. Keep original development history except for coordinated sensitive-data removal; do not hide truthful financial/company functionality or claim the new cleanup commit revokes credentials.
+- **Files**: `docs/bridge-integration-status.md`, `deprecated/bridge/docs/bridge-integration-status.md`, historical `bridge/docs/bridge-integration-status.md`, `blindpay/.env`, `telegram/.env`, and affected deployment secret stores.
 
 ### #32 — Balance Not Credited After On-Ramp
 - **Evidence**: "era pra ter mudado o saldo... o on ramp nao esta funcionando"
@@ -139,7 +147,7 @@ PAIN-POINTS.md currently records 38 fixed, 22 still open, and 3 partially-fixed 
 ## Status Notes
 
 - **38 documented fixes confirmed** (see PAIN-POINTS.md Status Summary for full commit table)
-- **3 partially fixed** (#1, #10, #16)
+- **4 partially fixed** (#1, #10, #16, #67)
 - **22 documented pain points still open** — predominantly UX/flow-state, conversational routing, and reliability gaps
 - The backend correctness issues (quote/fee consistency, ledger/balance) are largely resolved
 - The frontend UX flow issues and conversational routing improvements are the current bottleneck

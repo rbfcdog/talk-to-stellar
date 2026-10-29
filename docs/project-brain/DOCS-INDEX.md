@@ -8,6 +8,12 @@ Current scan: **253 non-project-brain Markdown files**: 204 source documents, 13
 
 Primary index: `docs/REPOSITORY-DOCS.md`.
 
+## Submission-Readiness Corrections
+
+The 2026-10-28 review reconciled `README.md`, `docs/compliance-questionnaire.md`, `docs/dorahacks.md`, and `docs/bridge-integration-status.md` against current runtime code. Earlier blanket claims of disabled Mainnet payments, live approved rails, verified compliance, or sole ownership must not be reused as current attestations. The root quickstart now uses tracked package scripts and isolated nonproduction configuration.
+
+Sensitive Bridge documentation and copied onboarding examples were sanitized, but credential revocation and historical exposure remain open under pain point #67 and `operations/RUNBOOK.md` section 23. An MIT license and sanitized current files do not establish program eligibility or a clean repository history.
+
 ## Consolidation Notes
 
 The former top-level documentation folders were removed:

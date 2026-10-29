@@ -1,8 +1,8 @@
 # PAIN-POINTS.md — TalkToStellar Development Pains
 
-> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-06-26. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
+> **Living document.** Updated every time a bug is reported or fixed. Last updated: 2026-10-28. See [MAINTAINER-GUIDE.md](./MAINTAINER-GUIDE.md) for the update workflow.
 
-63 documented incidents from founder WhatsApp testing sessions (June 2026). Clustered into 8 themes ranked by frequency × severity.
+64 documented incidents, comprising 63 founder WhatsApp testing reports (June 2026) and one submission-readiness/security review (October 2026). Clustered into 8 themes ranked by frequency × severity.
 
 ---
 
@@ -431,7 +431,17 @@
 
 ---
 
-## Cluster H — Reliability (19 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (20 incidents, SEVERITY: HIGH)
+
+### #67 — Public Submission Exposes Credentials and Conflicting Readiness Claims
+> **Quote**: "fix all these issues and commit the fixes, dont commit the random stuff thats not commited, like the random mds"
+> **Gloss**: Remediate the submission review's sensitive material, contradictory status/ownership claims, and broken local instructions without committing unrelated work.
+
+- **Where**: `docs/bridge-integration-status.md`, its archived duplicate, copied Bridge onboarding examples, `backend/tests/bridge.routes.test.ts`, `backend/tests/onboarding.test.ts`, `backend/tests/wallet.test.ts`, `README.md`, `docs/compliance-questionnaire.md`, and `docs/dorahacks.md`.
+- **Root cause**: Raw provider responses and customer-specific onboarding information were published as documentation and copied into examples. Earlier environment files remain in history despite current ignore rules. Independent documentation drafts conflated implementation with deployment/compliance evidence and referenced a missing startup launcher. Two test mocks embedded valid static private keys instead of generating ephemeral pairs.
+- **Status**: **Partially fixed** by `c82f18f5`. Current credential/onboarding copies and a historical quote's short-link token are sanitized, private test fixtures use ephemeral keypairs, public disclosures distinguish code capability from unverified operation/ownership, and local setup uses tracked package scripts. Provider revocation, published-history cleanup, data-provenance review, owner/legal confirmation, and program eligibility remain unverified and require authorized follow-through.
+- **Verification**: Isolated backend `/health` and frontend `/` returned HTTP 200 without production credentials. Three targeted fixture suites passed, 31 tests total. A stale Bridge test asserting obsolete internal calls and rejected provider fields was removed rather than re-pinned. Default-plus-known-key Gitleaks scans covered tracked current files and reachable history; the known Bridge key and both old static test keys are absent from current tracked regular files. Historical provider exposure remains, including Bridge, BlindPay, and Telegram; credential values were not validated against providers.
+- **Lesson**: Documentation and fixtures are part of the public attack surface. Current-file cleanup is not revocation or historical removal, and an MIT license or sandbox demo does not establish ownership, financial-data eligibility, or production readiness.
 
 ### #42 — Ops Dashboard Omits Historical Transactions
 > **Quote**: "in hs sccreen, should appear all tranactions done trhought the whole database history!!!!!!"
@@ -661,7 +671,7 @@
 
 ## Top Pains Ranked
 
-Ranked by frequency × severity across the 63 documented incidents:
+Ranked by frequency × severity across the 64 documented incidents:
 
 | Rank | Cluster | Count | Severity | Summary |
 |------|---------|-------|----------|---------|
@@ -669,7 +679,7 @@ Ranked by frequency × severity across the 63 documented incidents:
 | 2 | **E — Conversational Routing** | 6 | HIGH | Wrong intents, wrong assets, contact blocking, NLU outage loops |
 | 3 | **A — Quote/Fee Consistency** | 4 | HIGH | Values change mid-flow, off-ramp fee not instant |
 | 4 | **B — Ledger & Balance** | 8 | HIGH | Balance not credited, distribution math wrong, duplicate receipts, insufficient-balance copy, Bridge VA balance visibility, provider-path drift, Bridge-to-Stellar wallet linkage |
-| 5 | **H — Reliability** | 19 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, Blend pool discovery, investments fail, payment links unreliable, login redirects wrong |
+| 5 | **H — Reliability** | 20 | HIGH | Admin history incomplete, dashboard access, login rendering/submission, migration setup, wire-test stale deploy/proxy failure, watcher/proxy deploy failure, Horizon preflight/SSE rate-limit issues, Soroswap provider fallback/testnet execution gaps, wire-onramp short-link context loss, Blend pool discovery, investments fail, payment links unreliable, login redirects wrong, public credential exposure and submission-readiness drift |
 | 6 | **G — Visual Polish** | 9 | MEDIUM | SVG spacing, shadows, charts, dark mode, dashboard cleanliness, ramp contrast, yield overview hierarchy |
 | 7 | **F — Copy & Verbosity** | 5 | MEDIUM | "Summary" banned, stray words, implementation copy, receipts auto-shown |
 | 8 | **D — i18n Leakage** | 3 | MEDIUM | Wrong language, toggle placement, onboarding note |
@@ -677,11 +687,11 @@ Ranked by frequency × severity across the 63 documented incidents:
 ## Status Summary
 
 - **Confirmed fixed**: 38 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65, #66)
-- **Partially fixed**: 3 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain)
+- **Partially fixed**: 4 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain, #67 — current files sanitized but credential/history/eligibility follow-through remains)
 - **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
 - **Not verifiable in current code**: 0
 
-**Key**: 38 of 63 documented founder-reported pain points have been fixed since the testing sessions. The 22 remaining open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Three additional items are partially fixed.
+**Key**: 38 of 64 documented pain points are fixed. The 22 open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Four items are partially fixed, including the submission-readiness/security incident whose external remediation remains outstanding.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |

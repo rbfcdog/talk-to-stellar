@@ -395,3 +395,26 @@
 
 **Files**: `frontend/app/globals.css`, `frontend/app/wire-onramp/wire-onramp-client.tsx`, `frontend/app/usd-withdraw/usd-withdraw-client.tsx`, `frontend/components/shared/wallets-suite-card.tsx`
 **Related**: Pain point #65
+
+## 23. Public Repository Contains Credentials or Customer Onboarding Records
+
+**Symptom**: A submission review or secret scan finds a provider key, bot token, customer identifier, or customer-specific onboarding link in committed documentation or historical environment files.
+
+**Diagnosis**: Raw provider response dumps were copied into public documentation, including an archived duplicate. Ignoring `.env` now does not remove environment files committed earlier. The Bridge key in the reviewed documentation was missed by Gitleaks default rules, so a default-rule pass alone cannot establish removal.
+
+**Response**:
+1. Never paste exposed values into issues, chat, scanner output, or new commits. Run scanners with full redaction and keep reports outside the repository.
+2. Treat exposed credentials as compromised. Use each provider's trusted account controls to revoke or rotate them, update private deployment secrets, and verify the old credentials are disabled. The identified providers are Bridge, BlindPay, and Telegram. Repository edits do not establish revocation.
+3. Remove current copies of credentials and customer-specific onboarding records, including archived documentation and copied fixtures. Use unmistakably synthetic identities under `example.com`, not real customer details.
+4. Scan tracked current files and all reachable Git history. Combine general secret rules with known exposed-value checks in memory. Triage test literals, public asset identifiers, image data, and variable placeholders separately from credentials. Do not add broad allowlists merely to get a clean report.
+5. Coordinate any history rewrite with the repository owner and collaborators before rewriting or force-pushing. Remove all historical copies, including renamed paths, and follow GitHub's sensitive-data removal process for cached views and pull-request references. A new cleanup commit alone does not remove old exposure.
+6. Confirm whether stored onboarding metadata and evidence identify real people. Testnet or sandbox settlement does not establish that identities are synthetic.
+7. Keep the incident open until credential lifecycle, history remediation, and data provenance are verified. Do not certify the repository as secret-free or the financial project as program-eligible solely because current files were sanitized.
+
+**Known historical locations**: `docs/bridge-integration-status.md`, `bridge/docs/bridge-integration-status.md`, `deprecated/bridge/docs/bridge-integration-status.md`, `blindpay/.env`, and `telegram/.env`. Values are intentionally omitted.
+
+**Related**: Pain point #67; `OPEN-ISSUES.md` submission-readiness follow-up.
+
+**Remediation evidence (2026-10-28)**: `c82f18f5` sanitizes current documents and fixtures, removes the copied short-link token from its historical quote with an explicit redaction note, replaces two static private-key mocks with ephemeral keypairs, and reconciles status/ownership/setup documentation. Three targeted fixture suites passed (31 tests). An isolated backend health endpoint and frontend landing page returned HTTP 200; no production credentials were loaded. Database migrations, provider delivery, and live funds were not exercised.
+
+Gitleaks 8.30.1, verified against its official archive SHA-256, scanned 1,339 commits across reachable refs with default rules plus an in-memory known-Bridge-key rule. It reported 36 historical matches, including the Bridge exposure missed by default rules and earlier BlindPay/Telegram environment credentials. The tracked-current snapshot had 23 heuristic matches in examples, test identifiers, and image metadata; these counts are not credential counts or a clean-security certification. Exact current-file checks found no copies of the known Bridge credential or either removed static mock private key. Full data provenance, credential revocation, historical/cached-copy removal, and program acceptance remain unverified. Check whether any published static test key was ever reused for a funded account; if so, retire that account securely.
