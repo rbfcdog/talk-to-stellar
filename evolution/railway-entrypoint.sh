@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
+: "${AUTHENTICATION_API_KEY:?Set a fresh AUTHENTICATION_API_KEY}"
+export AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=false
+
 # Railway injects PORT. Evolution reads SERVER_PORT, so make the mapping
 # explicit even if the Railway variable reference was not configured.
 if [ -n "${PORT:-}" ] && [ -z "${SERVER_PORT:-}" ]; then

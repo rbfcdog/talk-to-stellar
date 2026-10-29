@@ -74,6 +74,25 @@ That means:
 
 ## Start
 
+First create a private `evolution/.env` using fresh secrets from [API Key](#api-key).
+Compose refuses missing API/database secrets; Postgres and Redis ports bind only
+to `127.0.0.1`. Configure Evolution's database/Redis settings for those local
+ports, not production services. For the default `evolution` database/user:
+
+```dotenv
+DATABASE_ENABLED=true
+DATABASE_PROVIDER=postgresql
+DATABASE_URL=postgresql://evolution:<your-fresh-database-password>@127.0.0.1:5434/evolution?schema=public
+DATABASE_CONNECTION_URI=postgresql://evolution:<your-fresh-database-password>@127.0.0.1:5434/evolution?schema=public
+CACHE_REDIS_ENABLED=true
+CACHE_REDIS_URI=redis://127.0.0.1:6380/6
+```
+
+Replace the password placeholders locally with the same fresh hex password as
+`POSTGRES_PASSWORD`. Changing `.env` does not rotate passwords in existing
+Postgres volumes. Rotate existing accounts through authorized controls before
+restarting; do not delete data volumes to hide a credential incident.
+
 ```bash
 cd evolution
 docker compose up -d
@@ -101,12 +120,18 @@ Create fresh, separate API and instance tokens locally, for example with
 AUTHENTICATION_API_KEY=<fresh-api-key>
 EVOLUTION_API_KEY=<same-api-key>
 INSTANCE_TOKEN=<different-fresh-instance-token>
+POSTGRES_PASSWORD=<different-fresh-database-password>
 ```
 
 These are configuration placeholders, not working credentials. The create-instance
 script requires `INSTANCE_TOKEN` and does not print or save the raw provider
 response, which may contain authentication data. Never reuse tokens from old
 repository snapshots.
+The Compose configuration and hosted entrypoint also disable
+`AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES`; instance discovery needs names, not
+returned authentication keys. The hosted entrypoint fails before migrations if
+`AUTHENTICATION_API_KEY` is missing. These controls do not rotate existing
+credentials or attest that an already-running deployment has been updated.
 
 In the backend `.env`, set the Evolution values so the webhook can answer through the same instance:
 

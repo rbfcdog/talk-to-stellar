@@ -10,6 +10,9 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      AUTHENTICATION_API_KEY: ${AUTHENTICATION_API_KEY:?Set a fresh AUTHENTICATION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
     volumes:
       - evolution_instances:/evolution/instances
     network_mode: host
@@ -21,9 +24,9 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE:-evolution}
       POSTGRES_USER: ${POSTGRES_USER:-evolution}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-evolution}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a fresh POSTGRES_PASSWORD}
     ports:
-      - "${POSTGRES_PORT:-5434}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
     volumes:
       - evolution_postgres:/var/lib/postgresql/data
     healthcheck:
@@ -40,7 +43,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     volumes:
       - evolution_redis:/data
     healthcheck:
