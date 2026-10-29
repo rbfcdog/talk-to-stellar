@@ -415,6 +415,31 @@
 
 **Related**: Pain point #67; `OPEN-ISSUES.md` submission-readiness follow-up.
 
-**Remediation evidence (2026-10-28)**: `c82f18f5` sanitizes current documents and fixtures, removes the copied short-link token from its historical quote with an explicit redaction note, replaces two static private-key mocks with ephemeral keypairs, and reconciles status/ownership/setup documentation. Three targeted fixture suites passed (31 tests). An isolated backend health endpoint and frontend landing page returned HTTP 200; no production credentials were loaded. Database migrations, provider delivery, and live funds were not exercised.
+### Initial review before history rewriting
+
+**Initial remediation evidence (2026-10-28)**: rewritten commit `dd0e5dbb` sanitizes current documents and fixtures, removes the copied short-link token from its historical quote with an explicit redaction note, replaces two static private-key mocks with ephemeral keypairs, and reconciles status/ownership/setup documentation. Three targeted fixture suites passed (31 tests). An isolated backend health endpoint and frontend landing page returned HTTP 200; no production credentials were loaded. Database migrations, provider delivery, and live funds were not exercised.
 
 Gitleaks 8.30.1, verified against its official archive SHA-256, scanned 1,339 commits across reachable refs with default rules plus an in-memory known-Bridge-key rule. It reported 36 historical matches, including the Bridge exposure missed by default rules and earlier BlindPay/Telegram environment credentials. The tracked-current snapshot had 23 heuristic matches in examples, test identifiers, and image metadata; these counts are not credential counts or a clean-security certification. Exact current-file checks found no copies of the known Bridge credential or either removed static mock private key. Full data provenance, credential revocation, historical/cached-copy removal, and program acceptance remain unverified. Check whether any published static test key was ever reused for a funded account; if so, retire that account securely.
+
+### Verified rewrite and publication
+
+The owner authorized history rewriting and publication with a lease, confirmed that the exposed Bridge/BlindPay/Telegram credentials were revoked or rotated, and identified the software's personal co-owners as Rodrigo (`rbfcdog`), André, and João Pedro. Other people actively collaborate; the owner reports no company ownership or employer/client/university/NDA restrictions. These are owner statements, not independent provider or legal verification.
+
+A separate mirror was rewritten with `git-filter-repo` 2.47.0. Six private dotenv paths were removed from every analyzed ref, and 25 exact credential/onboarding indicators were scrubbed from blobs and commit/tag messages. All 1,356 original commits in the combined local/PR analysis history were preserved rather than squashed. Exact checks covered 20,787 reachable objects and 22 ZIP members without finding any known indicators. Default-plus-known-indicator Gitleaks scanning retained 30 heuristic test/example/image/public-asset matches; no findings were hidden by adding allowlists.
+
+The cleaned `main` lineage, including `009bae48`, was force-pushed with an explicit expected-old-SHA lease. A separate `git ls-remote` query confirmed GitHub's branch tip. That commit also requires a fresh Evolution instance token, removes terminal/file disclosure of raw create-instance responses, and fixes remaining example/fixture copies. The real CLI against an isolated local HTTP provider failed the disclosure regression before the fix and passed afterward; all 17 Bridge route tests passed. Run the permanent disclosure check from the repository root:
+
+```bash
+python3 evolution/tests/test_create_instance.py
+```
+
+GitHub secret scanning and push protection are enabled. Telegram secret-scanning alert #1 was resolved as revoked based on the owner's confirmation. This does not delete GitHub's stored historical objects.
+
+### Remaining external copies and submission restrictions
+
+- GitHub PRs #1 and #2 are closed, but their read-only refs retain original history. A direct Git object lookup still returned an original exposed-history commit after the cleaned main push.
+- The public fork `andluca/talk-to-stellar` also returned that original commit. This account has read access but no push permission. Its owner must clean/recreate the fork or remove the contaminated fork history; do not force-push someone else's repository.
+- Follow [GitHub's sensitive-data removal process](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository) for support review of PR refs and cached views. Supply the first-changed commits and affected-PR count from the private filter report, never secrets or customer records. GitHub decides whether cached-copy removal is supported; credential rotation alone may be considered sufficient risk mitigation.
+- Collaborators must re-clone or carefully migrate their work onto the rewritten lineage, never merge or re-push the old history. The local `.git/filter-repo/commit-map` can translate pre-rewrite commit references.
+- Check whether any old shared Evolution instance token or static mock keypair was reused for an active account; replace/retire it if so. Expire or supersede sensitive onboarding links through authorized provider controls where applicable.
+- Program eligibility is still a separate decision because the application handles personal/financial information and is co-owned. Obtain organizer guidance before submitting or certifying. Do not represent the cleanup as “all historical copies everywhere removed” or “approved for the program.”

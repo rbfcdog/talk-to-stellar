@@ -177,6 +177,12 @@ TalkToStellar is a proof of concept that Stellar's ecosystem can be packaged int
 
 ### Historical Team Draft — Unverified
 
+**Owner-confirmed update (2026-10-28)**: Rodrigo (`rbfcdog`), André, and João
+Pedro personally co-own the software, other people actively collaborate, and
+no company or other entity owns the code. The owner reports no external
+employer/client/university or confidentiality claims. This supersedes the old
+solo-ownership implication, not the need to verify historical biography claims.
+
 The original submission described a “Solo project by **Rodrigo** — full-stack
 developer, building on Stellar since the hackathon started.” This is retained as
 historical draft wording, **not a statement of current sole ownership or absence

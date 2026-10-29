@@ -4,9 +4,9 @@ This is the canonical, sanitized replacement for the integration snapshot origin
 
 ## Credential and customer-data exposure
 
-**Sanitizing current files does not revoke the exposed key or remove historic copies.** Treat the previously published key as compromised. Authorized operators must revoke/rotate it with the provider, update affected deployments securely, review access, and coordinate published-history remediation. Customer-specific ToS/KYC links and identifiers must not be republished or used as examples.
+**Current-file sanitization alone does not revoke a key or remove historical copies.** The owner subsequently confirmed Bridge, BlindPay, and Telegram revocation/rotation, and a verified sensitive-data rewrite was published to `main`. GitHub read-only PR refs/cached views and an independently owned fork still retain the old history. Customer-specific ToS/KYC links and identifiers must not be republished or used as examples.
 
-See the [operations runbook](project-brain/operations/RUNBOOK.md) for incident handling and outstanding external remediation. No provider API calls, credential rotation, deployment checks, or history rewriting are implied by this documentation change.
+See the [operations runbook](project-brain/operations/RUNBOOK.md) for verification scope and remaining external remediation. No provider API calls or live-deployment checks were performed to validate revoked credentials.
 
 Keep `BRIDGE_API_KEY` and other credentials in the server environment or secret store, never in documentation, browser bundles, screenshots, response dumps, or committed configuration.
 

@@ -60,6 +60,7 @@ Central documentation hub. Everything a new engineer needs to understand the pro
 | [operations/incidents/duplicate-receipts.md](./operations/incidents/duplicate-receipts.md) | 2 comprovantes for 1 on-ramp. |
 | [operations/forensics/orchestration-logs.md](./operations/forensics/orchestration-logs.md) | You need orchestration event log reference/schema. |
 | [operations/forensics/transfer-record-example.md](./operations/forensics/transfer-record-example.md) | You need a full transfer record template to copy. |
+| [../../evolution/tests/test_create_instance.py](../../evolution/tests/test_create_instance.py) | Run the isolated CLI regression for missing instance tokens and credential-bearing response disclosure. |
 
 ### Product
 | File | Read when... |
@@ -108,7 +109,7 @@ Quick rules:
 
 ## Quick links
 
-- Repo: `https://github.com/anomalyco/talk-to-stellar`
+- Repo: `https://github.com/rbfcdog/talk-to-stellar`
 - Stellar testnet explorer: `https://stellar.expert/explorer/testnet/`
 - Supabase: `https://nvidjphdzkujrjncjcbz.supabase.co`
 - Etherfuse sandbox: `https://api.sand.etherfuse.com`

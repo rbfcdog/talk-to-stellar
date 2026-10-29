@@ -12,7 +12,7 @@ Primary index: `docs/REPOSITORY-DOCS.md`.
 
 The 2026-10-28 review reconciled `README.md`, `docs/compliance-questionnaire.md`, `docs/dorahacks.md`, and `docs/bridge-integration-status.md` against current runtime code. Earlier blanket claims of disabled Mainnet payments, live approved rails, verified compliance, or sole ownership must not be reused as current attestations. The root quickstart now uses tracked package scripts and isolated nonproduction configuration.
 
-Sensitive Bridge documentation and copied onboarding examples were sanitized, but credential revocation and historical exposure remain open under pain point #67 and `operations/RUNBOOK.md` section 23. An MIT license and sanitized current files do not establish program eligibility or a clean repository history.
+Sensitive Bridge documentation and copied onboarding examples were sanitized. The owner confirmed revocation/rotation of the exposed Bridge, BlindPay, and Telegram credentials, and a verified sensitive-data rewrite was published to `main` at `009bae48`. GitHub read-only pull refs, cached commits, and the independently owned fork still retain old history; follow pain point #67 and `operations/RUNBOOK.md` section 23. Native GitHub secret scanning and push protection are enabled. An MIT license and rewritten main history do not establish financial-data eligibility.
 
 ## Consolidation Notes
 

@@ -11,12 +11,12 @@ Original draft: **2026-06-22**. Documentation reconciliation: **2026-10-28**.
 
 ## Entity, Ownership, and Operating Status
 
-The June draft used “company” as business-model language. This document does not
-establish whether an entity is incorporated, which entity operates the service,
-who owns the intellectual property/equity, or who has contributed to it. Do not
-interpret it as evidence that no company exists or that the project belongs
-solely to one person. Obtain current entity, beneficial-ownership, contribution,
-and contractual records from the responsible owner/legal advisers.
+The owner confirmed on 2026-10-28 that the software is personally co-owned by
+Rodrigo (`rbfcdog`), André, and João Pedro, not by a company or other entity,
+and that other people actively work on the repository. The owner also reported
+no employer, client, university, NDA, or confidentiality claims restricting
+sharing. These are owner-provided statements, not an independent legal audit.
+They establish neither a licensed financial operator nor regulatory approval.
 
 Likewise, “sandbox” is an environment configuration, not a blanket description of
 all code paths. The repository includes a public-key Mainnet wallet view, separate
