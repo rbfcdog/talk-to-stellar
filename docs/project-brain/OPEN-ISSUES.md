@@ -4,7 +4,7 @@
 
 Every pain point from [PAIN-POINTS.md](./PAIN-POINTS.md) whose fix could NOT be verified in the current code. Only genuinely open issues listed here.
 
-PAIN-POINTS.md currently records 38 fixed, 22 still open, and 4 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
+PAIN-POINTS.md currently records 38 fixed, 23 still open, and 4 partially-fixed incidents. This backlog also contains standalone requested items that do not yet have dedicated PAIN-POINTS.md entries.
 
 ## Priority: P0 (Blocking Production)
 
@@ -12,7 +12,8 @@ PAIN-POINTS.md currently records 38 fixed, 22 still open, and 4 partially-fixed 
 - **Priority**: P0 security; public submission remains blocked pending confirmation.
 - **Evidence**: "fix all these issues and commit the fixes, dont commit the random stuff thats not commited, like the random mds"
 - **Completed**: Current-file sanitization and a verified sensitive-data history rewrite are published in the `main` lineage containing `009bae48` and `615a8259`. Follow-on commit `73bfa54a` requires private Evolution API/database secrets, disables native instance-key disclosure, and restricts local backing-service ports to loopback. The instance helper requires a fresh token and does not print/save raw responses. The owner confirmed Bridge/BlindPay/Telegram revocation and personal co-ownership with André and João Pedro, active collaborators, and no external sharing-rights restrictions. GitHub secret scanning/push protection are enabled; the Telegram alert was resolved as revoked.
-- **Remaining**: Coordinate cleanup of `andluca/talk-to-stellar` with its owner (this account has no push permission), request GitHub review of the two closed PRs' read-only refs and cached views, and confirm personal-data provenance and financial-data/co-ownership eligibility with the program. Confirm old mock keys, shared instance tokens, or default database/API passwords were never reused for active accounts, or retire/rotate them securely. Repository config changes do not rotate credentials in running deployments or existing volumes.
+- **Submission checks**: `.github/workflows/submission-checks.yml` and `npm --prefix backend run check:submission` provide a scoped synthetic/Testnet gate. A clean locked install and an inherited-credential probe passed 33 Jest tests and the actual Evolution helper's local-HTTP regression. This is not evidence of co-owner consent, provider revocation, external-copy cleanup, lint, or production readiness.
+- **Remaining**: Obtain separate, attributable authorizations from André and João Pedro for program use; their signatures/messages are not implied by Rodrigo's ownership statement. Coordinate cleanup of `andluca/talk-to-stellar` with its owner (this account has no push permission), request GitHub review of the two closed PRs' read-only refs and cached views, and confirm personal-data provenance and financial-data/co-ownership eligibility with the program. Obtain redacted provider-side revocation evidence. Confirm old mock keys, shared instance tokens, or default database/API passwords were never reused for active accounts, or retire/rotate them securely. Repository config changes do not rotate credentials in running deployments or existing volumes.
 - **Suggested fix**: Follow `operations/RUNBOOK.md` section 23. Do not merge or re-push old history. Do not hide truthful financial functionality or certify eligibility from an MIT license, owner statements, or a successful branch rewrite.
 - **Files**: `docs/project-brain/operations/RUNBOOK.md`, `evolution/scripts/create-instance.sh`, GitHub PRs #1/#2, and the independently owned fork. No credential values belong in issue comments or support messages.
 
@@ -53,6 +54,13 @@ PAIN-POINTS.md currently records 38 fixed, 22 still open, and 4 partially-fixed 
 - **Files**: Agent fallback handler
 
 ## Priority: P1 (Blocks Good UX)
+
+### #68 — Locked Backend Dependency Advisories
+- **Priority**: P1 security triage; npm severity does not establish application exploitability.
+- **Evidence**: The clean `npm --prefix backend ci --ignore-scripts` install and `npm --prefix backend audit --json` reported 50 affected dependency entries: 5 low, 25 moderate, 17 high, and 3 critical. Critical transitive entries were `handlebars`, `proxy-addr`, and `tar`, each reporting a fix available.
+- **Root cause**: The committed lockfile still resolves advisory-affected transitive versions. The passing synthetic submission checks do not audit this dependency graph.
+- **Suggested fix**: Review advisory paths and production exposure, apply compatible dependency updates separately, and rerun the isolated checks plus affected application paths. Do not use `npm audit fix --force` blindly or hide findings with allowlists.
+- **Files**: `backend/package.json`, `backend/package-lock.json`; diagnosis in `operations/RUNBOOK.md` section 23.
 
 ### #17, #18, #20, #23 — Flow State Machine
 - **Issues**: Back-navigation breaks flow (#17), auto-advance without Confirm (#18), no Nubank-style multi-step (#20), conversion screen too long (#23)

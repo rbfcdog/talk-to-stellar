@@ -451,3 +451,62 @@ Commit `73bfa54a` requires explicit Evolution API/database secrets in Compose, r
 An isolated invocation of the actual Compose CLI demonstrated that the previous model accepted omitted credentials, while the new model rejects missing API/database secrets and renders valid supplied configuration with loopback bindings and disclosure disabled. The actual hosted shell wrapper rejected a missing key before migrations, and its isolated handoff passed with disclosure forced off. These checks did not launch a real container, database, or hosted deployment.
 
 Generate fresh private secrets and rotate any running deployment that reused old defaults; changing configuration files or `POSTGRES_PASSWORD` does not change the password already stored in a Postgres volume. Do not delete existing data volumes as a shortcut.
+
+### Synthetic submission CI and reviewer evidence
+
+The reviewer requested co-owner authorizations, credential-copy/revocation status,
+and CI or working lint with named local mocked checks. Keep all session work
+synthetic and Testnet/sandbox-only; Mainnet-capable code still exists.
+
+From the repository root, with Node.js 26+, Python 3, Bash, and curl:
+
+```sh
+npm --prefix backend ci --ignore-scripts
+npm --prefix backend run check:submission
+```
+
+`.github/workflows/submission-checks.yml` runs these commands on push, pull
+request, and manual dispatch, with read-only repository permissions, checkout
+credentials not persisted, and no provider secrets. The runner reuses the
+existing Jest configuration and mocks rather than replacing application logic.
+
+`backend/scripts/check-submission.cjs` starts children with an allowlisted
+synthetic/Testnet environment. `backend/tests/submission.setup.cjs` disables
+dotenv loading before shared setup and application imports. Node permissions
+deny network and child-process access in Jest and limit writes to temporary
+files. Native addons are allowed for Jest's resolver; this is an accidental-I/O
+guard, not a hostile-code sandbox. The separate Python check uses only its
+temporary environment and loopback HTTP provider. Installation itself needs
+network access to fetch locked dependencies.
+
+Local evidence on Node 26.3.0 and Python 3.12.3:
+
+- 4 isolation tests passed, including real socket/process denial and a synthetic
+  dotenv override attempt. Synthetic inherited provider-key/Mainnet settings
+  were stripped from the child environment.
+- 17 Bridge route and 12 PIX organization-account tests passed with mocked
+  providers/database. The Bridge VA test now mocks Horizon `loadAccount`;
+  previously it attempted a real Mainnet read and caught the network error.
+- The actual Evolution helper completed its local-HTTP disclosure regression.
+- A clean snapshot, excluding private dotenv files and unrelated untracked work,
+  passed the same locked install and check commands. No hosted Actions run is
+  claimed by this local evidence. This is not a lint or full-suite result.
+
+The clean install and JSON audit also reported 50 affected dependency entries
+(5 low, 25 moderate, 17 high, 3 critical). Critical transitive entries were
+`handlebars`, `proxy-addr`, and `tar`, each reporting a fix available. Track
+triage as #68; do not treat CI success as a dependency-security certification.
+No force-upgrades or advisory allowlists were added.
+
+External follow-through remains separate:
+
+- Obtain an individual, attributable authorization from each of André and João
+  Pedro. Rodrigo's statement is not their consent.
+- PR refs #1 and #2 still return their original head SHAs. The independent fork
+  remains public, and this account still has no push permission. A support-ticket
+  resolution and a fork-owner cleanup confirmation have not been supplied.
+- The Telegram alert is resolved as revoked. Bridge/BlindPay/Telegram revocation
+  is owner-confirmed, not independently provider-verified. Collect redacted
+  status evidence without posting old or replacement credential values.
+- Deployed Evolution tokens and existing database passwords still need rotation
+  if old defaults were reused. No live deployment was accessed by these checks.

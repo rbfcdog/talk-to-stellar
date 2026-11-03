@@ -1,0 +1,30 @@
+name: Synthetic submission checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mocked-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install locked backend dependencies without lifecycle scripts
+        run: npm --prefix backend ci --ignore-scripts
+      - name: Run synthetic checks without provider credentials or Node network access
+        run: npm --prefix backend run check:submission

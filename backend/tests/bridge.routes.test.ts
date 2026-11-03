@@ -1,8 +1,11 @@
-import { jest, describe, it, expect, beforeEach } from "@jest/globals";
+import { jest, describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import type { Request, Response } from "express";
+import type { Horizon } from "@stellar/stellar-sdk";
 import { BridgeController } from "../src/api/controllers/bridge.controller";
 import { supabase } from "../src/config/supabase";
 import { getBridgeService } from "../src/integrations/bridge";
+import { mainnetServer } from "../src/config/stellar";
+import { PUBLIC_USDC_ISSUER } from "../src/config/assets";
 
 jest.mock("../src/integrations/bridge", () => ({
   getBridgeService: jest.fn(),
@@ -45,6 +48,7 @@ function supabaseBuilder({ maybeSingleData = null, listData = [] }: { maybeSingl
 
 describe("Bridge Customer API", () => {
   let mockService: any;
+  afterEach(() => jest.restoreAllMocks());
 
   beforeEach(() => {
     mockService = {
@@ -307,6 +311,16 @@ describe("Bridge Customer API", () => {
   // ── Virtual Account ───────────────────────
 
   it("creates a BRL virtual account", async () => {
+    // Exercise existing-account handling without contacting Horizon or funding an account.
+    const account = {
+      balances: [{
+        asset_type: "credit_alphanum4",
+        asset_code: "USDC",
+        asset_issuer: PUBLIC_USDC_ISSUER,
+        balance: "0",
+      }],
+    } as unknown as Horizon.AccountResponse; // Only balances are consumed in this path.
+    jest.spyOn(mainnetServer, "loadAccount").mockResolvedValue(account);
     const vAccount = { id: "va_001", status: "activated" };
     mockService.createBrlVirtualAccount.mockResolvedValue(vAccount);
 

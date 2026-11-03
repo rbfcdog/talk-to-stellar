@@ -2,6 +2,49 @@
 
 Complete test suite for the Talk to Stellar backend application. This test suite covers unit tests, integration tests, E2E tests, and AI agent testing.
 
+## Synthetic submission checks
+
+Use Node.js 26+, Python 3, Bash, and curl. From the repository root:
+
+```sh
+npm --prefix backend ci --ignore-scripts
+npm --prefix backend run check:submission
+```
+
+`.github/workflows/submission-checks.yml` runs the same commands for pushes,
+pull requests, and manual dispatches. No provider credentials or Actions secrets
+are supplied. Dependency installation uses the network; the Jest child does not.
+
+The runner reuses `backend/jest.config.js`, selects only the suites below, starts
+with an allowlisted synthetic/Testnet environment, and replaces dotenv loading
+before shared setup or application imports. It does not change ordinary tests
+or application startup.
+
+- `submission-isolation.test.ts` exercises inherited-credential stripping,
+  dotenv override rejection, actual socket denial, and child-process denial.
+- `bridge.routes.test.ts` covers synthetic customer/virtual-account responses,
+  transfer amount boundaries, and cached/activity-derived balances. Its Horizon
+  account read is explicitly mocked, including Mainnet-capable controller paths.
+- `anchor-pix-organization-bank-account.test.ts` covers organization-account
+  selection, synthetic sandbox fallback, fee/quote math, and receipt suppression.
+- `evolution/tests/test_create_instance.py` runs the actual helper against a
+  temporary loopback HTTP provider and checks credential disclosure and missing
+  token rejection. It creates its own synthetic environment file.
+
+Node's native permission model denies network and subprocess access in Jest;
+filesystem writes are limited to a temporary directory. The Python check needs
+loopback access. Jest's native resolver requires `--allow-addons`, so this is a
+guard against accidental I/O, not a sandbox for hostile code or native addons.
+See [Node's permission-model limits](https://nodejs.org/api/permissions.html).
+The regular test commands below are broader and do not have these guarantees.
+
+Verified on Node 26.3.0 and Python 3.12.3, including a clean locked-dependency
+installation and a run with synthetic inherited provider-key/Mainnet settings:
+33 Jest tests passed, followed by the actual helper's local-HTTP regression.
+This is not a live provider, deployment, real-money, lint, or full-suite result.
+The clean install also reported unresolved dependency advisories, tracked as
+issue #68 in `docs/project-brain/OPEN-ISSUES.md`.
+
 ## Test Structure
 
 ```

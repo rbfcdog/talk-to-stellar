@@ -431,7 +431,17 @@
 
 ---
 
-## Cluster H — Reliability (20 incidents, SEVERITY: HIGH)
+## Cluster H — Reliability (21 incidents, SEVERITY: HIGH)
+
+### #68 — Submission Install Reports Unresolved Dependency Advisories
+> **Context quote**: "ja adicione as que vc consegue resolver"
+> **Gloss**: Implement the reachable submission-review changes. The dependency findings below were discovered by the clean-install verification, not reported as exploits by the founder.
+
+- **Where**: `backend/package.json`, `backend/package-lock.json`.
+- **Evidence**: Clean locked installation and `npm audit --json` reported 50 affected dependency entries, including 3 critical transitive entries (`handlebars`, `proxy-addr`, `tar`).
+- **Root cause**: The locked dependency graph contains advisory-affected transitive versions. Runtime reachability and exploitability were not established by the audit.
+- **Status**: **Still open**. Scoped synthetic/Testnet checks pass, but no dependency upgrade or advisory suppression was included in this CI change.
+- **Lesson**: Passing mocked checks is not a dependency-security audit. Triage advisory paths and verify compatible fixes separately.
 
 ### #67 — Public Submission Exposes Credentials and Conflicting Readiness Claims
 > **Quote**: "fix all these issues and commit the fixes, dont commit the random stuff thats not commited, like the random mds"
@@ -442,6 +452,7 @@
 - **Root cause**: Raw provider responses and customer-specific onboarding information were published as documentation and copied into examples. Historical private environment files and static test keys remained reachable. The instance helper also used a shared token default and printed/saved raw provider responses. Independent documentation drafts conflated implementation with deployment/compliance evidence and referenced a missing startup launcher.
 - **Status**: **Partially fixed** by the rewritten cleanup lineage, `009bae48`, and `73bfa54a`. Current copies and historical sensitive values were scrubbed from rewritten main history; all private dotenv paths in the analyzed history were removed without squashing commits. The owner confirmed Bridge/BlindPay/Telegram revocation and personal co-ownership with André and João Pedro. Evolution now requires private API/database/instance secrets, disables native instance-key listing and raw response dumps, and limits local backing-service ports to loopback. Native GitHub secret scanning/push protection are enabled. External fork history, GitHub pull refs/cached views, data provenance, deployed-secret rotation where defaults were reused, and program eligibility still require follow-through.
 - **Verification**: Rewritten `main` was force-pushed with an explicit lease and independently observed at `009bae48`; a fresh public clone later confirmed the `615a8259` lineage. Exact checks found none of the 25 known indicators in 20,787 reachable objects and 22 ZIP members of the sanitized analysis refs. The final local object audit covered 20,680 objects, preserving both linked worktrees, two stashes, and unrelated user edits. The CLI disclosure regression fails before the fix and passes afterward; 17 Bridge tests passed. Actual Compose rendering rejects missing API/database secrets and limits ports to loopback; the hosted wrapper rejects a missing key before migrations and disables key-list disclosure before runtime handoff. No live container/database was started. GitHub/fork copies remain accessible, so this is not a blanket clean-repository certification.
+- **Submission-review follow-through**: `.github/workflows/submission-checks.yml` runs the allowlisted local command `npm --prefix backend run check:submission`; a clean install passed 33 Jest tests and the real helper's local-HTTP regression. The Bridge VA fixture now mocks its Horizon account read instead of attempting a Mainnet lookup. Separate authorizations from André and João Pedro, provider-side revocation evidence, PR/fork cleanup, and organizer acceptance remain external requirements.
 - **Lesson**: Documentation and fixtures are part of the public attack surface. Current-file cleanup is not revocation or historical removal, and an MIT license or sandbox demo does not establish ownership, financial-data eligibility, or production readiness.
 
 ### #42 — Ops Dashboard Omits Historical Transactions
@@ -689,10 +700,10 @@ Ranked by frequency × severity across the 64 documented incidents:
 
 - **Confirmed fixed**: 38 (issues #2, #3, #4, #5, #6, #7, #9, #11, #12, #14, #15, #22, #33, #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #63, #64, #65, #66)
 - **Partially fixed**: 4 (#1 — popup exists but needs further polish, #10 — receipt language fixed but full audit pending, #16 — expiry windows extended but token-consume-on-failure may remain, #67 — current files sanitized but credential/history/eligibility follow-through remains)
-- **Still open**: 22 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41)
+- **Still open**: 23 (issues #8, #13, #17, #18, #19, #20, #21, #23, #24, #25, #26, #28, #29, #30, #30b, #31, #32, #34, #35, #36, #39, #41, #68)
 - **Not verifiable in current code**: 0
 
-**Key**: 38 of 64 documented pain points are fixed. The 22 open items are predominantly UX/flow-state polish, conversational routing improvements, and reliability gaps. Four items are partially fixed, including the submission-readiness/security incident whose external remediation remains outstanding.
+**Key**: 38 of 65 documented pain points are fixed. The 23 open items include UX/flow-state polish, conversational routing, reliability gaps, and the locked-dependency audit finding. Four items are partially fixed, including the submission-readiness/security incident whose external remediation remains outstanding.
 
 Fixing commits verified in codebase:
 | Issue | Commit | What was fixed |
