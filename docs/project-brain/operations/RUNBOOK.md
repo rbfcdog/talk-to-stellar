@@ -510,3 +510,9 @@ External follow-through remains separate:
   status evidence without posting old or replacement credential values.
 - Deployed Evolution tokens and existing database passwords still need rotation
   if old defaults were reused. No live deployment was accessed by these checks.
+
+Hosted execution [41695338214](https://github.com/rbfcdog/talk-to-stellar/actions/runs/41695338214)
+passed for `8142e581`. Its runner annotations identified deprecated Node 20
+Actions and upcoming `ubuntu-latest` image drift. The workflow now pins Ubuntu
+24.04 and the verified official checkout/setup-node/setup-python releases using
+Node 24 for the Actions themselves; application checks still use Node 26.
